@@ -1,0 +1,1519 @@
+= VillageCompute Java Project Standards
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+This document defines the standard technology stack and practices for Java web application projects at VillageCompute. These standards are derived from the village-calendar reference implementation and should be followed for all new Java projects.
+
+== Build System
+
+=== Maven
+
+All projects MUST use Maven as the build system.
+
+==== Required POM Structure
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>villagecompute</groupId>
+  <artifactId>project-name</artifactId>
+  <version>1.0-SNAPSHOT</version>
+
+  <properties>
+    <compiler-plugin.version>3.13.0</compiler-plugin.version>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <quarkus.platform.version>3.26.2</quarkus.platform.version>
+  </properties>
+  <!-- ... -->
+</project>
+----
+
+==== Java Version
+
+* Use Java 21 (LTS) as the minimum version
+* Configure both `maven.compiler.release` and explicit source/target in compiler plugin
+
+== Base Technology Stack
+
+=== Quarkus Framework
+
+Quarkus is the standard framework for all Java web applications.
+
+==== Required Dependencies
+
+[source,xml]
+----
+<dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>io.quarkus.platform</groupId>
+      <artifactId>quarkus-bom</artifactId>
+      <version>${quarkus.platform.version}</version>
+      <type>pom</type>
+      <scope>import</scope>
+    </dependency>
+  </dependencies>
+</dependencyManagement>
+
+<dependencies>
+  <!-- Core -->
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-arc</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-rest</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-rest-jackson</artifactId>
+  </dependency>
+
+  <!-- Database -->
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-hibernate-orm-panache</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-jdbc-postgresql</artifactId>
+  </dependency>
+
+  <!-- Health & Metrics -->
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-smallrye-health</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+  </dependency>
+</dependencies>
+----
+
+=== PostgreSQL Database
+
+PostgreSQL is the standard database for all applications.
+
+* Use PostGIS image when geographic data is needed: `postgis/postgis:17-3.4`
+* Standard PostgreSQL for other projects: `postgres:17`
+
+== Frontend Options
+
+=== Option 1: Qute Templates
+
+Use Qute for server-rendered HTML pages with minimal JavaScript requirements.
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-qute</artifactId>
+</dependency>
+----
+
+=== Option 2: Vue.js with Quinoa
+
+Use Vue.js with Quinoa for rich single-page applications.
+
+==== Maven Configuration
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.quarkiverse.quinoa</groupId>
+  <artifactId>quarkus-quinoa</artifactId>
+  <version>2.6.2</version>
+</dependency>
+----
+
+==== Frontend Stack
+
+* **Framework**: Vue 3 with Composition API
+* **Build Tool**: Vite
+* **Type Safety**: TypeScript
+* **State Management**: Pinia
+* **UI Components**: PrimeVue with Tailwind CSS
+* **Testing**: Playwright for E2E tests
+
+==== package.json Template
+
+[source,json]
+----
+{
+  "name": "project-frontend",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,vue,css,scss,json,md}\"",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0",
+    "pinia": "^3.0.3",
+    "primevue": "^4.3.2",
+    "tailwindcss": "^4.0.15"
+  }
+}
+----
+
+== Database Migrations
+
+=== MyBatis Migrations
+
+All database schema changes MUST be managed through MyBatis Migrations.
+
+==== Directory Structure
+
+----
+migrations/
+├── pom.xml
+├── README.md
+└── src/main/resources/
+    ├── environments/
+    │   ├── development.properties
+    │   ├── beta.properties
+    │   └── production.properties
+    └── scripts/
+        ├── 001_initial_schema.sql
+        ├── 002_add_feature.sql
+        └── ...
+----
+
+==== migrations/pom.xml
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>villagecompute</groupId>
+  <artifactId>project-migrations</artifactId>
+  <version>1.0-SNAPSHOT</version>
+
+  <properties>
+    <migrations.plugin.version>1.2.0</migrations.plugin.version>
+    <postgresql.driver.version>42.7.4</postgresql.driver.version>
+    <migration.env>development</migration.env>
+    <migration.path>${project.basedir}/src/main/resources</migration.path>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>${postgresql.driver.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.mybatis.maven</groupId>
+        <artifactId>migrations-maven-plugin</artifactId>
+        <version>${migrations.plugin.version}</version>
+        <configuration>
+          <repository>${migration.path}</repository>
+          <environment>${migration.env}</environment>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.driver.version}</version>
+          </dependency>
+        </dependencies>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+----
+
+==== Migration Script Format
+
+[source,sql]
+----
+-- //
+-- Description: Add user preferences table
+-- //
+
+CREATE TABLE user_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    preferences JSONB NOT NULL DEFAULT '{}',
+    created TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- //@UNDO
+
+DROP TABLE IF EXISTS user_preferences;
+----
+
+==== Running Migrations
+
+[source,bash]
+----
+# Check status
+cd migrations && mvn migration:status -Dmigration.env=development
+
+# Apply pending migrations
+cd migrations && mvn migration:up -Dmigration.env=development
+
+# Rollback last migration
+cd migrations && mvn migration:down -Dmigration.env=development
+----
+
+== Local Development Environment
+
+=== docker-compose.yml
+
+Every project MUST include a docker-compose.yml for local development.
+
+==== Required Services
+
+[source,yaml]
+----
+version: "3.8"
+
+services:
+  app-db:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: appdb
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: 'pg_isready -U appuser --dbname=appdb'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Email testing (local only)
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # Web UI
+      - "1025:1025"  # SMTP
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
+  # Distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Web UI
+      - "4317:4317"    # OTLP gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  # Database migrations
+  migrations:
+    image: maven:3.9-eclipse-temurin-21-alpine
+    working_dir: /migrations
+    depends_on:
+      app-db:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations
+      - maven-repo:/root/.m2
+    environment:
+      MAVEN_OPTS: "-Dmigration.env=docker"
+    entrypoint: ["mvn"]
+    command: ["migration:up"]
+    profiles:
+      - tools
+
+volumes:
+  app-db-data:
+  maven-repo:
+----
+
+== Code Formatting
+
+=== Spotless Maven Plugin
+
+All projects MUST use Spotless for consistent code formatting.
+
+==== Maven Configuration
+
+[source,xml]
+----
+<plugin>
+  <groupId>com.diffplug.spotless</groupId>
+  <artifactId>spotless-maven-plugin</artifactId>
+  <version>2.43.0</version>
+  <configuration>
+    <java>
+      <eclipse>
+        <version>4.29</version>
+        <file>${project.basedir}/eclipse-formatter.xml</file>
+      </eclipse>
+      <removeUnusedImports/>
+      <importOrder>
+        <order>java,javax,jakarta,org,com,villagecompute</order>
+      </importOrder>
+      <formatAnnotations/>
+    </java>
+    <pom>
+      <sortPom>
+        <expandEmptyElements>false</expandEmptyElements>
+        <sortDependencies>scope,groupId,artifactId</sortDependencies>
+        <sortPlugins>groupId,artifactId</sortPlugins>
+      </sortPom>
+    </pom>
+  </configuration>
+</plugin>
+----
+
+=== Eclipse Formatter Configuration
+
+Include an `eclipse-formatter.xml` with these key settings:
+
+* Line length: 120 characters
+* Indentation: 4 spaces
+* Brace style: K&R (same line)
+
+=== Git Pre-commit Hook
+
+Create `.git/hooks/pre-commit`:
+
+[source,bash]
+----
+#!/bin/sh
+# Pre-commit hook to fix imports and formatting with Spotless
+
+STAGED_JAVA_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.java$')
+
+if [ -z "$STAGED_JAVA_FILES" ]; then
+    exit 0
+fi
+
+echo "Running Spotless to fix imports and formatting..."
+
+./mvnw spotless:apply -q
+
+for FILE in $STAGED_JAVA_FILES; do
+    if [ -f "$FILE" ]; then
+        git add "$FILE"
+    fi
+done
+
+echo "Spotless formatting applied."
+----
+
+=== EditorConfig
+
+Include `.editorconfig` for IDE consistency:
+
+[source,ini]
+----
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.java]
+indent_size = 4
+max_line_length = 120
+
+[*.{xml,yml,yaml,json}]
+indent_size = 2
+
+[*.{vue,ts,tsx,js,jsx,css,scss}]
+indent_size = 2
+----
+
+== Code Coverage
+
+=== JaCoCo Configuration
+
+All projects MUST maintain 95% code coverage on all Java classes.
+
+==== Coverage Requirements
+
+* **Minimum Coverage**: 95% line and branch coverage on all Java classes
+* **Branch Coverage Priority**: Special focus on testing all possible branches of user input, including:
+** Validation edge cases (empty strings, null values, boundary values)
+** Error handling paths (invalid input, malformed data, constraint violations)
+** Conditional logic based on user-provided data
+** All enum values and switch cases for user-controlled inputs
+* **No Exceptions**: Coverage requirements apply to all production code, including services, resources, and utility classes
+
+==== Maven Configuration
+
+[source,xml]
+----
+<plugin>
+  <groupId>org.jacoco</groupId>
+  <artifactId>jacoco-maven-plugin</artifactId>
+  <version>0.8.11</version>
+  <executions>
+    <execution>
+      <id>prepare-agent</id>
+      <goals>
+        <goal>prepare-agent</goal>
+      </goals>
+      <configuration>
+        <propertyName>surefire.jacoco.args</propertyName>
+      </configuration>
+    </execution>
+    <execution>
+      <id>report</id>
+      <goals>
+        <goal>report</goal>
+      </goals>
+      <phase>test</phase>
+      <configuration>
+        <formats>
+          <format>XML</format>
+          <format>HTML</format>
+        </formats>
+      </configuration>
+    </execution>
+  </executions>
+</plugin>
+----
+
+==== Pre-commit Coverage Check
+
+Before committing, run:
+
+[source,bash]
+----
+./mvnw test jacoco:report
+----
+
+Review `target/site/jacoco/index.html` to ensure 95% coverage on all Java classes.
+
+== Code Quality
+
+=== SonarQube / SonarCloud
+
+All projects MUST be configured for SonarQube analysis.
+
+==== sonar-project.properties
+
+[source,properties]
+----
+sonar.projectKey=organization_project-name
+sonar.organization=organization
+
+sonar.projectName=project-name
+
+sonar.sources=src/main/java,src/main/webui/src
+sonar.tests=src/test/java
+
+sonar.sourceEncoding=UTF-8
+
+sonar.java.source=21
+sonar.java.binaries=target/classes
+sonar.java.test.binaries=target/test-classes
+
+sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+
+sonar.exclusions=**/target/**,**/node_modules/**,**/*.min.js,**/*.min.css
+sonar.test.exclusions=**/test/**
+----
+
+==== Pre-commit Quality Check
+
+Run SonarQube scanner before committing and fix any issues:
+
+[source,bash]
+----
+# Run tests with coverage
+./mvnw test jacoco:report
+
+# Run SonarQube scanner (requires sonar-scanner CLI or Maven plugin)
+sonar-scanner
+----
+
+== Java Coding Standards
+
+=== Package Structure
+
+----
+src/main/java/villagecompute/projectname/
+├── api/
+│   ├── rest/         # REST resources
+│   └── types/        # API DTOs (generated from OpenAPI)
+├── config/           # Configuration classes
+├── data/
+│   ├── models/       # JPA entities
+│   └── repositories/ # Data access layer
+├── exceptions/       # Custom exceptions
+├── integration/      # External service integrations
+├── jobs/             # Background jobs and handlers
+├── services/         # Business logic
+└── util/             # Utilities
+----
+
+=== Named Query Pattern
+
+Use this pattern for all JPA named queries:
+
+[source,java]
+----
+// 1. Define constant for query name (in the entity class)
+public static final String QUERY_FIND_BY_EMAIL =
+        "User.findByEmail";
+
+// 2. NamedQuery annotation references the constant
+@NamedQueries({
+    @NamedQuery(
+        name = User.QUERY_FIND_BY_EMAIL,
+        query = "SELECT u FROM User u WHERE u.email = :email")
+})
+@Entity
+public class User extends PanacheEntityBase {
+    // ...
+
+    // 3. Static finder method uses Panache find() with # prefix
+    public static Optional<User> findByEmail(String email) {
+        return find("#" + QUERY_FIND_BY_EMAIL,
+                    Parameters.with("email", email))
+               .firstResultOptional();
+    }
+}
+----
+
+Key points:
+
+* Query name constant: `QUERY_` prefix, referenced in both annotation and finder
+* Use `#` prefix with `find()` to invoke named queries
+* Use `Parameters.with()` for type-safe parameter binding
+* Use `JOIN FETCH` to eagerly load relationships and avoid N+1 queries
+* Return `Optional` via `firstResultOptional()` for single results
+
+=== Application Exceptions
+
+Never throw raw `RuntimeException`. Create domain-specific exceptions:
+
+[source,java]
+----
+// Base exception (extends RuntimeException - no throws declaration needed)
+public class ApplicationException extends RuntimeException {
+    public ApplicationException(String message) {
+        super(message);
+    }
+    public ApplicationException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+
+// Domain-specific exceptions
+public class EmailException extends ApplicationException { ... }
+public class PaymentException extends ApplicationException { ... }
+public class ValidationException extends ApplicationException { ... }
+----
+
+Key points:
+
+* All exceptions extend `RuntimeException` so they don't require throws declarations
+* Always include the cause exception when wrapping: `new XxxException("message", cause)`
+* Add new exception types to the `exceptions` package as needed
+
+=== Service Layer
+
+[source,java]
+----
+@ApplicationScoped
+public class UserService {
+
+    @Inject
+    UserRepository userRepository;
+
+    @Transactional
+    public User createUser(CreateUserRequest request) {
+        // Validation
+        if (userRepository.existsByEmail(request.email())) {
+            throw new ValidationException("Email already exists");
+        }
+
+        // Business logic
+        User user = new User();
+        user.email = request.email();
+        user.persist();
+
+        return user;
+    }
+}
+----
+
+=== JSON Marshalling
+
+All JSON data MUST be marshalled in and out of defined Type classes. Direct `JsonNode` traversal and tree-based APIs are prohibited.
+
+==== Requirements
+
+* All JSON type classes MUST end with the `Type` suffix (e.g., `UserType`, `OrderPayloadType`, `ConfigType`)
+* Use Jackson `ObjectMapper.readValue()` to deserialize JSON strings into Type classes
+* Use Jackson `ObjectMapper.writeValueAsString()` to serialize Type classes to JSON strings
+* NEVER use tree-based APIs: `readTree()`, `treeToValue()`, `valueToTree()`, `convertValue()`
+* NEVER traverse `JsonNode` directly using methods like `get()`, `path()`, `findValue()`, etc.
+* Type classes should be placed in the `api/types/` package or a domain-specific `types` subpackage
+
+==== Why Typed JSON?
+
+* **Type Safety**: Compile-time checks catch errors before runtime
+* **Refactoring**: IDE refactoring tools work with typed fields
+* **Documentation**: Type classes serve as self-documenting schemas
+* **Validation**: Bean validation annotations can be applied to fields
+* **Maintainability**: Changes to JSON structure are explicit and traceable
+
+==== Correct Pattern
+
+[source,java]
+----
+// Define a Type class for the JSON payload
+public class EmailJobPayloadType {
+    public String to;
+    public String subject;
+    public String htmlBody;
+    public String templateName;
+    public Map<String, Object> templateData;
+}
+
+@Inject
+ObjectMapper objectMapper;
+
+// Serialize Type class to JSON string
+public String toJson(EmailJobPayloadType payload) throws JsonProcessingException {
+    return objectMapper.writeValueAsString(payload);
+}
+
+// Deserialize JSON string to Type class
+public EmailJobPayloadType fromJson(String jsonString) throws JsonProcessingException {
+    return objectMapper.readValue(jsonString, EmailJobPayloadType.class);
+}
+
+// Usage example
+public void processPayload(String jsonString) throws JsonProcessingException {
+    EmailJobPayloadType payload = objectMapper.readValue(jsonString, EmailJobPayloadType.class);
+
+    // Use typed fields
+    sendEmail(payload.to, payload.subject, payload.htmlBody);
+}
+----
+
+==== Prohibited Patterns
+
+[source,java]
+----
+// DO NOT DO THIS - tree-based APIs
+JsonNode node = objectMapper.readTree(jsonString);           // PROHIBITED
+MyType obj = objectMapper.treeToValue(node, MyType.class);   // PROHIBITED
+JsonNode node = objectMapper.valueToTree(myObject);          // PROHIBITED
+OtherType other = objectMapper.convertValue(obj, OtherType.class); // PROHIBITED
+
+// DO NOT DO THIS - direct JsonNode traversal
+public void processPayload(JsonNode json) {
+    String to = json.get("to").asText();           // PROHIBITED
+    String subject = json.path("subject").asText(); // PROHIBITED
+    JsonNode data = json.findValue("templateData"); // PROHIBITED
+
+    if (json.has("htmlBody")) {                     // PROHIBITED
+        // ...
+    }
+}
+----
+
+==== Records for Immutable Types
+
+Prefer Java records for immutable JSON types:
+
+[source,java]
+----
+public record WebhookEventType(
+    String eventId,
+    String eventType,
+    Instant timestamp,
+    WebhookPayloadType payload
+) {}
+
+public record WebhookPayloadType(
+    UUID resourceId,
+    String action,
+    Map<String, String> metadata
+) {}
+----
+
+== API Design
+
+=== OpenAPI Spec-First REST API
+
+All REST APIs MUST follow a spec-first approach using OpenAPI 3.0. This provides strongly-typed request/response objects generated from the API specification, similar to the contract-first approach used with XSD/JAXB.
+
+==== Why Spec-First?
+
+* **Contract-First**: Define the API before implementation, ensuring clear interface contracts
+* **Strongly Typed**: Generated Java types provide compile-time safety
+* **Documentation**: OpenAPI specs serve as living documentation
+* **Client Generation**: Clients can be generated for any language from the same spec
+* **Validation**: Request/response validation happens automatically
+
+==== Directory Structure
+
+----
+src/main/resources/
+└── openapi/
+    ├── api.yaml           # Main API specification
+    └── schemas/
+        ├── user.yaml      # User-related schemas
+        ├── order.yaml     # Order-related schemas
+        └── common.yaml    # Shared schemas
+----
+
+==== Maven Configuration
+
+[source,xml]
+----
+<plugin>
+  <groupId>org.openapitools</groupId>
+  <artifactId>openapi-generator-maven-plugin</artifactId>
+  <version>7.10.0</version>
+  <executions>
+    <execution>
+      <id>generate-api-types</id>
+      <goals>
+        <goal>generate</goal>
+      </goals>
+      <configuration>
+        <inputSpec>${project.basedir}/src/main/resources/openapi/api.yaml</inputSpec>
+        <generatorName>jaxrs-spec</generatorName>
+        <output>${project.build.directory}/generated-sources/openapi</output>
+        <apiPackage>villagecompute.projectname.api.generated</apiPackage>
+        <modelPackage>villagecompute.projectname.api.types</modelPackage>
+        <configOptions>
+          <dateLibrary>java8</dateLibrary>
+          <useJakartaEe>true</useJakartaEe>
+          <interfaceOnly>true</interfaceOnly>
+          <useBeanValidation>true</useBeanValidation>
+          <performBeanValidation>true</performBeanValidation>
+          <serializationLibrary>jackson</serializationLibrary>
+        </configOptions>
+        <generateApiTests>false</generateApiTests>
+        <generateModelTests>false</generateModelTests>
+      </configuration>
+    </execution>
+  </executions>
+</plugin>
+----
+
+==== OpenAPI Specification Example
+
+[source,yaml]
+----
+openapi: 3.0.3
+info:
+  title: Project API
+  version: 1.0.0
+  description: REST API for Project
+
+servers:
+  - url: /api/v1
+
+paths:
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      tags: [Users]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+
+    post:
+      operationId: createUser
+      summary: Create a new user
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      summary: Get user by ID
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    UserResponse:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    UserListResponse:
+      type: object
+      required:
+        - items
+        - totalCount
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+        totalCount:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+----
+
+==== REST Resource Implementation
+
+Implement the generated interface in your REST resource:
+
+[source,java]
+----
+@Path("/api/v1/users")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class UserResource implements UsersApi {
+
+    @Inject
+    UserService userService;
+
+    @Override
+    public Response listUsers(Integer page, Integer size) {
+        var users = userService.listUsers(page, size);
+        var response = new UserListResponse()
+            .items(users.stream().map(this::toResponse).toList())
+            .totalCount(userService.countUsers())
+            .page(page)
+            .pageSize(size);
+        return Response.ok(response).build();
+    }
+
+    @Override
+    public Response createUser(CreateUserRequest request) {
+        var user = userService.createUser(request);
+        return Response.status(Response.Status.CREATED)
+            .entity(toResponse(user))
+            .build();
+    }
+
+    @Override
+    public Response getUser(UUID id) {
+        return userService.findById(id)
+            .map(u -> Response.ok(toResponse(u)).build())
+            .orElse(Response.status(Response.Status.NOT_FOUND)
+                .entity(new ErrorResponse()
+                    .code("NOT_FOUND")
+                    .message("User not found"))
+                .build());
+    }
+
+    private UserResponse toResponse(User user) {
+        return new UserResponse()
+            .id(user.id)
+            .email(user.email)
+            .name(user.name)
+            .createdAt(user.created.atOffset(ZoneOffset.UTC));
+    }
+}
+----
+
+==== File Downloads and Binary Responses
+
+For endpoints that return files or binary data (not covered by OpenAPI generation):
+
+[source,java]
+----
+@Path("/api/v1/orders")
+public class OrderResource {
+
+    @GET
+    @Path("/{orderNumber}/items/{itemId}/pdf")
+    @Produces("application/pdf")
+    public Response downloadOrderItemPDF(
+            @PathParam("orderNumber") String orderNumber,
+            @PathParam("itemId") UUID itemId) {
+        // ... generate PDF
+        return Response.ok(pdfBytes)
+            .type("application/pdf")
+            .header("Content-Disposition",
+                "attachment; filename=\"" + filename + "\"")
+            .build();
+    }
+}
+----
+
+== Background Job Processing
+
+=== Delayed Job Pattern
+
+Applications requiring background processing MUST implement the Delayed Job pattern for reliable, retryable job execution.
+
+==== Job Entity
+
+[source,java]
+----
+@Entity
+@Table(name = "delayed_jobs")
+public class DelayedJob extends PanacheEntityBase {
+
+    @Id
+    @GeneratedValue
+    public UUID id;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    public DelayedJobQueue queue;
+
+    @Column(name = "handler_class", nullable = false)
+    public String handlerClass;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    public JsonNode payload;
+
+    @Column(name = "run_at", nullable = false)
+    public Instant runAt;
+
+    @Column(name = "locked_at")
+    public Instant lockedAt;
+
+    @Column(name = "locked_by")
+    public String lockedBy;
+
+    @Column(nullable = false)
+    public int attempts = 0;
+
+    @Column(name = "last_error", columnDefinition = "TEXT")
+    public String lastError;
+
+    @Column(name = "failed_at")
+    public Instant failedAt;
+
+    public Instant created;
+    public Instant updated;
+}
+----
+
+==== Job Queue with Priorities
+
+[source,java]
+----
+public enum DelayedJobQueue {
+    CRITICAL(1),    // Payment confirmations, security alerts
+    HIGH(2),        // Order confirmations, password resets
+    DEFAULT(3),     // General notifications
+    LOW(4),         // Marketing emails, reports
+    BULK(5);        // Mass operations, data exports
+
+    private final int priority;
+
+    DelayedJobQueue(int priority) {
+        this.priority = priority;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+}
+----
+
+==== Job Handler Interface
+
+[source,java]
+----
+public interface DelayedJobHandler<T> {
+
+    /**
+     * Execute the job with the given payload.
+     * @throws Exception if job fails (will be retried based on retry strategy)
+     */
+    void execute(T payload) throws Exception;
+
+    /**
+     * Deserialize the JSON payload to the handler's type.
+     */
+    T deserializePayload(JsonNode payload);
+
+    /**
+     * Get the queue this handler processes jobs from.
+     */
+    DelayedJobQueue getQueue();
+}
+----
+
+==== Retry Strategy
+
+Implement exponential backoff with configurable limits:
+
+[source,java]
+----
+@ApplicationScoped
+public class DelayedJobService {
+
+    private static final int MAX_ATTEMPTS = 25;
+    private static final Duration BASE_DELAY = Duration.ofSeconds(5);
+    private static final Duration MAX_DELAY = Duration.ofDays(7);
+
+    public Duration calculateNextRunDelay(int attempts) {
+        // Formula: 5 seconds + N^4 seconds
+        // Attempt 1: 5s + 1s = 6s
+        // Attempt 5: 5s + 625s = ~10 min
+        // Attempt 10: 5s + 10000s = ~2.8 hours
+        // Attempt 15: 5s + 50625s = ~14 hours
+        long delaySeconds = BASE_DELAY.toSeconds() + (long) Math.pow(attempts, 4);
+        Duration delay = Duration.ofSeconds(delaySeconds);
+        return delay.compareTo(MAX_DELAY) > 0 ? MAX_DELAY : delay;
+    }
+
+    @Transactional
+    public void enqueue(DelayedJobHandler<?> handler, Object payload) {
+        enqueue(handler, payload, Instant.now());
+    }
+
+    @Transactional
+    public void enqueue(DelayedJobHandler<?> handler, Object payload, Instant runAt) {
+        DelayedJob job = new DelayedJob();
+        job.queue = handler.getQueue();
+        job.handlerClass = handler.getClass().getName();
+        job.payload = objectMapper.valueToTree(payload);
+        job.runAt = runAt;
+        job.persist();
+
+        // Trigger immediate processing via EventBus
+        eventBus.publish("delayed-job-ready", job.id);
+    }
+}
+----
+
+==== Job Processing with Locking
+
+[source,java]
+----
+@ApplicationScoped
+public class DelayedJobProcessor {
+
+    @Inject
+    DelayedJobService jobService;
+
+    @Scheduled(every = "30s")
+    @Transactional
+    public void processPendingJobs() {
+        // Process jobs in priority order
+        for (DelayedJobQueue queue : DelayedJobQueue.values()) {
+            processQueue(queue);
+        }
+    }
+
+    private void processQueue(DelayedJobQueue queue) {
+        String lockId = UUID.randomUUID().toString();
+
+        // Atomically lock a batch of jobs
+        int locked = DelayedJob.update(
+            "lockedAt = ?1, lockedBy = ?2 " +
+            "WHERE queue = ?3 AND lockedAt IS NULL AND runAt <= ?4 " +
+            "AND failedAt IS NULL",
+            Instant.now(), lockId, queue, Instant.now());
+
+        if (locked == 0) return;
+
+        // Process locked jobs
+        List<DelayedJob> jobs = DelayedJob.find(
+            "lockedBy = ?1 ORDER BY runAt", lockId).list();
+
+        for (DelayedJob job : jobs) {
+            processJob(job);
+        }
+    }
+}
+----
+
+== Email Service
+
+=== Email Service with Domain Filtering
+
+Applications that send email MUST implement domain filtering to prevent accidental sends to real users in non-production environments.
+
+==== Configuration
+
+[source,properties]
+----
+# application.properties
+
+# Production profile sends to all addresses
+%prod.email.safe-test-domains=
+
+# Non-production profiles restrict to safe domains
+email.safe-test-domains=yourcompany.com,test.com,example.com,mailinator.com
+----
+
+==== Email Service Implementation
+
+[source,java]
+----
+@ApplicationScoped
+public class EmailService {
+
+    private static final Logger LOG = Logger.getLogger(EmailService.class);
+
+    @ConfigProperty(name = "email.safe-test-domains", defaultValue = "")
+    String safeTestDomains;
+
+    @ConfigProperty(name = "quarkus.profile", defaultValue = "prod")
+    String profile;
+
+    @Inject
+    Mailer mailer;
+
+    /**
+     * Send an email, respecting domain filtering in non-production environments.
+     *
+     * @return true if email was sent, false if filtered
+     */
+    public boolean sendEmail(String to, String subject, String htmlBody) {
+        if (!isEmailDomainSafe(to)) {
+            LOG.warnf("Email to %s blocked - domain not in safe list for %s profile",
+                to, profile);
+            return false;
+        }
+
+        Mail mail = Mail.withHtml(to, subject, htmlBody);
+        mailer.send(mail);
+        LOG.infof("Email sent to %s: %s", to, subject);
+        return true;
+    }
+
+    /**
+     * Check if an email address is safe to send to in the current environment.
+     */
+    public boolean isEmailDomainSafe(String email) {
+        // Production sends to everyone
+        if ("prod".equals(profile) || safeTestDomains.isBlank()) {
+            return true;
+        }
+
+        String domain = email.substring(email.lastIndexOf("@") + 1).toLowerCase();
+        List<String> safeDomains = Arrays.stream(safeTestDomains.split(","))
+            .map(String::trim)
+            .map(String::toLowerCase)
+            .toList();
+
+        return safeDomains.contains(domain);
+    }
+
+    /**
+     * Get list of safe domains for the current environment.
+     * Useful for UI to show which domains will receive emails.
+     */
+    public List<String> getSafeTestDomains() {
+        if (safeTestDomains.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(safeTestDomains.split(","))
+            .map(String::trim)
+            .toList();
+    }
+}
+----
+
+==== Email Job Handler
+
+Combine with the Delayed Job pattern for reliable email delivery:
+
+[source,java]
+----
+@ApplicationScoped
+public class EmailJobHandler implements DelayedJobHandler<EmailJobPayload> {
+
+    @Inject
+    EmailService emailService;
+
+    @Inject
+    ObjectMapper objectMapper;
+
+    @Override
+    public void execute(EmailJobPayload payload) throws Exception {
+        boolean sent = emailService.sendEmail(
+            payload.to(),
+            payload.subject(),
+            payload.htmlBody()
+        );
+
+        if (!sent) {
+            // Don't retry if domain was filtered
+            throw new EmailFilteredException(
+                "Email to " + payload.to() + " filtered by domain policy");
+        }
+    }
+
+    @Override
+    public EmailJobPayload deserializePayload(JsonNode payload) {
+        return objectMapper.treeToValue(payload, EmailJobPayload.class);
+    }
+
+    @Override
+    public DelayedJobQueue getQueue() {
+        return DelayedJobQueue.HIGH;
+    }
+}
+
+public record EmailJobPayload(
+    String to,
+    String subject,
+    String htmlBody,
+    String templateName,
+    Map<String, Object> templateData
+) {}
+----
+
+== Testing
+
+=== Required Test Dependencies
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-junit5</artifactId>
+  <scope>test</scope>
+</dependency>
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-junit5-mockito</artifactId>
+  <scope>test</scope>
+</dependency>
+<dependency>
+  <groupId>io.rest-assured</groupId>
+  <artifactId>rest-assured</artifactId>
+  <scope>test</scope>
+</dependency>
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-jacoco</artifactId>
+  <scope>test</scope>
+</dependency>
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-jdbc-h2</artifactId>
+  <scope>test</scope>
+</dependency>
+----
+
+=== Test Structure
+
+[source,java]
+----
+@QuarkusTest
+public class UserServiceTest {
+
+    @Inject
+    UserService userService;
+
+    @Test
+    @Transactional
+    void testCreateUser_Success() {
+        // Given
+        CreateUserRequest request = new CreateUserRequest("test@example.com");
+
+        // When
+        User result = userService.createUser(request);
+
+        // Then
+        assertNotNull(result.id);
+        assertEquals("test@example.com", result.email);
+    }
+
+    @Test
+    void testCreateUser_DuplicateEmail_ThrowsException() {
+        // ...
+    }
+}
+----
+
+== Observability
+
+=== OpenTelemetry
+
+Configure OpenTelemetry for distributed tracing:
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-opentelemetry</artifactId>
+</dependency>
+----
+
+=== Health Checks
+
+Include health endpoints for load balancer integration:
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-smallrye-health</artifactId>
+</dependency>
+----
+
+[appendix]
+== Suggestions (Optional Patterns)
+
+[NOTE]
+====
+The following patterns are observed in the reference implementation and may be valuable, but are not strictly required. Consider adopting them based on project needs.
+====
+
+=== Container Image Building with Jib
+
+For projects deploying to Kubernetes or container platforms, Jib provides build-time container image creation without requiring Docker:
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-container-image-jib</artifactId>
+</dependency>
+----
+
+NOTE: This dependency is available in the reference implementation but is not actively configured. Additional configuration is required to enable Jib builds.
+
+== Version History
+
+[cols="1,2,5"]
+|===
+|Version |Date |Changes
+
+|1.1
+|2026-01-01
+|Replaced GraphQL with OpenAPI spec-first REST API design. Moved Delayed Job and Email Service to required sections.
+
+|1.0
+|2026-01-01
+|Initial document based on village-calendar reference implementation
+|===
