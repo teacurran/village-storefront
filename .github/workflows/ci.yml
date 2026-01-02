@@ -57,7 +57,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check if frontend exists
+        id: frontend-check
+        run: |
+          if [ -f "src/main/webui/package.json" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Frontend not yet initialized, skipping linting"
+          fi
+
       - name: Set up Node.js
+        if: steps.frontend-check.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -65,10 +76,12 @@ jobs:
           cache-dependency-path: src/main/webui/package-lock.json
 
       - name: Install frontend dependencies
+        if: steps.frontend-check.outputs.exists == 'true'
         working-directory: src/main/webui
         run: npm ci
 
       - name: Run ESLint
+        if: steps.frontend-check.outputs.exists == 'true'
         working-directory: src/main/webui
         run: npm run lint
 
