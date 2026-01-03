@@ -55,11 +55,36 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 
 ### 1. Multi-Tenancy & Store Management
 
+#### Tenant Isolation Architecture
+- **Database strategy**: Shared database with `tenant_id` discriminator column on all tenant-scoped tables
+- **Row-Level Security**: PostgreSQL RLS policies enforce tenant isolation at database layer
+- **Application-layer enforcement**: Defense-in-depth via Panache query filters
+
+#### Tenant Resolution (Request Filter Pattern)
+- **TenantContext**: `@RequestScoped` CDI bean holding current tenant ID
+  ```java
+  @RequestScoped
+  public class TenantContext {
+      private UUID tenantId;
+      private Store store;
+      // getters/setters
+  }
+  ```
+- **TenantFilter**: `@Provider` JAX-RS `ContainerRequestFilter` executes before all requests
+  - Extracts tenant from Host header subdomain (e.g., `acme.storefront.com` → `acme`)
+  - Resolves subdomain to Store entity, populates TenantContext
+  - For custom domains: lookup domain in `custom_domains` table
+  - Returns 404 if tenant not found (invalid subdomain/domain)
+- **Service injection**: All services `@Inject TenantContext` for tenant-aware operations
+- **Panache integration**: Base repository class automatically applies `tenant_id` filter to all queries
+
+#### Store Features
 - **Store creation**: Merchants sign up and create a store with unique subdomain
-- **Custom domains**: Merchants can add custom domains with automatic SSL handling
+- **Custom domains**: Merchants can add custom domains with automatic SSL via Let's Encrypt (ACME HTTP-01 challenge)
 - **Store settings**: Business info, branding (logo, colors, fonts), policies
 - **Tenant isolation**: All data strictly scoped to tenant; no cross-tenant data leakage
 - **Store suspension/deletion**: Platform admin can manage store lifecycle
+- **CORS configuration**: Enable cross-origin requests for subdomain-based access
 
 ### 2. User Authentication & Accounts
 
@@ -460,11 +485,54 @@ For static site integration and custom frontends:
 1. **Single base currency per store**: Payments processed in one currency, display in multiple
 2. **English-only for v1**: Internationalization deferred to future version
 3. **Stripe-only payments for v1**: Pluggable provider architecture ready for PayPal, CashApp, etc.
-4. **US shipping focus**: USPS, UPS, FedEx initially; international carriers later
+4. **US shipping focus**: USPS, UPS, FedEx direct API integrations
 5. **No marketplace features**: Stores are independent; no cross-store discovery
 6. **No AI features in v1**: Focus on core functionality first
 7. **No B2B features in v1**: Wholesale pricing, purchase orders deferred
 8. **No Redis**: Stateless JWT auth + Caffeine caching; add distributed cache later if needed
+
+---
+
+## Technical Architecture Decisions
+
+### Background Job Processing
+- **Async tasks (emails, media processing, payouts)**: DelayedJob pattern (see `java-project-standards.adoc`)
+  - Database-persisted job queue with retry logic
+  - Priority queues (CRITICAL, HIGH, DEFAULT, LOW, BULK)
+  - Exponential backoff retry strategy
+- **Recurring batch jobs (cleanup, reports, cert renewal)**: Quarkus `@Scheduled` annotations
+- **No external message broker**: Adheres to "No Redis" constraint
+
+### Shipping Rate Integration
+- **Direct carrier API integrations**: USPS Web Tools, UPS Rating API, FedEx Web Services
+- **Per-carrier credential management**: Store-level API keys
+- **Fallback strategy**: Table-rate/flat-rate shipping if carrier API unavailable
+- **Rate caching**: Cache rates for identical origin/destination/weight for 15 minutes
+
+### Consignment Vendor Payouts
+- **Stripe Connect Express accounts**: Vendors onboard via Stripe-hosted flow
+- **Compliance delegation**: Stripe handles 1099-K reporting and identity verification
+- **Payout timing**: Controlled by Stripe (2-7 day settlement)
+- **Platform fee collection**: Deducted at time of charge via Stripe Connect
+- **Vendor tax details**: SSN/EIN collected during Stripe onboarding
+
+### Media Processing Execution
+- **Short operations (image resize, thumbnail)**: In-process via Thumbnailator, immediate response
+- **Long operations (video transcode)**: Queued via DelayedJob, processed asynchronously
+- **Execution environment**: FFmpeg invoked via ProcessBuilder within application pods
+- **Resource limits**:
+  - Image processing timeout: 30 seconds
+  - Video processing timeout: 10 minutes
+  - Upload limits enforced before processing begins
+- **Failure handling**: Failed transcodes logged, original preserved, retry via DelayedJob
+
+### Session & Audit Log Storage
+- **Hot storage**: PostgreSQL with time-based partitioning (monthly partitions)
+- **Retention in database**: 90 days of session activity and audit logs
+- **Archival**: Records older than 90 days compressed and archived to R2 object storage
+- **Archive format**: JSONL (newline-delimited JSON) with gzip compression
+- **Historical queries**: Application queries archive via S3 API when date range exceeds 90 days
+- **Partition maintenance**: Scheduled job creates new partitions, archives and drops old ones
 
 ---
 
