@@ -360,6 +360,88 @@ Each merchant store is a **tenant** identified by subdomain or custom domain. Al
 
 See [ADR-001](docs/adr/ADR-001-tenancy.md) for detailed architecture and data model.
 
+## Storefront Development
+
+The customer-facing storefront uses **Qute templates** with **Tailwind CSS** for server-side rendering (SSR). This approach provides excellent SEO, fast initial page loads, and progressive enhancement.
+
+### Storefront Stack
+
+- **Templates:** Qute (type-safe, compiled templates)
+- **Styling:** Tailwind CSS (utility-first, responsive design)
+- **Components:** PrimeUI (progressively enhanced widgets)
+- **Localization:** ResourceBundle (en/es message bundles)
+- **Theming:** CSS custom properties (tenant-specific color overrides)
+
+### Tailwind Setup
+
+```bash
+# Install Tailwind (one-time setup)
+npm install -D tailwindcss
+
+# Generate CSS (development with watch mode)
+npx tailwindcss -i src/main/resources/css/input.css \
+                -o src/main/resources/META-INF/resources/static/css/tailwind.css \
+                --watch
+
+# Build for production (minified)
+npx tailwindcss -i src/main/resources/css/input.css \
+                -o src/main/resources/META-INF/resources/static/css/tailwind.css \
+                --minify
+```
+
+### Template Structure
+
+```
+src/main/resources/templates/
+├── base.html              # Base layout with header/footer
+├── StorefrontResource/
+│   └── index.html         # Homepage template
+└── components/
+    ├── header.html        # Navigation header
+    ├── footer.html        # Footer with links
+    ├── hero.html          # Hero banner section
+    └── product-card.html  # Product card component
+```
+
+### Creating New Storefront Pages
+
+1. **Create template** in `src/main/resources/templates/StorefrontResource/`:
+
+```html
+{#include base.html}
+
+{#content}
+<div class="max-w-8xl mx-auto px-4 py-12">
+    <h1 class="text-4xl font-bold mb-6">{pageTitle}</h1>
+    <p>{msg:custom_message}</p>
+</div>
+{/content}
+
+{/include}
+```
+
+2. **Add resource method** in `StorefrontResource.java`:
+
+```java
+@GET
+@Path("/custom")
+public TemplateInstance customPage() {
+    return Templates.customPage()
+        .data("pageTitle", "Custom Page")
+        .data("tenantName", getTenantName());
+}
+```
+
+3. **Add message keys** to `messages.properties` and `messages_es.properties`
+
+### Theming & Localization
+
+See [docs/storefront-theming.md](docs/storefront-theming.md) for complete guide on:
+- Customizing tenant colors via design tokens
+- Adding new message translations
+- Using Money formatting helpers
+- Testing multi-tenant themes
+
 ## API Documentation
 
 The REST API follows an **OpenAPI spec-first** approach:
@@ -562,6 +644,7 @@ mvn migration:up -Dmigration.env=development
 - **Architecture Overview:** `docs/architecture_overview.md`
 - **ADRs:** `docs/adr/` (Architecture Decision Records)
 - **Java Standards:** `docs/java-project-standards.adoc`
+- **Storefront Theming:** `docs/storefront-theming.md` (Tailwind, design tokens, localization)
 - **API Spec:** `api/v1/openapi.yaml`
 - **Diagrams:** `docs/diagrams/` (PlantUML source files)
 

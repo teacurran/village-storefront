@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="{locale ?: 'en'}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    {#if seoTitle}
+    <title>{seoTitle} - {tenantName}</title>
+    {#else}
+    <title>{pageTitle ?: 'Home'} - {tenantName}</title>
+    {/if}
+
+    {#if seoDescription}
+    <meta name="description" content="{seoDescription}">
+    {/if}
+
+    {#if canonicalUrl}
+    <link rel="canonical" href="{canonicalUrl}">
+    {/if}
+    {#if tenantSubdomain}
+    <meta name="tenant-subdomain" content="{tenantSubdomain}">
+    {/if}
+
+    <!-- Tenant-specific theme CSS variables -->
+    <style>
+        :root {
+            /* Tenant-specific color overrides */
+            --color-primary-50: {themeTokens.primary50 ?: '#eff6ff'};
+            --color-primary-100: {themeTokens.primary100 ?: '#dbeafe'};
+            --color-primary-200: {themeTokens.primary200 ?: '#bfdbfe'};
+            --color-primary-300: {themeTokens.primary300 ?: '#93c5fd'};
+            --color-primary-400: {themeTokens.primary400 ?: '#60a5fa'};
+            --color-primary-500: {themeTokens.primary500 ?: '#3b82f6'};
+            --color-primary-600: {themeTokens.primary600 ?: '#2563eb'};
+            --color-primary-700: {themeTokens.primary700 ?: '#1d4ed8'};
+            --color-primary-800: {themeTokens.primary800 ?: '#1e40af'};
+            --color-primary-900: {themeTokens.primary900 ?: '#1e3a8a'};
+            --color-primary-950: {themeTokens.primary950 ?: '#172554'};
+
+            --color-secondary-50: {themeTokens.secondary50 ?: '#f5f3ff'};
+            --color-secondary-100: {themeTokens.secondary100 ?: '#ede9fe'};
+            --color-secondary-200: {themeTokens.secondary200 ?: '#ddd6fe'};
+            --color-secondary-300: {themeTokens.secondary300 ?: '#c4b5fd'};
+            --color-secondary-400: {themeTokens.secondary400 ?: '#a78bfa'};
+            --color-secondary-500: {themeTokens.secondary500 ?: '#8b5cf6'};
+            --color-secondary-600: {themeTokens.secondary600 ?: '#7c3aed'};
+            --color-secondary-700: {themeTokens.secondary700 ?: '#6d28d9'};
+            --color-secondary-800: {themeTokens.secondary800 ?: '#5b21b6'};
+            --color-secondary-900: {themeTokens.secondary900 ?: '#4c1d95'};
+            --color-secondary-950: {themeTokens.secondary950 ?: '#2e1065'};
+        }
+    </style>
+
+    <!-- Tailwind CSS - generated during build with tenant overrides -->
+    <link rel="stylesheet" href="/static/css/tailwind.css">
+
+    <!-- PrimeUI CSS for enhanced components -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/primeui@1.0.0/dist/primeui.min.css">
+
+    {#insert head /}
+</head>
+<body class="bg-neutral-50 text-neutral-900 antialiased">
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded">
+        {msg.skipToContent}
+    </a>
+
+    <!-- Header Navigation -->
+    {#include components/header.html /}
+
+    <!-- Main Content -->
+    <main id="main-content" class="min-h-screen">
+        {#insert content /}
+    </main>
+
+    <!-- Footer -->
+    {#include components/footer.html /}
+
+    <!-- PrimeUI JavaScript for progressive enhancement -->
+    <script src="https://cdn.jsdelivr.net/npm/primeui@1.0.0/dist/primeui.min.js" defer></script>
+
+    {#insert scripts /}
+</body>
+</html>
