@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="{locale ?: 'en'}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #374151;
+            background-color: #f9fafb;
+        }
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .email-header {
+            background-color: #f59e0b;
+            color: #ffffff;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .email-body {
+            padding: 32px 24px;
+        }
+        .email-body h2 {
+            margin: 0 0 16px 0;
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+        }
+        .email-body p {
+            margin: 0 0 16px 0;
+        }
+        .button-primary {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #f59e0b;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            margin: 16px 0;
+        }
+        .warning-box {
+            background-color: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .warning-box p {
+            margin: 0 0 8px 0;
+        }
+        .item-list {
+            list-style: none;
+            padding: 0;
+            margin: 8px 0;
+        }
+        .item-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .item-name {
+            font-weight: 500;
+            color: #111827;
+        }
+        .expiry-date {
+            color: #f59e0b;
+            font-size: 14px;
+        }
+        .email-footer {
+            padding: 24px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+            background-color: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+        .email-footer p {
+            margin: 8px 0;
+        }
+        .email-footer a {
+            color: #f59e0b;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <!-- Header -->
+        <div class="email-header">
+            <h1>{msg.email_consignment_expiration_header}</h1>
+        </div>
+
+        <!-- Body Content -->
+        <div class="email-body">
+            <h2>{msg.email_consignment_expiration_greeting} {consignorName},</h2>
+
+            <p>{msg.email_consignment_expiration_intro}</p>
+
+            <div class="warning-box">
+                <p><strong>{msg.email_consignment_expiration_warning}</strong></p>
+                <p>{msg.email_consignment_expiration_days_remaining}: <strong>{expirationDays}</strong></p>
+
+                <ul class="item-list">
+                    {#for item in expiringItems}
+                    <li>
+                        <div class="item-name">{item.name}</div>
+                        <div class="expiry-date">{msg.email_consignment_expiration_expires_on}: {item.expiryDate}</div>
+                    </li>
+                    {/for}
+                </ul>
+            </div>
+
+            <p>{msg.email_consignment_expiration_action_required}</p>
+
+            <p>{msg.email_consignment_expiration_contact_info}</p>
+        </div>
+
+        <!-- Footer -->
+        <div class="email-footer">
+            <p>{msg.email_footer_message}</p>
+            <p>{msg.email_footer_questions} <a href="mailto:{msg.email_support_address}">{msg.email_support_address}</a></p>
+            <p>&copy; 2026 {msg.all_rights_reserved}</p>
+        </div>
+    </div>
+</body>
+</html>
