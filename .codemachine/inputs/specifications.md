@@ -25,16 +25,19 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 - **Payments**: Stripe (including Stripe Connect for platform fees)
 - **Email**: Quarkus Mailer with domain filtering for non-production environments
 
-### Frontend (Storefront)
-- **Templating**: Qute templates for server-rendered HTML
-- **JavaScript**: PrimeUI components for interactive elements
+### Frontend (Customer-Facing Storefront)
+- **Templating**: Qute templates for all customer-facing server-rendered HTML
+- **JavaScript**: PrimeUI components for interactive elements (cart, checkout)
 - **Styling**: Tailwind CSS
+- **Routes**: All paths except `/admin/*` are rendered with Qute
 - **Headless API**: REST endpoints for cart status, product data (for static site integration)
 
-### Frontend (Admin Dashboard)
+### Frontend (Admin Dashboard - `/admin/*` only)
 - **Framework**: Vue.js 3 + Vite + TypeScript (via Quinoa)
 - **UI Components**: PrimeVue
 - **Styling**: Tailwind CSS
+- **Routes**: All `/admin/*` paths served by Vue.js SPA
+- **Users**: Store owners, staff, consignment vendors, and platform super-users
 
 ### Deployment
 - **Container**: GraalVM native image in minimal Docker container

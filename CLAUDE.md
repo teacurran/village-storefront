@@ -20,7 +20,8 @@ This project follows the VillageCompute Java Project Standards. See `docs/java-p
 - **Spotless** for code formatting
 - **JaCoCo** with 80% code coverage requirement (enforced by SonarCloud)
 - **OpenAPI spec-first** REST API design
-- **Vue.js 3** with Quinoa for frontend
+- **Qute templates** for customer-facing storefront (all paths except `/admin/*`)
+- **Vue.js 3** with Quinoa for admin dashboard (`/admin/*` only)
 
 ### Build Commands
 
