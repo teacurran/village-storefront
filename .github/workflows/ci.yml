@@ -3,105 +3,276 @@ name: Continuous Integration
 on:
   push:
     branches:
-      - main
-      - beta
+      - '**'
   pull_request:
-    branches:
-      - main
-      - beta
 
-# Cancel in-progress runs for the same branch/PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
-  REGISTRY: docker.io
-  IMAGE_NAME: village-storefront
+  JAVA_VERSION: '21'
+  NODE_VERSION: '20'
+  MAVEN_OPTS: >-
+    -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+    -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+  PLANTUML_JAR: tools/plantuml.jar
 
 jobs:
-  backend-build:
-    name: Backend Build & Test
+  validate:
+    name: Validate Code Style & Specs
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
-          cache: maven
+          cache: 'maven'
 
-      - name: Compile backend
-        run: ./mvnw compile -DskipTests
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
-      - name: Run unit tests
-        run: ./mvnw test
+      - name: Install npm dependencies
+        run: npm ci
 
-      - name: Upload test results
+      - name: Lint backend formatting (Spotless)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/lint
+          npm run lint --silent | tee artifacts/lint/spotless.json
+
+      - name: Lint OpenAPI specification
+        run: npm run openapi:lint
+
+      - name: Validate PlantUML diagrams
+        run: npm run diagrams:check
+
+      - name: Upload lint reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
-          path: target/surefire-reports/
-          retention-days: 7
+          name: lint-reports
+          path: artifacts/lint/
+          retention-days: 14
 
-  frontend-lint:
-    name: Frontend Linting
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ validate duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
+  test:
+    name: Test (${{ matrix.runtime }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: validate
+    strategy:
+      matrix:
+        runtime: [jvm, native]
+      fail-fast: false
+    if: ${{ matrix.runtime == 'jvm' || github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check if frontend exists
-        id: frontend-check
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        if: matrix.runtime == 'jvm'
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up GraalVM
+        if: matrix.runtime == 'native'
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+
+      - name: Set up Node.js
+        if: matrix.runtime == 'jvm'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install npm dependencies
+        if: matrix.runtime == 'jvm'
+        run: npm ci
+
+      - name: Run JVM tests via npm (Spotless + JaCoCo enforced)
+        if: matrix.runtime == 'jvm'
+        run: npm run test
+
+      - name: Upload coverage reports
+        if: matrix.runtime == 'jvm'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports-jvm
+          path: |
+            target/site/jacoco/
+            target/jacoco.exec
+          retention-days: 30
+
+      - name: Upload test results
+        if: matrix.runtime == 'jvm'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-jvm
+          path: target/surefire-reports/
+          retention-days: 30
+
+      - name: Publish coverage summary
+        if: matrix.runtime == 'jvm'
+        run: |
+          if [ -f target/site/jacoco/jacoco.csv ]; then
+            echo "## JVM Coverage Summary" >> $GITHUB_STEP_SUMMARY
+            echo "| Package | Instruction % | Branch % | Line % |" >> $GITHUB_STEP_SUMMARY
+            echo "|---------|---------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
+            tail -n +2 target/site/jacoco/jacoco.csv | while IFS=, read -r group package class inst_missed inst_covered branch_missed branch_covered line_missed line_covered rest; do
+              inst_total=$((inst_missed + inst_covered))
+              branch_total=$((branch_missed + branch_covered))
+              line_total=$((line_missed + line_covered))
+              if [ $inst_total -gt 0 ]; then
+                inst_pct=$((inst_covered * 100 / inst_total))
+              else
+                inst_pct=0
+              fi
+              if [ $branch_total -gt 0 ]; then
+                branch_pct=$((branch_covered * 100 / branch_total))
+              else
+                branch_pct=0
+              fi
+              if [ $line_total -gt 0 ]; then
+                line_pct=$((line_covered * 100 / line_total))
+              else
+                line_pct=0
+              fi
+              echo "| $package | ${inst_pct}% | ${branch_pct}% | ${line_pct}% |" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Coverage gate: 80% line + branch (JaCoCo)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No coverage data found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Run native verify
+        if: matrix.runtime == 'native'
+        run: ./mvnw -B verify -Pnative -DskipITs=false
+
+      - name: Upload native executable info
+        if: matrix.runtime == 'native'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-info
+          path: |
+            target/*-runner
+            target/quarkus-artifact.properties
+          retention-days: 7
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ test-${{ matrix.runtime }} duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
+  admin-spa:
+    name: Admin SPA (Lint & Test)
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Detect admin SPA workspace
+        id: spa
         run: |
           if [ -f "src/main/webui/package.json" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "present=true" >> $GITHUB_OUTPUT
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Frontend not yet initialized, skipping linting"
+            echo "present=false" >> $GITHUB_OUTPUT
+            echo "Admin SPA not initialized; skipping lint/test."
           fi
 
       - name: Set up Node.js
-        if: steps.frontend-check.outputs.exists == 'true'
+        if: steps.spa.outputs.present == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: src/main/webui/package-lock.json
 
-      - name: Install frontend dependencies
-        if: steps.frontend-check.outputs.exists == 'true'
+      - name: Install SPA dependencies
+        if: steps.spa.outputs.present == 'true'
         working-directory: src/main/webui
         run: npm ci
 
-      - name: Run ESLint
-        if: steps.frontend-check.outputs.exists == 'true'
+      - name: Run SPA lint
+        if: steps.spa.outputs.present == 'true'
         working-directory: src/main/webui
         run: npm run lint
+
+      - name: Run SPA tests
+        if: steps.spa.outputs.present == 'true'
+        working-directory: src/main/webui
+        run: npm test -- --runInBand
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ admin-spa duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: [backend-build, frontend-lint]
+    needs: [test, admin-spa]
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for better analysis
+          fetch-depth: 0
 
-      - name: Set up JDK 21
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
-          cache: maven
+          cache: 'maven'
 
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
@@ -115,88 +286,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          # Run tests with coverage first
           ./mvnw -B verify -DskipITs=false
-
-          # Only run SonarCloud if SONAR_TOKEN is configured and project exists
           if [ -n "$SONAR_TOKEN" ]; then
             ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
               -Dsonar.projectKey=teacurran_village-storefront \
               -Dsonar.organization=appi \
               -Dsonar.host.url=https://sonarcloud.io \
               -Dsonar.qualitygate.wait=true \
-              -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml,target/jacoco-report/jacoco.xml \
+              -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
               -Dsonar.java.binaries=target/classes \
-              -Dsonar.java.source=21 || echo "SonarCloud analysis failed (project may not exist yet)"
+              -Dsonar.java.source=21
           else
             echo "SONAR_TOKEN not configured, skipping SonarCloud analysis"
           fi
 
-      - name: Upload JaCoCo coverage reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jacoco-coverage-reports
-          path: |
-            target/site/jacoco/
-            target/jacoco-report/
-          retention-days: 7
-
-      - name: Add coverage summary to workflow
+      - name: Record job duration
         if: always()
         run: |
-          echo "## Code Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f target/site/jacoco/jacoco.csv ]; then
-            echo "### Package Coverage" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Package | Instruction % | Branch % | Line % |" >> $GITHUB_STEP_SUMMARY
-            echo "|---------|---------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
-            tail -n +2 target/site/jacoco/jacoco.csv | while IFS=, read -r group package class inst_missed inst_covered branch_missed branch_covered line_missed line_covered rest; do
-              if [ -n "$inst_covered" ] && [ -n "$inst_missed" ]; then
-                inst_total=$((inst_missed + inst_covered))
-                if [ $inst_total -gt 0 ]; then
-                  inst_pct=$((inst_covered * 100 / inst_total))
-                else
-                  inst_pct=0
-                fi
-
-                branch_total=$((branch_missed + branch_covered))
-                if [ $branch_total -gt 0 ]; then
-                  branch_pct=$((branch_covered * 100 / branch_total))
-                else
-                  branch_pct="-"
-                fi
-
-                line_total=$((line_missed + line_covered))
-                if [ $line_total -gt 0 ]; then
-                  line_pct=$((line_covered * 100 / line_total))
-                else
-                  line_pct=0
-                fi
-
-                echo "| $package | ${inst_pct}% | ${branch_pct}% | ${line_pct}% |" >> $GITHUB_STEP_SUMMARY
-              fi
-            done
-          else
-            echo "No coverage data found" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 Full HTML report available in **jacoco-coverage-reports** artifact" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Quality Gate" >> $GITHUB_STEP_SUMMARY
-          echo "- **Coverage requirement**: 80% (line and branch)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Defects allowed**: 0 (APPI quality profile)" >> $GITHUB_STEP_SUMMARY
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ sonarcloud duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
   docker-build:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: [sonarcloud]
-    # Only build Docker on push to main/beta after quality checks pass
-    # Also requires Docker Hub credentials to be configured
+    needs: sonarcloud
     if: github.event_name == 'push' && vars.DOCKER_ENABLED == 'true'
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -215,7 +331,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+          images: docker.io/${{ secrets.DOCKER_USERNAME }}/village-storefront
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}

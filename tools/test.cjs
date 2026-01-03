@@ -71,7 +71,9 @@ function runInstall() {
  */
 function runTests() {
   const mvnCmd = getMavenCommand();
-  logInfo('Running tests with coverage...\n');
+  const isNative = process.argv.includes('--native');
+
+  logInfo(`Running ${isNative ? 'native' : 'JVM'} tests with coverage...\n`);
 
   // Spawn Maven process for tests
   // Using spawn instead of exec to stream output in real-time
@@ -79,9 +81,10 @@ function runTests() {
   const child = spawn(
     mvnCmd,
     [
-      'test',           // Run tests
-      'jacoco:report',  // Generate coverage report
-      '-B'              // Batch mode (non-interactive)
+      '-B',              // Batch mode (non-interactive)
+      ...(isNative ? ['-Pnative'] : []),
+      'verify',          // Run full verification lifecycle (includes JaCoCo check)
+      'jacoco:report'    // Generate coverage report artifacts
     ],
     {
       stdio: 'inherit',
