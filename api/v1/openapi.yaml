@@ -677,6 +677,260 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  # ============================================================================
+  # LOYALTY ENDPOINTS
+  # ============================================================================
+
+  /loyalty/program:
+    get:
+      operationId: getLoyaltyProgram
+      summary: Get active loyalty program
+      description: |
+        Returns the currently active loyalty program configuration for the tenant inferred from the `Host` header.
+        Responds with `404` if the tenant has not configured a program yet.
+      tags: [Storefront]
+      responses:
+        '200':
+          description: Loyalty program retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '404':
+          description: No loyalty program configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/member/{userId}:
+    get:
+      operationId: getLoyaltyMember
+      summary: Get loyalty member profile
+      description: |
+        Returns the loyalty membership record (balance, lifetime stats, tier) for the specified user. Requires the
+        caller to be authenticated as the same tenant.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Loyalty member retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyMember'
+        '404':
+          description: User is not enrolled in the loyalty program
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/enroll/{userId}:
+    post:
+      operationId: enrollLoyaltyMember
+      summary: Enroll user in loyalty program
+      description: |
+        Idempotently enrolls the specified user in the tenant's active loyalty program. Returns the existing membership
+        record if the user was already enrolled.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Member enrolled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyMember'
+        '400':
+          description: Enrollment failed (user not found or program disabled)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/redeem/{userId}:
+    post:
+      operationId: redeemLoyaltyPoints
+      summary: Redeem loyalty points for a discount
+      description: |
+        Redeems points from the user's balance for discounts during checkout. Enforces program-level minimum/maximum
+        thresholds and requires the `X-Idempotency-Key` header for safe retries.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemPointsRequest'
+      responses:
+        '200':
+          description: Points redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyTransaction'
+        '400':
+          description: Redemption failed (insufficient balance, invalid thresholds, or missing idempotency key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/transactions/{userId}:
+    get:
+      operationId: listLoyaltyTransactions
+      summary: List loyalty transactions for a member
+      description: |
+        Returns the immutable ledger entries for the specified user's loyalty account ordered by `createdAt DESC`.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Page number (0-indexed)
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoyaltyTransaction'
+        '400':
+          description: User is not enrolled in the loyalty program
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/loyalty/program:
+    get:
+      operationId: getAdminLoyaltyProgram
+      summary: Admin - get loyalty program configuration
+      description: |
+        Returns the loyalty program configuration for the current tenant, including disabled programs. Requires an admin
+        JWT.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Program configuration retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '404':
+          description: No configuration exists for this tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: upsertLoyaltyProgram
+      summary: Admin - upsert loyalty program configuration
+      description: |
+        Creates or updates the loyalty program configuration for the tenant. Setting `enabled` to `false` leaves the
+        configuration in place but disables accrual/redemption.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertLoyaltyProgramRequest'
+      responses:
+        '200':
+          description: Program updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '201':
+          description: Program created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '400':
+          description: Invalid configuration payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/loyalty/adjust/{userId}:
+    post:
+      operationId: adjustLoyaltyPoints
+      summary: Admin - adjust loyalty points
+      description: |
+        Adjusts a member's balance manually for customer service or remediation scenarios. Supports positive and
+        negative adjustments while preventing negative balances.
+      tags: [Admin]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustPointsRequest'
+      responses:
+        '200':
+          description: Adjustment recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyTransaction'
+        '400':
+          description: Adjustment failed (user not enrolled or invalid point amount)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     delete:
       operationId: removeCartItem
       summary: Remove item from cart
@@ -2340,6 +2594,8 @@ components:
         updatedAt:
           type: string
           format: date-time
+        loyalty:
+          $ref: '#/components/schemas/CartLoyaltySummary'
 
     CartItem:
       type: object
@@ -2386,6 +2642,255 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    CartLoyaltySummary:
+      type: object
+      required:
+        - programEnabled
+        - estimatedPointsEarned
+        - estimatedRewardValue
+        - availableRedemptionValue
+      properties:
+        programEnabled:
+          type: boolean
+          description: Indicates whether the loyalty program is enabled for the tenant
+        programId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Loyalty program identifier
+        memberPointsBalance:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Current balance for the authenticated user (null for guests)
+        estimatedPointsEarned:
+          type: integer
+          minimum: 0
+          description: Estimated points that will be earned for the current cart subtotal
+        estimatedRewardValue:
+          $ref: '#/components/schemas/Money'
+        availableRedemptionValue:
+          $ref: '#/components/schemas/Money'
+        currentTier:
+          type: string
+          nullable: true
+          description: Tier name resolved from the tenant's tier configuration
+        dataFreshnessTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp indicating when the loyalty data was last refreshed
+
+    LoyaltyProgram:
+      type: object
+      required:
+        - id
+        - name
+        - enabled
+        - pointsPerDollar
+        - redemptionValuePerPoint
+        - minRedemptionPoints
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        pointsPerDollar:
+          type: number
+          format: double
+        redemptionValuePerPoint:
+          type: number
+          format: double
+        minRedemptionPoints:
+          type: integer
+          minimum: 1
+        maxRedemptionPoints:
+          type: integer
+          nullable: true
+        pointsExpirationDays:
+          type: integer
+          nullable: true
+        tierConfig:
+          type: string
+          description: Raw JSON tier configuration for historical reference
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LoyaltyMember:
+      type: object
+      required:
+        - id
+        - programId
+        - pointsBalance
+        - lifetimePointsEarned
+        - lifetimePointsRedeemed
+        - status
+        - enrolledAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        programId:
+          type: string
+          format: uuid
+        pointsBalance:
+          type: integer
+        lifetimePointsEarned:
+          type: integer
+        lifetimePointsRedeemed:
+          type: integer
+        currentTier:
+          type: string
+          nullable: true
+        tierUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+        enrolledAt:
+          type: string
+          format: date-time
+
+    LoyaltyTransaction:
+      type: object
+      required:
+        - id
+        - memberId
+        - pointsDelta
+        - balanceAfter
+        - transactionType
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+          nullable: true
+        pointsDelta:
+          type: integer
+        balanceAfter:
+          type: integer
+        transactionType:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AdjustPointsRequest:
+      type: object
+      required:
+        - points
+        - reason
+      properties:
+        points:
+          type: integer
+          description: Positive to award points, negative to deduct points
+        reason:
+          type: string
+          description: Human-readable reason for the adjustment
+
+    RedeemPointsRequest:
+      type: object
+      required:
+        - pointsToRedeem
+      properties:
+        pointsToRedeem:
+          type: integer
+          minimum: 1
+        idempotencyKey:
+          type: string
+          description: Optional fallback idempotency key when the header cannot be set
+          nullable: true
+
+    UpsertLoyaltyProgramRequest:
+      type: object
+      required:
+        - name
+        - pointsPerDollar
+        - redemptionValuePerPoint
+        - minRedemptionPoints
+        - tiers
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          default: true
+        pointsPerDollar:
+          type: number
+          format: double
+        redemptionValuePerPoint:
+          type: number
+          format: double
+        minRedemptionPoints:
+          type: integer
+        maxRedemptionPoints:
+          type: integer
+          nullable: true
+        pointsExpirationDays:
+          type: integer
+          nullable: true
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoyaltyTierConfig'
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    LoyaltyTierConfig:
+      type: object
+      required:
+        - name
+        - minPoints
+        - multiplier
+      properties:
+        name:
+          type: string
+        minPoints:
+          type: integer
+          minimum: 0
+        multiplier:
+          type: number
+          format: double
 
     AddToCartRequest:
       type: object

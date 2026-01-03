@@ -22,6 +22,7 @@ import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.InventoryAgingAggregate;
 import villagecompute.storefront.data.models.InventoryLevel;
 import villagecompute.storefront.data.models.InventoryLocation;
+import villagecompute.storefront.data.models.LoyaltyTransaction;
 import villagecompute.storefront.data.models.SalesByPeriodAggregate;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.repositories.CartItemRepository;
@@ -348,5 +349,26 @@ public class ReportingProjectionService {
                     "aggregate_type", "inventory_aging").increment();
             throw e;
         }
+    }
+
+    /**
+     * Lightweight hook used by the loyalty service to ensure ledger events are observable by the reporting pipeline.
+     *
+     * @param transaction
+     *            loyalty transaction that was just persisted
+     */
+    public void recordLoyaltyLedgerEvent(LoyaltyTransaction transaction) {
+        if (transaction == null) {
+            return;
+        }
+
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Recording loyalty ledger event - tenantId=%s, transactionId=%s, type=%s", tenantId, transaction.id,
+                transaction.transactionType);
+
+        meterRegistry
+                .counter("reporting.loyalty.ledger.events", "tenant_id", tenantId.toString(), "transaction_type",
+                        transaction.transactionType != null ? transaction.transactionType : "unknown")
+                .increment(Math.abs(transaction.pointsDelta != null ? transaction.pointsDelta : 0));
     }
 }

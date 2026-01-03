@@ -48,6 +48,9 @@ public class CartDto {
     @JsonProperty("updatedAt")
     private OffsetDateTime updatedAt;
 
+    @JsonProperty("loyalty")
+    private CartLoyaltySummary loyalty;
+
     public CartDto() {
     }
 
@@ -121,5 +124,13 @@ public class CartDto {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public CartLoyaltySummary getLoyalty() {
+        return loyalty;
+    }
+
+    public void setLoyalty(CartLoyaltySummary loyalty) {
+        this.loyalty = loyalty;
     }
 }
