@@ -483,7 +483,7 @@ For static site integration and custom frontends:
 ## Constraints & Assumptions
 
 1. **Single base currency per store**: Payments processed in one currency, display in multiple
-2. **English-only for v1**: Internationalization deferred to future version
+2. **Internationalized UI**: English and Spanish supported from v1 (see Internationalization section)
 3. **Stripe-only payments for v1**: Pluggable provider architecture ready for PayPal, CashApp, etc.
 4. **US shipping focus**: USPS, UPS, FedEx direct API integrations
 5. **No marketplace features**: Stores are independent; no cross-store discovery
@@ -533,6 +533,28 @@ For static site integration and custom frontends:
 - **Archive format**: JSONL (newline-delimited JSON) with gzip compression
 - **Historical queries**: Application queries archive via S3 API when date range exceeds 90 days
 - **Partition maintenance**: Scheduled job creates new partitions, archives and drops old ones
+
+### Internationalization (i18n)
+- **Supported languages**: English (en), Spanish (es) at launch; extensible for future languages
+- **Language selection**:
+  - Customer storefront: Browser `Accept-Language` header with manual override (stored in cookie/session)
+  - Admin dashboard: User preference stored in account settings
+- **Translation strategy**:
+  - **Qute templates (storefront)**: Quarkus `MessageBundle` with `.properties` files per locale
+  - **Vue.js admin**: `vue-i18n` with JSON message files per locale
+  - **API error messages**: Localized via `MessageBundle`, locale from request header
+- **Message file structure**:
+  ```
+  src/main/resources/messages/
+  ├── messages.properties        # English (default)
+  ├── messages_es.properties     # Spanish
+  src/main/webui/src/locales/
+  ├── en.json                    # English (admin)
+  └── es.json                    # Spanish (admin)
+  ```
+- **Content translation**: Product descriptions, store policies, email templates are merchant-managed (not system-translated)
+- **Date/number formatting**: Locale-aware formatting via `java.time` and `Intl` APIs
+- **RTL support**: Not required for v1 (English/Spanish are LTR)
 
 ---
 
