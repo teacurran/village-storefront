@@ -74,7 +74,7 @@ public class InventoryLocationRepository implements PanacheRepositoryBase<Invent
      */
     public List<InventoryLocation> findAllForTenant() {
         UUID tenantId = TenantContext.getCurrentTenantId();
-        return list("tenant.id", tenantId);
+        return list("tenant.id = ?1", tenantId);
     }
 
     /**

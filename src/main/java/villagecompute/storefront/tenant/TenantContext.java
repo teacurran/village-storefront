@@ -3,6 +3,8 @@ package villagecompute.storefront.tenant;
 import java.util.Objects;
 import java.util.UUID;
 
+import villagecompute.storefront.data.models.Tenant;
+
 /**
  * Thread-local holder for current tenant context. Automatically populated by {@link TenantResolutionFilter}.
  *
@@ -36,6 +38,28 @@ public class TenantContext {
         Objects.requireNonNull(tenantInfo, "Tenant info cannot be null");
         Objects.requireNonNull(tenantInfo.tenantId(), "Tenant ID cannot be null");
         CURRENT_TENANT.set(tenantInfo);
+    }
+
+    /**
+     * Convenience helper for background jobs that only know the tenant ID.
+     *
+     * <p>
+     * Resolves the tenant record and seeds {@link TenantInfo} so repositories can continue enforcing tenant filters
+     * without going through the HTTP resolution filter. Primarily used by scheduled jobs and integration tests.
+     *
+     * @param tenantId
+     *            tenant UUID
+     */
+    public static void setCurrentTenantId(UUID tenantId) {
+        Objects.requireNonNull(tenantId, "Tenant ID cannot be null");
+
+        Tenant tenant = Tenant.findById(tenantId);
+        if (tenant == null) {
+            throw new IllegalArgumentException("Tenant not found for id " + tenantId);
+        }
+
+        TenantInfo info = new TenantInfo(tenant.id, tenant.subdomain, tenant.name, tenant.status);
+        setCurrentTenant(info);
     }
 
     /**
