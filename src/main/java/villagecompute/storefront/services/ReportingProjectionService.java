@@ -19,11 +19,13 @@ import villagecompute.storefront.data.models.CartItem;
 import villagecompute.storefront.data.models.ConsignmentItem;
 import villagecompute.storefront.data.models.ConsignmentPayoutAggregate;
 import villagecompute.storefront.data.models.Consignor;
+import villagecompute.storefront.data.models.GiftCardTransaction;
 import villagecompute.storefront.data.models.InventoryAgingAggregate;
 import villagecompute.storefront.data.models.InventoryLevel;
 import villagecompute.storefront.data.models.InventoryLocation;
 import villagecompute.storefront.data.models.LoyaltyTransaction;
 import villagecompute.storefront.data.models.SalesByPeriodAggregate;
+import villagecompute.storefront.data.models.StoreCreditTransaction;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.repositories.CartItemRepository;
 import villagecompute.storefront.data.repositories.CartRepository;
@@ -370,5 +372,39 @@ public class ReportingProjectionService {
                 .counter("reporting.loyalty.ledger.events", "tenant_id", tenantId.toString(), "transaction_type",
                         transaction.transactionType != null ? transaction.transactionType : "unknown")
                 .increment(Math.abs(transaction.pointsDelta != null ? transaction.pointsDelta : 0));
+    }
+
+    /**
+     * Observability hook for gift card ledger adjustments.
+     */
+    public void recordGiftCardLedgerEvent(GiftCardTransaction transaction) {
+        if (transaction == null) {
+            return;
+        }
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Recording gift card ledger event - tenantId=%s, transactionId=%s, type=%s", tenantId,
+                transaction.id, transaction.transactionType);
+
+        meterRegistry
+                .counter("reporting.giftcard.ledger.events", "tenant_id", tenantId.toString(), "transaction_type",
+                        transaction.transactionType != null ? transaction.transactionType : "unknown")
+                .increment(transaction.amount != null ? transaction.amount.abs().doubleValue() : 0d);
+    }
+
+    /**
+     * Observability hook for store credit ledger adjustments.
+     */
+    public void recordStoreCreditLedgerEvent(StoreCreditTransaction transaction) {
+        if (transaction == null) {
+            return;
+        }
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Recording store credit ledger event - tenantId=%s, transactionId=%s, type=%s", tenantId,
+                transaction.id, transaction.transactionType);
+
+        meterRegistry
+                .counter("reporting.storecredit.ledger.events", "tenant_id", tenantId.toString(), "transaction_type",
+                        transaction.transactionType != null ? transaction.transactionType : "unknown")
+                .increment(transaction.amount != null ? transaction.amount.abs().doubleValue() : 0d);
     }
 }

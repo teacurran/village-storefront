@@ -75,6 +75,11 @@ public class TenantFilterTest {
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
         entityManager.createQuery("DELETE FROM Category").executeUpdate();
         entityManager.createQuery("DELETE FROM CustomDomain").executeUpdate();
+        entityManager.createQuery("DELETE FROM PaymentTender").executeUpdate();
+        entityManager.createQuery("DELETE FROM StoreCreditTransaction").executeUpdate();
+        entityManager.createQuery("DELETE FROM StoreCreditAccount").executeUpdate();
+        entityManager.createQuery("DELETE FROM GiftCardTransaction").executeUpdate();
+        entityManager.createQuery("DELETE FROM GiftCard").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
         entityManager.flush();

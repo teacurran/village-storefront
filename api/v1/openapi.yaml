@@ -933,6 +933,470 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
 
   # ============================================================================
+  # GIFT CARD ENDPOINTS
+  # ============================================================================
+
+  /gift-cards/check-balance:
+    post:
+      operationId: checkGiftCardBalance
+      summary: Check gift card balance
+      description: |
+        Returns the current balance and status of a gift card by its code. Does not require authentication,
+        allowing customers to check balances before redemption. Code lookups use secure SHA-256 hashing.
+      tags: [Storefront]
+      security: []  # Public endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckGiftCardBalanceRequest'
+      responses:
+        '200':
+          description: Gift card balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardBalanceResponse'
+        '404':
+          description: Gift card not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /gift-cards/redeem:
+    post:
+      operationId: redeemGiftCard
+      summary: Redeem gift card during checkout
+      description: |
+        Applies a gift card to an order, deducting the specified amount from the card's balance.
+        Supports partial redemption. Requires the `X-Idempotency-Key` header for safe retries.
+      tags: [Storefront]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemGiftCardRequest'
+      responses:
+        '200':
+          description: Gift card redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardTransaction'
+        '400':
+          description: Redemption failed (insufficient balance, expired card, or missing idempotency key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /gift-cards/transactions/{giftCardId}:
+    get:
+      operationId: listGiftCardTransactions
+      summary: List gift card transaction history
+      description: |
+        Returns the immutable ledger entries for the specified gift card ordered by `createdAt DESC`.
+      tags: [Storefront]
+      parameters:
+        - name: giftCardId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Page number (0-indexed)
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GiftCardTransaction'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/gift-cards:
+    get:
+      operationId: listGiftCards
+      summary: Admin - list gift cards
+      description: |
+        Returns a paginated list of gift cards with optional filtering by status. Requires admin role.
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, redeemed, expired, cancelled]
+          description: Filter by gift card status
+      responses:
+        '200':
+          description: Gift cards retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GiftCardDto'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+    post:
+      operationId: issueGiftCard
+      summary: Admin - issue a new gift card
+      description: |
+        Creates a new gift card with a secure randomly generated code. Can be used for promotional
+        purposes or customer service remediation.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueGiftCardRequest'
+      responses:
+        '201':
+          description: Gift card issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardDto'
+        '400':
+          description: Invalid request (e.g., negative balance)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/gift-cards/{giftCardId}:
+    get:
+      operationId: getGiftCard
+      summary: Admin - get gift card details
+      description: |
+        Returns full details of a gift card including transaction history and metadata.
+      tags: [Admin]
+      parameters:
+        - name: giftCardId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Gift card retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardDto'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      operationId: updateGiftCard
+      summary: Admin - update gift card status or balance
+      description: |
+        Allows admins to cancel gift cards, adjust balances, or update expiration dates.
+      tags: [Admin]
+      parameters:
+        - name: giftCardId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGiftCardRequest'
+      responses:
+        '200':
+          description: Gift card updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardDto'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # STORE CREDIT ENDPOINTS
+  # ============================================================================
+
+  /store-credit/balance/{userId}:
+    get:
+      operationId: getStoreCreditBalance
+      summary: Get store credit balance for user
+      description: |
+        Returns the current store credit balance and account status for the specified user.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Store credit balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCreditAccountDto'
+        '404':
+          description: Store credit account not found for user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /store-credit/redeem/{userId}:
+    post:
+      operationId: redeemStoreCredit
+      summary: Redeem store credit during checkout
+      description: |
+        Applies store credit to an order, deducting the specified amount from the user's balance.
+        Requires the `X-Idempotency-Key` header for safe retries.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemStoreCreditRequest'
+      responses:
+        '200':
+          description: Store credit redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCreditTransaction'
+        '400':
+          description: Redemption failed (insufficient balance or missing idempotency key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store credit account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /store-credit/transactions/{userId}:
+    get:
+      operationId: listStoreCreditTransactions
+      summary: List store credit transaction history
+      description: |
+        Returns the immutable ledger entries for the specified user's store credit account ordered by `createdAt DESC`.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Page number (0-indexed)
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoreCreditTransaction'
+        '404':
+          description: Store credit account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/store-credit/accounts:
+    get:
+      operationId: listStoreCreditAccounts
+      summary: Admin - list store credit accounts
+      description: |
+        Returns a paginated list of store credit accounts with optional filtering by status.
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, closed]
+          description: Filter by account status
+      responses:
+        '200':
+          description: Store credit accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StoreCreditAccountDto'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+
+  /admin/store-credit/adjust/{userId}:
+    post:
+      operationId: adjustStoreCredit
+      summary: Admin - adjust store credit balance
+      description: |
+        Adjusts a user's store credit balance manually for refunds, customer service, or promotional purposes.
+        Supports positive and negative adjustments while preventing negative balances.
+      tags: [Admin]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustStoreCreditRequest'
+      responses:
+        '200':
+          description: Store credit adjusted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCreditTransaction'
+        '400':
+          description: Adjustment failed (invalid amount or would result in negative balance)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store credit account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/store-credit/convert-gift-card:
+    post:
+      operationId: convertGiftCardToStoreCredit
+      summary: Admin - convert gift card balance to store credit
+      description: |
+        Moves the remaining balance from a gift card to a user's store credit account.
+        This is useful for customer service scenarios or when a customer wants to consolidate balances.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvertGiftCardRequest'
+      responses:
+        '200':
+          description: Gift card balance converted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [giftCardTransaction, storeCreditTransaction]
+                properties:
+                  giftCardTransaction:
+                    $ref: '#/components/schemas/GiftCardTransaction'
+                  storeCreditTransaction:
+                    $ref: '#/components/schemas/StoreCreditTransaction'
+        '400':
+          description: Conversion failed (gift card has no balance or user account issues)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Gift card or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
   # PLATFORM ADMIN ENDPOINTS (Placeholder)
   # ============================================================================
 
@@ -2863,6 +3327,413 @@ components:
         multiplier:
           type: number
           format: double
+
+    # ====== Gift Card Schemas ======
+
+    GiftCardDto:
+      type: object
+      required:
+        - id
+        - code
+        - initialBalance
+        - currentBalance
+        - currency
+        - status
+        - issuedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        code:
+          type: string
+          description: Display code (e.g., XXXX-XXXX-XXXX-XXXX) shown to customer
+        initialBalance:
+          type: number
+          format: double
+          minimum: 0
+        currentBalance:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+        status:
+          type: string
+          enum: [active, redeemed, expired, cancelled]
+        purchaserUserId:
+          type: string
+          format: uuid
+          nullable: true
+        purchaserEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientName:
+          type: string
+          nullable: true
+        personalMessage:
+          type: string
+          nullable: true
+        issuedAt:
+          type: string
+          format: date-time
+        activatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        fullyRedeemedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sourceOrderId:
+          type: integer
+          format: int64
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GiftCardBalanceResponse:
+      type: object
+      required:
+        - currentBalance
+        - currency
+        - status
+      properties:
+        currentBalance:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        status:
+          type: string
+          enum: [active, redeemed, expired, cancelled]
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    GiftCardTransaction:
+      type: object
+      required:
+        - id
+        - giftCardId
+        - amount
+        - transactionType
+        - balanceAfter
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        giftCardId:
+          type: integer
+          format: int64
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+        amount:
+          type: number
+          format: double
+          description: Positive for load/refund, negative for redemption
+        transactionType:
+          type: string
+          enum: [issued, redeemed, refunded, adjusted, expired]
+        balanceAfter:
+          type: number
+          format: double
+          minimum: 0
+        reason:
+          type: string
+          nullable: true
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: POS device ID if redeemed offline
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when offline redemption synced to server
+        createdAt:
+          type: string
+          format: date-time
+
+    CheckGiftCardBalanceRequest:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: Gift card code (e.g., XXXX-XXXX-XXXX-XXXX)
+          minLength: 1
+
+    RedeemGiftCardRequest:
+      type: object
+      required:
+        - code
+        - amount
+      properties:
+        code:
+          type: string
+          description: Gift card code
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Amount to redeem from card
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Associated order ID
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Optional fallback idempotency key when header cannot be set
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: POS device identifier when redemption occurs offline
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when offline redemption synced to server
+
+    IssueGiftCardRequest:
+      type: object
+      required:
+        - initialBalance
+      properties:
+        initialBalance:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: USD
+        purchaserUserId:
+          type: string
+          format: uuid
+          nullable: true
+        purchaserEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientName:
+          type: string
+          nullable: true
+        personalMessage:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        sourceOrderId:
+          type: integer
+          format: int64
+          nullable: true
+
+    UpdateGiftCardRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, redeemed, expired, cancelled]
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+          description: Reason for status change or adjustment
+
+    # ====== Store Credit Schemas ======
+
+    StoreCreditAccountDto:
+      type: object
+      required:
+        - id
+        - userId
+        - balance
+        - currency
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: string
+          format: uuid
+        balance:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+        status:
+          type: string
+          enum: [active, suspended, closed]
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    StoreCreditTransaction:
+      type: object
+      required:
+        - id
+        - accountId
+        - amount
+        - transactionType
+        - balanceAfter
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        accountId:
+          type: integer
+          format: int64
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+        giftCardId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Gift card ID if credit from conversion
+        amount:
+          type: number
+          format: double
+          description: Positive for credit, negative for debit
+        transactionType:
+          type: string
+          enum: [issued, redeemed, refunded, adjusted, converted, expired]
+        balanceAfter:
+          type: number
+          format: double
+          minimum: 0
+        reason:
+          type: string
+          nullable: true
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    RedeemStoreCreditRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Amount to redeem from store credit
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Optional fallback idempotency key when header cannot be set
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: POS device identifier when redemption happens offline
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when offline redemption synced back to platform
+
+    AdjustStoreCreditRequest:
+      type: object
+      required:
+        - amount
+        - reason
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Positive to credit, negative to debit
+        reason:
+          type: string
+          description: Human-readable reason for adjustment
+
+    ConvertGiftCardRequest:
+      type: object
+      required:
+        - giftCardId
+        - userId
+      properties:
+        giftCardId:
+          type: integer
+          format: int64
+          description: Gift card to convert
+        userId:
+          type: string
+          format: uuid
+          description: User who will receive the store credit
+        reason:
+          type: string
+          nullable: true
+          description: Reason for conversion
 
     AddToCartRequest:
       type: object
