@@ -24,6 +24,10 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 - **Migrations**: MyBatis Migrations
 - **Payments**: Stripe (including Stripe Connect for platform fees)
 - **Email**: Quarkus Mailer with domain filtering for non-production environments
+- **Object Storage**: AWS SDK S3 client (compatible with Cloudflare R2)
+- **Media Processing**:
+  - Images: Java ImageIO + Thumbnailator for resizing/compression
+  - Video: FFmpeg (via process execution) for transcoding
 
 ### Frontend (Customer-Facing Storefront)
 - **Templating**: Qute templates for all customer-facing server-rendered HTML
@@ -125,6 +129,37 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 - **Bulk import/export**: CSV/Excel for mass product management
 - **Custom attributes**: Store-defined fields for product metadata
 - **SEO metadata**: Title, description, URL slug per product
+
+#### Media Management
+- **Supported formats**:
+  - **Images**: JPEG, PNG, WebP, GIF (uploaded in any format)
+  - **Video**: MP4, MOV, WebM (uploaded in any format)
+- **Object storage**: Configurable S3-compatible storage (Cloudflare R2 default)
+  - All original uploads stored permanently
+  - Processed variants stored alongside originals
+  - Tenant-isolated storage paths
+- **Image processing**:
+  - Automatic recompression to WebP for web delivery
+  - Multiple size variants generated:
+    - Thumbnail (150px)
+    - Small (300px)
+    - Medium (600px)
+    - Large (1200px)
+    - Original (preserved)
+  - Aspect ratio preserved, longest edge sized
+  - EXIF data stripped for privacy
+  - Lazy generation: create on first request, cache permanently
+- **Video processing**:
+  - Transcode to H.264/MP4 for universal playback
+  - Generate HLS segments for adaptive streaming (optional)
+  - Extract poster frame as thumbnail image
+  - Compress to configurable quality/bitrate targets
+- **Processing modes**:
+  - **Background job**: Large uploads queued for async processing
+  - **On-demand**: Variants generated on first request if not cached
+  - **Results cached**: Processed media saved to object storage, never reprocessed
+- **CDN integration**: Signed URLs with configurable expiration for private content
+- **Upload limits**: Configurable per-tenant (default: 50MB images, 500MB video)
 
 ### 4. Inventory Management
 
@@ -436,7 +471,7 @@ Quarkus Native Build (GraalVM)
 ### Infrastructure
 - **Database**: PostgreSQL (managed or in-cluster)
 - **Cache**: Caffeine (in-memory, per-pod)
-- **Object Storage**: S3-compatible for product images
+- **Object Storage**: Cloudflare R2 (S3-compatible) for product images and video
 - **Email**: SMTP or SES for transactional email
 - **DNS**: Wildcard subdomain for tenant stores
 
