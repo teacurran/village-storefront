@@ -1,0 +1,308 @@
+@startuml component_overview
+!theme plain
+skinparam componentStyle rectangle
+scale max 1920 width
+
+' Planned shared diagram skin library (see docs/architecture_overview.md Section 2)
+' !include docs/diagrams/includes/village_shared_styles.puml
+
+' Rendering command:
+' docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/component_overview.puml -tpng
+' Or with local PlantUML: plantuml docs/diagrams/component_overview.puml
+
+title Village Storefront - Component Overview\n(Layered Modular Monolith Architecture)
+
+legend top left
+  **Icon Conventions:**
+  [Component] = Quarkus module or logical boundary
+  ((I)) = Interface/Contract
+  [Ext] = External service/system
+  --> Solid arrow = Direct dependency
+  ..> Dotted arrow = Asynchronous/event flow
+
+  **Documentation Anchors:**
+  See docs/architecture_overview.md
+    - #section-3-layered-modular-monolith
+    - #section-4-tenant-isolation
+  See docs/adr/ADR-001-tenancy.md
+    - Shared database tenancy model
+    - TenantContext propagation
+endlegend
+
+' ============================================================================
+' PRESENTATION LAYER
+' ============================================================================
+package "Presentation Layer" as PresentationLayer #DDFFDD {
+
+  component [Qute Storefront\nTemplates] as QuteStorefront #LightBlue
+  note right of QuteStorefront
+    Customer-facing views
+    All paths except /admin/*
+    Server-side rendering
+  end note
+
+  component [Admin SPA\n(Vue.js 3 + Quinoa)] as AdminSPA #LightBlue
+  note right of AdminSPA
+    Merchant dashboard
+    /admin/* routes
+    Compiled via Quinoa
+  end note
+
+  component [REST API\n(/api/v1/*)] as RestAPI #LightBlue
+  note right of RestAPI
+    OpenAPI spec-first
+    Package: api.rest
+    DTOs in api.types
+  end note
+}
+
+' ============================================================================
+' TENANT ACCESS GATEWAY (Cross-cutting concern)
+' ============================================================================
+package "Tenant Access Gateway" as TenantGateway #FFE6CC {
+  component [TenantResolutionFilter] as TenantFilter
+  component [TenantContext\n(ThreadLocal)] as TenantContext
+  database "Tenant Cache\n(Caffeine)" as TenantCache
+
+  TenantFilter --> TenantContext : Set current tenant
+  TenantFilter --> TenantCache : Lookup by domain
+
+  note right of TenantGateway
+    **anchor: section-4-tenant-isolation**
+    Resolves tenant from Host header
+    (subdomain or custom domain)
+    Propagates tenant_id to all layers
+    See ADR-001 for details
+  end note
+}
+
+' ============================================================================
+' SERVICE/DOMAIN LAYER (Logical Modules)
+' ============================================================================
+package "Service Layer - Logical Modules" as ServiceLayer #E6F3FF {
+
+  ' INNER MODULES (no dependencies on outer modules)
+  package "Tenancy Module" as TenancyModule #FFFFCC {
+    component [TenantService] as TenantService
+    component [CustomDomainService] as DomainService
+
+    note bottom of TenancyModule
+      **Core bounded context**
+      Entities: Tenant, Store, CustomDomain
+      No external module dependencies
+    end note
+  }
+
+  package "Identity Module" as IdentityModule #FFFFCC {
+    component [AuthService\n(JWT)] as AuthService
+    component [SessionService] as SessionService
+    component [ImpersonationService] as ImpersonationService
+
+    note bottom of IdentityModule
+      Entities: User, Session, Role, Permission
+      Depends on: Tenancy
+      Stateless JWT + session logging
+    end note
+  }
+
+  ' MIDDLE MODULES
+  package "Catalog Module" as CatalogModule #E6E6FF {
+    component [ProductService] as ProductService
+    component [InventoryService] as InventoryService
+    component [CategoryService] as CategoryService
+
+    note bottom of CatalogModule
+      Entities: Product, Variant, Category, InventoryItem
+      Depends on: Tenancy
+    end note
+  }
+
+  package "Payments Module" as PaymentsModule #E6E6FF {
+    component [PaymentService] as PaymentService
+    component [StripeAdapter] as StripeAdapter
+    component [RefundService] as RefundService
+
+    note bottom of PaymentsModule
+      Entities: Payment, Refund, PaymentMethod
+      Depends on: Orders, Tenancy
+      External: Stripe SDK
+    end note
+  }
+
+  ' OUTER MODULES (depend on inner modules)
+  package "Orders Module" as OrdersModule #FFE6E6 {
+    component [CartService] as CartService
+    component [CheckoutOrchestrator] as CheckoutService
+    component [OrderService] as OrderService
+    component [ShipmentService] as ShipmentService
+    component [ReturnService] as ReturnService
+
+    note bottom of OrdersModule
+      Entities: Order, LineItem, Shipment, Return
+      Depends on: Catalog, Payments, Tenancy
+      Orchestrates checkout flow
+    end note
+  }
+
+  package "Consignment Module" as ConsignmentModule #FFE6E6 {
+    component [VendorService] as VendorService
+    component [CommissionService] as CommissionService
+    component [PayoutService] as PayoutService
+
+    note bottom of ConsignmentModule
+      Entities: Vendor, Commission, Payout
+      Depends on: Catalog, Orders, Payments
+    end note
+  }
+
+  package "Notifications Module" as NotificationsModule #FFE6E6 {
+    component [EmailService] as EmailService
+    component [WebhookService] as WebhookService
+    component [DelayedJobWorker] as JobWorker
+
+    note bottom of NotificationsModule
+      Entities: DelayedJob, EmailTemplate
+      Depends on: All other modules (observes events)
+      Background processing
+    end note
+  }
+}
+
+' ============================================================================
+' INFRASTRUCTURE LAYER
+' ============================================================================
+package "Infrastructure Layer" as InfraLayer #F0F0F0 {
+  database "PostgreSQL\n(Shared Schema)" as PostgreSQL
+  note right of PostgreSQL
+    All tables include tenant_id
+    Composite unique constraints
+    See ADR-001 shared database model
+  end note
+
+  queue "Background Job Queue" as JobQueue
+  note right of JobQueue
+    Delayed job processing
+    Email sending, webhooks
+  end note
+}
+
+' ============================================================================
+' EXTERNAL SYSTEMS
+' ============================================================================
+cloud "Stripe API" as Stripe #FFD700
+cloud "Email Provider\n(SMTP/Mailpit)" as Mailer #FFD700
+cloud "Object Storage\n(S3/R2)" as ObjectStorage #FFD700
+cloud "Shipping APIs\n(UPS/FedEx/USPS)" as ShippingAPIs #FFD700
+
+' ============================================================================
+' PRESENTATION -> GATEWAY DEPENDENCIES
+' ============================================================================
+QuteStorefront --> TenantFilter : HTTP Request
+AdminSPA --> TenantFilter : HTTP Request
+RestAPI --> TenantFilter : HTTP Request
+
+' ============================================================================
+' GATEWAY -> INNER MODULES
+' ============================================================================
+TenantContext ..> TenantService : Get tenant metadata
+TenantContext ..> IdentityModule : Propagate tenant_id
+
+' ============================================================================
+' MODULE DEPENDENCIES (Following Dependency Rule)
+' ============================================================================
+
+' Presentation -> Services
+QuteStorefront --> CatalogModule : Display products
+QuteStorefront --> OrdersModule : Checkout
+AdminSPA --> IdentityModule : Authentication
+AdminSPA --> CatalogModule : Manage products
+AdminSPA --> OrdersModule : View orders
+AdminSPA --> ConsignmentModule : Vendor management
+RestAPI --> CatalogModule
+RestAPI --> OrdersModule
+RestAPI --> IdentityModule
+
+' Identity depends on Tenancy
+IdentityModule --> TenancyModule : Tenant-scoped users
+
+' Catalog depends on Tenancy
+CatalogModule --> TenancyModule : Tenant-scoped products
+
+' Payments depends on Tenancy
+PaymentsModule --> TenancyModule : Tenant-scoped payments
+
+' Orders depends on Catalog, Payments, Tenancy
+OrdersModule --> CatalogModule : Product/inventory lookup
+OrdersModule --> PaymentsModule : Process payments
+OrdersModule --> TenancyModule : Tenant-scoped orders
+
+' Consignment depends on Catalog, Orders, Payments
+ConsignmentModule --> CatalogModule : Vendor products
+ConsignmentModule --> OrdersModule : Commission calculation
+ConsignmentModule --> PaymentsModule : Vendor payouts
+
+' Notifications observes all modules (event-driven)
+NotificationsModule ..> OrdersModule : Order events
+NotificationsModule ..> PaymentsModule : Payment events
+NotificationsModule ..> ConsignmentModule : Payout events
+
+' ============================================================================
+' INFRASTRUCTURE DEPENDENCIES
+' ============================================================================
+TenantService --> PostgreSQL : CRUD operations
+IdentityModule --> PostgreSQL : CRUD operations
+CatalogModule --> PostgreSQL : CRUD operations
+OrdersModule --> PostgreSQL : CRUD operations
+PaymentsModule --> PostgreSQL : CRUD operations
+ConsignmentModule --> PostgreSQL : CRUD operations
+NotificationsModule --> PostgreSQL : CRUD operations
+
+CatalogModule --> ObjectStorage : Product images
+NotificationsModule --> JobQueue : Enqueue jobs
+JobWorker --> JobQueue : Consume jobs
+
+' ============================================================================
+' EXTERNAL SYSTEM DEPENDENCIES
+' ============================================================================
+StripeAdapter --> Stripe : Payment processing
+EmailService --> Mailer : Send emails
+ShipmentService --> ShippingAPIs : Generate labels
+
+' ============================================================================
+' FLOW ANNOTATIONS
+' ============================================================================
+note as Flow1
+  **Flow 1: Customer Purchase (Storefront)**
+  1. Browser → Qute Storefront (product page)
+  2. TenantResolutionFilter resolves tenant
+  3. TenantContext propagates tenant_id
+  4. CatalogService fetches product (tenant-scoped)
+  5. CheckoutOrchestrator coordinates:
+     - InventoryService (reserve stock)
+     - PaymentService → StripeAdapter (charge)
+     - OrderService (create order record)
+  6. EmailService → JobQueue (send confirmation)
+  **Anchors:**
+  - docs/architecture_overview.md#section-3-layered-architecture
+  - docs/architecture_overview.md#section-4-tenant-isolation
+  - docs/adr/ADR-001-tenancy.md
+end note
+
+note as Flow2
+  **Flow 2: Admin Vendor Management**
+  1. Admin SPA → REST API (/api/v1/admin/vendors)
+  2. TenantResolutionFilter resolves tenant
+  3. AuthService validates JWT + permissions
+  4. VendorService creates vendor (tenant-scoped)
+  5. CommissionService calculates splits
+  6. WebhookService notifies vendor (async)
+  **Anchors:**
+  - docs/architecture_overview.md#section-3-layered-architecture
+  - docs/architecture_overview.md#module-boundaries-logical
+  - docs/adr/ADR-001-tenancy.md
+end note
+
+Flow1 .. QuteStorefront
+Flow2 .. AdminSPA
+
+@enduml
