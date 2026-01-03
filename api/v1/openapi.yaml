@@ -1,0 +1,1295 @@
+# Village Storefront API - OpenAPI 3.0.3 Specification
+#
+# Lint command: npx @stoplight/spectral-cli lint api/v1/openapi.yaml
+#
+# This specification defines the REST API contract for Village Storefront,
+# a multi-tenant ecommerce platform. All endpoints are tenant-scoped via
+# subdomain/custom domain resolution (see ADR-001).
+#
+# References:
+# - Architecture: docs/architecture_overview.md#section-5-api-contracts
+# - Tenancy: docs/adr/ADR-001-tenancy.md
+# - Standards: docs/java-project-standards.adoc
+
+openapi: 3.0.3
+
+info:
+  title: Village Storefront API
+  version: 1.0.0
+  description: |
+    **Multi-tenant SaaS ecommerce platform API**
+
+    Village Storefront provides a comprehensive REST API for managing online stores,
+    products, orders, payments, and consignment vendors. Each merchant operates an
+    isolated store accessible via subdomain (storename.villagecompute.com) or custom domain.
+
+    ## Tenant Resolution
+
+    The API automatically resolves the current tenant from the HTTP `Host` header:
+    - Subdomain: `storename.villagecompute.com` → tenant with subdomain "storename"
+    - Custom domain: `shop.merchant.com` → tenant with verified custom domain
+
+    All API operations are automatically scoped to the resolved tenant. No explicit
+    tenant ID parameter is required in requests.
+
+    ## Authentication
+
+    The API supports two authentication methods:
+
+    1. **JWT Bearer Tokens** (for user sessions):
+       - Access token (15 min expiry) + Refresh token (30 day expiry)
+       - Obtain via `/api/v1/auth/login`, refresh via `/api/v1/auth/refresh`
+       - Includes `tenant_id`, `sub` (user ID), and `roles` claims
+
+    2. **API Keys** (for server-to-server integrations):
+       - Long-lived tokens scoped to tenant + permissions
+       - Managed via admin dashboard at `/admin/settings/api-keys`
+       - Pass via `X-API-Key` header
+
+    ## Versioning
+
+    - URL-based versioning: `/api/v1`, `/api/v2` (breaking changes)
+    - Deprecation policy: 12-month notice, marked with `deprecated: true`
+
+    ## Error Handling
+
+    All errors follow RFC 7807 Problem Details format. See `ProblemDetails` schema.
+
+    ## Rate Limiting
+
+    Rate limits vary by authentication method and endpoint category:
+    - Public endpoints: 100 requests/min per IP
+    - Authenticated endpoints: 1000 requests/min per user
+    - Headless API: 5000 requests/min per API key
+
+    Rate limit headers included in all responses:
+    - `X-RateLimit-Limit`: Request limit per window
+    - `X-RateLimit-Remaining`: Remaining requests in window
+    - `X-RateLimit-Reset`: Unix timestamp when window resets
+
+  contact:
+    name: VillageCompute API Support
+    url: https://docs.villagecompute.com
+    email: api-support@villagecompute.com
+
+  license:
+    name: Proprietary
+    url: https://villagecompute.com/terms
+
+servers:
+  - url: /api/v1
+    description: API v1 (relative URL, resolves to current host)
+  - url: https://storename.villagecompute.com/api/v1
+    description: Example tenant subdomain (replace 'storename' with actual subdomain)
+
+tags:
+  - name: System
+    description: System health and platform metadata endpoints (public, no auth required)
+    externalDocs:
+      description: Architecture reference
+      url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-5-api-contracts
+
+  - name: Authentication
+    description: |
+      User authentication and session management. Supports JWT token-based auth
+      with access/refresh token flow. See ADR-001 for tenant context injection.
+
+  - name: Storefront
+    description: |
+      Customer-facing storefront operations (product browsing, cart, checkout).
+      These endpoints power the Qute-templated storefront UI and can also be
+      used by headless/mobile clients.
+    externalDocs:
+      description: Headless commerce guide
+      url: https://docs.villagecompute.com/guides/headless
+
+  - name: Admin
+    description: |
+      Store administration endpoints (product management, order fulfillment, settings).
+      Requires `admin` or `vendor` role. Powers the Vue.js admin dashboard at `/admin/*`.
+
+  - name: Headless
+    description: |
+      Headless commerce API for custom frontend implementations. Supports cart
+      operations, checkout flows, and order management via API keys. Optimized
+      for high-throughput integrations.
+
+  - name: Platform
+    description: |
+      Platform-level administration (tenant management, billing, system config).
+      Restricted to platform administrators only. Not accessible to individual
+      store owners.
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+paths:
+  # ============================================================================
+  # SYSTEM ENDPOINTS
+  # ============================================================================
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      description: |
+        Returns the service health status. Used by Kubernetes liveness/readiness probes.
+        No authentication required.
+      tags: [System]
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Service is healthy and ready to accept requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "ok"
+                version: "1.0.0"
+                timestamp: "2026-01-02T12:00:00Z"
+
+  # ============================================================================
+  # AUTHENTICATION ENDPOINTS
+  # ============================================================================
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Authenticate user and obtain JWT tokens
+      description: |
+        Authenticates a user (customer, admin, or vendor) and returns access + refresh tokens.
+        Tenant context is automatically resolved from the Host header before authentication.
+
+        **Token Claims:**
+        - `sub`: User ID (UUID)
+        - `tenant_id`: Tenant ID (UUID)
+        - `roles`: Array of role strings (admin, customer, vendor)
+        - `exp`: Expiration timestamp
+
+        **Session Logging:**
+        All login attempts are logged to the database for audit/compliance purposes.
+      tags: [Authentication]
+      security: []  # No auth required for login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@merchant.com
+                password:
+                  type: string
+                  format: password
+                  example: "********"
+                  minLength: 8
+      responses:
+        '200':
+          description: Authentication successful, tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Invalid credentials or account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Tenant not found (invalid subdomain/domain)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Refresh access token using refresh token
+      description: |
+        Exchanges a valid refresh token for a new access token + refresh token pair.
+        Refresh tokens are single-use; the old refresh token is invalidated upon successful refresh.
+      tags: [Authentication]
+      security: []  # Refresh token passed in request body, not header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  description: The refresh token obtained from login
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refresh successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Invalidate current session
+      description: |
+        Logs out the current user by invalidating the refresh token.
+        Access tokens cannot be invalidated (stateless JWT), but expire in 15 minutes.
+      tags: [Authentication]
+      responses:
+        '204':
+          description: Logout successful, refresh token invalidated
+        '401':
+          description: Invalid or missing authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # TENANT RESOLUTION ENDPOINTS
+  # ============================================================================
+
+  /tenants/resolve:
+    get:
+      operationId: resolveTenant
+      summary: Resolve current tenant metadata
+      description: |
+        Returns metadata about the currently resolved tenant based on the Host header.
+        Useful for headless clients to verify tenant context and retrieve theme settings.
+
+        **No authentication required** - tenant resolution happens before authentication.
+      tags: [Platform]
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Tenant successfully resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMetadata'
+        '404':
+          description: No tenant found for this domain/subdomain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # STOREFRONT - CATALOG ENDPOINTS (Placeholder)
+  # ============================================================================
+
+  /catalog/products:
+    get:
+      operationId: listProducts
+      summary: List products (catalog listing)
+      description: |
+        **TODO:** Implement product catalog listing with filtering, sorting, and pagination.
+
+        Returns paginated list of active products for the current tenant. Supports:
+        - Filtering by category, tags, price range, availability
+        - Sorting by name, price, created date, popularity
+        - Search by product name, SKU, description
+
+        **Authentication:** Optional (public catalog browsing, auth required for customer-specific pricing)
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by category slug
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            format: decimal
+          description: Minimum price filter (in tenant's default currency)
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            format: decimal
+          description: Maximum price filter
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query (matches name, SKU, description)
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, price_asc, price_desc, created_desc, popularity]
+            default: name
+          description: Sort order
+      responses:
+        '200':
+          description: Product list successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /catalog/products/{productId}:
+    get:
+      operationId: getProduct
+      summary: Get product details
+      description: |
+        **TODO:** Implement product detail retrieval.
+
+        Returns full product details including variants, pricing, inventory, images.
+        Public endpoint (no auth required for browsing).
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      responses:
+        '200':
+          description: Product details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # STOREFRONT - CHECKOUT ENDPOINTS (Placeholder)
+  # ============================================================================
+
+  /checkout/preview:
+    post:
+      operationId: previewCheckout
+      summary: Preview checkout totals (cart calculation)
+      description: |
+        **TODO:** Implement checkout preview/calculation.
+
+        Calculates order totals including:
+        - Line item subtotals (product price × quantity)
+        - Discounts (promo codes, customer-specific pricing)
+        - Taxes (based on shipping address)
+        - Shipping costs (based on carrier rates)
+
+        **Idempotent:** Safe to call multiple times with same cart state.
+        Does not create order or charge payment method.
+      tags: [Storefront, Headless]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutPreviewRequest'
+      responses:
+        '200':
+          description: Checkout preview calculated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutPreview'
+        '400':
+          description: Invalid cart state (out of stock, invalid promo code, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /checkout/commit:
+    post:
+      operationId: commitCheckout
+      summary: Complete checkout and create order
+      description: |
+        **TODO:** Implement order creation and payment processing.
+
+        Atomically:
+        1. Creates order record
+        2. Charges payment method via Stripe
+        3. Reduces inventory
+        4. Enqueues fulfillment job
+
+        **Idempotent:** Uses `X-Idempotency-Key` header to prevent duplicate orders
+        if client retries due to network failure.
+
+        **Requires authentication:** Must be logged-in customer or use valid API key.
+      tags: [Storefront, Headless]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutCommitRequest'
+      responses:
+        '201':
+          description: Order successfully created and payment charged
+          headers:
+            Location:
+              description: URL of the created order resource
+              schema:
+                type: string
+                format: uri
+                example: https://storename.villagecompute.com/api/v1/orders/550e8400-e29b-41d4-a716-446655440000
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreatedResponse'
+        '400':
+          description: Invalid request (validation errors, out of stock, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '402':
+          description: Payment required (payment method declined)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Duplicate idempotency key (order already created)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # PLATFORM ADMIN ENDPOINTS (Placeholder)
+  # ============================================================================
+
+  /platform/tenants:
+    get:
+      operationId: listTenants
+      summary: List all tenants (platform admin only)
+      description: |
+        **TODO:** Implement tenant listing for platform administrators.
+
+        Returns paginated list of all tenants with status, creation date, and billing info.
+        **Restricted to platform administrators only** (not accessible to store owners).
+      tags: [Platform]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, deleted]
+          description: Filter by tenant status
+      responses:
+        '200':
+          description: Tenant list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '403':
+          description: Forbidden (requires platform admin role)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    post:
+      operationId: createTenant
+      summary: Create new tenant (platform admin only)
+      description: |
+        **TODO:** Implement tenant provisioning.
+
+        Creates a new tenant (merchant store) with subdomain and initial settings.
+        Atomically provisions:
+        - Tenant record
+        - Default store settings
+        - Initial admin user account
+
+        **Restricted to platform administrators only.**
+      tags: [Platform]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '201':
+          description: Tenant created successfully
+          headers:
+            Location:
+              description: URL of the created tenant resource
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+        '400':
+          description: Validation error (subdomain taken, invalid format, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (requires platform admin role)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
+
+components:
+  # ============================================================================
+  # SECURITY SCHEMES
+  # ============================================================================
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from `/api/v1/auth/login` or `/api/v1/auth/refresh`.
+
+        **Token Claims:**
+        ```json
+        {
+          "sub": "user-uuid",
+          "tenant_id": "tenant-uuid",
+          "roles": ["admin"],
+          "exp": 1704110400
+        }
+        ```
+
+        **Token Lifecycle:**
+        - Access token: 15 minute expiry (short-lived, stateless)
+        - Refresh token: 30 day expiry (long-lived, stored in DB for revocation)
+
+        **Tenant Context:**
+        Tenant context is automatically injected from the `tenant_id` claim.
+        All API operations are scoped to this tenant.
+
+        **Note:** Role-based scopes like platform:admin are encoded in the JWT claims,
+        not as OAuth scopes. Access control is enforced at the application layer.
+
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Long-lived API key for server-to-server integrations and headless commerce.
+
+        **Key Characteristics:**
+        - Scoped to specific tenant + permission set
+        - Managed via admin dashboard at `/admin/settings/api-keys`
+        - Can be rotated or revoked instantly
+        - Rate limits: 5000 requests/min (higher than user tokens)
+
+        **Typical Use Cases:**
+        - Custom storefronts (React, Vue, mobile apps)
+        - Backend integrations (inventory sync, order webhooks)
+        - Automated workflows (scheduled imports, bulk operations)
+
+        **Security:**
+        Keys are hashed in database (bcrypt). Store securely, never commit to version control.
+
+  # ============================================================================
+  # REUSABLE PARAMETERS
+  # ============================================================================
+
+  parameters:
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+      description: |
+        Idempotency key for safe retries of non-idempotent operations (POST, DELETE).
+        If a request with the same idempotency key is replayed within 24 hours,
+        the original response is returned (no duplicate side effects).
+
+        **Recommended:** Always generate a unique UUID v4 per logical operation.
+        Store the key client-side and reuse on retry.
+
+    PageNumber:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number for pagination (1-indexed)
+
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Number of items per page (max 100)
+
+    TenantDomain:
+      name: X-Tenant-Domain
+      in: header
+      required: false
+      schema:
+        type: string
+        example: "storename.villagecompute.com"
+      description: |
+        **Optional override** for tenant resolution in testing/development.
+        Production requests should rely on the HTTP `Host` header for automatic resolution.
+
+        Useful for:
+        - Multi-tenant testing (switch tenants without DNS changes)
+        - Platform admin impersonation
+        - Local development with ngrok/tunnels
+
+  # ============================================================================
+  # REUSABLE SCHEMAS
+  # ============================================================================
+
+  schemas:
+    # --------------------------------------------------------------------------
+    # Core Domain Schemas
+    # --------------------------------------------------------------------------
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: "ok"
+          description: Health status (ok, degraded, error)
+        version:
+          type: string
+          example: "1.0.0"
+          description: API version
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-01-02T12:00:00Z"
+          description: Server timestamp (ISO 8601)
+
+    AuthTokenResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - tokenType
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token (short-lived, 15 min)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          description: JWT refresh token (long-lived, 30 days)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expiresIn:
+          type: integer
+          description: Access token expiry in seconds
+          example: 900
+        tokenType:
+          type: string
+          description: Token type (always "Bearer")
+          example: "Bearer"
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - email
+        - roles
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        email:
+          type: string
+          format: email
+          description: User email address
+        name:
+          type: string
+          description: User full name
+          example: "John Doe"
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [customer, admin, vendor, platform_admin]
+          description: User roles within tenant
+          example: ["admin"]
+
+    TenantMetadata:
+      type: object
+      required:
+        - id
+        - subdomain
+        - name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Tenant ID
+        subdomain:
+          type: string
+          description: Tenant subdomain
+          example: "storename"
+        name:
+          type: string
+          description: Store name (display)
+          example: "Acme Store"
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+          description: Tenant status
+        customDomains:
+          type: array
+          items:
+            type: string
+          description: Verified custom domains for this tenant
+          example: ["shop.acme.com"]
+        settings:
+          type: object
+          description: Tenant-specific settings (theme, locale, features)
+          additionalProperties: true
+          example:
+            locale: "en-US"
+            currency: "USD"
+            theme: "default"
+
+    TenantSummary:
+      type: object
+      required:
+        - id
+        - subdomain
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        subdomain:
+          type: string
+          example: "storename"
+        name:
+          type: string
+          example: "Acme Store"
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        planTier:
+          type: string
+          description: Billing plan tier
+          example: "professional"
+
+    TenantDetail:
+      allOf:
+        - $ref: '#/components/schemas/TenantSummary'
+        - type: object
+          properties:
+            customDomains:
+              type: array
+              items:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  verified:
+                    type: boolean
+            settings:
+              type: object
+              additionalProperties: true
+            updatedAt:
+              type: string
+              format: date-time
+
+    CreateTenantRequest:
+      type: object
+      required:
+        - subdomain
+        - name
+        - adminEmail
+      properties:
+        subdomain:
+          type: string
+          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+          minLength: 3
+          maxLength: 63
+          description: Tenant subdomain (lowercase alphanumeric + hyphens, 3-63 chars)
+          example: "acme-store"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Store display name
+          example: "Acme Store"
+        adminEmail:
+          type: string
+          format: email
+          description: Email for initial admin user account
+          example: "admin@acme.com"
+        adminPassword:
+          type: string
+          format: password
+          minLength: 8
+          description: Password for initial admin user (if not provided, generated and emailed)
+        settings:
+          type: object
+          description: Initial tenant settings (optional)
+          additionalProperties: true
+
+    ProductSummary:
+      type: object
+      required:
+        - id
+        - sku
+        - name
+        - price
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          example: "WIDGET-001"
+        name:
+          type: string
+          example: "Premium Widget"
+        description:
+          type: string
+          description: Short description (max 200 chars for listing)
+          example: "High-quality widget for all your needs"
+        price:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [active, draft, archived]
+        imageUrl:
+          type: string
+          format: uri
+          description: Primary product image URL
+          example: "https://cdn.villagecompute.com/products/widget-001.jpg"
+        inStock:
+          type: boolean
+          description: Aggregate stock availability (true if any variant in stock)
+
+    ProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          properties:
+            longDescription:
+              type: string
+              description: Full product description (Markdown supported)
+            images:
+              type: array
+              items:
+                type: string
+                format: uri
+              description: All product image URLs
+            variants:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProductVariant'
+              description: Product variants (size, color, etc.)
+            categories:
+              type: array
+              items:
+                type: string
+              description: Category slugs
+              example: ["electronics", "widgets"]
+            tags:
+              type: array
+              items:
+                type: string
+              description: Product tags
+              example: ["featured", "on-sale"]
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    ProductVariant:
+      type: object
+      required:
+        - id
+        - sku
+        - price
+        - stock
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          example: "WIDGET-001-RED-L"
+        price:
+          $ref: '#/components/schemas/Money'
+        stock:
+          type: integer
+          minimum: 0
+          description: Available inventory quantity
+        options:
+          type: object
+          description: 'Variant option values (e.g., {"color": "Red", "size": "Large"})'
+          additionalProperties:
+            type: string
+          example:
+            color: "Red"
+            size: "Large"
+
+    CheckoutPreviewRequest:
+      type: object
+      required:
+        - lineItems
+      properties:
+        lineItems:
+          type: array
+          items:
+            type: object
+            required: [variantId, quantity]
+            properties:
+              variantId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        promoCode:
+          type: string
+          description: Promotional/discount code
+          example: "SAVE20"
+
+    CheckoutPreview:
+      type: object
+      required:
+        - subtotal
+        - tax
+        - shipping
+        - total
+        - currency
+      properties:
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        discounts:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              amount:
+                $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        shipping:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
+        currency:
+          type: string
+          example: "USD"
+        lineItems:
+          type: array
+          description: Calculated line items with final pricing
+          items:
+            type: object
+            properties:
+              variantId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+              unitPrice:
+                $ref: '#/components/schemas/Money'
+              lineTotal:
+                $ref: '#/components/schemas/Money'
+
+    CheckoutCommitRequest:
+      allOf:
+        - $ref: '#/components/schemas/CheckoutPreviewRequest'
+        - type: object
+          required:
+            - shippingAddress
+            - billingAddress
+            - paymentMethodId
+          properties:
+            billingAddress:
+              $ref: '#/components/schemas/Address'
+            paymentMethodId:
+              type: string
+              description: Stripe payment method ID (from Stripe Elements)
+              example: "pm_1234567890abcdef"
+
+    OrderCreatedResponse:
+      type: object
+      required:
+        - orderId
+        - orderNumber
+        - status
+        - total
+        - createdAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+          description: Human-readable order number
+          example: "ORD-2026-00042"
+        status:
+          type: string
+          enum: [pending, processing, shipped, delivered, cancelled]
+        total:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        estimatedDelivery:
+          type: string
+          format: date
+          description: Estimated delivery date
+
+    # --------------------------------------------------------------------------
+    # Shared/Utility Schemas
+    # --------------------------------------------------------------------------
+
+    Money:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: string
+          pattern: '^\d+\.\d{2}$'
+          description: Decimal amount as string (avoids floating-point precision issues)
+          example: "99.99"
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code
+          example: "USD"
+      description: |
+        Monetary value with currency. Amount stored as string to preserve precision.
+        Always includes exactly 2 decimal places (e.g., "10.00", not "10").
+
+    Address:
+      type: object
+      required:
+        - line1
+        - city
+        - country
+        - postalCode
+      properties:
+        line1:
+          type: string
+          description: Street address line 1
+          example: "123 Main St"
+        line2:
+          type: string
+          description: Street address line 2 (apt, suite, etc.)
+          example: "Apt 4B"
+        city:
+          type: string
+          example: "San Francisco"
+        state:
+          type: string
+          description: State/province/region code
+          example: "CA"
+        postalCode:
+          type: string
+          example: "94102"
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: ISO 3166-1 alpha-2 country code
+          example: "US"
+        phone:
+          type: string
+          description: Contact phone number
+          example: "+1-415-555-1234"
+      description: Physical address for shipping/billing
+
+    PaginationMetadata:
+      type: object
+      required:
+        - page
+        - pageSize
+        - totalItems
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: Current page number (1-indexed)
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          description: Items per page
+          example: 20
+        totalItems:
+          type: integer
+          minimum: 0
+          description: Total number of items across all pages
+          example: 142
+        totalPages:
+          type: integer
+          minimum: 0
+          description: Total number of pages
+          example: 8
+        hasNext:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        hasPrev:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+      description: |
+        Pagination metadata for paginated list responses.
+        Includes navigation helpers (hasNext, hasPrev) to simplify client logic.
+
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference identifying the problem type
+          example: "https://docs.villagecompute.com/errors/validation-error"
+        title:
+          type: string
+          description: Short, human-readable summary of the problem
+          example: "Validation Failed"
+        status:
+          type: integer
+          description: HTTP status code
+          example: 400
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence
+          example: "Product SKU must be unique within tenant"
+        instance:
+          type: string
+          format: uri
+          description: URI reference identifying the specific occurrence
+          example: "https://storename.villagecompute.com/api/v1/products"
+        errors:
+          type: object
+          description: Field-level validation errors (key = field name, value = error messages)
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            sku: ["SKU 'WIDGET-001' already exists"]
+            price: ["Price must be greater than 0"]
+      description: |
+        RFC 7807 Problem Details for HTTP APIs.
+        Standard error response format used across all endpoints.
+
+        **Common Error Types:**
+        - `validation-error`: Input validation failed (400)
+        - `authentication-required`: Missing or invalid auth token (401)
+        - `forbidden`: Insufficient permissions (403)
+        - `not-found`: Resource not found (404)
+        - `conflict`: Resource conflict (409)
+        - `rate-limit-exceeded`: Too many requests (429)
+        - `internal-error`: Unexpected server error (500)
