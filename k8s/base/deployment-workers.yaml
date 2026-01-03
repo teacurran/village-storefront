@@ -1,0 +1,273 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-workers
+  labels:
+    app: village-storefront
+    component: workers
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: workers
+  template:
+    metadata:
+      labels:
+        app: village-storefront
+        component: workers
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/q/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: village-storefront
+
+      # Pod affinity to spread workers across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - workers
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: worker
+        image: ghcr.io/villagecompute/village-storefront:latest
+        imagePullPolicy: IfNotPresent
+
+        # Resource limits based on job processing requirements
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Ports
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+
+        # Environment variables
+        env:
+        - name: QUARKUS_PROFILE
+          value: "production"
+
+        - name: QUARKUS_SCHEDULER_ENABLED
+          value: "true"
+
+        # Database connection
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: jdbc-url
+
+        - name: QUARKUS_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: username
+
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: password
+
+        # Metrics & observability
+        - name: QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED
+          value: "true"
+
+        - name: QUARKUS_LOG_LEVEL
+          value: "INFO"
+
+        - name: QUARKUS_LOG_CONSOLE_JSON
+          value: "true"
+
+        # Job framework configuration
+        - name: JOBS_QUEUE_CAPACITY_CRITICAL
+          value: "1000"
+
+        - name: JOBS_QUEUE_CAPACITY_HIGH
+          value: "5000"
+
+        - name: JOBS_QUEUE_CAPACITY_DEFAULT
+          value: "10000"
+
+        - name: JOBS_RETRY_MAX_ATTEMPTS_CRITICAL
+          value: "5"
+
+        - name: JOBS_RETRY_MAX_ATTEMPTS_DEFAULT
+          value: "3"
+
+        # Storage client (Cloudflare R2)
+        - name: R2_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: village-storefront-config
+              key: r2-bucket-name
+
+        - name: R2_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-r2
+              key: access-key-id
+
+        - name: R2_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-r2
+              key: secret-access-key
+
+        # Stripe API keys
+        - name: STRIPE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-stripe
+              key: api-key
+
+        # Email service (optional)
+        - name: QUARKUS_MAILER_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: village-storefront-config
+              key: mailer-host
+              optional: true
+
+        # JVM options for container environment
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: village-storefront-workers
+  labels:
+    app: village-storefront
+    component: workers
+spec:
+  type: ClusterIP
+  selector:
+    app: village-storefront
+    component: workers
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: village-storefront-workers-hpa
+  labels:
+    app: village-storefront
+    component: workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: village-storefront-workers
+  minReplicas: 2
+  maxReplicas: 20
+
+  metrics:
+  # Scale based on CPU utilization
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # Scale based on memory utilization
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # Scale based on custom queue depth metric (requires custom metrics API)
+  # Uncomment when Prometheus adapter is configured
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: reporting_refresh_queue_depth
+  #     target:
+  #       type: AverageValue
+  #       averageValue: "100"
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: village-storefront-workers-pdb
+  labels:
+    app: village-storefront
+    component: workers
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: workers

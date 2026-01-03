@@ -70,8 +70,7 @@ class NotificationServiceTest {
     void setUp() {
         // Clean up existing notification feature flags without touching tenants created by other suites
         entityManager.createQuery("DELETE FROM FeatureFlag f WHERE f.flagKey IN :keys")
-                .setParameter("keys", NOTIFICATION_FLAG_KEYS)
-                .executeUpdate();
+                .setParameter("keys", NOTIFICATION_FLAG_KEYS).executeUpdate();
 
         // Create test tenant with unique subdomain per test run
         Tenant tenant = new Tenant();
@@ -114,12 +113,10 @@ class NotificationServiceTest {
     @Transactional
     void tearDown() {
         entityManager.createQuery("DELETE FROM FeatureFlag f WHERE f.flagKey IN :keys")
-                .setParameter("keys", NOTIFICATION_FLAG_KEYS)
-                .executeUpdate();
+                .setParameter("keys", NOTIFICATION_FLAG_KEYS).executeUpdate();
 
         if (tenantId != null) {
-            entityManager.createQuery("DELETE FROM Tenant t WHERE t.id = :tenantId")
-                    .setParameter("tenantId", tenantId)
+            entityManager.createQuery("DELETE FROM Tenant t WHERE t.id = :tenantId").setParameter("tenantId", tenantId)
                     .executeUpdate();
             tenantId = null;
         }
