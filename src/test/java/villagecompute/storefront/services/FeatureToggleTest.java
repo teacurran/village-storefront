@@ -43,6 +43,11 @@ class FeatureToggleTest {
     @BeforeEach
     @Transactional
     void setUp() {
+        entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
+        entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM Category").executeUpdate();
+        entityManager.createQuery("DELETE FROM CustomDomain").executeUpdate();
         entityManager.createQuery("DELETE FROM FeatureFlag").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 

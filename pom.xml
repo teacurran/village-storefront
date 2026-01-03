@@ -18,6 +18,8 @@
     <surefire-plugin.version>3.5.2</surefire-plugin.version>
     <!-- Coverage threshold - enforced by SonarCloud quality gate -->
     <coverage.minimum>0.80</coverage.minimum>
+    <!-- MapStruct version for DTO mapping -->
+    <mapstruct.version>1.6.3</mapstruct.version>
   </properties>
 
   <dependencyManagement>
@@ -152,6 +154,13 @@
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-smallrye-openapi</artifactId>
+    </dependency>
+
+    <!-- MapStruct for DTO mapping -->
+    <dependency>
+      <groupId>org.mapstruct</groupId>
+      <artifactId>mapstruct</artifactId>
+      <version>${mapstruct.version}</version>
     </dependency>
 
     <!-- AWS SDK for S3 (object storage for product images) -->
@@ -294,6 +303,13 @@
           <parameters>true</parameters>
           <source>21</source>
           <target>21</target>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.mapstruct</groupId>
+              <artifactId>mapstruct-processor</artifactId>
+              <version>${mapstruct.version}</version>
+            </path>
+          </annotationProcessorPaths>
         </configuration>
       </plugin>
 
@@ -315,6 +331,13 @@
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>0.8.11</version>
+        <configuration>
+          <excludes>
+            <exclude>**/api/types/**</exclude>
+            <exclude>**/services/mappers/**</exclude>
+            <exclude>**/data/models/**</exclude>
+          </excludes>
+        </configuration>
         <executions>
           <execution>
             <id>prepare-agent</id>

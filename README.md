@@ -196,6 +196,37 @@ mvn migration:down -Dmigration.env=development
 mvn migration:new -Dmigration.env=development -Dmigration.description="add_feature"
 ```
 
+### Loading Sample Catalog Data
+
+For development and testing purposes, you can load sample catalog data (products, variants, categories, inventory):
+
+```bash
+# Ensure PostgreSQL is running
+docker-compose up -d
+
+# Load sample data (creates Tech Gadgets store with products)
+psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
+
+# Or if using password authentication:
+PGPASSWORD=apppass psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
+```
+
+This will create:
+- 2 sample tenants (`techgadgets` and `artisancrafts`)
+- 4 categories (Electronics, Smartphones, Audio, Accessories)
+- 3 products (Wireless Earbuds, Phone Cases, USB-C Cables)
+- 7 product variants with pricing
+- 8 inventory records across multiple locations
+
+**Test tenant access:**
+- Subdomain: `techgadgets` (use as Host header or in local DNS)
+- Tenant ID: `a0000000-0000-0000-0000-000000000001`
+
+**Verify data loading:**
+```bash
+psql -h localhost -U appuser -d storefront_dev -c "SELECT * FROM products WHERE tenant_id = 'a0000000-0000-0000-0000-000000000001'::uuid;"
+```
+
 ## Code Quality & CI/CD
 
 ### Quality Standards
