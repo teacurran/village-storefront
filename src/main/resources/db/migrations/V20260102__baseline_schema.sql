@@ -347,6 +347,7 @@ CREATE TABLE carts (
     session_id VARCHAR(255),  -- For guest cart tracking
     metadata JSONB DEFAULT '{}',
     expires_at TIMESTAMPTZ NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -368,6 +369,7 @@ CREATE TABLE cart_items (
     quantity INTEGER NOT NULL DEFAULT 1,
     unit_price NUMERIC(19,4) NOT NULL,  -- Snapshot price at add-to-cart time
     metadata JSONB DEFAULT '{}',
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_cart_items_quantity_positive CHECK (quantity > 0),

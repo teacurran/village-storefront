@@ -33,14 +33,19 @@ class QuteExtensionsTest {
     void stringUtilitiesWorkAsExpected() {
         assertEquals("Hel...", QuteExtensions.truncate("HelloWorld", 6));
         assertEquals("Hi", QuteExtensions.truncate("Hi", 10));
+        assertEquals(null, QuteExtensions.truncate(null, 5));
         assertTrue(QuteExtensions.isPresent("hello"));
         assertTrue(!QuteExtensions.isPresent("   "));
+        assertTrue(!QuteExtensions.isPresent(null));
         assertEquals("JD", QuteExtensions.initials("John Doe"));
+        assertEquals("J", QuteExtensions.initials("John"));
         assertEquals("", QuteExtensions.initials(" "));
         assertEquals("", QuteExtensions.initials(null));
         assertEquals("stories", QuteExtensions.pluralize("story", 2));
         assertEquals("bus", QuteExtensions.pluralize("bus", 1));
         assertEquals("buses", QuteExtensions.pluralize("bus", 2));
         assertEquals("brushes", QuteExtensions.pluralize("brush", 3));
+        assertEquals("boxes", QuteExtensions.pluralize("box", 4));
+        assertEquals("cats", QuteExtensions.pluralize("cat", 2));
     }
 }

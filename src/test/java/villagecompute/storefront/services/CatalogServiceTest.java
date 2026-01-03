@@ -51,9 +51,12 @@ class CatalogServiceTest {
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
         entityManager.createQuery("DELETE FROM Category").executeUpdate();
+        entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 
         // Create test tenant
@@ -225,6 +228,20 @@ class CatalogServiceTest {
 
         Product deleted = entityManager.find(Product.class, product.id);
         assertEquals("deleted", deleted.status);
+    }
+
+    @Test
+    @Transactional
+    void deleteProduct_shouldFailWhenTenantMismatch() {
+        Product product = createAndPersistProduct("DELETE-002", "Cross Tenant Delete");
+
+        TenantContext.clear();
+        TenantContext.setCurrentTenant(new TenantInfo(tenant2Id, "catalogtest2", "Catalog Test Tenant 2", "active"));
+
+        assertThrows(IllegalArgumentException.class, () -> catalogService.deleteProduct(product.id));
+
+        TenantContext.clear();
+        TenantContext.setCurrentTenant(new TenantInfo(tenantId, "catalogtest", "Catalog Test Tenant", "active"));
     }
 
     // ========================================

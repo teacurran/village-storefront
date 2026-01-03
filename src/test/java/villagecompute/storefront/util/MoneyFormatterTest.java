@@ -41,7 +41,7 @@ class MoneyFormatterTest {
 
         assertEquals("120,00 €", formatter.format(new BigDecimal("120"), "EUR", Locale.GERMANY));
         Money invalid = new Money(new BigDecimal("5"), "ZZZ");
-        assertEquals("ZZZ 5", formatter.format(invalid));
+        assertEquals("ZZZ 5.00", formatter.format(invalid));
         assertEquals("", formatter.formatSavings(null, sale));
     }
 
@@ -53,5 +53,18 @@ class MoneyFormatterTest {
         String comparison = formatter.formatPriceComparison(sale, original);
         assertTrue(comparison.contains("$21.50"));
         assertTrue(comparison.contains("$29.00"));
+    }
+
+    @Test
+    void additionalEdgeCasesAreHandled() {
+        assertEquals("ZZZ", formatter.getCurrencySymbol("ZZZ", Locale.US));
+
+        Money sale = new Money(new BigDecimal("10.00"), "USD");
+        assertEquals("$10.00", formatter.formatPriceComparison(sale, null));
+        assertEquals("$10.00", formatter.formatPriceComparison(null, sale));
+
+        Money free = new Money(new BigDecimal("0.00"), "USD");
+        assertEquals("", formatter.formatDiscountPercentage(free, sale));
+        assertEquals("", formatter.formatDiscountPercentage(sale, null));
     }
 }

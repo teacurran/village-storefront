@@ -1,6 +1,7 @@
 package villagecompute.storefront.api.types;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -19,6 +20,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 public class Money {
 
+    private static final int SCALE = 2;
+    private static final RoundingMode ROUNDING_MODE = RoundingMode.HALF_UP;
+
     @JsonProperty("amount")
     private String amount;
 
@@ -34,7 +38,7 @@ public class Money {
     }
 
     public Money(BigDecimal amount, String currency) {
-        this.amount = amount.toPlainString();
+        this.amount = normalize(amount);
         this.currency = currency;
     }
 
@@ -56,5 +60,10 @@ public class Money {
 
     public BigDecimal getAmountAsDecimal() {
         return new BigDecimal(amount);
+    }
+
+    private String normalize(BigDecimal value) {
+        BigDecimal normalized = value == null ? BigDecimal.ZERO : value;
+        return normalized.setScale(SCALE, ROUNDING_MODE).toPlainString();
     }
 }

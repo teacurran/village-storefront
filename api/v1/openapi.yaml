@@ -505,6 +505,199 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
 
   # ============================================================================
+  # CART ENDPOINTS
+  # ============================================================================
+
+  /cart:
+    parameters:
+      - $ref: '#/components/parameters/GuestSessionId'
+    get:
+      operationId: getCart
+      summary: Get current user's cart
+      description: |
+        Returns the active cart for the authenticated user or guest session.
+        Includes all line items with calculated totals.
+
+        **Authentication:** Optional - guest carts tracked via session, user carts via JWT.
+        Provide the `X-Session-Id` header (or rely on the `vs_session` cookie issued by the API) to continue a guest cart.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Cart retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '404':
+          description: No active cart found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    delete:
+      operationId: clearCart
+      summary: Clear all items from cart
+      description: |
+        Removes all line items from the cart. The cart entity itself remains
+        and can be reused for future items.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: Cart cleared successfully
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /cart/items:
+    post:
+      operationId: addToCart
+      summary: Add item to cart
+      description: |
+        Adds a product variant to the cart with specified quantity.
+        If the variant already exists in the cart, the quantities are merged.
+
+        **Price Snapshot:** The current variant price is captured at add-to-cart
+        time to prevent cart total changes when product prices are updated.
+
+        **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+        **Guest Session:** Provide `X-Session-Id` or use the `vs_session` cookie to add to the same anonymous cart.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '201':
+          description: Item added to cart successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+        '400':
+          description: Validation error (invalid variant, negative quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Product variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock exception (concurrent modification detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /cart/items/{itemId}:
+    patch:
+      operationId: updateCartItem
+      summary: Update cart item quantity
+      description: |
+        Updates the quantity of a specific cart line item.
+
+        **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+      responses:
+        '200':
+          description: Cart item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+        '400':
+          description: Validation error (negative quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock exception (concurrent modification detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    delete:
+      operationId: removeCartItem
+      summary: Remove item from cart
+      description: |
+        Removes a specific line item from the cart.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '204':
+          description: Cart item removed successfully
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
   # PLATFORM ADMIN ENDPOINTS (Placeholder)
   # ============================================================================
 
@@ -678,6 +871,19 @@ components:
 
         **Recommended:** Always generate a unique UUID v4 per logical operation.
         Store the key client-side and reuse on retry.
+
+    GuestSessionId:
+      name: X-Session-Id
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+        example: "2f605a0b-93c0-4cf2-a6ed-2f139b31e9de"
+      description: |
+        Guest session identifier used to associate anonymous carts with the same browser/client.
+        If omitted, the API issues a `vs_session` HTTP-only cookie and returns the generated UUID in the response header.
+        Authenticated users can ignore this header because their carts are keyed to their account identity.
 
     PageNumber:
       name: page
@@ -1024,6 +1230,124 @@ components:
           example:
             color: "Red"
             size: "Large"
+
+    Cart:
+      type: object
+      required:
+        - id
+        - items
+        - subtotal
+        - itemCount
+        - expiresAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Cart UUID
+        userId:
+          type: string
+          format: uuid
+          description: User UUID (null for guest carts)
+          nullable: true
+        sessionId:
+          type: string
+          description: Session identifier for guest carts
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+          description: Cart line items
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        itemCount:
+          type: integer
+          minimum: 0
+          description: Total number of distinct items in cart
+        expiresAt:
+          type: string
+          format: date-time
+          description: Cart expiration timestamp
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CartItem:
+      type: object
+      required:
+        - id
+        - variantId
+        - productName
+        - variantName
+        - sku
+        - quantity
+        - unitPrice
+        - lineTotal
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Cart item UUID
+        variantId:
+          type: string
+          format: uuid
+          description: Product variant UUID
+        productName:
+          type: string
+          description: Product name (snapshot)
+        variantName:
+          type: string
+          description: Variant name (snapshot)
+        sku:
+          type: string
+          description: Variant SKU (snapshot)
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity of this item
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        lineTotal:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AddToCartRequest:
+      type: object
+      required:
+        - variantId
+        - quantity
+      properties:
+        variantId:
+          type: string
+          format: uuid
+          description: Product variant UUID to add
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Quantity to add
+
+    UpdateCartItemRequest:
+      type: object
+      required:
+        - quantity
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          description: New quantity for the cart item
 
     CheckoutPreviewRequest:
       type: object

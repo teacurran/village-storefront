@@ -49,9 +49,12 @@ class InventoryServiceTest {
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 
         // Create test tenant
@@ -171,6 +174,18 @@ class InventoryServiceTest {
 
         assertEquals(5, released.reserved);
         assertEquals(95, released.getAvailableQuantity());
+    }
+
+    @Test
+    @Transactional
+    void releaseReservation_shouldNotGoNegative() {
+        inventoryService.setInventoryLevel(variantId, "warehouse-1", 50);
+        inventoryService.reserveInventory(variantId, "warehouse-1", 5);
+
+        InventoryLevel released = inventoryService.releaseReservation(variantId, "warehouse-1", 20);
+
+        assertEquals(0, released.reserved);
+        assertEquals(50, released.quantity);
     }
 
     @Test
