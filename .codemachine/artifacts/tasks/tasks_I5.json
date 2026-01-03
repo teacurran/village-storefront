@@ -1,0 +1,160 @@
+[
+  {
+    "task_id": "I5.T1",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Complete headless API suite: finalize OpenAPI headless spec covering catalog/cart/order/customer endpoints with OAuth scopes, implement rate limiting middleware, and add integration tests simulating static-site usage.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Existing OpenAPI specs, Tenant filter, Identity scopes.",
+    "target_files": [
+      "api/openapi-headless.yaml",
+      "src/main/java/com/village/storefront/headless/*.java",
+      "src/test/java/com/village/storefront/headless/HeadlessApiIT.java"
+    ],
+    "input_files": [],
+    "deliverables": "Separate spec file for headless APIs, Quarkus resources implementing endpoints, tests verifying rate limiting + OAuth scopes.",
+    "acceptance_criteria": "- `swagger-cli validate` passes for headless spec referencing shared components.\n        - OAuth client credentials with scopes `catalog:read`, `cart:write`, `orders:read` enforced by annotations.\n        - Integration tests simulate multi-tenant clients to ensure RLS + rate limiting hold.",
+    "dependencies": [
+      "I2.T5",
+      "I4.T5"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I5.T2",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Draw POS Offline Flow diagram (Mermaid flowchart) covering device login, local queueing, encryption, sync, reconciliation, and conflict handling aligned with Section 3 Flow narrative.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Section 3 POS requirements, ADRs, existing checkout diagram.",
+    "target_files": [
+      "docs/diagrams/pos-offline-flow.mmd"
+    ],
+    "input_files": [],
+    "deliverables": "Flowchart with nodes for Device, Identity, Checkout API, Offline Storage, Sync Worker, Reporting, Audit.",
+    "acceptance_criteria": "- Diagram renders and indicates encryption steps + duplicate prevention.\n        - Captures manual override path + support escalation trigger.\n        - Linked from README + POS docs.",
+    "dependencies": [
+      "I3.T6"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I5.T3",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Implement POS backend + SPA module: device registration, PIN auth, quick cart entry hooking into checkout endpoints, offline queue serialization, reconciliation API, and admin UI for monitoring devices.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "POS diagram, checkout services, identity.",
+    "target_files": [
+      "src/main/java/com/village/storefront/pos/*.java",
+      "src/main/resources/db/migrations/0011_pos.sql",
+      "src/test/java/com/village/storefront/pos/PosResourceTest.java",
+      "src/main/webui/src/views/pos/*.vue",
+      "src/main/webui/src/stores/pos.ts"
+    ],
+    "input_files": [],
+    "deliverables": "POS REST endpoints + Vue views, offline queue encryption utilities, device heartbeat metrics, tests verifying offline to online reconciliation.",
+    "acceptance_criteria": "- Offline queue encrypted with rotated keys; duplicates prevented via UUID idempotency.\n        - Device dashboards show heartbeat + queue depth; tests confirm unauthorized devices blocked.\n        - Integration tests simulate network drop + replay success.",
+    "dependencies": [
+      "I5.T2",
+      "I2.T6"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I5.T4",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Integrate shipping + returns orchestration: USPS/UPS/FedEx adapters, rate caching, label generation jobs, RMA endpoints, restocking logic, and admin UI flows for returns.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Section 7 shipping requirements, Integration adapter layer, reporting service.",
+    "target_files": [
+      "src/main/java/com/village/storefront/shipping/*.java",
+      "src/main/java/com/village/storefront/returns/*.java",
+      "src/test/java/com/village/storefront/shipping/ShippingAdapterTest.java",
+      "src/main/resources/db/migrations/0012_shipping.sql",
+      "src/main/webui/src/views/orders/returns.vue"
+    ],
+    "input_files": [],
+    "deliverables": "Adapter interfaces + implementations (sandbox), rate caching service, label job integration, RMA endpoints + UI, tests covering retries + fallback.",
+    "acceptance_criteria": "- Rate caching honors 15-minute TTL; tests simulate fallback table rates.\n        - Label jobs push metrics + integrate with background worker instrumentation.\n        - Returns update inventory + consignment states; audit logs capture actions.",
+    "dependencies": [
+      "I3.T6",
+      "I3.T3"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I5.T5",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Finalize payment ledger features: gift cards, store credit, refund workflows, payout audit enhancements, webhook hardening; ensure PaymentProvider interface ready for PayPal/others.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Payment layer, loyalty service, reporting.",
+    "target_files": [
+      "src/main/java/com/village/storefront/payments/GiftCardService.java",
+      "src/main/java/com/village/storefront/payments/StoreCreditService.java",
+      "src/test/java/com/village/storefront/payments/GiftCardServiceTest.java",
+      "src/main/resources/db/migrations/0013_payments.sql"
+    ],
+    "input_files": [],
+    "deliverables": "Gift card issuance/redemption APIs, store credit ledger, refund enhancements, webhook validators, documentation for PaymentProvider extension points.",
+    "acceptance_criteria": "- Gift card codes hashed, stored with status + expiration; tests cover concurrency.\n        - Store credit integrates with checkout + loyalty for redemption priority.\n        - Webhook handlers enforce idempotency + signature validation; logs include provider metadata.",
+    "dependencies": [
+      "I3.T7",
+      "I4.T2"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I5.T6",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Performance + reliability hardening: load tests for checkout/storefront/admin, media queue stress tests, POS offline soak tests, and adjustments to HPAs/Kubernetes manifests based on findings.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Observability dashboards, CI outputs, ops scripts.",
+    "target_files": [
+      "tests/perf/checkout-jmeter.plan",
+      "tests/perf/pos-offline-plan.md",
+      "ops/k8s/overlays/prod/hpa.yaml",
+      "docs/operational/perf-readout.md"
+    ],
+    "input_files": [],
+    "deliverables": "Perf test plans, scripts, updated HPAs, readout summarizing bottlenecks + mitigations.",
+    "acceptance_criteria": "- Checkout meets <800ms P95 under load; POS offline flush <60s; metrics recorded.\n        - HPAs updated with CPU/memory/custom metrics thresholds.\n        - Readout documents future scaling roadmap + gating issues.",
+    "dependencies": [
+      "I5.T3",
+      "I3.T6"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I5.T7",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize headless APIs, deliver POS offline workflows (diagram + implementation), integrate shipping/returns orchestration, polish payments/ledger (gift cards/store credit), harden performance + operational tooling, and prep GA artifacts + plan manifest references.",
+    "description": "Release readiness + documentation sweep: update README, ops runbooks, plan manifest references, ADR status table, and prepare GA checklist (security signoff, DR drill summary, tenant onboarding guide).",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Outputs from all iterations, ops docs, plan files.",
+    "target_files": [
+      "README.md",
+      "docs/runbooks/*.md",
+      "docs/release/ga-checklist.md",
+      ".codemachine/artifacts/plan/plan_manifest.json"
+    ],
+    "input_files": [],
+    "deliverables": "Updated documentation referencing final artifacts, GA checklist, manifest entries for new diagrams/tasks.",
+    "acceptance_criteria": "- README includes final architecture summary, build instructions, and artifact index.\n        - GA checklist covers security, performance, observability, DR, tenant onboarding.\n        - Plan manifest enumerates anchors + file paths for retrieval.",
+    "dependencies": [
+      "I5.T1",
+      "I5.T6"
+    ],
+    "parallelizable": false,
+    "done": false
+  }
+]

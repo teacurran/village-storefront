@@ -1,0 +1,154 @@
+[
+  {
+    "task_id": "I4.T1",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Create Loyalty Domain Model diagram (Mermaid) detailing LoyaltyProgram, Tier, LoyaltyLedgerEntry, TierRule, ExpirationPolicy, GiftCard, StoreCredit relationships and interactions with Customer + Order entities.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Section 2 data model, Section 9 loyalty requirements.",
+    "target_files": [
+      "docs/diagrams/loyalty-model.mmd"
+    ],
+    "input_files": [],
+    "deliverables": "Mermaid class/ER diagram with notes on accrual, redemption, expiration, and audit metadata.",
+    "acceptance_criteria": "- Diagram passes lint, includes multi-currency fields, references loyalty KPIs.\n        - Links to reporting + checkout modules via annotations.\n        - README updates mention new diagram.",
+    "dependencies": [
+      "I3.T1"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I4.T2",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Implement Loyalty service: ledger entities, accrual/redemption logic, tier recalculation scheduled job, customer APIs for viewing history, admin endpoints for configuration; integrate with checkout service.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Loyalty diagram, ADRs, checkout code.",
+    "target_files": [
+      "src/main/java/com/village/storefront/loyalty/*.java",
+      "src/test/java/com/village/storefront/loyalty/LoyaltyServiceTest.java",
+      "src/main/resources/db/migrations/0008_loyalty.sql",
+      "api/openapi-base.yaml"
+    ],
+    "input_files": [],
+    "deliverables": "Ledger tables + Panache entities, service orchestrating accrual/redemption, scheduled job, REST endpoints + DTOs, integration tests verifying loyalty flows.",
+    "acceptance_criteria": "- Checkout orchestrator invokes loyalty service for accrual + redemption with compensating actions on failure.\n        - Tier recalculation job logs metrics + respects ADR job governance.\n        - Tests cover expiration + multi-currency conversions.",
+    "dependencies": [
+      "I4.T1",
+      "I3.T7"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I4.T3",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Document platform impersonation flow via PlantUML (Flow D) covering Platform Admin Console, Identity, Feature Flags, Tenant Gateway, Admin SPA, Storefront, Audit events, Reporting.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Section 3 Flow D, Identity service, ADR for feature flags.",
+    "target_files": [
+      "docs/diagrams/seq-impersonation.puml"
+    ],
+    "input_files": [],
+    "deliverables": "Sequence diagram with emphasis on reason codes, banner display, audit + reporting updates, token revocation.",
+    "acceptance_criteria": "- Diagram renders and references security constraints + reason field requirement.\n        - Contains notes about logging, audit, session updates.\n        - Linked from README + platform admin docs.",
+    "dependencies": [
+      "I2.T4"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I4.T4",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Implement Platform Admin backend: SaaS dashboard APIs (store list, revenue, system health), impersonation endpoints (start/heartbeat/end), global reporting views, and admin-specific RBAC scopes.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Impersonation diagram, reporting service, identity.",
+    "target_files": [
+      "src/main/java/com/village/storefront/platformops/*.java",
+      "src/test/java/com/village/storefront/platformops/PlatformOpsResourceTest.java",
+      "api/openapi-base.yaml",
+      "src/main/resources/db/migrations/0009_platformops.sql"
+    ],
+    "input_files": [],
+    "deliverables": "REST endpoints for store management, impersonation audit retrieval, platform metrics; RBAC annotations; tests verifying super-user scopes.",
+    "acceptance_criteria": "- Endpoints enforce MFA + reason codes; tests cover unauthorized access.\n        - Platform metrics use reporting aggregates with data freshness metadata.\n        - Swagger docs highlight `platform` scope + rate limits.",
+    "dependencies": [
+      "I4.T3",
+      "I3.T7"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I4.T5",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Build multi-currency display + FX service: scheduled job fetching rates, Money value object, API for conversion, integration with catalog and checkout DTOs; update OpenAPI specs + tests.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Section 3 multi-currency assumptions, loyalty/calc requirements.",
+    "target_files": [
+      "src/main/java/com/village/storefront/money/*.java",
+      "src/test/java/com/village/storefront/money/MoneyServiceTest.java",
+      "src/main/resources/db/migrations/0010_fx.sql",
+      "ops/scripts/fetch_fx_rates.sh"
+    ],
+    "input_files": [],
+    "deliverables": "Money classes with integer minor units, FX job, caching, conversion API endpoints, tests verifying rounding + fallback.",
+    "acceptance_criteria": "- FX job caches daily rates, logs timestamp + source; tests simulate stale data fallback.\n        - Checkout + catalog DTOs include `displayCurrency` vs `settlementCurrency` fields.\n        - Ops script documented for manual re-run.",
+    "dependencies": [
+      "I2.T5",
+      "I3.T7"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I4.T6",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Enhance observability + audit logging: implement correlation ID propagation, OpenTelemetry span enrichers for loyalty + platform endpoints, structured logging fields for impersonation and tenant plan, dashboards showing KPIs (Grafana JSON).",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Section 3 observability, Section 4 KPIs.",
+    "target_files": [
+      "src/main/java/com/village/storefront/common/logging/TracingFilter.java",
+      "src/main/resources/application.properties",
+      "ops/observability/grafana-loyalty.json"
+    ],
+    "input_files": [],
+    "deliverables": "Logging filter injecting IDs, OpenTelemetry instrumentation, Grafana dashboards for loyalty accrual + impersonation, doc updates.",
+    "acceptance_criteria": "- Logs include tenant_id, store_id, impersonationId, loyaltyTier; sample entries documented.\n        - Grafana dashboard JSON validated via lint script and referenced in README.\n        - Telemetry extends to Quinoa admin SPA fetches through response headers.",
+    "dependencies": [
+      "I4.T2",
+      "I4.T3"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I4.T7",
+    "iteration_id": "I4",
+    "iteration_goal": "Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.",
+    "description": "Update Admin SPA to expose platform admin workspace: dashboards for store metrics, impersonation controls with reason entry, loyalty configuration UI, localization updates for Spanish.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Platform ops APIs, loyalty endpoints, SPA code.",
+    "target_files": [
+      "src/main/webui/src/views/platform/*.vue",
+      "src/main/webui/src/stores/platform.ts",
+      "src/main/webui/src/locales/en.json",
+      "src/main/webui/src/locales/es.json"
+    ],
+    "input_files": [],
+    "deliverables": "Vue views for dashboards + impersonation, store modules hitting APIs, localization strings, tests verifying reason enforcement + Spanish translations.",
+    "acceptance_criteria": "- UI shows impersonation banner + exit CTA; tests confirm reason required.\n        - Dashboards pull data freshness timestamps from reporting API.\n        - Localization coverage ensures new strings exist in en/es files.",
+    "dependencies": [
+      "I4.T4",
+      "I4.T2"
+    ],
+    "parallelizable": false,
+    "done": false
+  }
+]

@@ -439,3 +439,281 @@ Disaster recovery artifacts (database backups, R2 archives) replicate off-cluste
 This operational architecture enforces the foundation mandates around modular seams, tenant isolation, and deliberate rollout discipline.
 By anchoring every concern—authentication, logging, security, scalability, reliability—into concrete Kubernetes and PostgreSQL patterns, Village Storefront stays ready for Phase 2/3 expansions without rework.
 Runbooks, observability, and automation themes ensure platform teams can evolve safely while keeping merchants online and confident in the SaaS platform.
+
+<!-- anchor: 3-19-module-task-matrix -->
+### 3.19 Module Operational Task Matrix
+
+The following subsections capture routine operational tasks per module so ownership, alert triage, and automation candidates remain transparent.
+
+<!-- anchor: 3-19-1-tenant-gateway-tasks -->
+#### 3.19.1 Tenant Access Gateway
+
+- Review DNS change logs daily to confirm new tenant subdomains propagate and no unauthorized records exist.
+- Validate Caffeine cache eviction metrics weekly to ensure hot tenants stay cached without causing memory pressure.
+- Run smoke tests covering wildcard routing and custom domain routing after every ingress upgrade.
+- Inspect rate limiting rejection logs to ensure premium tenants receive appropriate limits based on plan entitlements.
+- Confirm ACME certificates renew 15 days before expiry; escalate to platform ops if automated renewal fails twice.
+- Audit tenant resolution logs for anomalies such as repeated unknown domains that may indicate typos or malicious probes.
+- Update runbooks whenever DNS provider onboarding instructions change to avoid merchant confusion.
+- Ensure TenantContext propagation spans include `tenant_plan` label for downstream analytics.
+
+<!-- anchor: 3-19-2-identity-tasks -->
+#### 3.19.2 Identity and Session Service
+
+- Rotate JWT signing keys annually and whenever compromise suspected, coordinating token revocation windows.
+- Monitor refresh token issuance counts to detect spikes correlated with credential stuffing attempts.
+- Verify session partition maintenance jobs create upcoming partitions two weeks early to prevent intake failures.
+- Run reports on impersonation activity weekly, flagging any missing reason codes for compliance review.
+- Exercise OAuth client credential issuance scripts monthly to keep headless integrations operational.
+- Validate social login integrations remain current with provider API versions and OAuth scopes.
+- Inspect bcrypt configuration to ensure work factor remains at 12 and measure login latency impact.
+- Confirm login notification emails respect non-production domain filters to avoid test emails hitting real customers.
+
+<!-- anchor: 3-19-3-storefront-tasks -->
+#### 3.19.3 Storefront Rendering Engine
+
+- Measure Qute template render time and identify any templates exceeding 150ms median for optimization.
+- Verify Tailwind design tokens sync after each deployment; mismatch triggers CSS inconsistencies requiring rebuild.
+- Run Lighthouse audits quarterly on reference tenants to track accessibility and performance regressions.
+- Ensure CDN cache-control headers align with business needs; update values before promotional campaigns.
+- Monitor image variant selection logs to confirm responsive logic picks correct sizes for devices.
+- Validate fallback pages for suspended tenants retain branding and contact details for compliance.
+- Inspect search index integration to ensure query latency stays within future SLOs once search expands.
+- Review translation placeholders even if English-only to prepare for eventual localization features.
+
+<!-- anchor: 3-19-4-admin-spa-tasks -->
+#### 3.19.4 Admin SPA Delivery
+
+- Confirm Quinoa builds produce hashed filenames and purge outdated assets from pods after deployment.
+- Validate Service Worker cache manifest updates alongside app version to avoid stale shells.
+- Run automated axe-core accessibility tests during CI and review failures before release.
+- Monitor admin bootstrap API for latency spikes, as slow responses degrade SPA load times.
+- Ensure staff permission metadata correctly hides restricted UI controls, preventing unauthorized actions.
+- Audit Content Security Policy headers to maintain defense against script injection across admin routes.
+- Verify PrimeVue component imports remain tree-shaken to keep bundle size under budgets.
+- Track admin route usage analytics to identify screens needing caching or backend optimizations.
+
+<!-- anchor: 3-19-5-catalog-tasks -->
+#### 3.19.5 Catalog and Inventory
+
+- Rebuild search indexes or materialized views nightly to keep product listings aligned with recent changes.
+- Validate batch import jobs log success metrics (rows processed, duration) for auditing.
+- Review variant upsert logs to ensure SKUs remain unique per tenant, preventing fulfillment errors.
+- Monitor inventory adjustment audit trails for suspicious activities such as frequent manual overrides.
+- Ensure low-stock alert emails dispatch promptly and deduplicate notifications per tenant.
+- Run data integrity scripts verifying category trees remain acyclic and depth-limited.
+- Verify API pagination defaults and maximums align with performance goals and prevent abuse.
+- Inspect Panache filters monthly to guarantee new tables include tenant_id enforcement.
+
+<!-- anchor: 3-19-6-consignment-tasks -->
+#### 3.19.6 Consignment Module
+
+- Confirm consignor onboarding flows collect necessary tax information and store encryption metadata.
+- Audit commission calculations for random samples to ensure rates apply according to consignor or category overrides.
+- Ensure batch intake screens enforce barcode uniqueness and maintain traceability.
+- Review aging report generation schedules to guarantee expired items trigger notifications.
+- Monitor payout job logs for reconciliation mismatches and escalate to finance immediately.
+- Validate consignor portal tokens expire per policy and require MFA where applicable.
+- Track notification deliverability for consignor communications to prevent missed updates.
+- Document regulatory requirements per jurisdiction and store references for compliance audits.
+
+<!-- anchor: 3-19-7-checkout-tasks -->
+#### 3.19.7 Checkout and Orders
+
+- Run synthetic checkout flows multiple times per day covering guest, registered, loyalty, and gift card scenarios.
+- Monitor shipping rate caching to ensure entries refresh before expiry and carriers remain in sync.
+- Verify discount code APIs handle concurrency, preventing double redemption.
+- Inspect order timeline entries to ensure each status change logs actor and timestamp information.
+- Review refund processing times weekly to confirm Stripe responses propagate to customer communications.
+- Validate address validation provider credentials remain current and error handling gracefully falls back.
+- Ensure CORS rules for checkout APIs reflect allowed origins for storefront and headless use.
+- Audit order export jobs to ensure data freshness and proper scoping before merchants download.
+
+<!-- anchor: 3-19-8-payment-tasks -->
+#### 3.19.8 Payment Integration Layer
+
+- Monitor Stripe webhook delivery metrics; repeated failures require immediate investigation.
+- Validate application fee settings align with platform fee models and update when plans change.
+- Confirm payout schedules per tenant remain in sync with Stripe-managed cycles.
+- Reconcile platform ledger entries with Stripe balance reports daily to detect anomalies.
+- Test dummy provider implementation in CI to ensure interface compatibility for future processors.
+- Rotate Stripe API keys per environment per security schedule and store rotation evidence.
+- Verify dispute notifications create support tickets with all required metadata.
+- Ensure webhook idempotency store purges old entries to avoid storage bloat.
+
+<!-- anchor: 3-19-9-loyalty-tasks -->
+#### 3.19.9 Loyalty and Rewards
+
+- Validate nightly tier recalculation job completes within SLA and logs summary stats.
+- Monitor points accrual for high-volume tenants to ensure performance remains acceptable.
+- Test redemption rules for edge cases (partial redemption, returns) to prevent ledger inconsistencies.
+- Review expiration policies and confirm notifications issue before points lapse.
+- Audit loyalty ledger entries randomly to guarantee balance_after matches expected totals.
+- Ensure API responses include `data_freshness_timestamp` so frontends display accurate context.
+- Coordinate with marketing to align loyalty promotions with feature flag rollouts.
+- Document future integration hooks (CRM, marketing automation) for when roadmaps expand.
+
+<!-- anchor: 3-19-10-pos-tasks -->
+#### 3.19.10 POS and Offline Processor
+
+- Validate device registration workflows store firmware version data for auditing.
+- Monitor offline queue sizes per device; devices exceeding thresholds require support outreach.
+- Ensure PIN-based quick login rotates codes and enforces lockouts after repeated failures.
+- Test printer and barcode scanning integrations quarterly to catch driver updates.
+- Audit cash drawer events to confirm each open/close event ties to staff identity and reason code.
+- Verify offline transaction encryption keys rotate and devices wipe data after reconnection confirmation.
+- Run reconciliation jobs in staging replicating long offline periods to ensure conflict resolution holds.
+- Coordinate with hardware vendors for firmware updates and track adoption per tenant.
+
+<!-- anchor: 3-19-11-media-tasks -->
+#### 3.19.11 Media Pipeline
+
+- Monitor FFmpeg version compliance and update container layers promptly when vulnerabilities disclosed.
+- Track storage consumption per tenant and enforce quotas or upsell paths before hitting limits.
+- Validate image recompression retains quality using automated perceptual diffs on sample assets.
+- Ensure variant generation respects lazy caching rules; duplicates indicate caching bug.
+- Test HLS manifest generation for QA tenants to ensure playlist integrity.
+- Audit signed URL expiration defaults to prevent overly long exposures for private content.
+- Verify EXIF stripping executes for all uploads to protect privacy.
+- Measure job retry counts; repeated failures require analyzing source files or resource limits.
+
+<!-- anchor: 3-19-12-reporting-tasks -->
+#### 3.19.12 Reporting and Analytics
+
+- Confirm hourly ETL jobs populate aggregate tables on schedule; missing runs trigger alerts.
+- Validate report export manifests include schema version and encryption metadata.
+- Track usage of each predefined report to prioritize optimization or retirement.
+- Ensure API endpoints return `data_freshness_timestamp` fields, enabling UI to display last update times.
+- Audit CSV generation to ensure delimiter and encoding remain consistent for merchant tooling.
+- Test long-running report cancellation workflows to avoid orphaned jobs.
+- Monitor read replica health if reporting directs queries to secondary databases.
+- Document new report additions in the catalog with owner, SLA, and feature flag references.
+
+<!-- anchor: 3-19-13-platform-admin-tasks -->
+#### 3.19.13 Platform Admin and Support Tools
+
+- Review platform dashboard metrics daily to detect anomalies in store signups or revenue.
+- Ensure impersonation UI clearly indicates acting user and logs exit actions.
+- Validate support tooling enforces reason codes when suspending or unsuspending stores.
+- Monitor health indicator widgets for stale timestamps; underlying metrics should refresh each minute.
+- Provide audit exports for compliance teams with filtering by tenant, actor, and action.
+- Keep runbooks updated with latest CLI commands for plan changes or tenant migrations.
+- Coordinate monthly governance reviews capturing blueprint deviations and resolutions.
+- Train support staff on feature flag usage to avoid toggling flags without change control.
+
+<!-- anchor: 3-19-14-integration-adapter-tasks -->
+#### 3.19.14 Integration Adapter Layer
+
+- Verify HTTP client configurations share centralized timeout and retry policies to avoid divergence.
+- Maintain mock servers for USPS, UPS, FedEx, and address validation APIs to support integration testing.
+- Monitor adapter-level metrics (success, retry, timeout, failure) for early detection of dependency issues.
+- Rotate API credentials per carrier schedule and document rotation evidence.
+- Update documentation when carrier APIs change to inform merchant credential setup.
+- Implement circuit breakers that trip after repeated failures, with runbooks describing reset procedures.
+- Ensure adapters log sanitized requests/responses for debugging without exposing sensitive data.
+- Plan backlog for future providers (PayPal, CashApp, Square) by validating PaymentProvider interface readiness.
+
+<!-- anchor: 3-20-alert-catalog -->
+### 3.20 Alert Catalog and Response Targets
+
+<!-- anchor: 3-20-1-sev1 -->
+#### 3.20.1 Severity One Alerts (Immediate Paging)
+
+- Checkout HTTP 5xx rate >2% for 5 minutes.
+- Stripe webhook failure rate >5% across all event types.
+- Tenant Access Gateway resolution latency >250ms median.
+- PostgreSQL failover or replication lag >30s reported by managed service.
+- Media transcode queue depth >500 combined with wait time >30 minutes.
+- Background job dead-letter queue growth >50 entries within 10 minutes.
+- Authentication service token issuance errors >1% or bcrypt errors triggered.
+- Audit log insertion failure detected in readiness probe.
+- ACME certificate renewal failure within 7 days of expiry for any production domain.
+- POS offline queue growth >200 transactions per device for high-volume stores.
+
+<!-- anchor: 3-20-2-sev2 -->
+#### 3.20.2 Severity Two Alerts (Within Business Hours)
+
+- Shipping rate cache miss ratio >70% for an hour, indicating caching inefficiency.
+- Reporting job queue wait time >15 minutes during non-peak hours.
+- Loyalty tier recalculation job exceeding 15 minutes runtime.
+- Consignment payout reconciliation job delayed beyond daily window.
+- Feature flag overrides older than 90 days detected.
+- Stripe Connect onboarding completion rate drops below 95% over 24 hours.
+- CDN cache hit ratio drop >20% for storefront assets.
+- Tailwind design token sync failure in latest deployment pipeline.
+- Data archival job backlog spanning more than two schedules.
+- OAuth client credential issuance errors >5% during partner onboarding week.
+
+<!-- anchor: 3-20-3-info -->
+#### 3.20.3 Informational Alerts (Monitoring Only)
+
+- New tenant signup rate surpassing forecast by >30%.
+- Media storage consumption >80% of allocated bucket for any tenant.
+- Synthetic checkout success >99.9% for consecutive days (indicates potential monitoring blind spot).
+- POS device heartbeat offline for >30 minutes outside business hours.
+- Carrier API response time >1s but still succeeding (watch for degradation).
+- Feature flag toggles executed outside maintenance windows.
+- Reporting export downloads surpassing plan-specific quotas.
+- Loyalty redemption exceeding accrual for more than 3 consecutive days (potential fraud).
+- Background job retry rate >2% but trending downward (watch for pattern).
+- Platform admin impersonation time >4 hours per day per agent (capacity planning).
+
+<!-- anchor: 3-21-operational-data-contracts -->
+### 3.21 Operational Data Contracts
+
+<!-- anchor: 3-21-1-tenant-context-contract -->
+#### 3.21.1 Tenant Context Contract
+
+- TenantContext CDI bean contains `tenantId`, `storeId`, `plan`, `featureFlags`, and `themeTokens` fields populated by the Tenant Access Gateway.
+- Context populated prior to controller invocation and serialized into structured logs for traceability.
+- Scheduled jobs iterating tenants stream IDs through TenantContext factory to avoid loading entire store datasets simultaneously.
+- Context refresh occurs on every request to honor real-time plan or suspension changes triggered from platform admin tooling.
+- Failure to resolve context results in 404 response plus structured log entry referencing host header and correlation ID.
+
+<!-- anchor: 3-21-2-feature-flag-contract -->
+#### 3.21.2 Feature Flag Contract
+
+- `feature_flags` table stores key, description, default_state, owner, expiry, and allowed audiences per §3 Rulebook.
+- Overrides stored per tenant, per plan, or temporary cohorts; API ensures updates recorded with actor metadata.
+- Caffeine caches maintain 60-second TTL; changes propagate quickly while preventing thrash.
+- Feature evaluations log decision outcome, actor, and tenant to support kill-switch audibility.
+- Flags tied to migrations must include rollback plan references to satisfy release guardrails.
+
+<!-- anchor: 3-21-3-background-job-contract -->
+#### 3.21.3 Background Job Payload Contract
+
+- Payloads structured JSON with `job_type`, `version`, `entity_refs`, `attempt`, and `metadata` fields.
+- Workers validate schema version before execution and emit `job_version_mismatch` metrics when incompatible payloads encountered.
+- Sensitive identifiers hashed before storage; execution retrieves full data as needed to limit exposure.
+- Job records store `locked_by` and `locked_at` for observability to identify stuck workers.
+- Completion updates include `finished_at` timestamp and optional result summary for downstream audits.
+
+<!-- anchor: 3-21-4-audit-log-contract -->
+#### 3.21.4 Audit Log Contract
+
+- Audit events capture `id`, `tenant_id`, `actor_type`, `actor_id`, `action`, `target_type`, `target_id`, `metadata`, `impersonation_context`, and `occurred_at` per §5 Contract Patterns.
+- API responses referencing audit events redact sensitive metadata unless caller holds platform scope.
+- Append-only semantics enforced via database constraints; delete operations only allowed through archival pipeline.
+- Reporting exports include audit log entries with `data_freshness_timestamp` for compliance accuracy.
+- Observability pipelines monitor audit log insert rates to detect sudden spikes that may indicate abuse.
+
+<!-- anchor: 3-21-5-reporting-contract -->
+#### 3.21.5 Reporting Contract
+
+- Report job creation accepts `reportType`, `filters`, and `format`; backend returns `job_id` referencing DelayedJob entry.
+- Status endpoints provide `state`, `percent_complete`, `download_url`, `expires_at`, and `data_freshness_timestamp`.
+- Download URLs are signed, expire after 72 hours, and include checksum metadata for verification.
+- Reports log `generated_by`, `tenant_id`, and `row_count` to support billing and auditing.
+- Cancellation requests mark jobs as `aborted` and notify workers via cooperative cancellation flags to avoid wasted compute.
+
+<!-- anchor: 3-22-release-calendar -->
+### 3.22 Release Calendar and Operational Cadence
+
+- Weekly deployments on Tuesdays/Thursdays with freeze windows during major retail events (Black Friday, Cyber Monday) as mandated by release management.
+- Monthly governance reviews align new requirements with foundation anchors, documenting deviations and remediation owners.
+- Quarterly DR drills rotate across environments, ensuring runbooks remain accurate and teams stay practiced.
+- Secrets rotation calendar ensures Stripe, carrier, SMTP, and OAuth secrets refresh at least quarterly with evidence captured in compliance packets.
+- Observability reviews occur bi-weekly to adjust alert thresholds, SLO budgets, and dashboard fidelity.
+- Performance benchmarking exercises run monthly across checkout, storefront, and admin flows to maintain KPI adherence.
+- Tenant advisory board sessions quarterly provide operational feedback loops and highlight upcoming load events.
+- Backlog grooming includes at least one operational improvement epic per sprint to honor §1 Extended Directives emphasizing sustained platform health.

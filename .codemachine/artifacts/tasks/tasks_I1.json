@@ -1,0 +1,144 @@
+[
+  {
+    "task_id": "I1.T1",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Bootstrap the Maven multi-module Quarkus project (core platform + admin UI module placeholders), configure Spotless, JaCoCo (80%), and shared plugins, seed README with architecture commitments, and stub package structure per Section 3.",
+    "agent_type_hint": "SetupAgent",
+    "inputs": "Section 2 Standard Kit, Section 3 directory structure, docs/java-project-standards directives.",
+    "target_files": [
+      "pom.xml",
+      "README.md",
+      "src/main/java/com/village/storefront/**",
+      "src/main/resources/application.properties",
+      "ui-storefront/",
+      "src/main/webui/"
+    ],
+    "input_files": [],
+    "deliverables": "Multi-module Maven build, baseline Quarkus app with placeholders for tenant, identity, catalog modules, README summary of stack + commands.",
+    "acceptance_criteria": "- `mvn clean verify` succeeds with Spotless + JaCoCo wired and default modules present.\n        - README documents build/run commands plus module overview referencing Sections 1–2.\n        - Package skeleton mirrors directory tree, including placeholder classes (TenantContext, CatalogService) with TODO comments.",
+    "dependencies": [],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I1.T2",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Author the Component Diagram (PlantUML) covering Tenant Gateway, Identity, Storefront, Admin SPA, Catalog, Consignment, Checkout, Payments, Loyalty, POS, Media, Jobs, Reporting, Platform Admin, and external systems.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Section 2 Core Architecture, Section 2.1 artifact list.",
+    "target_files": [
+      "docs/diagrams/component-overview.puml"
+    ],
+    "input_files": [],
+    "deliverables": "PlantUML diagram with labeled interfaces + notes on GraalVM/Kubernetes context.",
+    "acceptance_criteria": "- Diagram renders via `plantuml` CLI without errors.\n        - Each component shows inbound/outbound dependencies + technology notes (Stripe, R2, PostgreSQL).\n        - File header references `I1.T2` and Section 2 for traceability.",
+    "dependencies": [
+      "I1.T1"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I1.T3",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Draft the multi-tenant ERD (Mermaid) showing Tenant, StoreUser, Customer, SessionLog, Product, Variant, InventoryLocation/Level, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, AuditEvent, FeatureFlag, BackgroundJob.",
+    "agent_type_hint": "DatabaseAgent",
+    "inputs": "Section 2 Data Model overview, docs/java-project-standards RLS guidance.",
+    "target_files": [
+      "docs/diagrams/tenant-erd.mmd"
+    ],
+    "input_files": [],
+    "deliverables": "Mermaid ERD capturing primary keys, foreign keys, tenant_id presence, and notes on RLS policies.",
+    "acceptance_criteria": "- Mermaid preview passes `mmdc` or mermaid-cli lint.\n        - Every tenant-scoped table shows `tenant_id` plus indexes described in notes.\n        - Document includes commentary on partitioned tables (SessionLog, AuditEvent) linking to Section 5.",
+    "dependencies": [
+      "I1.T2"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I1.T4",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Produce initial OpenAPI spec (YAML) covering auth (login, refresh, impersonation), tenant resolution endpoints, catalog read endpoints, and shared DTO components.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Sections 2 & 5 (API style), ERD, component diagram.",
+    "target_files": [
+      "api/openapi-base.yaml"
+    ],
+    "input_files": [],
+    "deliverables": "Valid OpenAPI 3.0 spec with tags for `auth`, `tenants`, `catalog-public`, security schemes for JWT + OAuth client credentials, and RFC7807 error schema.",
+    "acceptance_criteria": "- `openapi-generator validate` (or `swagger-cli validate`) passes with no warnings.\n        - Paths include tenant-aware segments and document feature flag metadata in `x-feature-flags`.\n        - Components define DTOs referenced by future modules (Tenant, StoreUser, ProductSummary, ProblemDetail).",
+    "dependencies": [
+      "I1.T3"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I1.T5",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Implement TenantContext, TenantFilter, and request-scope wiring plus stub Panache repositories enforcing tenant filters; include unit tests for subdomain + custom domain parsing.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Section 2 communication patterns, OpenAPI base spec.",
+    "target_files": [
+      "src/main/java/com/village/storefront/tenant/TenantContext.java",
+      "src/main/java/com/village/storefront/tenant/TenantFilter.java",
+      "src/test/java/com/village/storefront/tenant/TenantFilterTest.java"
+    ],
+    "input_files": [],
+    "deliverables": "Working `@RequestScoped` context, JAX-RS ContainerRequestFilter, placeholder TenantService with TODO for DB lookup, and tests covering host parsing + 404 path.",
+    "acceptance_criteria": "- Tests cover subdomain + custom-domain resolution and fail invalid hosts with 404.\n        - Filter populates MDC/structured logging fields for tenant_id + store_id.\n        - Code passes Spotless + JaCoCo thresholds; TODOs reference upcoming tasks for DB integration.",
+    "dependencies": [
+      "I1.T4"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I1.T6",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Write initial MyBatis migrations for Tenant, Store, CustomDomain, StoreUser, Role, FeatureFlag tables including tenant_id columns, default data, and baseline RLS policies; document migration strategy in comments.",
+    "agent_type_hint": "DatabaseAgent",
+    "inputs": "ERD, docs/java-project-standards RLS section.",
+    "target_files": [
+      "src/main/resources/db/migrations/0001_create_tenant_tables.sql",
+      "src/main/resources/db/migrations/0002_rss_policies.sql"
+    ],
+    "input_files": [],
+    "deliverables": "Ordered migration scripts with up/down sections, test fixtures for verifying RLS via integration test harness.",
+    "acceptance_criteria": "- Scripts apply cleanly on PostgreSQL 17 container with MyBatis CLI.\n        - RLS policies restrict select/update/delete to tenant context user.\n        - Integration test (`TenantTablesIT`) proves unauthorized tenant_id access fails.",
+    "dependencies": [
+      "I1.T5"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I1.T7",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
+    "description": "Configure GitHub Actions workflow + ops scaffolding (ops/k8s base manifests, README snippet) covering Maven verify, Quinoa build placeholder, OpenAPI lint, and artifact uploads to `ops/k8s/base`.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Section 2 Deployment, docs/java-project-standards CI rules.",
+    "target_files": [
+      ".github/workflows/ci.yml",
+      "ops/k8s/base/deployment.yaml",
+      "ops/k8s/base/service.yaml",
+      "ops/scripts/smoke.sh"
+    ],
+    "input_files": [],
+    "deliverables": "CI workflow with lint/test/build matrix (JVM + Native), placeholder Kubernetes manifests referencing image names, smoke script invoking `/q/health`.",
+    "acceptance_criteria": "- Workflow runs Spotless, unit tests, OpenAPI lint, Quinoa `npm run lint`, and uploads manifests as artifacts.\n        - Base deployment includes resource requests/limits, readiness/liveness probes, ConfigMap/Secret placeholders.\n        - Smoke script documented in README and used in CI job.",
+    "dependencies": [
+      "I1.T1"
+    ],
+    "parallelizable": true,
+    "done": false
+  }
+]

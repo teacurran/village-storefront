@@ -1,0 +1,146 @@
+[
+  {
+    "task_id": "I2.T1",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Write ADR `0001-delayed-job-governance` detailing queue naming, priority, worker scaling policy, payload schema expectations, and observability metrics referenced across jobs.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Section 2 messaging/queues, Section 4 enforcement playbooks.",
+    "target_files": [
+      "docs/adr/0001-delayed-job-governance.md"
+    ],
+    "input_files": [],
+    "deliverables": "ADR with context/problem/decision/consequences, links to plan sections, checklists for worker pods.",
+    "acceptance_criteria": "- ADR follows markdown template, includes status = Accepted.\n        - Documents queue taxonomy (CRITICAL/HIGH/DEFAULT/LOW/BULK) with SLA + owner mapping.\n        - References instrumentation + retry policies; cross-links to future worker tasks.",
+    "dependencies": [
+      "I1.T2"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I2.T2",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Draft ADR `0002-feature-flag-governance` describing flag lifecycle, owner metadata, expiry policies, audit logging, and required metadata in OpenAPI `x-feature-flags`.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Section 3 enforcement playbooks, Section 5 contract patterns.",
+    "target_files": [
+      "docs/adr/0002-feature-flag-governance.md"
+    ],
+    "input_files": [],
+    "deliverables": "ADR with diagrams or tables describing overrides per tenant and CLI/admin UI responsibilities.",
+    "acceptance_criteria": "- Specifies schema for `feature_flags` table + API exposures.\n        - Defines review cadence, owner fields, expiry enforcement automation.\n        - Links to plan Section 3 + Section 5; referenced in README and future tasks.",
+    "dependencies": [
+      "I2.T1"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I2.T3",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Produce PlantUML checkout sequence diagram capturing storefront request, TenantContext resolution, catalog calls, address validation, shipping rates, Stripe intent creation, loyalty hooks, reporting events (per Section 3 Proposed Architecture Flow A).",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "OpenAPI base spec, component diagram, Section 3 flow.",
+    "target_files": [
+      "docs/diagrams/seq-checkout.puml"
+    ],
+    "input_files": [],
+    "deliverables": "PlantUML with swim lanes for Shopper, Tenant Gateway, Storefront, Catalog, Checkout, Adapters, Stripe, Reporting.",
+    "acceptance_criteria": "- Diagram renders successfully and references plan Flow A steps.\n        - Notes describe idempotency keys + feature flag gating.\n        - File cross-links to relevant API endpoints in comments.",
+    "dependencies": [
+      "I1.T4"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I2.T4",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Implement Identity & Session Service features: JWT/refresh issuance endpoints, session logging entity, refresh token persistence, impersonation audit hook stubs; update OpenAPI spec plus integration tests hitting PostgreSQL.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "OpenAPI base spec, ERD, ADRs for governance.",
+    "target_files": [
+      "api/openapi-base.yaml",
+      "src/main/java/com/village/storefront/identity/*.java",
+      "src/test/java/com/village/storefront/identity/IdentityResourceTest.java",
+      "src/main/resources/db/migrations/0003_identity.sql"
+    ],
+    "input_files": [],
+    "deliverables": "REST endpoints for login/refresh/impersonation start-stop (stubs), Panache entities for session logs, service wiring hooking TenantContext, and tests hitting Quarkus devservices Postgres.",
+    "acceptance_criteria": "- Tests cover JWT generation, refresh, impersonation rejection when reason missing.\n        - Session log writes include tenant_id, user_agent, ip fields mirroring Section 3 requirements.\n        - OpenAPI spec updated with security schemes + responses; lint passes.",
+    "dependencies": [
+      "I1.T6"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I2.T5",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Extend catalog and tenant APIs: implement product/category CRUD (server stubs), Panache repositories with tenant filters, and unit tests verifying RLS interactions; update OpenAPI spec `catalog-public` + `catalog-admin` tags accordingly.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "ERD, OpenAPI base, Tenant filter code.",
+    "target_files": [
+      "src/main/java/com/village/storefront/catalog/*.java",
+      "src/test/java/com/village/storefront/catalog/CatalogResourceTest.java",
+      "api/openapi-catalog.yaml",
+      "src/main/resources/db/migrations/0004_catalog.sql"
+    ],
+    "input_files": [],
+    "deliverables": "Catalog service/resour­ces, DTO mappers, tests, and updated spec split `openapi-catalog.yaml` referencing shared components.",
+    "acceptance_criteria": "- Panache base repository automatically injects tenant filter; tests prove data leakage prevented.\n        - OpenAPI documents filtering/pagination + ProblemDetails for validation errors.\n        - Migrations create required indexes + JSONB custom_attributes field.",
+    "dependencies": [
+      "I2.T4"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I2.T6",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Scaffold Admin SPA (Vue 3 + Vite + Tailwind + PrimeVue) via Quinoa: configure lint/test scripts, Tailwind tokens fetch stub, login shell using Identity endpoints, and localization scaffolding (en/es JSON).",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Section 2 frontend stack, Identity endpoints, feature flag ADR.",
+    "target_files": [
+      "src/main/webui/src/main.ts",
+      "src/main/webui/src/router/index.ts",
+      "src/main/webui/src/locales/en.json",
+      "src/main/webui/src/locales/es.json",
+      "src/main/webui/package.json",
+      "src/main/webui/tailwind.config.js"
+    ],
+    "input_files": [],
+    "deliverables": "Working SPA scaffold with auth layout, feature flag injection placeholder, unit tests (Vitest) verifying login form + localization toggle.",
+    "acceptance_criteria": "- `npm run test` + `npm run lint` succeed inside CI job; Quinoa build integrates with Maven profile.\n        - Tailwind config reads design tokens placeholder and documents pipeline for pulling from DB.\n        - Router enforces `/admin/*` guard requiring JWT + impersonation banner indicator slot.",
+    "dependencies": [
+      "I2.T4"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I2.T7",
+    "iteration_id": "I2",
+    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
+    "description": "Create CI/CD pipeline diagram (Mermaid) describing GitHub Actions stages (lint/test/native build, Quinoa build, OpenAPI validation, manifest generation), artifact storage, and k3s deployment promotion, referencing Section 3 deployment view.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Section 2 deployment stack, CI workflow from `I1.T7`.",
+    "target_files": [
+      "docs/diagrams/ci-cd-pipeline.mmd"
+    ],
+    "input_files": [],
+    "deliverables": "Mermaid diagram with nodes for developer commit, GitHub Actions jobs, container registry, k3s overlays, smoke tests.",
+    "acceptance_criteria": "- Diagram renders via mermaid-cli; includes annotations for SLO gates (Spotless, JaCoCo, OpenAPI lint).\n        - Highlights blue/green deploy path and secret management.\n        - Linked from README + plan manifest.",
+    "dependencies": [
+      "I1.T7"
+    ],
+    "parallelizable": true,
+    "done": false
+  }
+]

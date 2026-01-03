@@ -1,4 +1,4 @@
-# Specification Review & Recommendations: Village Storefront - Multi-Tenant SaaS Ecommerce Platform
+# Specification Review & Recommendations: Village Storefront SaaS Platform
 
 **Date:** 2026-01-02
 **Status:** Awaiting Specification Enhancement
@@ -13,86 +13,86 @@ This document is an automated analysis of the provided project specifications. I
 
 *Based on the provided data, the core project objective is to engineer a system that:*
 
-Delivers a multi-tenant SaaS ecommerce platform enabling small-to-medium merchants to operate independent online stores with subdomain/custom domain access, consignment vendor management, and comprehensive product/inventory/order management capabilities built on Java 21/Quarkus with GraalVM native compilation targeting Kubernetes deployment.
+Delivers a multi-tenant SaaS ecommerce platform enabling merchants to operate independent online stores with consignment vendor management, leveraging Java 21/Quarkus for backend services, Qute templates for customer-facing storefronts, and Vue.js for administrative interfaces, all deployed as GraalVM native images on Kubernetes infrastructure.
 
 ### **3.0 Critical Assertions & Required Clarifications**
 
 ---
 
-#### **Assertion 1: Tenant Isolation Strategy & Database Architecture**
+#### **Assertion 1: Platform Super-User Access Strategy & Data Access Boundaries**
 
-*   **Observation:** The specification mandates strict tenant isolation with all data tenant-scoped, but does not define the isolation implementation pattern at the database layer.
-*   **Architectural Impact:** This is a foundational decision affecting database schema design, query performance, migration complexity, and operational safety.
-    *   **Path A (Shared Database, Discriminator Column):** Single PostgreSQL database with `tenant_id` on all tables. Simplest deployment, but requires rigorous row-level security policies and application-layer guards to prevent cross-tenant data leakage. Highest performance density, lowest operational overhead.
-    *   **Path B (Schema-per-Tenant):** Single PostgreSQL instance with dedicated schema per tenant. Moderate isolation, schema-level access control, simpler backup/restore per tenant. Migration complexity increases linearly with tenant count.
-    *   **Path C (Database-per-Tenant):** Separate PostgreSQL database per tenant. Maximum isolation and security, independent scaling per tenant, but significantly higher operational complexity and infrastructure cost.
-*   **Default Assumption & Required Action:** To optimize for MVP velocity and operational simplicity while maintaining security, the system will be architected assuming **Path A (Shared Database with Discriminator Column)** enforced via PostgreSQL Row-Level Security policies + application-layer tenant context injection. **The specification must be updated** to explicitly define the tenant isolation pattern, acceptable cross-tenant data leakage risk tolerance, and whether per-tenant database backup/restore is a hard requirement.
+*   **Observation:** The specification defines platform admin capabilities including store suspension, analytics access, and impersonation features, but does not clarify the architectural isolation model between platform-level operations and tenant-level data access.
+*   **Architectural Impact:** This is a security-critical decision affecting database access patterns, audit logging depth, regulatory compliance posture, and the design of the multi-tenant data isolation layer.
+    *   **Path A (Shared Isolation Layer):** Platform admins access tenant data through the same RLS/Panache filter mechanisms as regular users, with context overrides for impersonation. Simpler implementation, but requires careful audit trail architecture.
+    *   **Path B (Separate Access Plane):** Platform admin operations use dedicated database roles with explicit cross-tenant query capabilities, bypassing RLS entirely. More complex, but provides clearer security boundaries and compliance audit separation.
+    *   **Path C (API-Mediated):** Platform admins never query tenant tables directly; all cross-tenant operations proxied through dedicated service layer with explicit authorization checks. Maximum auditability, highest development overhead.
+*   **Default Assumption & Required Action:** To balance security and development velocity, the system will assume **Path A (Shared Isolation Layer)** with mandatory impersonation audit logging to separate tables outside RLS scope. **The specification must be updated** to explicitly define the platform admin data access model, required audit granularity for compliance, and any regulatory frameworks the platform must satisfy (SOC2, GDPR, etc.).
 
 ---
 
 #### **Assertion 2: Custom Domain SSL Certificate Provisioning & Renewal Architecture**
 
-*   **Observation:** The specification requires custom domain support with "automatic SSL handling" but does not define the certificate acquisition, validation, and renewal mechanism.
-*   **Architectural Impact:** This decision affects infrastructure dependencies, DNS configuration requirements, certificate storage strategy, and operational monitoring needs.
-    *   **Path A (ACME Protocol with Let's Encrypt):** Implement ACME client within the application to request certificates via HTTP-01 or DNS-01 challenge. Requires either HTTP server on port 80 for validation or DNS API integration. Certificate storage in database or object storage. Auto-renewal via scheduled job.
-    *   **Path B (Cloudflare SSL for SaaS):** Delegate SSL management to Cloudflare's SSL for SaaS product. Merchant adds CNAME, platform issues certificate via Cloudflare API. Zero application-level certificate management, but introduces Cloudflare dependency and potential cost per custom domain.
-    *   **Path C (AWS Certificate Manager + CloudFront):** Use ACM for certificate provisioning with CloudFront distribution per custom domain. Managed renewal, but requires AWS infrastructure and CloudFront configuration per domain.
-*   **Default Assumption & Required Action:** To minimize external dependencies and operational cost for MVP, the system will assume **Path A (ACME Protocol with Let's Encrypt)** using HTTP-01 challenge with certificate storage in object storage and a background job for renewal monitoring. **The specification must be updated** to define acceptable certificate provisioning latency (immediate vs. minutes), DNS control requirements for merchants, and whether third-party SSL management services are acceptable.
+*   **Observation:** The specification states "automatic SSL via Let's Encrypt (ACME HTTP-01 challenge)" for custom domains but does not define the certificate storage strategy, renewal orchestration, or ingress controller integration model.
+*   **Architectural Impact:** This decision fundamentally affects infrastructure dependencies, certificate lifecycle management complexity, and the coupling between application logic and Kubernetes ingress configuration.
+    *   **Path A (Application-Managed):** Quarkus application performs ACME challenges, stores certificates in database, programmatically updates Kubernetes Ingress/TLS secrets. Tightly coupled, requires elevated RBAC permissions for pods.
+    *   **Path B (Operator-Delegated):** External cert-manager operator handles ACME challenges and certificate lifecycle, application only registers domain records. Loosely coupled, standard k8s pattern, but adds infrastructure dependency.
+    *   **Path C (Cloudflare Proxy):** All custom domains proxied through Cloudflare with Universal SSL, application only manages DNS CNAME records. Simplest implementation, vendor lock-in, requires Cloudflare paid plan for multiple domains.
+*   **Default Assumption & Required Action:** The architecture will assume **Path B (Operator-Delegated)** using cert-manager with HTTP-01 challenges, as it aligns with Kubernetes best practices and minimizes application security surface. **The specification must be updated** to define the acceptable infrastructure dependencies, certificate storage requirements, and whether vendor-managed SSL (Cloudflare) is architecturally permissible.
 
 ---
 
-#### **Assertion 3: Background Job Processing & Async Task Architecture**
+#### **Assertion 3: Multi-Currency Settlement & Exchange Rate Authority**
 
-*   **Observation:** The specification references background jobs for media processing, consignment payouts, email notifications, and certificate renewal, but does not define the job queue/scheduler architecture.
-*   **Architectural Impact:** This variable dictates infrastructure dependencies, failure recovery strategies, job persistence, and horizontal scaling characteristics.
-    *   **Path A (Quarkus Scheduler with Database Persistence):** Use Quarkus @Scheduled annotations with job state persisted to PostgreSQL. Simple, zero external dependencies, but limited to single-node execution without distributed locking. Suitable for MVP with moderate job volume.
-    *   **Path B (Quarkus + Quartz Scheduler):** Integrate Quartz for distributed job scheduling with database-backed job store. Multi-node execution with clustering support, but adds complexity and requires Quartz schema management.
-    *   **Path C (External Message Queue - Redis/RabbitMQ/Kafka):** Dedicated message broker for async job distribution. Highest scalability and resilience, but introduces external infrastructure dependency counter to "No Redis" constraint.
-*   **Default Assumption & Required Action:** Adhering to the "No Redis" constraint and minimizing infrastructure complexity, the system will assume **Path A (Quarkus Scheduler with Database Persistence)** with optimistic locking for job claim semantics. **The specification must be updated** to define expected job volume (jobs/hour), acceptable job execution latency, and whether multi-node job distribution is required for MVP.
-
----
-
-#### **Assertion 4: Real-Time Shipping Rate Calculation Integration Scope**
-
-*   **Observation:** The specification mandates real-time shipping rates from USPS, UPS, and FedEx in cart and at checkout, but does not define carrier API integration depth or fallback strategies.
-*   **Architectural Impact:** This decision affects third-party API dependencies, rate accuracy, checkout abandonment risk, and operational cost (carrier API fees).
-    *   **Path A (Direct Carrier API Integration):** Implement native integrations with USPS Web Tools, UPS Rating API, and FedEx Web Services. Maximum rate accuracy and control, but requires managing three separate API contracts, credential sets, and error handling strategies.
-    *   **Path B (Third-Party Aggregator - EasyPost/Shippo):** Integrate with shipping aggregation service providing unified API for all carriers. Simplified integration, single credential set, built-in fallbacks, but introduces monthly/per-label fees and external dependency.
-    *   **Path C (Hybrid - Flat Rate with Optional Real-Time):** Merchants configure flat-rate or table-rate shipping by default, with optional real-time carrier integration for stores requiring it. Reduces critical path dependencies for MVP.
-*   **Default Assumption & Required Action:** To de-risk MVP delivery and minimize integration surface area, the system will assume **Path C (Hybrid Model)** with flat-rate/table-rate shipping as baseline and Phase 2 delivery of real-time carrier integration via aggregator (Path B). **The specification must be updated** to define whether real-time carrier rates are hard requirements for MVP launch or acceptable as post-launch enhancement.
+*   **Observation:** The specification mandates "multi-currency display with real-time or daily exchange rates" but does not specify the authoritative exchange rate source, settlement currency conversion strategy, or handling of rate fluctuations between display and payment capture.
+*   **Architectural Impact:** This variable affects payment processor integration complexity, revenue recognition accuracy, merchant financial reporting, and potential forex risk exposure.
+    *   **Path A (Display-Only Conversion):** Exchange rates used solely for customer-facing price display; all transactions settled in store base currency at Stripe's market rate at time of charge. Simple, zero forex risk for platform, rate mismatch potential between display and charge.
+    *   **Path B (Locked Rate Conversion):** Exchange rate locked at cart creation, stored with order, settlement uses locked rate. Accurate customer experience, requires manual reconciliation with Stripe settlement amounts, forex risk absorbed by merchant.
+    *   **Path C (Stripe Multi-Currency):** Leverage Stripe's presentment currency feature to charge customer in display currency, auto-settle to merchant base currency. Stripe handles conversion, fees applied, cleanest UX, highest transaction cost.
+*   **Default Assumption & Required Action:** The system will implement **Path A (Display-Only Conversion)** using a daily-refreshed exchange rate cache from a free API (e.g., exchangerate-api.com), with prominent disclaimer that final charge is in base currency. **The specification must be updated** to define the acceptable exchange rate source, tolerance for display/settlement variance, and whether Stripe multi-currency fees are acceptable for premium merchants.
 
 ---
 
-#### **Assertion 5: Consignment Vendor Automated Payout Mechanism & Compliance**
+#### **Assertion 4: Consignment Vendor Payout Timing & Platform Fee Collection Point**
 
-*   **Observation:** The specification requires "automated payouts" and "integration with payment service for vendor payments" but does not define the payout rail, compliance requirements, or vendor onboarding workflow.
-*   **Architectural Impact:** This decision affects payment processor selection (Stripe Connect Platform vs. Express), vendor tax reporting obligations (1099-K generation), KYC/identity verification requirements, and payout timing.
-    *   **Path A (Stripe Connect - Express Accounts):** Vendors create Stripe Express accounts, platform uses Stripe transfers to pay out commissions. Stripe handles 1099-K reporting and compliance. Requires vendor SSN/EIN collection and identity verification. Payout timing controlled by Stripe (2-7 days).
-    *   **Path B (Stripe Connect - Custom Accounts):** Platform has full control over payout UX and timing, but assumes 1099-K reporting and compliance burden. Requires building identity verification workflow and annual tax form generation.
-    *   **Path C (Manual Payout with ACH Integration):** Platform generates payout reports, merchant initiates manual ACH transfers via bank portal. Zero automation, but eliminates payment processor dependency for payouts. Acceptable only if payout volume is very low.
-*   **Default Assumption & Required Action:** To leverage Stripe's compliance infrastructure and minimize regulatory risk, the system will assume **Path A (Stripe Connect Express Accounts)** with vendor onboarding collecting tax details and triggering Stripe identity verification. **The specification must be updated** to define acceptable payout frequency (daily, weekly, monthly), whether platform or vendor bears payout fees, and whether 1099-K generation must be handled by platform or can be delegated to Stripe.
-
----
-
-#### **Assertion 6: Media Processing Execution Environment & Resource Limits**
-
-*   **Observation:** The specification mandates FFmpeg video transcoding and Thumbnailator image processing but does not define execution environment (in-process vs. isolated), resource limits, or timeout policies.
-*   **Architectural Impact:** This decision affects application pod resource allocation, crash risk from malformed media, job execution latency, and infrastructure cost.
-    *   **Path A (In-Process Execution):** FFmpeg invoked via ProcessBuilder within Quarkus application pods. Simplest architecture, but risks pod OOM/crash from large files and consumes application pod CPU during processing. Requires generous pod memory limits and careful timeout enforcement.
-    *   **Path B (Kubernetes Job per Media File):** Spawn dedicated K8s Job for each video transcode operation. Isolated resource limits, no risk to application pods, but introduces job orchestration complexity and requires pod autoscaling for job workers.
-    *   **Path C (External Processing Service):** Delegate transcoding to external service (e.g., AWS MediaConvert, Cloudflare Stream). Zero application resource impact, optimized transcoding quality, but introduces per-minute processing fees and external dependency.
-*   **Default Assumption & Required Action:** Balancing MVP simplicity with pod stability, the system will assume **Path A (In-Process Execution)** with strict timeout enforcement (5 minutes for video, 30 seconds for images) and configurable per-tenant upload size limits (default 50MB images, 500MB video as specified). **The specification must be updated** to define acceptable media processing latency, whether transcoding failures should block upload or queue for retry, and maximum expected concurrent processing load.
+*   **Observation:** The specification describes Stripe Connect for vendor payouts with "platform fee collection" but does not define whether fees are deducted at point-of-sale or at payout, the timing of vendor balance settlement, or handling of refunds/chargebacks affecting vendor commissions.
+*   **Architectural Impact:** This decision affects cash flow modeling, vendor portal balance accuracy, accounting complexity, and the implementation of the commission calculation engine.
+    *   **Path A (POS Fee Deduction):** Platform fee deducted from each transaction via Stripe Connect application fee at charge time; vendor balance credited with net commission immediately. Real-time vendor balance accuracy, but complicates partial refunds and chargeback reconciliation.
+    *   **Path B (Payout Fee Deduction):** Vendor credited full commission on sale; platform fee deducted during payout generation. Simpler refund handling, but vendor sees inflated balance until payout, requires separate fee accounting.
+    *   **Path C (Hybrid Settlement):** Commission tracked as pending until order fulfillment confirmed, then settled to vendor balance; platform fee deducted at confirmed settlement. Accurate for refund scenarios, highest complexity, delayed vendor visibility.
+*   **Default Assumption & Required Action:** The architecture will assume **Path A (POS Fee Deduction)** with a deferred commission model where vendor balance only increments after the order's refund window expires (e.g., 30 days post-fulfillment). **The specification must be updated** to define the merchant's preferred vendor payout timing, acceptable delay between sale and vendor credit, and policy for handling chargebacks affecting consignor earnings.
 
 ---
 
-#### **Assertion 7: Session Activity Logging & Impersonation Audit Storage Strategy**
+#### **Assertion 5: Session Activity Log Query Performance & Reporting Scope**
 
-*   **Observation:** The specification requires comprehensive session logging, impersonation audit trails, and activity reports, but does not define the data retention policy, storage tier, or query access patterns.
-*   **Architectural Impact:** This decision affects database growth rate, query performance for reporting, compliance with data retention regulations, and long-term storage cost.
-    *   **Path A (PostgreSQL with Partitioning):** Store all session/impersonation logs in PostgreSQL using time-based partitioning (monthly). Query via SQL for reports. Simple architecture, but unlimited retention leads to unbounded database growth. Requires partition maintenance job.
-    *   **Path B (PostgreSQL + Archival to Object Storage):** Store recent logs (90 days) in PostgreSQL, archive older records to S3/R2 as compressed JSON. Requires dual query path for historical reports (SQL for recent, object scan for archive). Balances query performance and cost.
-    *   **Path C (Dedicated Audit Log Store - Elasticsearch/Loki):** Stream audit events to dedicated log aggregation system optimized for time-series data. Maximum query flexibility and retention scalability, but introduces external infrastructure dependency.
-*   **Default Assumption & Required Action:** To maintain simplicity while controlling database growth, the system will assume **Path B (PostgreSQL + Archival to Object Storage)** with 90-day retention in database and annual archival to object storage. **The specification must be updated** to define regulatory retention requirements (e.g., SOC2/GDPR audit log retention periods), acceptable query latency for historical reports, and whether real-time session activity monitoring is required.
+*   **Observation:** The specification mandates comprehensive session logging with 90-day hot storage and archival to R2, but does not define the query patterns for session reports, the indexing strategy for high-cardinality searches, or the performance SLA for admin-facing analytics.
+*   **Architectural Impact:** This variable dictates table partitioning strategy, index overhead, archive query implementation complexity, and whether a separate OLAP datastore is required.
+    *   **Tier 1 (Transactional Queries Only):** Session logs optimized for real-time operational queries (e.g., "show active sessions for user X"), minimal indexing, reports pre-aggregated via scheduled jobs. Low index overhead, limited ad-hoc reporting flexibility.
+    *   **Tier 2 (Moderate Analytics):** Full-text and composite indexes on session logs for admin-initiated searches (e.g., "sessions from IP range Y in last 30 days"), archive queries delegated to manual export. Balanced performance, some query latency on complex filters.
+    *   **Tier 3 (Advanced Analytics):** Session data replicated to columnar store (e.g., Parquet on R2 + DuckDB queries) for complex analytics, transactional DB used only for operational lookups. Highest query flexibility, requires ETL pipeline and additional infrastructure.
+*   **Default Assumption & Required Action:** The system will implement **Tier 1 (Transactional Queries Only)** with monthly pre-aggregated session reports stored as materialized views, and a CSV export tool for ad-hoc archive analysis. **The specification must be updated** to define the required session report types, acceptable query response times for admin dashboards, and whether real-time cross-tenant session analytics are a platform admin requirement.
+
+---
+
+#### **Assertion 6: Video Transcoding Resource Allocation & Processing SLA**
+
+*   **Observation:** The specification describes FFmpeg-based video transcoding within application pods with a 10-minute timeout, but does not specify the expected video upload volume, concurrent processing limits, or pod resource reservations required to prevent transcode jobs from starving application requests.
+*   **Architectural Impact:** This decision affects Kubernetes resource quotas, pod autoscaling configuration, job queue priority implementation, and whether video processing should be architecturally separated from the main application.
+    *   **Path A (In-Process Processing):** Video transcodes executed within web application pods using DelayedJob, resource limits enforced via JVM heap constraints. Simplest deployment, risk of OOM under high upload volume, limits horizontal scaling efficiency.
+    *   **Path B (Dedicated Worker Pods):** Separate Deployment for video processing workers consuming DelayedJob queue, isolated resource quotas. Clean separation, requires additional pod orchestration, increases infrastructure complexity.
+    *   **Path C (External Processing Service):** Offload transcoding to external service (e.g., AWS MediaConvert, Cloudflare Stream). Zero in-cluster resource impact, introduces external dependency and per-minute processing costs.
+*   **Default Assumption & Required Action:** The architecture will assume **Path B (Dedicated Worker Pods)** with a separate Deployment for media workers (CPU-optimized pods) consuming the DelayedJob CRITICAL priority queue, auto-scaling based on queue depth. **The specification must be updated** to define expected peak video upload volume, acceptable transcode completion SLA (e.g., "95% of videos processed within 15 minutes"), and budget constraints for external processing services.
+
+---
+
+#### **Assertion 7: Loyalty Points Redemption Mechanics & Discount Interaction Model**
+
+*   **Observation:** The specification describes a points-based loyalty program with "convert points to discount at checkout" but does not define the redemption granularity, interaction with other promotions, or handling of partial refunds affecting redeemed points.
+*   **Architectural Impact:** This decision affects checkout calculation logic complexity, promotion stacking rules engine design, and order adjustment/refund workflows.
+    *   **Path A (Fixed Redemption Tiers):** Points redeemable only in fixed increments (e.g., 100 points = $5 discount), applied as order-level discount code, stackable with one other promotion. Simple implementation, limited customer flexibility.
+    *   **Path B (Flexible Point Currency):** Points converted to store credit at dynamic rate (e.g., 1 point = $0.01), applied as payment method, combinable with all discounts. Maximum flexibility, requires separate payment method handling and refund complexity.
+    *   **Path C (Product-Level Redemption):** Points redeemable for specific reward products or percentage discounts on eligible items, non-stackable with sales. Gamification-friendly, highest promotional control, requires reward catalog management.
+*   **Default Assumption & Required Action:** The system will implement **Path A (Fixed Redemption Tiers)** with points-to-discount codes generated at 100-point increments, exclusive with automatic promotions but stackable with manually-entered coupon codes. **The specification must be updated** to define the desired loyalty program mechanics, acceptable redemption constraints for merchants, and policy for points reinstatement on partial/full refunds.
 
 ---
 

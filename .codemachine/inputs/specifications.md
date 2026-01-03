@@ -534,6 +534,67 @@ For static site integration and custom frontends:
 - **Historical queries**: Application queries archive via S3 API when date range exceeds 90 days
 - **Partition maintenance**: Scheduled job creates new partitions, archives and drops old ones
 
+### Platform Admin Data Access
+- **Access model**: Shared isolation layer with context overrides
+- **Impersonation**: Platform admins use same RLS/Panache filters with tenant context override
+- **Audit logging**: All platform admin actions logged to separate audit tables (outside RLS scope)
+- **Compliance**: Audit logs retained per regulatory requirements (SOC2, GDPR as applicable)
+
+### SSL Certificate Management
+- **Strategy**: Operator-delegated using cert-manager
+- **ACME provider**: Let's Encrypt with HTTP-01 challenges
+- **Certificate lifecycle**: cert-manager handles issuance, renewal, and secret management
+- **Application role**: Register custom domain records, cert-manager handles the rest
+- **Infrastructure dependency**: Requires cert-manager operator installed in k8s cluster
+
+### Multi-Currency Display
+- **Conversion model**: Display-only conversion
+- **Exchange rate source**: Daily-refreshed cache from free API (e.g., exchangerate-api.com)
+- **Settlement**: All transactions charged in store's base currency at Stripe's market rate
+- **Customer UX**: Prominent disclaimer that final charge is in store's base currency
+- **Rate caching**: Caffeine cache with 24-hour TTL, fallback to last known rate
+
+### Consignment Payout Mechanics
+- **Fee deduction timing**: Platform fee deducted at point-of-sale via Stripe Connect application fee
+- **Commission crediting**: Vendor balance credited after refund window expires (30 days post-fulfillment)
+- **Chargeback handling**: Chargebacks deducted from vendor balance; if insufficient, flagged for merchant resolution
+- **Payout frequency**: Configurable per-store (daily, weekly, monthly)
+- **Stripe settlement**: 2-7 day payout timing controlled by Stripe Express account settings
+
+### Session & Audit Log Analytics
+- **Query tier**: Tier 2 - Moderate analytics with indexed searches
+- **Indexing strategy**: Composite indexes on (tenant_id, timestamp), (tenant_id, user_id), (session_type, timestamp)
+- **Aggregation**: Scheduled jobs roll up data into aggregate tables for dashboard performance
+- **Tenant isolation**: All reports scoped to single tenant; no cross-tenant queries in store admin
+- **Platform admin reports**: Aggregate counts only (tenant count, logins, account creations, etc.)
+- **Query SLA**: Admin dashboard queries < 500ms for 30-day ranges
+- **Archive access**: CSV export tool for archived data beyond 90 days
+
+### Media Processing Deployment
+- **Execution model**: In-process within application pods via DelayedJob
+- **Queue configuration**: Per-pod configurable queue subscriptions via environment variables
+  - `DELAYED_JOB_QUEUES=CRITICAL,HIGH,DEFAULT` - which queues this pod processes
+  - `DELAYED_JOB_ENABLED=true|false` - enable/disable job processing entirely
+- **Deployment flexibility**:
+  - Web-only pods: `DELAYED_JOB_ENABLED=false`
+  - Video processing pods: `DELAYED_JOB_QUEUES=CRITICAL` (media jobs)
+  - Notification pods: `DELAYED_JOB_QUEUES=HIGH,DEFAULT` (emails, webhooks)
+  - All-purpose pods: `DELAYED_JOB_QUEUES=CRITICAL,HIGH,DEFAULT,LOW,BULK`
+- **Resource limits**: JVM heap constraints, 10-minute timeout for video, 30-second for images
+- **Scaling**: Horizontal pod autoscaling based on queue depth metrics
+
+### Loyalty Program Configuration
+- **Multi-model support**: Stores can configure one or more redemption models
+- **Available models**:
+  - **Points-to-Currency**: Flexible conversion (e.g., 1 point = $0.01), applied as payment method
+  - **Fixed Tiers**: Threshold rewards (e.g., 100 points = $5 discount code)
+  - **Product Rewards**: Punch-card style (e.g., buy 10 coffees, get 1 free)
+- **Earning rules**: Configurable points-per-dollar or points-per-item by category
+- **Stacking rules**: Merchant-configurable; default allows one loyalty reward + one coupon code
+- **Refund handling**: Points reinstated on full refund; partial refunds prorate point reinstatement
+- **Expiration**: Optional points expiration after configurable inactivity period
+- **Tier benefits**: Optional tier levels with bonus multipliers and exclusive rewards
+
 ### Internationalization (i18n)
 - **Supported languages**: English (en), Spanish (es) at launch; extensible for future languages
 - **Language selection**:
