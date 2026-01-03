@@ -195,7 +195,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [sonarcloud]
     # Only build Docker on push to main/beta after quality checks pass
-    if: github.event_name == 'push'
+    # Also requires Docker Hub credentials to be configured
+    if: github.event_name == 'push' && vars.DOCKER_ENABLED == 'true'
 
     steps:
       - name: Checkout code
