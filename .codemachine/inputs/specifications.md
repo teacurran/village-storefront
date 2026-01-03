@@ -234,18 +234,35 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 
 ### 8. Payment Processing
 
-- **Stripe integration**: Primary payment processor
-  - Stripe Connect for platform fee collection
-  - Each store connects their own Stripe account
-  - Configurable platform percentage fee
-- **Payment methods**:
-  - Credit/debit cards
-  - Apple Pay, Google Pay
-  - Link (Stripe's fast checkout)
-- **Gift cards**: Sell and redeem store-branded gift cards
-- **Store credit**: Issue credit for returns, goodwill, promotions
-- **Refunds**: Full and partial refund processing
+#### Pluggable Architecture
+- **Payment Provider Interface**: Abstract interface for all payment processors
+  - `PaymentProvider` - core payment operations (charge, refund, capture)
+  - `PaymentMethodProvider` - payment method management (cards, wallets)
+  - `MarketplaceProvider` - optional interface for platform fee splitting
+  - `WebhookHandler` - processor-specific webhook handling
+- **Provider registration**: Providers registered at startup, selectable per-store
+- **Multi-provider support**: Stores can enable multiple providers simultaneously
+- **Provider-agnostic models**: Internal payment/refund models map to provider-specific APIs
+
+#### Stripe (Primary Implementation)
+- Stripe Connect for platform fee collection
+- Each store connects their own Stripe account
+- Configurable platform percentage fee
+- Payment methods: Credit/debit cards, Apple Pay, Google Pay, Link
+
+#### Future Providers (Interface-Ready)
+- **PayPal**: PayPal Checkout, Venmo integration
+- **CashApp**: CashApp Pay for younger demographics
+- **Square**: Alternative card processing
+- Additional providers implementable via `PaymentProvider` interface
+
+#### Common Features (All Providers)
+- **Gift cards**: Sell and redeem store-branded gift cards (internal, provider-agnostic)
+- **Store credit**: Issue credit for returns, goodwill, promotions (internal ledger)
+- **Refunds**: Full and partial refund processing (delegated to provider)
 - **Payment status**: Pending, Completed, Failed, Refunded, Disputed
+- **Webhook processing**: Provider-specific webhooks mapped to common events
+- **Audit logging**: All payment operations logged with provider details
 
 ### 9. Loyalty & Rewards Program
 
@@ -442,7 +459,7 @@ For static site integration and custom frontends:
 
 1. **Single base currency per store**: Payments processed in one currency, display in multiple
 2. **English-only for v1**: Internationalization deferred to future version
-3. **Stripe-only payments**: No alternative payment processors in v1
+3. **Stripe-only payments for v1**: Pluggable provider architecture ready for PayPal, CashApp, etc.
 4. **US shipping focus**: USPS, UPS, FedEx initially; international carriers later
 5. **No marketplace features**: Stores are independent; no cross-store discovery
 6. **No AI features in v1**: Focus on core functionality first
