@@ -138,8 +138,8 @@ class LoyaltyLedgerIT {
         loyaltyService.enrollMember(userId);
 
         // Award points
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID());
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID()).orElseThrow();
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID()).orElseThrow();
 
         // Redeem points
         loyaltyService.redeemPoints(userId, 100, UUID.randomUUID().toString());
@@ -166,8 +166,8 @@ class LoyaltyLedgerIT {
         loyaltyService.enrollMember(userId);
 
         // Award points
-        LoyaltyTransaction transaction = loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"),
-                UUID.randomUUID());
+        LoyaltyTransaction transaction = loyaltyService
+                .awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID()).orElseThrow();
 
         assertNotNull(transaction.expiresAt);
         assertTrue(transaction.expiresAt.isAfter(OffsetDateTime.now().plusDays(29)));
@@ -179,7 +179,7 @@ class LoyaltyLedgerIT {
         loyaltyService.enrollMember(userId);
 
         // Award points
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID()).orElseThrow();
 
         // Verify initial balance
         LoyaltyMember member = loyaltyService.getMemberByUser(userId).orElseThrow();
@@ -205,7 +205,7 @@ class LoyaltyLedgerIT {
         loyaltyService.enrollMember(userId);
 
         UUID orderId = UUID.randomUUID();
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), orderId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), orderId).orElseThrow();
 
         List<LoyaltyTransaction> transactions = transactionRepository.findByOrder(orderId);
 
@@ -217,7 +217,7 @@ class LoyaltyLedgerIT {
     @Transactional
     void testIdempotencyKeyLookup() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
 
         String idempotencyKey = UUID.randomUUID().toString();
         LoyaltyTransaction transaction = loyaltyService.redeemPoints(userId, 150, idempotencyKey);
@@ -266,6 +266,6 @@ class LoyaltyLedgerIT {
     @Transactional
     void setupConcurrentTest() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("500.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("500.00"), UUID.randomUUID()).orElseThrow();
     }
 }

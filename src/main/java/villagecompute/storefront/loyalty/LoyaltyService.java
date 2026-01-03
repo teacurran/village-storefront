@@ -221,10 +221,10 @@ public class LoyaltyService {
      *            purchase amount
      * @param orderId
      *            order UUID
-     * @return transaction record
+     * @return {@link Optional} of the persisted transaction; empty if purchase value does not earn any points
      */
     @Transactional
-    public LoyaltyTransaction awardPointsForPurchase(UUID userId, BigDecimal purchaseAmount, UUID orderId) {
+    public Optional<LoyaltyTransaction> awardPointsForPurchase(UUID userId, BigDecimal purchaseAmount, UUID orderId) {
         Objects.requireNonNull(userId, "User ID is required");
         Objects.requireNonNull(purchaseAmount, "Purchase amount is required");
         UUID tenantId = TenantContext.getCurrentTenantId();
@@ -237,12 +237,12 @@ public class LoyaltyService {
         // Calculate points to award
         LoyaltyProgram program = member.program;
         ensureProgramEnabled(program);
-        ensureProgramEnabled(program);
         int pointsToAward = calculatePointsForPurchase(purchaseAmount, program, member);
 
         if (pointsToAward <= 0) {
-            LOG.infof("No points to award - tenantId=%s, userId=%s, amount=%s", tenantId, userId, purchaseAmount);
-            throw new IllegalArgumentException("Purchase amount too low to award points");
+            LOG.debugf("No points to award - tenantId=%s, userId=%s, orderId=%s, purchaseAmount=%s, pointsToAward=%d",
+                    tenantId, userId, orderId, purchaseAmount, pointsToAward);
+            return Optional.empty();
         }
 
         // Create transaction
@@ -276,7 +276,7 @@ public class LoyaltyService {
                 member.currentTier != null ? member.currentTier : "none").increment(pointsToAward);
         reportingProjectionService.recordLoyaltyLedgerEvent(transaction);
 
-        return transaction;
+        return Optional.of(transaction);
     }
 
     /**
@@ -381,6 +381,7 @@ public class LoyaltyService {
                 .orElseThrow(() -> new IllegalStateException("User not enrolled in loyalty program"));
 
         LoyaltyProgram program = member.program;
+        ensureProgramEnabled(program);
 
         // Validate redemption amount
         if (pointsToRedeem < program.minRedemptionPoints) {

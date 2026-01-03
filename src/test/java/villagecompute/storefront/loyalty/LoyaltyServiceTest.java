@@ -171,7 +171,8 @@ class LoyaltyServiceTest {
         UUID orderId = UUID.randomUUID();
         BigDecimal purchaseAmount = new BigDecimal("100.00");
 
-        LoyaltyTransaction transaction = loyaltyService.awardPointsForPurchase(userId, purchaseAmount, orderId);
+        LoyaltyTransaction transaction = loyaltyService.awardPointsForPurchase(userId, purchaseAmount, orderId)
+                .orElseThrow();
 
         assertNotNull(transaction);
         assertEquals(100, transaction.pointsDelta);
@@ -194,7 +195,8 @@ class LoyaltyServiceTest {
         UUID orderId = UUID.randomUUID();
         BigDecimal purchaseAmount = new BigDecimal("50.00");
 
-        LoyaltyTransaction transaction = loyaltyService.awardPointsForPurchase(userId, purchaseAmount, orderId);
+        LoyaltyTransaction transaction = loyaltyService.awardPointsForPurchase(userId, purchaseAmount, orderId)
+                .orElseThrow();
 
         assertNotNull(transaction);
         assertEquals(50, transaction.pointsDelta);
@@ -205,9 +207,25 @@ class LoyaltyServiceTest {
 
     @Test
     @Transactional
+    void testAwardPointsReturnsEmptyForSmallPurchase() {
+        loyaltyService.enrollMember(userId);
+
+        Optional<LoyaltyTransaction> transaction = loyaltyService.awardPointsForPurchase(userId, new BigDecimal("0.50"),
+                UUID.randomUUID());
+
+        assertTrue(transaction.isEmpty());
+
+        Optional<LoyaltyMember> member = loyaltyService.getMemberByUser(userId);
+        assertTrue(member.isPresent());
+        assertEquals(0, member.get().pointsBalance);
+        assertEquals(0, member.get().lifetimePointsEarned);
+    }
+
+    @Test
+    @Transactional
     void testRedeemPoints() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
 
         String idempotencyKey = UUID.randomUUID().toString();
         LoyaltyTransaction transaction = loyaltyService.redeemPoints(userId, 150, idempotencyKey);
@@ -229,7 +247,7 @@ class LoyaltyServiceTest {
     @Transactional
     void testRedeemPointsIdempotent() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
 
         String idempotencyKey = UUID.randomUUID().toString();
         LoyaltyTransaction transaction1 = loyaltyService.redeemPoints(userId, 150, idempotencyKey);
@@ -248,7 +266,7 @@ class LoyaltyServiceTest {
     @Transactional
     void testRedeemPointsInsufficientBalance() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID()).orElseThrow();
 
         assertThrows(IllegalArgumentException.class, () -> {
             loyaltyService.redeemPoints(userId, 100, UUID.randomUUID().toString());
@@ -259,7 +277,7 @@ class LoyaltyServiceTest {
     @Transactional
     void testRedeemPointsBelowMinimum() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
 
         assertThrows(IllegalArgumentException.class, () -> {
             loyaltyService.redeemPoints(userId, 50, UUID.randomUUID().toString());
@@ -292,19 +310,19 @@ class LoyaltyServiceTest {
         loyaltyService.enrollMember(userId);
 
         // Award small amount - should be Bronze
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("500.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("500.00"), UUID.randomUUID()).orElseThrow();
         Optional<LoyaltyMember> member = loyaltyService.getMemberByUser(userId);
         assertTrue(member.isPresent());
         assertEquals("Bronze", member.get().currentTier);
 
         // Award more - should upgrade to Silver
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("600.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("600.00"), UUID.randomUUID()).orElseThrow();
         member = loyaltyService.getMemberByUser(userId);
         assertTrue(member.isPresent());
         assertEquals("Silver", member.get().currentTier);
 
         // Award even more - should upgrade to Gold
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("4000.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("4000.00"), UUID.randomUUID()).orElseThrow();
         member = loyaltyService.getMemberByUser(userId);
         assertTrue(member.isPresent());
         assertEquals("Gold", member.get().currentTier);
@@ -314,8 +332,8 @@ class LoyaltyServiceTest {
     @Transactional
     void testGetTransactionHistory() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID());
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("100.00"), UUID.randomUUID()).orElseThrow();
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID()).orElseThrow();
         loyaltyService.redeemPoints(userId, 100, UUID.randomUUID().toString());
 
         List<LoyaltyTransaction> transactions = loyaltyService.getTransactionHistory(userId, 0, 10);
@@ -328,7 +346,7 @@ class LoyaltyServiceTest {
     @Transactional
     void testCalculateCartSummary() {
         loyaltyService.enrollMember(userId);
-        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID());
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
 
         CartLoyaltyProjection projection = loyaltyService.calculateCartSummary(new BigDecimal("50.00"), userId);
 

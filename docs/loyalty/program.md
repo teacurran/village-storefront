@@ -132,17 +132,24 @@ See `docs/diagrams/architecture.puml` Section 3.5 for the loyalty module boundar
 Points are automatically awarded when orders are completed:
 
 ```java
-LoyaltyTransaction transaction = loyaltyService.awardPointsForPurchase(
+Optional<LoyaltyTransaction> transaction = loyaltyService.awardPointsForPurchase(
     userId,
     orderTotal,
     orderId
 );
+
+transaction.ifPresent(tx -> {
+    log.infof("Points earned: %d", tx.pointsDelta);
+});
 ```
 
 **Calculation:**
 ```
 pointsEarned = floor(orderTotal * program.pointsPerDollar)
 ```
+
+If the calculated `pointsEarned` rounds down to zero, the method returns `Optional.empty()` and no ledger entry is
+created—checkout proceeds without raising an exception.
 
 **Expiration:**
 If `program.pointsExpirationDays` is set, earned points expire after that many days. Expiration is tracked per transaction, not per member.
