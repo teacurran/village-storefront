@@ -212,11 +212,12 @@ class CatalogServiceTest {
         createAndPersistProduct("WIDGET-200", "Blue Widget");
         createAndPersistProduct("GADGET-300", "Red Gadget");
 
-        List<Product> results = catalogService.searchProducts("red", 0, 10);
+        CatalogService.CatalogSearchResult results = catalogService.searchProducts("red", 0, 10);
 
-        assertEquals(2, results.size());
-        assertTrue(results.stream().anyMatch(p -> p.sku.equals("WIDGET-100")));
-        assertTrue(results.stream().anyMatch(p -> p.sku.equals("GADGET-300")));
+        assertEquals(2, results.products().size());
+        assertEquals(2, results.totalItems());
+        assertTrue(results.products().stream().anyMatch(p -> p.sku.equals("WIDGET-100")));
+        assertTrue(results.products().stream().anyMatch(p -> p.sku.equals("GADGET-300")));
     }
 
     @Test

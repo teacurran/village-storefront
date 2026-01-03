@@ -581,6 +581,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/GuestSessionId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -635,6 +637,8 @@ paths:
             format: uuid
           description: Cart item UUID
         - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
@@ -792,6 +796,419 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  # ============================================================================
+  # HEADLESS API ENDPOINTS
+  # ============================================================================
+
+  /api/v1/headless/catalog/products:
+    get:
+      operationId: listProductsHeadless
+      summary: List products (headless API)
+      description: |
+        **OAuth Scope Required:** `catalog:read`
+
+        List active products with optional search and pagination. Designed for headless/custom
+        frontends consuming the catalog API.
+
+        **Rate Limit:** 5000 requests/minute per client_id (configurable per OAuth client)
+
+        **Caching:** Search results are cached for 5 minutes. Cache is invalidated on catalog updates.
+
+        **Feature Flag:** `headless.api.enabled` (tenant-scoped)
+
+        **Authentication:** OAuth 2.0 Client Credentials flow via HTTP Basic Auth.
+        Pass client_id:client_secret as Authorization header.
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [catalog:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "running shoes"
+          description: Search query (searches product names and descriptions)
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Paginated product list
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '401':
+          description: Invalid or missing OAuth credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: OAuth client does not have catalog:read scope or feature disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/headless/catalog/products/{productId}:
+    get:
+      operationId: getProductHeadless
+      summary: Get product details (headless API)
+      description: |
+        **OAuth Scope Required:** `catalog:read`
+
+        Retrieve detailed product information including variants, pricing, and inventory status.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [catalog:read]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      responses:
+        '200':
+          description: Product details
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/v1/headless/cart:
+    get:
+      operationId: getCartHeadless
+      summary: Get cart (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:read`
+
+        Retrieve cart contents for a guest session. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:read]
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '200':
+          description: Cart contents
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartDto'
+        '400':
+          description: Missing X-Session-Id header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart not found for session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    delete:
+      operationId: clearCartHeadless
+      summary: Clear cart (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Remove all items from cart. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '204':
+          description: Cart cleared successfully
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+        '400':
+          description: Missing X-Session-Id header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart not found for session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/v1/headless/cart/items:
+    post:
+      operationId: addToCartHeadless
+      summary: Add item to cart (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Add a product variant to the cart or update quantity if already exists.
+        Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '201':
+          description: Item added to cart
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemDto'
+        '400':
+          description: Invalid request (missing session, invalid quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Product variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock conflict (cart modified concurrently)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/v1/headless/cart/items/{itemId}:
+    patch:
+      operationId: updateCartItemHeadless
+      summary: Update cart item quantity (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Update the quantity of an existing cart item. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+      responses:
+        '200':
+          description: Cart item updated successfully
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemDto'
+        '400':
+          description: Invalid request (missing session, invalid quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    delete:
+      operationId: removeCartItemHeadless
+      summary: Remove cart item (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Remove an item from the cart. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '204':
+          description: Cart item removed successfully
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+        '400':
+          description: Missing X-Session-Id header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
 # ==============================================================================
 # COMPONENTS
 # ==============================================================================
@@ -850,6 +1267,40 @@ components:
 
         **Security:**
         Keys are hashed in database (bcrypt). Store securely, never commit to version control.
+
+    oauthClientCredentials:
+      type: http
+      scheme: basic
+      description: |
+        OAuth 2.0 Client Credentials flow for headless API access.
+
+        **Authentication:**
+        Use HTTP Basic Authentication with client_id as username and client_secret as password:
+        ```
+        Authorization: Basic base64(client_id:client_secret)
+        ```
+
+        **Scopes:**
+        - `catalog:read` - Read product catalog
+        - `cart:read` - Read cart contents
+        - `cart:write` - Modify cart (add/update/remove items)
+        - `orders:read` - Read order history
+        - `orders:write` - Create and update orders
+
+        **Rate Limits:**
+        Default: 5000 requests/minute per client_id (configurable per OAuth client)
+
+        **Management:**
+        OAuth clients are created and managed via admin dashboard at `/admin/settings/oauth-clients`.
+        Each client is scoped to a specific tenant and has a configurable set of allowed scopes.
+
+        **Security:**
+        - Client secrets are hashed (bcrypt) in database
+        - Clients can be instantly revoked by setting active=false
+        - All requests are logged with client_id + tenant_id for audit trails
+        - Tenant isolation enforced: client can only access data for its assigned tenant
+
+        **Feature Flag:** Requires `headless.api.enabled` feature flag to be enabled for tenant
 
   # ============================================================================
   # REUSABLE PARAMETERS
@@ -921,6 +1372,71 @@ components:
         - Multi-tenant testing (switch tenants without DNS changes)
         - Platform admin impersonation
         - Local development with ngrok/tunnels
+
+  # ============================================================================
+  # REUSABLE HEADERS
+  # ============================================================================
+
+  headers:
+    X-RateLimit-Limit:
+      description: Maximum number of requests allowed in the current time window
+      schema:
+        type: integer
+        example: 5000
+
+    X-RateLimit-Remaining:
+      description: Number of requests remaining in the current time window
+      schema:
+        type: integer
+        example: 4998
+
+    X-RateLimit-Reset:
+      description: Unix timestamp when the rate limit window resets
+      schema:
+        type: integer
+        format: int64
+        example: 1704110460
+
+    Retry-After:
+      description: Number of seconds to wait before retrying the request
+      schema:
+        type: integer
+        example: 60
+
+  # ============================================================================
+  # REUSABLE RESPONSES
+  # ============================================================================
+
+  responses:
+    UnauthorizedError:
+      description: Invalid or missing OAuth credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    ForbiddenError:
+      description: OAuth client does not have required scope or feature disabled
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
 
   # ============================================================================
   # REUSABLE SCHEMAS

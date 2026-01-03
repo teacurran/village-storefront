@@ -107,6 +107,20 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     }
 
     /**
+     * Count search results for current tenant.
+     *
+     * @param searchTerm
+     *            search term
+     * @return total matches
+     */
+    public long countSearchResults(String searchTerm) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        String searchPattern = "%" + searchTerm.toLowerCase() + "%";
+        return count(QUERY_SEARCH_BY_NAME_OR_SKU,
+                Parameters.with("tenantId", tenantId).and("status", "active").and("search", searchPattern));
+    }
+
+    /**
      * Count all products for the current tenant.
      *
      * @return total product count

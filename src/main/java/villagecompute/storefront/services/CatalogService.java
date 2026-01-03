@@ -50,6 +50,9 @@ public class CatalogService {
     CategoryRepository categoryRepository;
 
     @Inject
+    CatalogCacheService catalogCacheService;
+
+    @Inject
     MeterRegistry meterRegistry;
 
     // ========================================
@@ -69,6 +72,7 @@ public class CatalogService {
         LOG.infof("Creating product - tenantId=%s, sku=%s, name=%s", tenantId, product.sku, product.name);
 
         productRepository.persist(product);
+        catalogCacheService.invalidateTenantCache(tenantId, "product-created");
 
         LOG.infof("Product created successfully - tenantId=%s, productId=%s, sku=%s", tenantId, product.id,
                 product.sku);
@@ -112,6 +116,7 @@ public class CatalogService {
         product.updatedAt = OffsetDateTime.now();
 
         productRepository.persist(product);
+        catalogCacheService.invalidateTenantCache(tenantId, "product-updated");
 
         LOG.infof("Product updated successfully - tenantId=%s, productId=%s", tenantId, productId);
         return product;
@@ -171,7 +176,7 @@ public class CatalogService {
     }
 
     /**
-     * Search products by keyword.
+     * Search products by keyword and return total count for pagination purposes.
      *
      * @param searchTerm
      *            search term
@@ -179,16 +184,27 @@ public class CatalogService {
      *            page number (0-indexed)
      * @param size
      *            page size
-     * @return list of matching products
+     * @return search result with products and total count
      */
-    public List<Product> searchProducts(String searchTerm, int page, int size) {
+    public CatalogSearchResult searchProducts(String searchTerm, int page, int size) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("Searching products - tenantId=%s, term=%s, page=%d, size=%d", tenantId, searchTerm, page, size);
 
         List<Product> results = productRepository.searchProducts(searchTerm, page, size);
+        long total = productRepository.countSearchResults(searchTerm);
         meterRegistry.counter("catalog.product.search", "tenant_id", tenantId.toString()).increment();
 
-        return results;
+        return new CatalogSearchResult(results, total);
+    }
+
+    /**
+     * Count active products for the current tenant.
+     *
+     * @return total number of active products
+     */
+    public long countActiveProducts() {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return productRepository.countActiveByCurrentTenant();
     }
 
     /**
@@ -211,6 +227,7 @@ public class CatalogService {
 
         product.status = "deleted";
         productRepository.persist(product);
+        catalogCacheService.invalidateTenantCache(tenantId, "product-deleted");
 
         LOG.infof("Product deleted successfully - tenantId=%s, productId=%s", tenantId, productId);
     }
@@ -280,6 +297,7 @@ public class CatalogService {
         LOG.infof("Creating variant - tenantId=%s, productId=%s, sku=%s", tenantId, variant.product.id, variant.sku);
 
         variantRepository.persist(variant);
+        catalogCacheService.invalidateTenantCache(tenantId, "variant-created");
 
         LOG.infof("Variant created successfully - tenantId=%s, variantId=%s, sku=%s", tenantId, variant.id,
                 variant.sku);
@@ -312,5 +330,11 @@ public class CatalogService {
         LOG.debugf("Fetching variant by SKU - tenantId=%s, sku=%s", tenantId, sku);
 
         return variantRepository.findBySku(sku);
+    }
+
+    /**
+     * Value object encapsulating catalog search results.
+     */
+    public record CatalogSearchResult(List<Product> products, long totalItems) {
     }
 }

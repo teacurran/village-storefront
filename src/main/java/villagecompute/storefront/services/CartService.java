@@ -60,6 +60,9 @@ public class CartService {
     @Inject
     MeterRegistry meterRegistry;
 
+    @Inject
+    CatalogCacheService catalogCacheService;
+
     // ========================================
     // Cart Operations
     // ========================================
@@ -261,6 +264,7 @@ public class CartService {
         // Update cart's updated_at timestamp
         cart.updatedAt = OffsetDateTime.now();
         cartRepository.persist(cart);
+        catalogCacheService.invalidateTenantCache(tenantId, "cart-item-upsert");
 
         // Eagerly initialize lazy-loaded relationships before transaction ends
         if (cartItem.variant != null) {
@@ -319,6 +323,7 @@ public class CartService {
         LOG.infof("Cart item quantity updated - tenantId=%s, cartId=%s, itemId=%s, newQuantity=%d", tenantId, cartId,
                 itemId, quantity);
         meterRegistry.counter("cart.item.quantity_updated", "tenant_id", tenantId.toString()).increment();
+        catalogCacheService.invalidateTenantCache(tenantId, "cart-item-quantity");
 
         // Eagerly initialize lazy-loaded relationships before transaction ends
         if (cartItem.variant != null) {
@@ -366,6 +371,7 @@ public class CartService {
 
         LOG.infof("Cart item removed - tenantId=%s, cartId=%s, itemId=%s", tenantId, cartId, itemId);
         meterRegistry.counter("cart.item.removed", "tenant_id", tenantId.toString()).increment();
+        catalogCacheService.invalidateTenantCache(tenantId, "cart-item-removed");
     }
 
     /**
@@ -429,6 +435,7 @@ public class CartService {
 
         LOG.infof("Cart cleared - tenantId=%s, cartId=%s, deletedItems=%d", tenantId, cartId, deletedItems);
         meterRegistry.counter("cart.cleared", "tenant_id", tenantId.toString()).increment();
+        catalogCacheService.invalidateTenantCache(tenantId, "cart-cleared");
     }
 
     // ========================================
