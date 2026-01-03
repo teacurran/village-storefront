@@ -2,18 +2,26 @@
   {
     "task_id": "I2.T1",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Write ADR `0001-delayed-job-governance` detailing queue naming, priority, worker scaling policy, payload schema expectations, and observability metrics referenced across jobs.",
-    "agent_type_hint": "DocumentationAgent",
-    "inputs": "Section 2 messaging/queues, Section 4 enforcement playbooks.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Implement catalog + inventory domain: Panache entities, repositories, service layer with tenant filters, import/export DTOs, MapStruct mappers, and unit tests; include fixture loaders + sample data script.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "ERD, OpenAPI schemas, ADR-001.",
     "target_files": [
-      "docs/adr/0001-delayed-job-governance.md"
+      "src/main/java/com/village/catalog/**",
+      "src/main/java/com/village/inventory/**",
+      "tests/backend/CatalogServiceTest.java",
+      "tools/scripts/sample_catalog_loader.sql"
     ],
-    "input_files": [],
-    "deliverables": "ADR with context/problem/decision/consequences, links to plan sections, checklists for worker pods.",
-    "acceptance_criteria": "- ADR follows markdown template, includes status = Accepted.\n        - Documents queue taxonomy (CRITICAL/HIGH/DEFAULT/LOW/BULK) with SLA + owner mapping.\n        - References instrumentation + retry policies; cross-links to future worker tasks.",
+    "input_files": [
+      "docs/diagrams/datamodel_erd.puml",
+      "api/v1/openapi.yaml",
+      "docs/adr/ADR-001-tenancy.md"
+    ],
+    "deliverables": "Domain models covering products/variants/categories/collections/inventory levels, service methods for CRUD + search placeholders, SQL loader script, doc updates referencing DTO mapping.",
+    "acceptance_criteria": "Entities include tenant_id + versioning, repositories enforce Panache filters, service tests cover CRUD + variant explosion, loader script seeds dev DB without violating constraints, README instructions for running loader.",
     "dependencies": [
-      "I1.T2"
+      "I1.T4",
+      "I1.T6"
     ],
     "parallelizable": true,
     "done": false
@@ -21,37 +29,55 @@
   {
     "task_id": "I2.T2",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Draft ADR `0002-feature-flag-governance` describing flag lifecycle, owner metadata, expiry policies, audit logging, and required metadata in OpenAPI `x-feature-flags`.",
-    "agent_type_hint": "DocumentationAgent",
-    "inputs": "Section 3 enforcement playbooks, Section 5 contract patterns.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Build storefront base: Qute layout, Tailwind config ingestion from tenant tokens, shared components (Hero, ProductCard, Footer), PrimeUI integration, Money formatting helpers, localization scaffolding (en/es message bundles).",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Architecture overview, design token spec, catalog service outputs.",
     "target_files": [
-      "docs/adr/0002-feature-flag-governance.md"
+      "src/main/resources/qute/templates/**",
+      "tailwind.config.js",
+      "src/main/resources/messages/messages.properties",
+      "src/main/resources/messages/messages_es.properties",
+      "tests/storefront/StorefrontRenderingTest.java"
     ],
-    "input_files": [],
-    "deliverables": "ADR with diagrams or tables describing overrides per tenant and CLI/admin UI responsibilities.",
-    "acceptance_criteria": "- Specifies schema for `feature_flags` table + API exposures.\n        - Defines review cadence, owner fields, expiry enforcement automation.\n        - Links to plan Section 3 + Section 5; referenced in README and future tasks.",
+    "input_files": [
+      "docs/architecture_overview.md",
+      "docs/diagrams/component_overview.puml",
+      "src/main/resources/messages/messages.properties"
+    ],
+    "deliverables": "Base layout with responsive grid, hero/category/product partials, Tailwind pipeline with tenant override hook, bilingual message bundles, SSR smoke tests.",
+    "acceptance_criteria": "Qute renders sample data via dev mode, CSS generated per tenant tokens, message bundles fallback gracefully, tests verify multi-tenant theming, docs describe customizing tokens.",
     "dependencies": [
       "I2.T1"
     ],
-    "parallelizable": true,
+    "parallelizable": false,
     "done": false
   },
   {
     "task_id": "I2.T3",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Produce PlantUML checkout sequence diagram capturing storefront request, TenantContext resolution, catalog calls, address validation, shipping rates, Stripe intent creation, loyalty hooks, reporting events (per Section 3 Proposed Architecture Flow A).",
-    "agent_type_hint": "DiagrammingAgent",
-    "inputs": "OpenAPI base spec, component diagram, Section 3 flow.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Scaffold admin SPA + POS shared shell: Vue 3 + Vite + PrimeVue + Tailwind, Pinia stores (auth, tenant, catalog), API client generator from OpenAPI, basic routing + layout + command palette stub, Storybook baseline.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "OpenAPI spec, design tokens, CI workflow.",
     "target_files": [
-      "docs/diagrams/seq-checkout.puml"
+      "src/main/webui/admin-spa/src/**",
+      "src/main/webui/admin-spa/tailwind.config.cjs",
+      "src/main/webui/admin-spa/src/stores/**",
+      "src/main/webui/admin-spa/src/components/base/**",
+      "src/main/webui/admin-spa/storybook/**",
+      "tests/admin/AdminShell.spec.ts"
     ],
-    "input_files": [],
-    "deliverables": "PlantUML with swim lanes for Shopper, Tenant Gateway, Storefront, Catalog, Checkout, Adapters, Stripe, Reporting.",
-    "acceptance_criteria": "- Diagram renders successfully and references plan Flow A steps.\n        - Notes describe idempotency keys + feature flag gating.\n        - File cross-links to relevant API endpoints in comments.",
+    "input_files": [
+      "api/v1/openapi.yaml",
+      "tailwind.config.js",
+      "package.json"
+    ],
+    "deliverables": "Running dev server, Storybook with atoms, generated API client types, command palette skeleton, documentation for npm scripts + CI integration.",
+    "acceptance_criteria": "`npm run dev` works, `npm run build` produces hashed assets consumed via Quinoa, Storybook renders at least 5 base components with knobs, command palette toggles, Pinia stores hold auth context.",
     "dependencies": [
-      "I1.T4"
+      "I1.T6",
+      "I2.T1"
     ],
     "parallelizable": true,
     "done": false
@@ -59,41 +85,47 @@
   {
     "task_id": "I2.T4",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Implement Identity & Session Service features: JWT/refresh issuance endpoints, session logging entity, refresh token persistence, impersonation audit hook stubs; update OpenAPI spec plus integration tests hitting PostgreSQL.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Implement cart + pricing services: persistent carts, cart lines, promotions placeholders, REST endpoints, Panache models, service tests, and API spec updates; include security guard rails for tenant isolation.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "OpenAPI base spec, ERD, ADRs for governance.",
+    "inputs": "OpenAPI spec, ERD, catalog services.",
     "target_files": [
-      "api/openapi-base.yaml",
-      "src/main/java/com/village/storefront/identity/*.java",
-      "src/test/java/com/village/storefront/identity/IdentityResourceTest.java",
-      "src/main/resources/db/migrations/0003_identity.sql"
+      "src/main/java/com/village/checkout/cart/**",
+      "tests/backend/CartServiceTest.java",
+      "tests/backend/CartControllerIT.java",
+      "api/v1/openapi.yaml"
     ],
-    "input_files": [],
-    "deliverables": "REST endpoints for login/refresh/impersonation start-stop (stubs), Panache entities for session logs, service wiring hooking TenantContext, and tests hitting Quarkus devservices Postgres.",
-    "acceptance_criteria": "- Tests cover JWT generation, refresh, impersonation rejection when reason missing.\n        - Session log writes include tenant_id, user_agent, ip fields mirroring Section 3 requirements.\n        - OpenAPI spec updated with security schemes + responses; lint passes.",
+    "input_files": [
+      "api/v1/openapi.yaml",
+      "docs/diagrams/datamodel_erd.puml",
+      "src/main/java/com/village/catalog/**"
+    ],
+    "deliverables": "Cart domain classes, services for add/update/remove/discount, REST resources tied to spec, integration tests hitting PostgreSQL with RLS.",
+    "acceptance_criteria": "Unit/integration tests pass, endpoints match spec (response codes, Problem Details), Panache filters enforce tenant_id, concurrency handled via optimistic locking.",
     "dependencies": [
-      "I1.T6"
+      "I2.T1"
     ],
-    "parallelizable": false,
+    "parallelizable": true,
     "done": false
   },
   {
     "task_id": "I2.T5",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Extend catalog and tenant APIs: implement product/category CRUD (server stubs), Panache repositories with tenant filters, and unit tests verifying RLS interactions; update OpenAPI spec `catalog-public` + `catalog-admin` tags accordingly.",
-    "agent_type_hint": "BackendAgent",
-    "inputs": "ERD, OpenAPI base, Tenant filter code.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Author checkout + shipping/address validation sequence diagram plus adapter design: show flow from storefront -> checkout orchestrator -> address validation -> carrier adapter -> payment placeholder; include error handling and idempotency notes.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Requirements shipping/checkout sections, OpenAPI endpoints, catalog/cart flows.",
     "target_files": [
-      "src/main/java/com/village/storefront/catalog/*.java",
-      "src/test/java/com/village/storefront/catalog/CatalogResourceTest.java",
-      "api/openapi-catalog.yaml",
-      "src/main/resources/db/migrations/0004_catalog.sql"
+      "docs/diagrams/sequence_checkout_payment.mmd",
+      "docs/adr/ADR-003-checkout-saga.md"
     ],
-    "input_files": [],
-    "deliverables": "Catalog service/resour­ces, DTO mappers, tests, and updated spec split `openapi-catalog.yaml` referencing shared components.",
-    "acceptance_criteria": "- Panache base repository automatically injects tenant filter; tests prove data leakage prevented.\n        - OpenAPI documents filtering/pagination + ProblemDetails for validation errors.\n        - Migrations create required indexes + JSONB custom_attributes field.",
+    "input_files": [
+      "docs/architecture_overview.md",
+      "api/v1/openapi.yaml",
+      "docs/diagrams/component_overview.puml"
+    ],
+    "deliverables": "Mermaid sequence diagram + ADR capturing saga + adapter contracts.",
+    "acceptance_criteria": "Diagram renders, highlights retry/compensation points, ADR describes address validation + shipping caching strategy, references Section 5 contract.",
     "dependencies": [
       "I2.T4"
     ],
@@ -103,22 +135,23 @@
   {
     "task_id": "I2.T6",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Scaffold Admin SPA (Vue 3 + Vite + Tailwind + PrimeVue) via Quinoa: configure lint/test scripts, Tailwind tokens fetch stub, login shell using Identity endpoints, and localization scaffolding (en/es JSON).",
-    "agent_type_hint": "FrontendAgent",
-    "inputs": "Section 2 frontend stack, Identity endpoints, feature flag ADR.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Write multi-tenant integration tests verifying PostgreSQL RLS + Panache filters for catalog/cart endpoints; include dataset with two tenants, ensure unauthorized cross-tenant data blocked, document test harness usage.",
+    "agent_type_hint": "QualityAgent",
+    "inputs": "Catalog/cart services, migrations.",
     "target_files": [
-      "src/main/webui/src/main.ts",
-      "src/main/webui/src/router/index.ts",
-      "src/main/webui/src/locales/en.json",
-      "src/main/webui/src/locales/es.json",
-      "src/main/webui/package.json",
-      "src/main/webui/tailwind.config.js"
+      "tests/backend/TenantIsolationIT.java",
+      "docs/quality/tenant_isolation.md"
     ],
-    "input_files": [],
-    "deliverables": "Working SPA scaffold with auth layout, feature flag injection placeholder, unit tests (Vitest) verifying login form + localization toggle.",
-    "acceptance_criteria": "- `npm run test` + `npm run lint` succeed inside CI job; Quinoa build integrates with Maven profile.\n        - Tailwind config reads design tokens placeholder and documents pipeline for pulling from DB.\n        - Router enforces `/admin/*` guard requiring JWT + impersonation banner indicator slot.",
+    "input_files": [
+      "tests/backend/CatalogServiceTest.java",
+      "tests/backend/CartControllerIT.java",
+      "src/main/resources/db/migrations/V20260102__baseline_schema.sql"
+    ],
+    "deliverables": "Integration test suite + documentation describing how to run + extend tenant isolation tests.",
+    "acceptance_criteria": "Tests fail if RLS disabled, document explains dataset + expected behavior, CI includes suite.",
     "dependencies": [
+      "I2.T1",
       "I2.T4"
     ],
     "parallelizable": true,
@@ -127,18 +160,28 @@
   {
     "task_id": "I2.T7",
     "iteration_id": "I2",
-    "iteration_goal": "Formalize governance (job + feature flag ADRs), capture checkout orchestration in sequence diagram, implement identity/auth services with session logging, expose catalog + tenant APIs driven by spec-first contracts, scaffold admin SPA tooling, and define CI/CD pipeline visualization.",
-    "description": "Create CI/CD pipeline diagram (Mermaid) describing GitHub Actions stages (lint/test/native build, Quinoa build, OpenAPI validation, manifest generation), artifact storage, and k3s deployment promotion, referencing Section 3 deployment view.",
-    "agent_type_hint": "DiagrammingAgent",
-    "inputs": "Section 2 deployment stack, CI workflow from `I1.T7`.",
+    "iteration_goal": "Implement catalog/inventory services, cart APIs, storefront Qute layout, and admin SPA scaffolding so real data can flow through tenant-aware surfaces.",
+    "description": "Expose headless catalog/cart endpoints + search caching: implement OAuth client credential guard, rate-limited controllers, search query builder, and caching via Caffeine with invalidation hooks; update spec + docs for partner usage.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "OpenAPI spec, catalog/cart services, feature flag directives.",
     "target_files": [
-      "docs/diagrams/ci-cd-pipeline.mmd"
+      "src/main/java/com/village/headless/**",
+      "tests/backend/HeadlessApiIT.java",
+      "docs/headless/usage.md",
+      "api/v1/openapi.yaml"
     ],
-    "input_files": [],
-    "deliverables": "Mermaid diagram with nodes for developer commit, GitHub Actions jobs, container registry, k3s overlays, smoke tests.",
-    "acceptance_criteria": "- Diagram renders via mermaid-cli; includes annotations for SLO gates (Spotless, JaCoCo, OpenAPI lint).\n        - Highlights blue/green deploy path and secret management.\n        - Linked from README + plan manifest.",
+    "input_files": [
+      "api/v1/openapi.yaml",
+      "src/main/java/com/village/catalog/**",
+      "src/main/java/com/village/checkout/cart/**",
+      "docs/architecture_overview.md"
+    ],
+    "deliverables": "OAuth-scoped endpoints for `/api/v1/headless/catalog`, `/api/v1/headless/cart`, caching strategy, documentation for partner onboarding, updated spec tags/scopes.",
+    "acceptance_criteria": "OAuth scopes enforced, rate limiting guard returns 429 properly, cache invalidates on product/cart updates, docs describe onboarding + quotas.",
     "dependencies": [
-      "I1.T7"
+      "I2.T1",
+      "I2.T4",
+      "I1.T5"
     ],
     "parallelizable": true,
     "done": false

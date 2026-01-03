@@ -1,142 +1,140 @@
-<!-- anchor: directives-process -->
-## 4. DIRECTIVES & STRICT PROCESS
+<!-- anchor: directives-and-process -->
+## 4. Directives & Strict Process
 
-- Honor the foundation blueprint: every deliverable must cite Sections 1–6 when making architectural choices, and no deviation ships without an ADR.
-- Follow spec-first discipline—diagrams, ERDs, and OpenAPI definitions precede implementation so later agents inherit stable contracts.
-- Enforce tenant safety, observability, feature flag governance, and security controls at creation time instead of retrofitting; background jobs, filters, and logs must embed tenant metadata.
-- Store all artifacts in the directories defined in Section 3, using descriptive filenames + anchors to maximize autonomous agent discoverability.
-- Acceptance criteria always include Spotless + JaCoCo compliance, schema validation where applicable, and documentation updates so CI gates remain green.
+*   Honor command discipline: autonomous agents must avoid `ls`/exploratory commands unless debugging approved incidents; rely on repo map above and task-scoped paths.
+*   Follow internal blueprinting + single-write policy when generating artifacts (docs, diagrams, specs); buffer complete content before writing, then verify via scripted line-count checks.
+*   Maintain spec-first flow: diagrams, OpenAPI, and ADRs precede code; code tasks block until upstream artifacts land in version control with reviewable anchors.
+*   Enforce quality gates continuously (Spotless, JaCoCo ≥80%, linting, CI) rather than deferring to final iteration; document deviations via ADR addendum referencing this section.
+*   Provide traceable deliverables: every artifact carries metadata (owner, date, iteration) and anchor references for manifest indexing.
+*   Keep manifest synchronized: after each artifact merge, update `plan_manifest.json` entry placeholders with anchor keys for automated retrieval.
+*   Capture retrospective notes at iteration end to refine directives for later iterations (include summary at top of `02_Iteration_I2.md`). 
+*   Notify platform ops + security leads when ADRs or specs change tenant isolation guarantees to maintain governance alignment.
 
 <!-- anchor: iteration-plan-overview -->
 ## 5. Iteration Plan
 
-* **Total Iterations Planned:** 5 (Setup/Core Models, Multi-Tenancy Services, Consignment & Media Foundations, Loyalty & Platform Ops, POS & Headless Completion).
-* **Iteration Dependencies:** `I1` lays scaffolding and core specs for `I2`; `I2` produces tenant-aware services enabling `I3` (consignment/media); `I3` outputs feed `I4` (loyalty/platform admin); `I4` unlocks `I5` (POS/offline/headless polishing). Testing + ADR work from earlier iterations becomes required context for later automation.
+*   **Total Iterations Planned:** 5
+*   **Iteration Dependencies:** I1 delivers foundation artifacts enabling domain implementation. I2 builds storefront/catalog/checkout skeletons atop I1 specs. I3 layers consignment/inventory depth referencing I2 APIs. I4 finalizes payments/media/checkout polish built on I2/I3. I5 hardens admin, platform ops, deployment, observability depending on all prior iterations.
 
 <!-- anchor: iteration-1-plan -->
-### Iteration 1: Platform Foundation & Spec-First Assets
+### Iteration 1: Architectural Foundations & Multi-Tenant Guardrails
 
-* **Iteration ID:** `I1`
-* **Goal:** Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.
-* **Prerequisites:** None
-* **Tasks:**
+*   **Iteration ID:** `I1`
+*   **Goal:** Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.
+*   **Prerequisites:** None.
+*   **Iteration Milestones & Exit Criteria:**
+    1. Architecture overview + ADR-001 merged with traceable anchors and change log.
+    2. OpenAPI baseline validated via lint plus mocked contract tests for tenant/auth endpoints.
+    3. Component + ERD diagrams render successfully and referenced from overview.
+    4. Tenant filter prototype passes unit tests covering subdomain/custom-domain/404 paths.
+    5. CI workflow enforcing Spotless + JaCoCo + OpenAPI lint green on main branch.
+    6. Manifest entries for all new artifacts submitted for downstream retrieval tooling.
 
 <!-- anchor: task-i1-t1 -->
-* **Task 1.1:**
-    * **Task ID:** `I1.T1`
-    * **Description:** Bootstrap the Maven multi-module Quarkus project (core platform + admin UI module placeholders), configure Spotless, JaCoCo (80%), and shared plugins, seed README with architecture commitments, and stub package structure per Section 3.
-    * **Agent Type Hint:** `SetupAgent`
-    * **Inputs:** Section 2 Standard Kit, Section 3 directory structure, docs/java-project-standards directives.
-    * **Input Files**: ["docs/java-project-standards.adoc", ".codemachine/inputs/competitor-research.md"]
-    * **Target Files:** ["pom.xml", "README.md", "src/main/java/com/village/storefront/**", "src/main/resources/application.properties", "ui-storefront/", "src/main/webui/"]
-    * **Deliverables:** Multi-module Maven build, baseline Quarkus app with placeholders for tenant, identity, catalog modules, README summary of stack + commands.
-    * **Acceptance Criteria:**
-        - `mvn clean verify` succeeds with Spotless + JaCoCo wired and default modules present.
-        - README documents build/run commands plus module overview referencing Sections 1–2.
-        - Package skeleton mirrors directory tree, including placeholder classes (TenantContext, CatalogService) with TODO comments.
-    * **Dependencies:** None
-    * **Parallelizable:** No
+*   **Task 1.1:**
+    *   **Task ID:** `I1.T1`
+    *   **Description:** Audit existing repo assets, ingest `docs/java-project-standards.adoc` + competitor research, and craft `docs/architecture_overview.md` overview plus ADR-001 describing layered modular monolith + tenancy approach; include risk register + decision log template.
+    *   **Agent Type Hint:** `ArchitectureAgent`
+    *   **Inputs:** Requirements brief, standards doc, competitor research notes.
+    *   **Input Files:** [`docs/java-project-standards.adoc`, `.codemachine/inputs/competitor-research.md`]
+    *   **Target Files:** [`docs/architecture_overview.md`, `docs/adr/ADR-001-tenancy.md`]
+    *   **Deliverables:** Updated overview doc linking sections 1-3, ADR covering tenancy + TenantContext contract, decision log template snippet.
+    *   **Acceptance Criteria:** Documents cite constraints, reference sections, include decision/rationale/implications; cross-link anchors inserted for manifest; reviewers can trace requirements to architecture choices.
+    *   **Testing Guidance:** Run Markdown lint + link checker, solicit review from commerce + platform stakeholders, and confirm risk table addresses assumptions listed in Section 1.6.
+    *   **Observability Hooks:** Document mandatory structured-log fields (tenant_id, store_id, correlation_id) plus baseline metrics expected from each module.
+    *   **Dependencies:** None.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i1-t2 -->
-* **Task 1.2:**
-    * **Task ID:** `I1.T2`
-    * **Description:** Author the Component Diagram (PlantUML) covering Tenant Gateway, Identity, Storefront, Admin SPA, Catalog, Consignment, Checkout, Payments, Loyalty, POS, Media, Jobs, Reporting, Platform Admin, and external systems.
-    * **Agent Type Hint:** `DiagrammingAgent`
-    * **Inputs:** Section 2 Core Architecture, Section 2.1 artifact list.
-    * **Input Files**: ["docs/java-project-standards.adoc", "README.md"]
-    * **Target Files:** ["docs/diagrams/component-overview.puml"]
-    * **Deliverables:** PlantUML diagram with labeled interfaces + notes on GraalVM/Kubernetes context.
-    * **Acceptance Criteria:**
-        - Diagram renders via `plantuml` CLI without errors.
-        - Each component shows inbound/outbound dependencies + technology notes (Stripe, R2, PostgreSQL).
-        - File header references `I1.T2` and Section 2 for traceability.
-    * **Dependencies:** `I1.T1`
-    * **Parallelizable:** Yes
+*   **Task 1.2:**
+    *   **Task ID:** `I1.T2`
+    *   **Description:** Bootstrap spec-first OpenAPI baseline (`api/v1/openapi.yaml`) covering tenant resolution, auth, catalog placeholder, checkout placeholder, and platform admin endpoints; include reusable schemas (Money, Address, Pagination) and security schemes.
+    *   **Agent Type Hint:** `APIDesignAgent`
+    *   **Inputs:** Requirements (sections on APIs, auth, headless), ADR-001 decisions.
+    *   **Input Files:** [`docs/architecture_overview.md`, `.codemachine/inputs/competitor-research.md`]
+    *   **Target Files:** [`api/v1/openapi.yaml`]
+    *   **Deliverables:** Valid OpenAPI 3.0 YAML passing `spectral` lint (document lint command inline), with section comments linking planned endpoints.
+    *   **Acceptance Criteria:** Lints cleanly, defines tagging strategy (Storefront, Admin, Headless, Platform), enumerates auth flows + idempotency headers, includes placeholder schemas for core entities.
+    *   **Testing Guidance:** Execute `spectral lint api/v1/openapi.yaml` and `swagger-cli validate`, then generate sample client SDK to ensure schema completeness; add CI snippet verifying commands.
+    *   **Observability Hooks:** Specify standard headers (`X-Trace-Id`, `X-Tenant-Id`, `X-Impersonation-Id`) and Problem Details extensions so logging/tracing remain consistent.
+    *   **Dependencies:** `I1.T1`.
+    *   **Parallelizable:** Yes (after ADR ready).
 
 <!-- anchor: task-i1-t3 -->
-* **Task 1.3:**
-    * **Task ID:** `I1.T3`
-    * **Description:** Draft the multi-tenant ERD (Mermaid) showing Tenant, StoreUser, Customer, SessionLog, Product, Variant, InventoryLocation/Level, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, AuditEvent, FeatureFlag, BackgroundJob.
-    * **Agent Type Hint:** `DatabaseAgent`
-    * **Inputs:** Section 2 Data Model overview, docs/java-project-standards RLS guidance.
-    * **Input Files**: ["docs/java-project-standards.adoc", "docs/diagrams/component-overview.puml"]
-    * **Target Files:** ["docs/diagrams/tenant-erd.mmd"]
-    * **Deliverables:** Mermaid ERD capturing primary keys, foreign keys, tenant_id presence, and notes on RLS policies.
-    * **Acceptance Criteria:**
-        - Mermaid preview passes `mmdc` or mermaid-cli lint.
-        - Every tenant-scoped table shows `tenant_id` plus indexes described in notes.
-        - Document includes commentary on partitioned tables (SessionLog, AuditEvent) linking to Section 5.
-    * **Dependencies:** `I1.T2`
-    * **Parallelizable:** Yes
+*   **Task 1.3:**
+    *   **Task ID:** `I1.T3`
+    *   **Description:** Produce PlantUML component diagram (`docs/diagrams/component_overview.puml`) showing bounded contexts, adapters, queues, and external services; embed legend + anchor references for major flows.
+    *   **Agent Type Hint:** `DiagrammingAgent`
+    *   **Inputs:** ADR-001, architecture overview, requirements components.
+    *   **Input Files:** [`docs/architecture_overview.md`, `docs/adr/ADR-001-tenancy.md`]
+    *   **Target Files:** [`docs/diagrams/component_overview.puml`]
+    *   **Deliverables:** PlantUML diagram renderable via CLI with annotation of Quarkus modules, background workers, integrations.
+    *   **Acceptance Criteria:** Diagram compiles, contains all key modules from Section 2, indicates planned PlantUML include library, exports PNG for review (document command), matches textual description.
+    *   **Testing Guidance:** Run PlantUML CLI locally + via CI, attach rendered PNG in docs, and capture diff vs reference image to guard against drift.
+    *   **Observability Hooks:** Embed callouts labeling metrics/tracing owners (checkout spans, job depth gauges) to align with Section 6 verification strategy.
+    *   **Dependencies:** `I1.T1`.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i1-t4 -->
-* **Task 1.4:**
-    * **Task ID:** `I1.T4`
-    * **Description:** Produce initial OpenAPI spec (YAML) covering auth (login, refresh, impersonation), tenant resolution endpoints, catalog read endpoints, and shared DTO components.
-    * **Agent Type Hint:** `DocumentationAgent`
-    * **Inputs:** Sections 2 & 5 (API style), ERD, component diagram.
-    * **Input Files**: ["docs/diagrams/component-overview.puml", "docs/diagrams/tenant-erd.mmd"]
-    * **Target Files:** ["api/openapi-base.yaml"]
-    * **Deliverables:** Valid OpenAPI 3.0 spec with tags for `auth`, `tenants`, `catalog-public`, security schemes for JWT + OAuth client credentials, and RFC7807 error schema.
-    * **Acceptance Criteria:**
-        - `openapi-generator validate` (or `swagger-cli validate`) passes with no warnings.
-        - Paths include tenant-aware segments and document feature flag metadata in `x-feature-flags`.
-        - Components define DTOs referenced by future modules (Tenant, StoreUser, ProductSummary, ProblemDetail).
-    * **Dependencies:** `I1.T3`
-    * **Parallelizable:** Yes
+*   **Task 1.4:**
+    *   **Task ID:** `I1.T4`
+    *   **Description:** Draft PlantUML ERD + initial MyBatis migration scaffolding; define schema for tenant, user, product, variant, catalog taxonomy, carts/orders/payments, consignment, loyalty, audit tables with tenant_id + metadata columns.
+    *   **Agent Type Hint:** `DatabaseAgent`
+    *   **Inputs:** OpenAPI baseline, component diagram, requirements (data model, tenancy, RLS, retention).
+    *   **Input Files:** [`api/v1/openapi.yaml`, `docs/diagrams/component_overview.puml`]
+    *   **Target Files:** [`docs/diagrams/datamodel_erd.puml`, `src/main/resources/db/migrations/V20260102__baseline_schema.sql`]
+    *   **Deliverables:** ERD diagram + SQL migration with tables, indexes, constraints placeholders, comments for RLS to be added later.
+    *   **Acceptance Criteria:** Diagram renders, migration applies cleanly against dev PostgreSQL, includes tenant_id + audit columns, sets up `flyway_schema_history` equivalent per standards, cross-references Section 5 contract.
+    *   **Testing Guidance:** Apply migration against disposable PostgreSQL container, run rollback dry-run, and assert required indexes exist via `psql \\d` output logged in PR.
+    *   **Observability Hooks:** Annotate schema comments describing audit/partition columns and capture TODO for RLS policies + retention jobs referenced in Section 6.
+    *   **Dependencies:** `I1.T2`, `I1.T3`.
+    *   **Parallelizable:** No (await diagrams/specs).
 
 <!-- anchor: task-i1-t5 -->
-* **Task 1.5:**
-    * **Task ID:** `I1.T5`
-    * **Description:** Implement TenantContext, TenantFilter, and request-scope wiring plus stub Panache repositories enforcing tenant filters; include unit tests for subdomain + custom domain parsing.
-    * **Agent Type Hint:** `BackendAgent`
-    * **Inputs:** Section 2 communication patterns, OpenAPI base spec.
-    * **Input Files**: ["src/main/java/com/village/storefront/tenant/**", "api/openapi-base.yaml"]
-    * **Target Files:** ["src/main/java/com/village/storefront/tenant/TenantContext.java", "src/main/java/com/village/storefront/tenant/TenantFilter.java", "src/test/java/com/village/storefront/tenant/TenantFilterTest.java"]
-    * **Deliverables:** Working `@RequestScoped` context, JAX-RS ContainerRequestFilter, placeholder TenantService with TODO for DB lookup, and tests covering host parsing + 404 path.
-    * **Acceptance Criteria:**
-        - Tests cover subdomain + custom-domain resolution and fail invalid hosts with 404.
-        - Filter populates MDC/structured logging fields for tenant_id + store_id.
-        - Code passes Spotless + JaCoCo thresholds; TODOs reference upcoming tasks for DB integration.
-    * **Dependencies:** `I1.T4`
-    * **Parallelizable:** No
+*   **Task 1.5:**
+    *   **Task ID:** `I1.T5`
+    *   **Description:** Prototype Tenant Access Gateway + FeatureToggle skeleton (Quarkus filter, Caffeine cache) and capture tenant-routing sequence diagram; include smoke tests verifying host parsing, custom domain lookup, and context propagation.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** ADR-001, ERD (tenant/custom_domains tables), OpenAPI security sections.
+    *   **Input Files:** [`docs/adr/ADR-001-tenancy.md`, `docs/diagrams/datamodel_erd.puml`]
+    *   **Target Files:** [`src/main/java/com/village/tenant/TenantFilter.java`, `src/main/java/com/village/tenant/TenantContext.java`, `docs/diagrams/sequence_tenant_routing.mmd`, `tests/backend/TenantFilterTest.java`]
+    *   **Deliverables:** Minimal but compiling Quarkus filter + context bean, Caffeine config stub, unit tests for host parsing, Mermaid diagram of routing path.
+    *   **Acceptance Criteria:** Quarkus dev mode builds filter, tests cover subdomain/custom domain, diagram outlines host parsing→TenantContext→FeatureToggle; comments referencing Section 2/5 anchors.
+    *   **Testing Guidance:** Cover success/failure variants using parameterized tests, run `mvn test -Dtest=TenantFilterTest`, and document dev services config for DNS mocks.
+    *   **Observability Hooks:** Add TODO structured logs (resolution latency, unknown host warnings) and outline metrics (counter per tenant, gauge for cache size) for future Section 6 instrumentation.
+    *   **Dependencies:** `I1.T4`.
+    *   **Parallelizable:** No (requires schema + context definitions).
 
 <!-- anchor: task-i1-t6 -->
-* **Task 1.6:**
-    * **Task ID:** `I1.T6`
-    * **Description:** Write initial MyBatis migrations for Tenant, Store, CustomDomain, StoreUser, Role, FeatureFlag tables including tenant_id columns, default data, and baseline RLS policies; document migration strategy in comments.
-    * **Agent Type Hint:** `DatabaseAgent`
-    * **Inputs:** ERD, docs/java-project-standards RLS section.
-    * **Input Files**: ["docs/diagrams/tenant-erd.mmd", "docs/java-project-standards.adoc"]
-    * **Target Files:** ["src/main/resources/db/migrations/0001_create_tenant_tables.sql", "src/main/resources/db/migrations/0002_rss_policies.sql"]
-    * **Deliverables:** Ordered migration scripts with up/down sections, test fixtures for verifying RLS via integration test harness.
-    * **Acceptance Criteria:**
-        - Scripts apply cleanly on PostgreSQL 17 container with MyBatis CLI.
-        - RLS policies restrict select/update/delete to tenant context user.
-        - Integration test (`TenantTablesIT`) proves unauthorized tenant_id access fails.
-    * **Dependencies:** `I1.T5`
-    * **Parallelizable:** No
+*   **Task 1.6:**
+    *   **Task ID:** `I1.T6`
+    *   **Description:** Establish CI/CD scaffolding: GitHub Actions workflow running Maven (Spotless, tests, JaCoCo), npm lint/test for admin SPA, OpenAPI lint, PlantUML check; add `.github/workflows/ci.yml`, configure JaCoCo 80% rule, document pipeline in README + ADR-002 (quality gates).
+    *   **Agent Type Hint:** `DevOpsAgent`
+    *   **Inputs:** Standards doc, existing pom, iteration artifacts (OpenAPI, diagrams) for validation.
+    *   **Input Files:** [`docs/java-project-standards.adoc`, `pom.xml`, `package.json`]
+    *   **Target Files:** [`.github/workflows/ci.yml`, `pom.xml`, `package.json`, `docs/adr/ADR-002-quality-gates.md`, `README.md`]
+    *   **Deliverables:** Workflow file with matrix (JVM + native), npm scripts invoked, code coverage enforcement, README CI badge + instructions; ADR describing guardrails.
+    *   **Acceptance Criteria:** Workflow references correct commands, fails on formatting/coverage, README documents usage, ADR records trade-offs.
+    *   **Testing Guidance:** Execute workflow via GitHub Actions plus local `act` dry-run, capture screenshots/log links, and intentionally break formatting to confirm failure path.
+    *   **Observability Hooks:** Configure workflow to upload coverage + lint reports as artifacts and emit job timing metrics for future optimization.
+    *   **Dependencies:** `I1.T2`, `I1.T3`, `I1.T4` (for validation targets).
+    *   **Parallelizable:** Yes (after upstream artifacts exist).
 
-<!-- anchor: task-i1-t7 -->
-* **Task 1.7:**
-    * **Task ID:** `I1.T7`
-    * **Description:** Configure GitHub Actions workflow + ops scaffolding (ops/k8s base manifests, README snippet) covering Maven verify, Quinoa build placeholder, OpenAPI lint, and artifact uploads to `ops/k8s/base`.
-    * **Agent Type Hint:** `DevOpsAgent`
-    * **Inputs:** Section 2 Deployment, docs/java-project-standards CI rules.
-    * **Input Files**: ["README.md", "ops/k8s/", "api/openapi-base.yaml"]
-    * **Target Files:** [".github/workflows/ci.yml", "ops/k8s/base/deployment.yaml", "ops/k8s/base/service.yaml", "ops/scripts/smoke.sh"]
-    * **Deliverables:** CI workflow with lint/test/build matrix (JVM + Native), placeholder Kubernetes manifests referencing image names, smoke script invoking `/q/health`.
-    * **Acceptance Criteria:**
-        - Workflow runs Spotless, unit tests, OpenAPI lint, Quinoa `npm run lint`, and uploads manifests as artifacts.
-        - Base deployment includes resource requests/limits, readiness/liveness probes, ConfigMap/Secret placeholders.
-        - Smoke script documented in README and used in CI job.
-    * **Dependencies:** `I1.T1`
-    * **Parallelizable:** Yes
-* **Iteration Exit Criteria:**
-  - Component + ERD diagrams reviewed with lead architect and linked inside README design references.
-  - OpenAPI base spec approved with lint status recorded in CI artifacts.
-  - Tenant filter + migrations validated against local PostgreSQL container with RLS tests proving isolation.
-  - CI workflow demonstrates green run including Quinoa placeholder lint and smoke script execution logs.
-* **Iteration Metrics:**
-  - Target setup cycle time ≤ 5 days with zero CI regressions; track in planning doc.
-  - Architecture artifacts stored under docs/diagrams with commit hashes referenced in plan_manifest.
+*   **Iteration KPIs & Validation Strategy:**
+    - Architecture documents reviewed with at least two stakeholders; review notes logged beside ADR links.
+    - OpenAPI validation automated within CI (spectral or equivalent) and invoked locally with documented command in README.
+    - Diagram renders verified via `plantuml` CLI; PNG exports attached to PR for visual confirmation.
+    - Tenant filter unit tests achieve ≥90% branch coverage; test harness seeds mock domains and ensures context cleanup.
+    - CI workflow run recorded in GitHub Actions with proof of Spotless + JaCoCo thresholds enforced; README includes badge linking to latest status.
+    - Manifest entries drafted for each new anchor (architecture overview, ADRs, diagrams, spec) to keep downstream agent lookup consistent.
+*   **Iteration Risk Log & Mitigations:**
+    - *Spec drift:* Downstream feature squads might bypass spec updates; mitigation—merge checklist demands updated OpenAPI/diagram anchors before domain PR approval.
+    - *Migration brittleness:* Early schema may omit indexes; mitigation—document TODOs and schedule `I2` backlog card for performance audit once catalog modeling boots.
+    - *CI instability:* Native builds prolong pipeline; mitigation—configure caching + matrix concurrency and measure runtimes in ADR-002 appendix.
+    - *Tenant filter regressions:* Host parsing edge cases could slip; mitigation—expand fixture set + synthetic tests per new tenant onboarding scenario.
+    - *Anchor omissions:* Missing anchors break manifest; mitigation—manifest review gate integrated into PR template with checkbox per artifact.
+*   **Iteration Backlog & Follow-ups:**
+    - Create ADR-003 for PaymentProvider extensibility (draft outline scheduled for `I2` once checkout flows evolve).
+    - Prepare skeleton Feature Flag governance doc (ties into Section 4 directives) to be filled in `I5`.
+    - Open ticket for automated PlantUML render job hooking into CI artifacts (target `I2`).
+    - Draft plan for repository-wide developer onboarding doc referencing produced specs; deliverable scheduled early `I2`.

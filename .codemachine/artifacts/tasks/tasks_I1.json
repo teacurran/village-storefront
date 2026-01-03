@@ -2,38 +2,40 @@
   {
     "task_id": "I1.T1",
     "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Bootstrap the Maven multi-module Quarkus project (core platform + admin UI module placeholders), configure Spotless, JaCoCo (80%), and shared plugins, seed README with architecture commitments, and stub package structure per Section 3.",
-    "agent_type_hint": "SetupAgent",
-    "inputs": "Section 2 Standard Kit, Section 3 directory structure, docs/java-project-standards directives.",
+    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
+    "description": "Audit existing repo assets, ingest `docs/java-project-standards.adoc` + competitor research, and craft `docs/architecture_overview.md` overview plus ADR-001 describing layered modular monolith + tenancy approach; include risk register + decision log template.",
+    "agent_type_hint": "ArchitectureAgent",
+    "inputs": "Requirements brief, standards doc, competitor research notes.",
     "target_files": [
-      "pom.xml",
-      "README.md",
-      "src/main/java/com/village/storefront/**",
-      "src/main/resources/application.properties",
-      "ui-storefront/",
-      "src/main/webui/"
+      "docs/architecture_overview.md",
+      "docs/adr/ADR-001-tenancy.md"
     ],
-    "input_files": [],
-    "deliverables": "Multi-module Maven build, baseline Quarkus app with placeholders for tenant, identity, catalog modules, README summary of stack + commands.",
-    "acceptance_criteria": "- `mvn clean verify` succeeds with Spotless + JaCoCo wired and default modules present.\n        - README documents build/run commands plus module overview referencing Sections 1–2.\n        - Package skeleton mirrors directory tree, including placeholder classes (TenantContext, CatalogService) with TODO comments.",
+    "input_files": [
+      "docs/java-project-standards.adoc",
+      ".codemachine/inputs/competitor-research.md"
+    ],
+    "deliverables": "Updated overview doc linking sections 1-3, ADR covering tenancy + TenantContext contract, decision log template snippet.",
+    "acceptance_criteria": "Documents cite constraints, reference sections, include decision/rationale/implications; cross-link anchors inserted for manifest; reviewers can trace requirements to architecture choices.",
     "dependencies": [],
-    "parallelizable": false,
+    "parallelizable": true,
     "done": false
   },
   {
     "task_id": "I1.T2",
     "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Author the Component Diagram (PlantUML) covering Tenant Gateway, Identity, Storefront, Admin SPA, Catalog, Consignment, Checkout, Payments, Loyalty, POS, Media, Jobs, Reporting, Platform Admin, and external systems.",
-    "agent_type_hint": "DiagrammingAgent",
-    "inputs": "Section 2 Core Architecture, Section 2.1 artifact list.",
+    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
+    "description": "Bootstrap spec-first OpenAPI baseline (`api/v1/openapi.yaml`) covering tenant resolution, auth, catalog placeholder, checkout placeholder, and platform admin endpoints; include reusable schemas (Money, Address, Pagination) and security schemes.",
+    "agent_type_hint": "APIDesignAgent",
+    "inputs": "Requirements (sections on APIs, auth, headless), ADR-001 decisions.",
     "target_files": [
-      "docs/diagrams/component-overview.puml"
+      "api/v1/openapi.yaml"
     ],
-    "input_files": [],
-    "deliverables": "PlantUML diagram with labeled interfaces + notes on GraalVM/Kubernetes context.",
-    "acceptance_criteria": "- Diagram renders via `plantuml` CLI without errors.\n        - Each component shows inbound/outbound dependencies + technology notes (Stripe, R2, PostgreSQL).\n        - File header references `I1.T2` and Section 2 for traceability.",
+    "input_files": [
+      "docs/architecture_overview.md",
+      ".codemachine/inputs/competitor-research.md"
+    ],
+    "deliverables": "Valid OpenAPI 3.0 YAML passing `spectral` lint (document lint command inline), with section comments linking planned endpoints.",
+    "acceptance_criteria": "Lints cleanly, defines tagging strategy (Storefront, Admin, Headless, Platform), enumerates auth flows + idempotency headers, includes placeholder schemas for core entities.",
     "dependencies": [
       "I1.T1"
     ],
@@ -43,18 +45,21 @@
   {
     "task_id": "I1.T3",
     "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Draft the multi-tenant ERD (Mermaid) showing Tenant, StoreUser, Customer, SessionLog, Product, Variant, InventoryLocation/Level, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, AuditEvent, FeatureFlag, BackgroundJob.",
-    "agent_type_hint": "DatabaseAgent",
-    "inputs": "Section 2 Data Model overview, docs/java-project-standards RLS guidance.",
+    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
+    "description": "Produce PlantUML component diagram (`docs/diagrams/component_overview.puml`) showing bounded contexts, adapters, queues, and external services; embed legend + anchor references for major flows.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "ADR-001, architecture overview, requirements components.",
     "target_files": [
-      "docs/diagrams/tenant-erd.mmd"
+      "docs/diagrams/component_overview.puml"
     ],
-    "input_files": [],
-    "deliverables": "Mermaid ERD capturing primary keys, foreign keys, tenant_id presence, and notes on RLS policies.",
-    "acceptance_criteria": "- Mermaid preview passes `mmdc` or mermaid-cli lint.\n        - Every tenant-scoped table shows `tenant_id` plus indexes described in notes.\n        - Document includes commentary on partitioned tables (SessionLog, AuditEvent) linking to Section 5.",
+    "input_files": [
+      "docs/architecture_overview.md",
+      "docs/adr/ADR-001-tenancy.md"
+    ],
+    "deliverables": "PlantUML diagram renderable via CLI with annotation of Quarkus modules, background workers, integrations.",
+    "acceptance_criteria": "Diagram compiles, contains all key modules from Section 2, indicates planned PlantUML include library, exports PNG for review (document command), matches textual description.",
     "dependencies": [
-      "I1.T2"
+      "I1.T1"
     ],
     "parallelizable": true,
     "done": false
@@ -62,37 +67,46 @@
   {
     "task_id": "I1.T4",
     "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Produce initial OpenAPI spec (YAML) covering auth (login, refresh, impersonation), tenant resolution endpoints, catalog read endpoints, and shared DTO components.",
-    "agent_type_hint": "DocumentationAgent",
-    "inputs": "Sections 2 & 5 (API style), ERD, component diagram.",
+    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
+    "description": "Draft PlantUML ERD + initial MyBatis migration scaffolding; define schema for tenant, user, product, variant, catalog taxonomy, carts/orders/payments, consignment, loyalty, audit tables with tenant_id + metadata columns.",
+    "agent_type_hint": "DatabaseAgent",
+    "inputs": "OpenAPI baseline, component diagram, requirements (data model, tenancy, RLS, retention).",
     "target_files": [
-      "api/openapi-base.yaml"
+      "docs/diagrams/datamodel_erd.puml",
+      "src/main/resources/db/migrations/V20260102__baseline_schema.sql"
     ],
-    "input_files": [],
-    "deliverables": "Valid OpenAPI 3.0 spec with tags for `auth`, `tenants`, `catalog-public`, security schemes for JWT + OAuth client credentials, and RFC7807 error schema.",
-    "acceptance_criteria": "- `openapi-generator validate` (or `swagger-cli validate`) passes with no warnings.\n        - Paths include tenant-aware segments and document feature flag metadata in `x-feature-flags`.\n        - Components define DTOs referenced by future modules (Tenant, StoreUser, ProductSummary, ProblemDetail).",
+    "input_files": [
+      "api/v1/openapi.yaml",
+      "docs/diagrams/component_overview.puml"
+    ],
+    "deliverables": "ERD diagram + SQL migration with tables, indexes, constraints placeholders, comments for RLS to be added later.",
+    "acceptance_criteria": "Diagram renders, migration applies cleanly against dev PostgreSQL, includes tenant_id + audit columns, sets up `flyway_schema_history` equivalent per standards, cross-references Section 5 contract.",
     "dependencies": [
+      "I1.T2",
       "I1.T3"
     ],
-    "parallelizable": true,
+    "parallelizable": false,
     "done": false
   },
   {
     "task_id": "I1.T5",
     "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Implement TenantContext, TenantFilter, and request-scope wiring plus stub Panache repositories enforcing tenant filters; include unit tests for subdomain + custom domain parsing.",
+    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
+    "description": "Prototype Tenant Access Gateway + FeatureToggle skeleton (Quarkus filter, Caffeine cache) and capture tenant-routing sequence diagram; include smoke tests verifying host parsing, custom domain lookup, and context propagation.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Section 2 communication patterns, OpenAPI base spec.",
+    "inputs": "ADR-001, ERD (tenant/custom_domains tables), OpenAPI security sections.",
     "target_files": [
-      "src/main/java/com/village/storefront/tenant/TenantContext.java",
-      "src/main/java/com/village/storefront/tenant/TenantFilter.java",
-      "src/test/java/com/village/storefront/tenant/TenantFilterTest.java"
+      "src/main/java/com/village/tenant/TenantFilter.java",
+      "src/main/java/com/village/tenant/TenantContext.java",
+      "docs/diagrams/sequence_tenant_routing.mmd",
+      "tests/backend/TenantFilterTest.java"
     ],
-    "input_files": [],
-    "deliverables": "Working `@RequestScoped` context, JAX-RS ContainerRequestFilter, placeholder TenantService with TODO for DB lookup, and tests covering host parsing + 404 path.",
-    "acceptance_criteria": "- Tests cover subdomain + custom-domain resolution and fail invalid hosts with 404.\n        - Filter populates MDC/structured logging fields for tenant_id + store_id.\n        - Code passes Spotless + JaCoCo thresholds; TODOs reference upcoming tasks for DB integration.",
+    "input_files": [
+      "docs/adr/ADR-001-tenancy.md",
+      "docs/diagrams/datamodel_erd.puml"
+    ],
+    "deliverables": "Minimal but compiling Quarkus filter + context bean, Caffeine config stub, unit tests for host parsing, Mermaid diagram of routing path.",
+    "acceptance_criteria": "Quarkus dev mode builds filter, tests cover subdomain/custom domain, diagram outlines host parsing→TenantContext→FeatureToggle; comments referencing Section 2/5 anchors.",
     "dependencies": [
       "I1.T4"
     ],
@@ -102,41 +116,28 @@
   {
     "task_id": "I1.T6",
     "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Write initial MyBatis migrations for Tenant, Store, CustomDomain, StoreUser, Role, FeatureFlag tables including tenant_id columns, default data, and baseline RLS policies; document migration strategy in comments.",
-    "agent_type_hint": "DatabaseAgent",
-    "inputs": "ERD, docs/java-project-standards RLS section.",
-    "target_files": [
-      "src/main/resources/db/migrations/0001_create_tenant_tables.sql",
-      "src/main/resources/db/migrations/0002_rss_policies.sql"
-    ],
-    "input_files": [],
-    "deliverables": "Ordered migration scripts with up/down sections, test fixtures for verifying RLS via integration test harness.",
-    "acceptance_criteria": "- Scripts apply cleanly on PostgreSQL 17 container with MyBatis CLI.\n        - RLS policies restrict select/update/delete to tenant context user.\n        - Integration test (`TenantTablesIT`) proves unauthorized tenant_id access fails.",
-    "dependencies": [
-      "I1.T5"
-    ],
-    "parallelizable": false,
-    "done": false
-  },
-  {
-    "task_id": "I1.T7",
-    "iteration_id": "I1",
-    "iteration_goal": "Establish Quarkus multi-module workspace, governance docs, base diagrams, ERD, OpenAPI seed, Tenant filter skeleton, and CI/CD hooks enforcing standards.",
-    "description": "Configure GitHub Actions workflow + ops scaffolding (ops/k8s base manifests, README snippet) covering Maven verify, Quinoa build placeholder, OpenAPI lint, and artifact uploads to `ops/k8s/base`.",
+    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
+    "description": "Establish CI/CD scaffolding: GitHub Actions workflow running Maven (Spotless, tests, JaCoCo), npm lint/test for admin SPA, OpenAPI lint, PlantUML check; add `.github/workflows/ci.yml`, configure JaCoCo 80% rule, document pipeline in README + ADR-002 (quality gates).",
     "agent_type_hint": "DevOpsAgent",
-    "inputs": "Section 2 Deployment, docs/java-project-standards CI rules.",
+    "inputs": "Standards doc, existing pom, iteration artifacts (OpenAPI, diagrams) for validation.",
     "target_files": [
       ".github/workflows/ci.yml",
-      "ops/k8s/base/deployment.yaml",
-      "ops/k8s/base/service.yaml",
-      "ops/scripts/smoke.sh"
+      "pom.xml",
+      "package.json",
+      "docs/adr/ADR-002-quality-gates.md",
+      "README.md"
     ],
-    "input_files": [],
-    "deliverables": "CI workflow with lint/test/build matrix (JVM + Native), placeholder Kubernetes manifests referencing image names, smoke script invoking `/q/health`.",
-    "acceptance_criteria": "- Workflow runs Spotless, unit tests, OpenAPI lint, Quinoa `npm run lint`, and uploads manifests as artifacts.\n        - Base deployment includes resource requests/limits, readiness/liveness probes, ConfigMap/Secret placeholders.\n        - Smoke script documented in README and used in CI job.",
+    "input_files": [
+      "docs/java-project-standards.adoc",
+      "pom.xml",
+      "package.json"
+    ],
+    "deliverables": "Workflow file with matrix (JVM + native), npm scripts invoked, code coverage enforcement, README CI badge + instructions; ADR describing guardrails.",
+    "acceptance_criteria": "Workflow references correct commands, fails on formatting/coverage, README documents usage, ADR records trade-offs.",
     "dependencies": [
-      "I1.T1"
+      "I1.T2",
+      "I1.T3",
+      "I1.T4"
     ],
     "parallelizable": true,
     "done": false

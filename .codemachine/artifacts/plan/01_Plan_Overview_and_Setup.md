@@ -1,4 +1,4 @@
-<!-- anchor: project-plan-village-storefront -->
+<!-- anchor: project-plan-root -->
 # Project Plan: Village Storefront
 
 **Version:** 1.0
@@ -8,137 +8,134 @@
 <!-- anchor: project-overview -->
 ## 1. Project Overview
 
-* **Goal:** Deliver a configurable multi-tenant ecommerce + consignment SaaS that pairs Quarkus-native backend services, Qute storefront, Vue admin SPA, and robust operational tooling so small/medium merchants can launch branded stores quickly while scaling to advanced workflows.
-* **High-Level Requirements Summary:**
-  - Tenant isolation via TenantContext filter, PostgreSQL RLS, Panache filters, multi-domain routing, and suspension flows.
-  - Role-based identity (merchant, staff, customers, platform admins), JWT/refresh tokens, impersonation logs, and audit-ready reporting.
-  - Comprehensive catalog, variants, consignment parity, multi-location inventory, POS, loyalty, background media processing, and headless APIs.
-  - Checkouts with Stripe Connect, shipping carrier integrations, returns/refunds, gift cards/store credit, and reporting dashboards.
-  - Non-functional mandates: Java 21 + Quarkus, GraalVM native builds, MyBatis migrations, Caffeine caches, Kubernetes/K3s deployment, structured logging, OpenTelemetry, and multi-currency display.
-* **Key Assumptions:**
-  - Feature delivery is staged by Phase 1→3 priorities, but initial architecture seeds extensibility for upcoming modules (consignment automation, POS, loyalty).
-  - GitHub Actions + SonarCloud enforce coverage/formatting; local developers follow `docs/java-project-standards.adoc` without deviation.
-  - PostgreSQL 17 remains the only persistent store; background queues rely on database tables per the DelayedJob standard.
-  - Cloudflare R2 acts as default object storage/CDN and FFmpeg is bundled within worker images to satisfy video requirements.
-  - Internationalization (English/Spanish) relies on MessageBundle + vue-i18n with translation assets stored in repo.
-
-<!-- anchor: project-scale-classification -->
-### 1.1 Project Scale Classification
-
-| Category | Typical Team Size | Duration | Complexity | Codebase Size | Scope/Goal |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| Small | 1–3 | Days to Weeks | Low | KLOC | Prototype/Utility |
-| Medium | 3–10 | Weeks to Months | Moderate | Tens of KLOC | Departmental MVP |
-| **Large (Selected)** | 10–50+ | 6 Months to 2 Years | High | Hundreds of KLOC | Complex platform spanning multi-tenant commerce, consignment, POS, loyalty, and platform ops |
-| Enterprise-Grade | 50+ | Years | Extremely High | Millions of KLOC | Mission-critical suites |
-
-*Rationale:* Requirement breadth (multi-tenant commerce, consignment parity, payments, POS, reporting, Kubernetes-native ops) exceeds startup MVP, so this plan targets the **Large** row with 5 iterations and rich artifacts.
+*   **Goal:** Deliver a Quarkus-based SaaS commerce platform that fuses multi-tenant storefronts, consignment parity, and platform governance into a scalable, operable foundation for VillageCompute merchants.
+*   **High-Level Requirements Summary:**
+    - Multi-tenant tenancy resolution via subdomains/custom domains plus PostgreSQL RLS; CORS, feature flags, and audit-ready impersonation built into every slice.
+    - Storefront rendered with Qute/Tailwind/PrimeUI, admin SPA powered by Vue 3/PrimeVue, and headless REST APIs for carts, catalog, and orders.
+    - Deep commerce set: product variants, inventory, consignment workflows, loyalty, POS offline mode, shipping integrations, digital goods, gift cards, and Stripe Connect payments.
+    - Media and background processing pipeline for image/video transforms, report exports, payouts, and archival routines using database-backed DelayedJob queues and FFmpeg.
+    - Observability, CI/CD, and deployment stack anchored on Quarkus native builds, Kubernetes (k3s), GitHub Actions, OpenTelemetry, Prometheus, and structured logging.
+    - Non-functional guardrails: JWT auth, bcrypt, PCI-safe payments, <200ms API targets, <2s storefront loads, archival retention, audit trails, and multilingual readiness (EN/ES first).
+*   **Key Assumptions:**
+    - Architecture follows VillageCompute Java standards (Java 21, Quarkus, Maven, Spotless, JaCoCo, MyBatis migrations, DelayedJob) without deviation unless recorded via ADRs.
+    - Stripe remains the only live payment rail for MVP, but PaymentProvider abstraction must allow PayPal/CashApp/Square plug-ins without schema changes.
+    - Tenants operate on shared PostgreSQL 17 cluster with tenant_id discriminator columns; no per-tenant databases or Redis caches are available.
+    - Kubernetes clusters already provisioned with cert-manager, ingress, Prometheus/Jaeger, and Cloudflare R2 connectivity per platform ops baseline.
+    - Internationalization limited to English/Spanish content shells; merchant-authored copy handles localization of rich content manually.
+    - Platform security/legal teams drive audit requirements (impersonation logging, retention, privacy exports) that cannot be deferred to later phases.
 
 <!-- anchor: core-architecture -->
 ## 2. Core Architecture
 
-* **Architectural Style:** Layered modular monolith with bounded contexts (tenant access, identity, catalog, consignment, checkout, payments, loyalty, media, POS, reporting) communicating via CDI contracts and persisted domain events; horizontal slices align with Quarkus modules and Maven subprojects.
-* **Technology Stack:**
-    * Frontend: Qute templates + Tailwind + PrimeUI for storefront; Vue 3 + Vite + TypeScript + PrimeVue via Quinoa for `/admin/*`.
-    * Backend: Java 21, Quarkus (RESTEasy Reactive, Qute, Panache, Scheduler, Kubernetes, Mailer, AWS S3, OpenTelemetry), MapStruct DTO mappers, Caffeine caching.
-    * Database: PostgreSQL 17 with Row-Level Security, partitioned audit/session tables, JSONB payloads for jobs/events; MyBatis migrations manage schema/policies.
-    * Messaging/Queues: Database-backed DelayedJob with CRITICAL/HIGH/DEFAULT/LOW/BULK priorities and worker pods.
-    * Deployment: GraalVM native builds packaged in distroless containers, Quarkus Kubernetes extension manifests consumed by GitHub Actions → k3s.
-    * Other tools: Stripe Connect SDK, Quarkus Mailer, Thumbnailator + ImageIO, FFmpeg process runner, OpenTelemetry + Jaeger, Prometheus, Spotless, JaCoCo, SonarCloud, Tailwind token generator, vue-i18n, Feature flag service.
-* **Key Components/Services:** Tenant Access Gateway, Identity & Session, Storefront Rendering Engine, Admin SPA Delivery, Catalog & Inventory, Consignment, Checkout & Order Orchestrator, Payment Integration Layer, Loyalty & Rewards, POS & Offline Processor, Media Pipeline, Background Job Scheduler, Reporting & Analytics, Platform Admin Console, Integration Adapter layer; Component Diagram (PlantUML) elaborated in `I1.T2`.
-* **Data Model Overview:** Core entities include Tenant, StoreUser, Customer, SessionLog, Product/Variant, Category/Collection, InventoryLocation/InventoryLevel, Consignor/ConsignmentItem, Cart, Order, PaymentIntent, Refund, Shipment, ReturnAuthorization, LoyaltyLedgerEntry, FeatureFlag, AuditEvent, BackgroundJob, WebhookEvent; initial ERD authored in Mermaid under `I1.T3` and refined through later iterations for loyalty/POS additions.
-* **API Contract Style:** RESTful spec-first OpenAPI 3.0 (YAML) with multi-tenant path semantics `/api/v1/tenants/{tenantId}/...` plus platform scopes; initial spec seeded in `I1.T4`, expanded in iterations focusing on catalog, checkout, consignment, loyalty, POS, and headless APIs; RFC7807 error shape mandated; SSE/Webhook contracts documented with schema components.
-* **Communication Patterns:** Request filters resolve tenants + feature flags; controllers call domain services via CDI; background jobs persist events for asynchronous handling; payment + carrier integrations encapsulated via adapter interfaces; SSE for admin notifications; diagrams: Sequence Diagram 1 (Storefront checkout) `I2.T3`, Sequence Diagram 2 (Consignment payout) `I3.T2`, Sequence Diagram 3 (Media processing) `I3.T5`, Sequence Diagram 4 (Platform impersonation) `I4.T3`.
+*   **Architectural Style:** Layered modular monolith in Quarkus where bounded-context modules (tenant access, identity, catalog, consignment, checkout, payments, loyalty, POS, media, reporting, platform ops) communicate via CDI interfaces and domain events persisted in PostgreSQL; design keeps seams ready for gradual service extraction.
+*   **Technology Stack:**
+    *   Frontend: Qute templates + Tailwind CSS + PrimeUI widgets for storefront routes; Vue 3 + Vite + TypeScript + PrimeVue for `/admin/*` via Quinoa; POS PWA uses same Vue stack with Workbox offline cache.
+    *   Backend: Java 21 + Quarkus extensions (RESTEasy Reactive, Qute, Panache, Scheduler, Mailer, AWS S3, Kubernetes); GraalVM native compilation and Maven build with Spotless/JaCoCo gates.
+    *   Database: PostgreSQL 17 (shared cluster) with tenant_id columns, RLS policies, partitioned audit/session tables, pgcrypto for sensitive fields; MyBatis migrations manage schema, RLS, and seed data.
+    *   Messaging/Queues: Database-backed DelayedJob tables (CRITICAL→BULK priorities) executed by Quarkus workers; CDI events for in-process notifications; no Redis/broker allowed.
+    *   Deployment: GitHub Actions builds GraalVM native container images, Quarkus Kubernetes extension emits manifests, Kustomize overlays per env, deployed to k3s with cert-manager and Cloudflare CDN.
+    *   Other Key Libraries/Tools: TenantContext request filter, FeatureToggle service with Caffeine cache, JWT + refresh tokens, Stripe SDK/Stripe Terminal, AWS SDK S3 (Cloudflare R2), Java ImageIO + Thumbnailator, FFmpeg CLI, OpenTelemetry, Prometheus, Caffeine caching, MapStruct, Spotless, JaCoCo, SonarCloud.
+*   **Key Components/Services:** (detailed Component Diagram in `docs/diagrams/component_overview.puml` via `I1.T3`)
+    - Tenant Access Gateway: Host header + custom-domain resolution, CORS policy injection, TenantContext broadcast.
+    - Identity & Session Service: JWT issuance, refresh tokens, MFA hooks, session/audit logging, platform impersonation control.
+    - Storefront Rendering Engine: Qute templates orchestrating catalog/cart/checkout data with Tailwind tokens and PrimeUI hydration.
+    - Admin SPA Delivery / POS Shell: Vue-based assets served via Quinoa, bootstrap config, offline support, command palette.
+    - Catalog & Inventory Module: Products, variants, categories, collections, inventory locations/levels, import/export, search indexing.
+    - Consignment Module: Consignor onboarding, commission rules, intake batches, payouts, vendor portal.
+    - Checkout & Order Orchestrator: Cart persistence, shipping rates, address validation, Stripe intents, order lifecycle, returns/refunds.
+    - Payment Integration Layer: PaymentProvider interfaces, Stripe Connect onboarding, payout reconciliation, webhook idempotency store.
+    - Loyalty & Rewards Module: Points ledger, tiers, redemption flows, POS tie-in.
+    - POS & Offline Processor: Offline queue encryption, barcode/terminal integrations, reconciliation jobs.
+    - Media Pipeline Controller: Upload negotiation, FFmpeg/Thumbnailator jobs, CDN metadata, signed URL service.
+    - Reporting & Analytics Projection Service: Domain event consumer building aggregates, exports, and platform dashboards.
+    - Platform Admin Console Backend: SaaS governance APIs, impersonation, plan/billing, custom domain automation, support tooling.
+*   **Data Model Overview:** (ERD captured in `docs/diagrams/datamodel_erd.puml` via `I1.T4`)
+    - Multi-tenant core: `Tenant`, `StoreUser`, `Customer`, `FeatureFlag`, `PlatformCommand` with tenant_id and audit metadata.
+    - Commerce entities: `Product`, `Variant`, `Category`, `Collection`, `InventoryLocation`, `InventoryLevel`, `MediaAsset`, `MediaDerivative`.
+    - Cart/Order: `Cart`, `CartItem`, `Order`, `OrderItem`, `Shipment`, `ReturnAuthorization`, `OrderTimelineEvent`.
+    - Payments: `PaymentIntent`, `Refund`, `GiftCard`, `StoreCreditLedger`, `SubscriptionContract`.
+    - Consignment: `Consignor`, `ConsignmentItem`, `PayoutBatch`.
+    - Loyalty: `LoyaltyLedgerEntry`, `TierDefinition`.
+    - Support/Observability: `SessionLog`, `AuditEvent`, `BackgroundJob`, `WebhookEvent`, `DomainEvent`, `RateLimitBucket`.
+*   **API Contract Style:** RESTful JSON APIs defined spec-first via OpenAPI 3.0 (base spec scaffolded in `api/v1/openapi.yaml` under `I1.T2`, expanded per iteration). Contracts embed tenant scoping, auth requirements, feature flags, pagination metadata, Problem Details errors, HATEOAS links, and idempotency headers.
+*   **Communication Patterns:** Host-based tenant routing -> TenantContext -> CDI events; synchronous REST for storefront/admin/headless, asynchronous domain events + DelayedJob for heavy work. Payment/shipping integrations use adapter layer with retries/circuit breakers. SSE/WS channels provide admin notifications. Sequence diagrams for checkout, consignment payout, media pipeline documented in `docs/diagrams/sequence_*` outputs under iterations `I2.T5`, `I3.T4`, `I4.T5`.
 
 <!-- anchor: key-artifacts -->
 ## 2.1. Key Architectural Artifacts Planned
 
-* Component Diagram (PlantUML, `docs/diagrams/component-overview.puml`) – visualizes core bounded contexts, data stores, and integrations; created in `I1.T2`.
-* Multi-Tenant ERD (Mermaid, `docs/diagrams/tenant-erd.mmd`) – outlines shared tables, tenant_id keys, and RLS policies; created in `I1.T3`, refined `I3.T1`.
-* Initial OpenAPI Spec (YAML, `api/openapi-base.yaml`) – seeds auth/tenant/cms endpoints; produced in `I1.T4`, extended each iteration with additional tags.
-* Checkout Sequence Diagram (PlantUML, `docs/diagrams/seq-checkout.puml`) – details checkout orchestration; produced `I2.T3`.
-* Consignment Payout Sequence Diagram (PlantUML, `docs/diagrams/seq-consignment-payout.puml`) – clarifies payout automation; produced `I3.T2`.
-* Media Pipeline Sequence Diagram (PlantUML, `docs/diagrams/seq-media-processing.puml`) – depicts upload→FFmpeg flow; produced `I3.T5`.
-* Platform Impersonation Sequence Diagram (PlantUML, `docs/diagrams/seq-impersonation.puml`) – secures audit flow; produced `I4.T3`.
-* Loyalty Domain Model Addendum (Markdown + Mermaid, `docs/diagrams/loyalty-model.mmd`) – adds ledger/tier relationships; produced `I4.T1`.
-* POS Offline Flow Diagram (Mermaid flowchart, `docs/diagrams/pos-offline-flow.mmd`) – ensures offline safety; produced `I5.T2`.
-* Job Governance ADR (Markdown, `docs/adr/0001-delayed-job-governance.md`) – documents queue policies referenced by workers; produced `I2.T1`.
-* Feature Flag Strategy ADR (Markdown, `docs/adr/0002-feature-flag-governance.md`) – codifies toggle lifecycle; produced `I2.T2`.
-* Deployment Pipeline Map (Mermaid, `docs/diagrams/ci-cd-pipeline.mmd`) – clarifies GitHub Actions + Kubernetes flow; produced `I2.T5`.
+*   Component Diagram (PlantUML) – Visualizes bounded-contexts and interactions for Tenant Access, Identity, Catalog, Consignment, Checkout, Payments, Loyalty, POS, Media, Reporting, Platform Ops. Generated in `docs/diagrams/component_overview.puml` during `I1.T3`; informs all technical agents.
+*   Data Model ERD (PlantUML) – Captures major entities, tenant_id patterns, RLS-dependent tables, relationships for catalog, orders, payments, loyalty, consignment. Authored in `docs/diagrams/datamodel_erd.puml` via `I1.T4`.
+*   Initial OpenAPI Spec (YAML) – `api/v1/openapi.yaml` seeded in `I1.T2`, iteratively expanded each iteration; drives client generation, contract tests, and headless partner onboarding.
+*   Tenant Routing Sequence Diagram (Mermaid) – `docs/diagrams/sequence_tenant_routing.mmd` produced in `I1.T5` to document request filter, TenantContext, feature flag hydration.
+*   Checkout & Payment Sequence Diagram (Mermaid) – `docs/diagrams/sequence_checkout_payment.mmd` built in `I2.T5` for saga reasoning.
+*   Consignment Payout Flow Diagram (Mermaid) – `docs/diagrams/sequence_consignment_payout.mmd` crafted in `I3.T4` to align payout automation.
+*   Media Pipeline Flow Diagram (Mermaid) – `docs/diagrams/sequence_media_pipeline.mmd` created in `I4.T5` for FFmpeg/queue orchestration.
+*   Deployment Diagram (PlantUML) – `docs/diagrams/deployment_k8s.puml` assembled in `I5.T3` for k3s topology review.
+*   ADR Set (Markdown) – `docs/adr/` entries (ADR-001 tenancy, ADR-002 payments, ADR-003 media, etc.) established across iterations to track trade-offs.
 
 <!-- anchor: directory-structure -->
 ## 3. Directory Structure
 
-* **Root Directory:** `village-storefront/`
-* **Structure Definition:**
-```
-village-storefront/
-├── README.md
-├── pom.xml
-├── mvnw / mvnw.cmd
-├── src/
-│   ├── main/java/com/village/storefront/
-│   │   ├── tenant/
-│   │   ├── identity/
-│   │   ├── catalog/
-│   │   ├── inventory/
-│   │   ├── consignment/
-│   │   ├── checkout/
-│   │   ├── payments/
-│   │   ├── loyalty/
-│   │   ├── pos/
-│   │   ├── media/
-│   │   ├── reporting/
-│   │   └── platformops/
-│   ├── main/resources/
-│   │   ├── application.properties
-│   │   ├── db/migrations/ (MyBatis)
-│   │   ├── messages/ (Qute MessageBundle)
-│   │   └── templates/ (Qute)
-│   ├── main/webui/ (Vue admin via Quinoa)
-│   └── test/java/... (unit + integration suites)
-├── ui-storefront/ (Tailwind/PrimeUI assets + Qute fragments)
-├── docs/
-│   ├── diagrams/
-│   │   ├── component-overview.puml
-│   │   ├── tenant-erd.mmd
-│   │   ├── seq-checkout.puml
-│   │   ├── seq-consignment-payout.puml
-│   │   ├── seq-media-processing.puml
-│   │   ├── seq-impersonation.puml
-│   │   ├── loyalty-model.mmd
-│   │   └── pos-offline-flow.mmd
-│   ├── adr/
-│   │   ├── 0001-delayed-job-governance.md
-│   │   └── 0002-feature-flag-governance.md
-│   └── standards/
-│       └── java-project-standards.adoc (reference copy or symlink)
-├── api/
-│   ├── openapi-base.yaml
-│   ├── openapi-catalog.yaml
-│   ├── openapi-checkout.yaml
-│   └── openapi-headless.yaml
-├── ops/
-│   ├── k8s/
-│   │   ├── base/ (Quarkus-generated manifests)
-│   │   └── overlays/{dev,staging,prod}/
-│   ├── github-actions/
-│   └── scripts/ (migration runners, smoke tests)
-├── jobs/
-│   ├── workers/ (job definitions, payload schemas)
-│   └── manifests/
-├── tools/
-│   ├── ffmpeg/ (version pin metadata)
-│   └── tailwind/ (design token export scripts)
-├── tests/
-│   ├── integration/
-│   ├── acceptance/
-│   └── perf/
-└── .codemachine/
-    ├── artifacts/
-    │   └── plan/ (this planning package)
-    └── inputs/
-        └── competitor-research.md
-```
-
-*Justification:* Structure separates bounded contexts for clarity, ensures documentation + diagrams are versioned under `docs/`, isolates API specs for spec-first workflow, houses ops artifacts for Kubernetes + CI/CD, and reserves `.codemachine/artifacts/plan` for this generated planning bundle.
+*   **Root Directory:** `village-storefront/`
+*   **Structure Definition:**
+    ~~~
+    village-storefront/
+    ├── README.md
+    ├── docs/
+    │   ├── architecture_overview.md
+    │   ├── diagrams/
+    │   │   ├── component_overview.puml
+    │   │   ├── datamodel_erd.puml
+    │   │   ├── sequence_tenant_routing.mmd
+    │   │   ├── sequence_checkout_payment.mmd
+    │   │   ├── sequence_consignment_payout.mmd
+    │   │   ├── sequence_media_pipeline.mmd
+    │   │   └── deployment_k8s.puml
+    │   ├── adr/
+    │   │   ├── ADR-001-tenancy.md
+    │   │   ├── ADR-002-payments.md
+    │   │   └── ...
+    │   └── java-project-standards.adoc
+    ├── api/
+    │   └── v1/
+    │       └── openapi.yaml
+    ├── src/
+    │   ├── main/java/
+    │   │   ├── com/village/tenant/
+    │   │   ├── com/village/identity/
+    │   │   ├── com/village/catalog/
+    │   │   ├── com/village/consignment/
+    │   │   ├──── com/village/checkout/
+    │   │   ├── com/village/payment/
+    │   │   ├── com/village/loyalty/
+    │   │   ├── com/village/pos/
+    │   │   ├── com/village/media/
+    │   │   ├── com/village/reporting/
+    │   │   └── com/village/platformops/
+    │   ├── main/resources/
+    │   │   ├── application.properties
+    │   │   ├── db/migrations/
+    │   │   ├── qute/templates/
+    │   │   └── messages/
+    │   └── main/webui/
+    │       ├── admin-spa/
+    │       ├── pos/
+    │       └── shared/
+    ├── tests/
+    │   ├── backend/
+    │   ├── storefront/
+    │   └── admin/
+    ├── tools/
+    │   ├── scripts/
+    │   └── pipelines/
+    ├── .codemachine/
+    │   └── inputs/
+    ├── pom.xml
+    ├── package.json (for admin SPA tooling)
+    ├── Dockerfile
+    ├── k8s/
+    │   ├── base/
+    │   └── overlays/{dev,staging,prod}
+    └── .github/workflows/
+    ~~~
+    Key locations earmark documentation (`docs/`), specs (`api/`), module-oriented Java packages, SPA assets under `src/main/webui`, MyBatis migrations under `src/main/resources/db/migrations`, and ops assets (`k8s/`, `tools/`). ADR folder ensures architectural decisions stay versioned. Tests separated by surface to support focused CI lanes.~~~

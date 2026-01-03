@@ -11,6 +11,26 @@ function extractIterationGoal(content) {
     return { iterationId, iterationGoal };
 }
 
+function parseFileList(raw) {
+    const compact = raw.replace(/\n/g, ' ').trim();
+    const normalized = compact
+        .replace(/`/g, '"')
+        .replace(/'/g, '"')
+        .replace(/,\s*]/g, ']');
+    try {
+        return JSON.parse(normalized);
+    } catch (e) {
+        const matches = [...compact.matchAll(/["'`]\s*([^"'`]+?)\s*["'`]/g)].map(m => m[1].trim());
+        if (matches.length > 0) return matches;
+        return compact
+            .replace(/^\[/, '')
+            .replace(/]$/, '')
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean);
+    }
+}
+
 function parseTask(taskText, iterationId, iterationGoal) {
     const task = {
         task_id: "",
@@ -42,22 +62,12 @@ function parseTask(taskText, iterationId, iterationGoal) {
 
     const inputFilesMatch = taskText.match(/\*\s+\*\*Input Files:\*\*\s+(\[.+?\])/s);
     if (inputFilesMatch) {
-        try {
-            task.input_files = JSON.parse(inputFilesMatch[1].replace(/\n/g, '').replace(/\s+/g, ' '));
-        } catch (e) {
-            const files = inputFilesMatch[1].match(/"([^"]+)"/g);
-            task.input_files = files ? files.map(f => f.replace(/"/g, '')) : [];
-        }
+        task.input_files = parseFileList(inputFilesMatch[1]);
     }
 
     const targetFilesMatch = taskText.match(/\*\s+\*\*Target Files:\*\*\s+(\[.+?\])/s);
     if (targetFilesMatch) {
-        try {
-            task.target_files = JSON.parse(targetFilesMatch[1].replace(/\n/g, '').replace(/\s+/g, ' '));
-        } catch (e) {
-            const files = targetFilesMatch[1].match(/"([^"]+)"/g);
-            task.target_files = files ? files.map(f => f.replace(/"/g, '')) : [];
-        }
+        task.target_files = parseFileList(targetFilesMatch[1]);
     }
 
     const delivMatch = taskText.match(/\*\s+\*\*Deliverables:\*\*\s+(.+?)(?=\n\s+\*\s+\*\*|\n\*\s+\*\*)/s);

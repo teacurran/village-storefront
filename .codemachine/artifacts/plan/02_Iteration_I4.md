@@ -1,143 +1,141 @@
 <!-- anchor: iteration-4-plan -->
-### Iteration 4: Loyalty, Platform Admin, and Impersonation Governance
+### Iteration 4: Checkout, Payments, Media Pipeline & Loyalty/POS Enhancements
 
-* **Iteration ID:** `I4`
-* **Goal:** Add loyalty/rewards assets (diagram + implementation), expand checkout + reporting to use loyalty, build platform admin console APIs with impersonation safeguards, document impersonation flow via sequence diagram, and introduce multi-currency/FX services plus enhanced observability + audit tooling.
-* **Prerequisites:** `I1`–`I3` outputs (catalog, consignment, media, reporting, ADRs, diagrams).
-* **Tasks:**
+*   **Iteration ID:** `I4`
+*   **Goal:** Ship production-ready checkout orchestration with Stripe payments, loyalty/gift card support, media processing pipeline, and POS offline flows.
+*   **Prerequisites:** `I1`, `I2`, `I3`
+*   **Retrospective Carryover:**
+    - Document operational toggles (feature flags) alongside implementation to aid release mgmt.
+    - Keep diagrams + ADRs current while coding; do not postpone modeling updates.
+    - Reuse background job improvements to avoid reinventing queue logic.
+*   **Iteration Milestones & Exit Criteria:**
+    1. PaymentProvider + Stripe Connect implementations with webhooks, payouts, disputes support.
+    2. Checkout orchestrator orchestrating cart, address validation, shipping rates, loyalty/gift cards, payments, audit logging.
+    3. Media pipeline (images + video) with FFmpeg/Thumbnailator jobs, signed URLs, CDN metadata, tenant quotas.
+    4. Loyalty program ledger + redemption logic integrated with checkout + admin UI.
+    5. POS offline workflows + Stripe Terminal bridging documented and partially implemented.
+    6. Media pipeline sequence diagram + docs ready for ops handoff.
 
 <!-- anchor: task-i4-t1 -->
-* **Task 4.1:**
-    * **Task ID:** `I4.T1`
-    * **Description:** Create Loyalty Domain Model diagram (Mermaid) detailing LoyaltyProgram, Tier, LoyaltyLedgerEntry, TierRule, ExpirationPolicy, GiftCard, StoreCredit relationships and interactions with Customer + Order entities.
-    * **Agent Type Hint:** `DiagrammingAgent`
-    * **Inputs:** Section 2 data model, Section 9 loyalty requirements.
-    * **Input Files**: ["docs/diagrams/tenant-erd.mmd", "docs/diagrams/component-overview.puml"]
-    * **Target Files:** ["docs/diagrams/loyalty-model.mmd"]
-    * **Deliverables:** Mermaid class/ER diagram with notes on accrual, redemption, expiration, and audit metadata.
-    * **Acceptance Criteria:**
-        - Diagram passes lint, includes multi-currency fields, references loyalty KPIs.
-        - Links to reporting + checkout modules via annotations.
-        - README updates mention new diagram.
-    * **Dependencies:** `I3.T1`
-    * **Parallelizable:** Yes
+*   **Task 4.1:**
+    *   **Task ID:** `I4.T1`
+    *   **Description:** Implement PaymentProvider framework + Stripe providers (PaymentProvider, PaymentMethodProvider, MarketplaceProvider, WebhookHandler); include Connect onboarding, payout scheduling, fee calculation, webhook ingestion, integration tests.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** ADRs, OpenAPI, Stripe docs.
+    *   **Input Files:** [`api/v1/openapi.yaml`, `docs/adr/ADR-004-consignment-payouts.md`, `docs/diagrams/sequence_checkout_payment.mmd`]
+    *   **Target Files:** [`src/main/java/com/village/payment/**`, `tests/backend/StripeProviderTest.java`, `tests/backend/StripeWebhookIT.java`, `docs/payments/stripe_connect.md`]
+    *   **Deliverables:** Payment provider interfaces + Stripe implementation, webhook idempotency storage, docs describing onboarding + platform fees.
+    *   **Acceptance Criteria:** Stripe sandbox integration works end-to-end, platform fees configurable per tenant, webhooks persisted + idempotent, docs show onboarding steps.
+    *   **Testing Guidance:** Use Stripe CLI/webhook emulator, integration tests verifying failure handling, include contract tests for PaymentProvider interface.
+    *   **Observability Hooks:** Emit logs for payment lifecycle (intent created, succeeded, failed) w/ tenant/payment ids; metrics for webhook latency + payout backlog.
+    *   **Dependencies:** `I2.T4`, `I3.T1`, `I3.T3`.
+    *   **Parallelizable:** Limited.
 
 <!-- anchor: task-i4-t2 -->
-* **Task 4.2:**
-    * **Task ID:** `I4.T2`
-    * **Description:** Implement Loyalty service: ledger entities, accrual/redemption logic, tier recalculation scheduled job, customer APIs for viewing history, admin endpoints for configuration; integrate with checkout service.
-    * **Agent Type Hint:** `BackendAgent`
-    * **Inputs:** Loyalty diagram, ADRs, checkout code.
-    * **Input Files**: ["docs/diagrams/loyalty-model.mmd", "src/main/java/com/village/storefront/checkout/**", "api/openapi-base.yaml"]
-    * **Target Files:** ["src/main/java/com/village/storefront/loyalty/*.java", "src/test/java/com/village/storefront/loyalty/LoyaltyServiceTest.java", "src/main/resources/db/migrations/0008_loyalty.sql", "api/openapi-base.yaml"]
-    * **Deliverables:** Ledger tables + Panache entities, service orchestrating accrual/redemption, scheduled job, REST endpoints + DTOs, integration tests verifying loyalty flows.
-    * **Acceptance Criteria:**
-        - Checkout orchestrator invokes loyalty service for accrual + redemption with compensating actions on failure.
-        - Tier recalculation job logs metrics + respects ADR job governance.
-        - Tests cover expiration + multi-currency conversions.
-    * **Dependencies:** `I4.T1`, `I3.T7`
-    * **Parallelizable:** No
+*   **Task 4.2:**
+    *   **Task ID:** `I4.T2`
+    *   **Description:** Implement checkout orchestrator: saga handling address validation, shipping rates (USPS/UPS/FedEx adapters), loyalty redemption, gift cards/store credit, payment capture, audit logging, error handling, retrieval endpoints.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Sequence diagram, cart services, payment provider, loyalty spec.
+    *   **Input Files:** [`docs/diagrams/sequence_checkout_payment.mmd`, `src/main/java/com/village/checkout/cart/**`, `src/main/java/com/village/payment/**`, `docs/adr/ADR-003-checkout-saga.md`]
+    *   **Target Files:** [`src/main/java/com/village/checkout/orchestrator/**`, `src/main/java/com/village/shipping/**`, `tests/backend/CheckoutSagaTest.java`, `tests/backend/ShippingAdapterIT.java`, `docs/checkout/saga.md`]
+    *   **Deliverables:** Orchestrator service, adapter layer wrappers, audit + domain events, doc describing compensation + kill switches.
+    *   **Acceptance Criteria:** Saga handles success/failure, integrates with payments + loyalty, shipping adapters stub external APIs, logs actions with trace IDs, tests cover success + failure + compensations.
+    *   **Testing Guidance:** Build scenario matrix (guest vs auth, loyalty vs not), run integration tests with Testcontainers + mock carriers; include contract tests vs OpenAPI.
+    *   **Observability Hooks:** Add tracing spans for each step, metrics for checkout latency, logs for failure funnel.
+    *   **Dependencies:** `I2.T4`, `I4.T1`, `I4.T4`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i4-t3 -->
-* **Task 4.3:**
-    * **Task ID:** `I4.T3`
-    * **Description:** Document platform impersonation flow via PlantUML (Flow D) covering Platform Admin Console, Identity, Feature Flags, Tenant Gateway, Admin SPA, Storefront, Audit events, Reporting.
-    * **Agent Type Hint:** `DiagrammingAgent`
-    * **Inputs:** Section 3 Flow D, Identity service, ADR for feature flags.
-    * **Input Files**: ["docs/diagrams/component-overview.puml", "api/openapi-base.yaml"]
-    * **Target Files:** ["docs/diagrams/seq-impersonation.puml"]
-    * **Deliverables:** Sequence diagram with emphasis on reason codes, banner display, audit + reporting updates, token revocation.
-    * **Acceptance Criteria:**
-        - Diagram renders and references security constraints + reason field requirement.
-        - Contains notes about logging, audit, session updates.
-        - Linked from README + platform admin docs.
-    * **Dependencies:** `I2.T4`
-    * **Parallelizable:** Yes
+*   **Task 4.3:**
+    *   **Task ID:** `I4.T3`
+    *   **Description:** Build media pipeline: upload negotiation endpoints, presigned URLs, tenant quotas, Thumbnailator for images, FFmpeg for video with HLS, background jobs, signed URL service, metadata persistence, API integration for storefront/admin.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Media requirements, ERD (MediaAsset/Derivative), job framework.
+    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `docs/architecture_overview.md`, `src/main/java/com/village/jobs/**`]
+    *   **Target Files:** [`src/main/java/com/village/media/**`, `tests/backend/MediaPipelineTest.java`, `docs/media/pipeline.md`, `src/main/resources/application.properties`]
+    *   **Deliverables:** Media services, FFmpeg invocation wrapper, queue integration, doc describing storage layout + TTLs.
+    *   **Acceptance Criteria:** Images/video processed with size tiers, signed URLs generated per tenant, quotas enforced, tests simulate FFmpeg via stub, doc explains failure retries.
+    *   **Testing Guidance:** Use small media fixtures, run FFmpeg locally, ensure tests cover quota enforcement + failure case.
+    *   **Observability Hooks:** Metrics for job duration, queue depth, storage usage; logs include mediaId + tenantId.
+    *   **Dependencies:** `I1.T5`, `I3.T6`.
+    *   **Parallelizable:** Limited.
 
 <!-- anchor: task-i4-t4 -->
-* **Task 4.4:**
-    * **Task ID:** `I4.T4`
-    * **Description:** Implement Platform Admin backend: SaaS dashboard APIs (store list, revenue, system health), impersonation endpoints (start/heartbeat/end), global reporting views, and admin-specific RBAC scopes.
-    * **Agent Type Hint:** `BackendAgent`
-    * **Inputs:** Impersonation diagram, reporting service, identity.
-    * **Input Files**: ["src/main/java/com/village/storefront/platformops/**", "docs/diagrams/seq-impersonation.puml", "src/main/java/com/village/storefront/reporting/**"]
-    * **Target Files:** ["src/main/java/com/village/storefront/platformops/*.java", "src/test/java/com/village/storefront/platformops/PlatformOpsResourceTest.java", "api/openapi-base.yaml", "src/main/resources/db/migrations/0009_platformops.sql"]
-    * **Deliverables:** REST endpoints for store management, impersonation audit retrieval, platform metrics; RBAC annotations; tests verifying super-user scopes.
-    * **Acceptance Criteria:**
-        - Endpoints enforce MFA + reason codes; tests cover unauthorized access.
-        - Platform metrics use reporting aggregates with data freshness metadata.
-        - Swagger docs highlight `platform` scope + rate limits.
-    * **Dependencies:** `I4.T3`, `I3.T7`
-    * **Parallelizable:** No
+*   **Task 4.4:**
+    *   **Task ID:** `I4.T4`
+    *   **Description:** Implement loyalty + rewards module: point accrual rules, ledger, redemption engine, tier calculations, admin APIs, storefront components integration (cart summary), reporting hooks.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Requirements, ERD (LoyaltyLedger), checkout saga design.
+    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `api/v1/openapi.yaml`, `docs/checkout/saga.md`]
+    *   **Target Files:** [`src/main/java/com/village/loyalty/**`, `tests/backend/LoyaltyServiceTest.java`, `tests/backend/LoyaltyLedgerIT.java`, `docs/loyalty/program.md`]
+    *   **Deliverables:** Ledger entity/service, accrual + redemption APIs, admin endpoints for configuration, documentation for tier logic.
+    *   **Acceptance Criteria:** Points accrual + redemption operate per config, ledger persists with audit fields, checkout integrates, admin endpoints secured, docs outline formulas.
+    *   **Testing Guidance:** Fuzz accrual scenarios, include integration tests verifying concurrency + ledger rollback.
+    *   **Observability Hooks:** Add metrics for points earned, redemption volume, ledger lag; logs include tenant/customer/tier info.
+    *   **Dependencies:** `I2.T4`, `I3.T3`.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i4-t5 -->
-* **Task 4.5:**
-    * **Task ID:** `I4.T5`
-    * **Description:** Build multi-currency display + FX service: scheduled job fetching rates, Money value object, API for conversion, integration with catalog and checkout DTOs; update OpenAPI specs + tests.
-    * **Agent Type Hint:** `BackendAgent`
-    * **Inputs:** Section 3 multi-currency assumptions, loyalty/calc requirements.
-    * **Input Files**: ["src/main/java/com/village/storefront/common/money/**", "api/openapi-base.yaml", "src/main/resources/db/migrations/0010_fx.sql"]
-    * **Target Files:** ["src/main/java/com/village/storefront/money/*.java", "src/test/java/com/village/storefront/money/MoneyServiceTest.java", "src/main/resources/db/migrations/0010_fx.sql", "ops/scripts/fetch_fx_rates.sh"]
-    * **Deliverables:** Money classes with integer minor units, FX job, caching, conversion API endpoints, tests verifying rounding + fallback.
-    * **Acceptance Criteria:**
-        - FX job caches daily rates, logs timestamp + source; tests simulate stale data fallback.
-        - Checkout + catalog DTOs include `displayCurrency` vs `settlementCurrency` fields.
-        - Ops script documented for manual re-run.
-    * **Dependencies:** `I2.T5`, `I3.T7`
-    * **Parallelizable:** Yes
+*   **Task 4.5:**
+    *   **Task ID:** `I4.T5`
+    *   **Description:** Document media pipeline sequence (upload -> processing -> CDN) via Mermaid + ops runbook; include scaling guidance, failure scenarios, kill switches, capacity planning.
+    *   **Agent Type Hint:** `DiagrammingAgent`
+    *   **Inputs:** Media implementation, job policies.
+    *   **Input Files:** [`src/main/java/com/village/media/**`, `docs/media/pipeline.md`, `k8s/base/deployment-workers.yaml`]
+    *   **Target Files:** [`docs/diagrams/sequence_media_pipeline.mmd`, `docs/operations/media_runbook.md`]
+    *   **Deliverables:** Diagram + runbook with kill-switch instructions, queue scaling, troubleshooting.
+    *   **Acceptance Criteria:** Diagram renders, runbook outlines detection/response steps, references Section 6 verification metrics.
+    *   **Testing Guidance:** Walkthrough runbook w/ simulated failure, gather feedback from ops.
+    *   **Observability Hooks:** Document metrics/dashboards for pipeline health (processing backlog, error counts).
+    *   **Dependencies:** `I4.T3`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i4-t6 -->
-* **Task 4.6:**
-    * **Task ID:** `I4.T6`
-    * **Description:** Enhance observability + audit logging: implement correlation ID propagation, OpenTelemetry span enrichers for loyalty + platform endpoints, structured logging fields for impersonation and tenant plan, dashboards showing KPIs (Grafana JSON).
-    * **Agent Type Hint:** `DevOpsAgent`
-    * **Inputs:** Section 3 observability, Section 4 KPIs.
-    * **Input Files**: ["src/main/java/com/village/storefront/common/logging/**", "ops/k8s/base/deployment.yaml", "docs/diagrams/seq-impersonation.puml"]
-    * **Target Files:** ["src/main/java/com/village/storefront/common/logging/TracingFilter.java", "src/main/resources/application.properties", "ops/observability/grafana-loyalty.json"]
-    * **Deliverables:** Logging filter injecting IDs, OpenTelemetry instrumentation, Grafana dashboards for loyalty accrual + impersonation, doc updates.
-    * **Acceptance Criteria:**
-        - Logs include tenant_id, store_id, impersonationId, loyaltyTier; sample entries documented.
-        - Grafana dashboard JSON validated via lint script and referenced in README.
-        - Telemetry extends to Quinoa admin SPA fetches through response headers.
-    * **Dependencies:** `I4.T2`, `I4.T3`
-    * **Parallelizable:** Yes
+*   **Task 4.6:**
+    *   **Task ID:** `I4.T6`
+    *   **Description:** Enhance gift cards + store credit modules and integrate with checkout & POS: APIs for issuance/redemption, ledger, admin UI wiring, POS offline usage.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Checkout saga, loyalty spec, POS requirements.
+    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `api/v1/openapi.yaml`, `src/main/java/com/village/checkout/orchestrator/**`, `src/main/java/com/village/pos/**`]
+    *   **Target Files:** [`src/main/java/com/village/giftcard/**`, `src/main/java/com/village/storecredit/**`, `tests/backend/GiftCardServiceTest.java`, `tests/backend/StoreCreditIT.java`, `docs/payments/giftcard.md`]
+    *   **Deliverables:** Gift card/store credit services, endpoints, integration with checkout/POS, docs for issuance + redemption.
+    *   **Acceptance Criteria:** Gift card codes unique + secure, redemption atomic, checkout + POS flows handle partial payments, docs describe lifecycle.
+    *   **Testing Guidance:** Integration tests with multi-tender payments, offline POS redemption scenario, load tests for gift card lookups.
+    *   **Observability Hooks:** Track issuance/redemption metrics, log suspicious activity, expose ledger health to reporting.
+    *   **Dependencies:** `I4.T2`, `I4.T4`.
+    *   **Parallelizable:** Limited.
 
 <!-- anchor: task-i4-t7 -->
-* **Task 4.7:**
-    * **Task ID:** `I4.T7`
-    * **Description:** Update Admin SPA to expose platform admin workspace: dashboards for store metrics, impersonation controls with reason entry, loyalty configuration UI, localization updates for Spanish.
-    * **Agent Type Hint:** `FrontendAgent`
-    * **Inputs:** Platform ops APIs, loyalty endpoints, SPA code.
-    * **Input Files**: ["src/main/webui/src/**", "api/openapi-base.yaml", "docs/diagrams/seq-impersonation.puml"]
-    * **Target Files:** ["src/main/webui/src/views/platform/*.vue", "src/main/webui/src/stores/platform.ts", "src/main/webui/src/locales/en.json", "src/main/webui/src/locales/es.json"]
-    * **Deliverables:** Vue views for dashboards + impersonation, store modules hitting APIs, localization strings, tests verifying reason enforcement + Spanish translations.
-    * **Acceptance Criteria:**
-        - UI shows impersonation banner + exit CTA; tests confirm reason required.
-        - Dashboards pull data freshness timestamps from reporting API.
-        - Localization coverage ensures new strings exist in en/es files.
-    * **Dependencies:** `I4.T4`, `I4.T2`
-    * **Parallelizable:** No
+*   **Task 4.7:**
+    *   **Task ID:** `I4.T7`
+    *   **Description:** Implement POS offline queue + Stripe Terminal integration: offline storage encryption, sync jobs, UI states, hardware pairing service, documentation.
+    *   **Agent Type Hint:** `FrontendAgent` + `BackendAgent` pairing
+    *   **Inputs:** POS requirements, job framework, payment provider.
+    *   **Input Files:** [`src/main/webui/admin-spa/src/modules/pos/**`, `src/main/java/com/village/payment/**`, `docs/operations/job_runbook.md`]
+    *   **Target Files:** [`src/main/webui/admin-spa/src/modules/pos/offline/**`, `src/main/java/com/village/pos/offline/**`, `tests/admin/POSOffline.spec.ts`, `tests/backend/POSOfflineIT.java`, `docs/pos/offline.md`]
+    *   **Deliverables:** Offline queue manager, encryption keys, sync job hooking into checkout, UI indicators + hold/resume features, doc for staff training.
+    *   **Acceptance Criteria:** Offline queue persists encrypted payloads, sync resumes automatically, UI highlights offline state, Stripe Terminal flows validated in sandbox.
+    *   **Testing Guidance:** Simulate offline mode via service worker, run integration tests ensuring duplicates prevented.
+    *   **Observability Hooks:** Gauge offline queue depth, metrics for sync success/failure, logs tagging device/location.
+    *   **Dependencies:** `I4.T1`, `I4.T2`, `I3.T6`.
+    *   **Parallelizable:** No.
 
-<!-- anchor: iteration-4-exit -->
-* **Iteration Exit Criteria:**
-  - Loyalty service integrated and validated with checkout, reporting, and dashboards, with job metrics visible.
-  - Platform admin APIs + UI enforce impersonation governance, audit logging, and display system KPIs.
-  - Multi-currency conversions applied to catalog + checkout; FX job documented with runbook.
-  - Observability dashboards + structured logs rolled out and referenced in README/ops docs.
-
-<!-- anchor: iteration-4-metrics -->
-* **Iteration Metrics:**
-  - Loyalty ledger operations maintain <20ms overhead; monitored via Grafana panels.
-  - Platform admin API latency <300ms P95; impersonation audit logs available within 30s.
-  - Multi-currency rates refreshed daily with <5% drift vs external benchmark.
-
-<!-- anchor: iteration-4-risks -->
-* **Iteration Risks & Actions:**
-  - Loyalty point miscalculations risk trust; add simulation tests with recorded fixtures.
-  - Impersonation misuse mitigated with SOC review + security signoff before release.
-  - FX provider outages handled via fallback caching; document manual override steps and escalate thresholds.
-
-<!-- anchor: iteration-4-followup -->
-* **Iteration Follow-Up Actions:**
-  - Schedule compliance review for platform admin logging + impersonation visibility.
-  - Prepare user training materials for loyalty config + platform dashboards.
+*   **Iteration KPIs & Validation Strategy:**
+    - PaymentProvider success ≥99% in sandbox load test; webhook latency median <1s.
+    - Checkout saga 95th percentile latency <800ms (excluding external calls) measured via integration harness.
+    - Media pipeline processes standard image <5s, video <10m; queue metrics accessible.
+    - Loyalty ledger integrity cross-checked vs orders; automated job recalculates tiers nightly.
+    - Gift card/store credit coverage ≥85% tests, POS offline queue flush <60s on reconnection.
+    - Runbook (media + POS) reviewed by ops + support with sign-off recorded.
+*   **Iteration Risk Log & Mitigations:**
+    - *Stripe API changes:* Monitor release notes; mitigate via feature flag to fall back to basic card flow.
+    - *FFmpeg resource spikes:* Use dedicated worker pool + Kubernetes limits.
+    - *Saga complexity:* Risk of cascade failures; mitigate with circuit breakers + compensating actions tests.
+    - *Offline data loss:* Enforce encryption + checksum; include manual reconciliation instructions.
+    - *Gift card fraud:* Add rate limits + audit alerts for suspicious behavior.
+*   **Iteration Backlog & Follow-ups:**
+    - Plan I5 work for platform payment observability dashboards.
+    - Schedule accessibility audit for checkout + POS flows.
+    - Create backlog item for multi-currency conversions in loyalty displays.
+    - Document future addition of PayPal provider hooking into PaymentProvider interface.
