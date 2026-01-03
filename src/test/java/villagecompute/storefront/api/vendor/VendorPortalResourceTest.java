@@ -120,8 +120,8 @@ class VendorPortalResourceTest {
                     value = CONSIGNOR_ID,
                     type = AttributeType.STRING)})
     void testGetProfile() {
-        vendorRequest().when().get("/api/v1/vendor/portal/profile").then().statusCode(200).body("id",
-                equalTo(CONSIGNOR_ID)).body("name", equalTo("Portal Vendor"));
+        vendorRequest().when().get("/api/v1/vendor/portal/profile").then().statusCode(200)
+                .body("id", equalTo(CONSIGNOR_ID)).body("name", equalTo("Portal Vendor"));
     }
 
     @Test
@@ -163,15 +163,10 @@ class VendorPortalResourceTest {
         entityManager.createNativeQuery(
                 "INSERT INTO consignors (id, tenant_id, name, contact_info, payout_settings, status, version, created_at, updated_at) "
                         + "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
-                .setParameter(1, UUID.fromString(CONSIGNOR_ID))
-                .setParameter(2, tenant.id)
-                .setParameter(3, "Portal Vendor")
-                .setParameter(4, "{\"email\":\"portal@example.com\"}")
-                .setParameter(5, "{\"default_commission_rate\":15}")
-                .setParameter(6, "active")
-                .setParameter(7, 0L)
-                .setParameter(8, now)
-                .setParameter(9, now).executeUpdate();
+                .setParameter(1, UUID.fromString(CONSIGNOR_ID)).setParameter(2, tenant.id)
+                .setParameter(3, "Portal Vendor").setParameter(4, "{\"email\":\"portal@example.com\"}")
+                .setParameter(5, "{\"default_commission_rate\":15}").setParameter(6, "active").setParameter(7, 0L)
+                .setParameter(8, now).setParameter(9, now).executeUpdate();
     }
 
     private RequestSpecification vendorRequest() {

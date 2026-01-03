@@ -31,6 +31,7 @@ public class ProductVariantRepository implements PanacheRepositoryBase<ProductVa
 
     private static final String QUERY_FIND_BY_PRODUCT = "tenant.id = :tenantId and product.id = :productId and status = 'active' order by position";
     private static final String QUERY_FIND_BY_TENANT_AND_SKU = "tenant.id = :tenantId and sku = :sku";
+    private static final String QUERY_FIND_BY_ID = "tenant.id = :tenantId and id = :variantId and status = 'active'";
 
     /**
      * Find all active variants for a product.
@@ -54,6 +55,19 @@ public class ProductVariantRepository implements PanacheRepositoryBase<ProductVa
     public Optional<ProductVariant> findBySku(String sku) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return find(QUERY_FIND_BY_TENANT_AND_SKU, Parameters.with("tenantId", tenantId).and("sku", sku))
+                .firstResultOptional();
+    }
+
+    /**
+     * Find variant by ID scoped to the current tenant.
+     *
+     * @param variantId
+     *            variant UUID
+     * @return variant if found
+     */
+    public Optional<ProductVariant> findByIdForTenant(UUID variantId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_FIND_BY_ID, Parameters.with("tenantId", tenantId).and("variantId", variantId))
                 .firstResultOptional();
     }
 }

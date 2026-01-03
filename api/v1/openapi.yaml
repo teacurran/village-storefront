@@ -1501,6 +1501,207 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+# ============================================================================
+# INVENTORY ADMIN ENDPOINTS
+# ============================================================================
+
+  /admin/inventory/locations:
+    get:
+      operationId: listInventoryLocations
+      summary: List inventory locations
+      description: Returns all inventory locations for the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of inventory locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryLocation'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      operationId: createInventoryLocation
+      summary: Create inventory location
+      description: Creates a new inventory location (warehouse, store, etc.) for the current tenant.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryLocationRequest'
+      responses:
+        '201':
+          description: Location created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLocation'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Location code already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/transfers:
+    get:
+      operationId: listInventoryTransfers
+      summary: List inventory transfers
+      description: Returns all inventory transfers for the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryTransfer'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      operationId: createInventoryTransfer
+      summary: Create inventory transfer
+      description: |
+        Creates a new inventory transfer from source to destination location.
+        Validates stock availability, reserves inventory at source, and enqueues
+        background job for barcode label generation.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryTransferRequest'
+      responses:
+        '201':
+          description: Transfer created successfully, includes barcode job ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryTransfer'
+        '400':
+          description: Validation error (e.g., invalid quantity, same source/destination)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Location or variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/transfers/{transferId}:
+    parameters:
+      - name: transferId
+        in: path
+        required: true
+        description: Transfer UUID
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getInventoryTransfer
+      summary: Get transfer details
+      description: Retrieves a transfer by ID within the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Transfer retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryTransfer'
+        '404':
+          description: Transfer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/transfers/{transferId}/receive:
+    parameters:
+      - name: transferId
+        in: path
+        required: true
+        description: Transfer UUID
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: receiveInventoryTransfer
+      summary: Mark transfer as received
+      description: |
+        Completes a transfer by marking it received, committing source reservations,
+        and adding inventory to destination location.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Transfer received successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryTransfer'
+        '404':
+          description: Transfer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Transfer already received
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/adjustments:
+    post:
+      operationId: createInventoryAdjustment
+      summary: Record inventory adjustment
+      description: |
+        Records a manual inventory adjustment with reason code for audit trail.
+        Used for cycle counts, damages, returns, shrinkage, etc.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryAdjustmentRequest'
+      responses:
+        '201':
+          description: Adjustment recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryAdjustment'
+        '400':
+          description: Validation error (e.g., invalid reason code)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Location or variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /vendor/portal/payouts:
     get:
       operationId: listVendorPayouts
@@ -2505,6 +2706,271 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    # --------------------------------------------------------------------------
+    # Inventory Domain Schemas
+    # --------------------------------------------------------------------------
+
+    InventoryLocation:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: "warehouse-1"
+          description: Unique location code within tenant
+        name:
+          type: string
+          example: "Main Warehouse"
+          description: Human-readable location name
+        type:
+          type: string
+          example: "warehouse"
+          description: Location type (warehouse, retail, supplier)
+        address:
+          type: string
+          description: Physical address in JSON format
+          example: '{"street":"123 Main St","city":"Seattle","state":"WA","zip":"98101"}'
+        active:
+          type: boolean
+          description: Whether location is active for transactions
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateInventoryLocationRequest:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        type:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+          description: Physical address in JSON format
+        active:
+          type: boolean
+          default: true
+
+    InventoryTransfer:
+      type: object
+      required:
+        - transferId
+        - sourceLocationId
+        - destinationLocationId
+        - status
+        - lines
+        - createdAt
+        - updatedAt
+      properties:
+        transferId:
+          type: string
+          format: uuid
+        sourceLocationId:
+          type: string
+          format: uuid
+        destinationLocationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, IN_TRANSIT, RECEIVED, CANCELLED]
+          description: Current transfer status
+        initiatedBy:
+          type: string
+          description: User or system that initiated transfer
+        expectedArrivalDate:
+          type: string
+          format: date-time
+          nullable: true
+        carrier:
+          type: string
+          example: "FedEx"
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        shippingCost:
+          type: integer
+          description: Shipping cost in cents
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferLine'
+          description: Transfer line items
+        barcodeJobId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Background job ID for barcode label generation
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransferLine:
+      type: object
+      required:
+        - variantId
+        - quantity
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        receivedQuantity:
+          type: integer
+          nullable: true
+          description: Actual quantity received (may differ from requested)
+        notes:
+          type: string
+          nullable: true
+
+    CreateInventoryTransferRequest:
+      type: object
+      required:
+        - sourceLocationId
+        - destinationLocationId
+        - lines
+      properties:
+        sourceLocationId:
+          type: string
+          format: uuid
+        destinationLocationId:
+          type: string
+          format: uuid
+        initiatedBy:
+          type: string
+        expectedArrivalDate:
+          type: string
+          format: date-time
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        shippingCost:
+          type: integer
+          description: Shipping cost in cents
+        notes:
+          type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - variantId
+              - quantity
+            properties:
+              variantId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+              notes:
+                type: string
+
+    InventoryAdjustment:
+      type: object
+      required:
+        - id
+        - variantId
+        - locationId
+        - quantityChange
+        - quantityBefore
+        - quantityAfter
+        - reason
+        - adjustedBy
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        quantityChange:
+          type: integer
+          description: Quantity delta (positive or negative)
+        quantityBefore:
+          type: integer
+          description: Quantity before adjustment
+        quantityAfter:
+          type: integer
+          description: Quantity after adjustment
+        reason:
+          type: string
+          enum: [CYCLE_COUNT, DAMAGE, RETURN, SHRINKAGE, FOUND, OTHER]
+          description: Adjustment reason code
+        adjustedBy:
+          type: string
+          description: User who performed adjustment
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateInventoryAdjustmentRequest:
+      type: object
+      required:
+        - variantId
+        - locationId
+        - quantityChange
+        - reason
+        - adjustedBy
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        quantityChange:
+          type: integer
+          description: Quantity delta (positive or negative)
+        reason:
+          type: string
+          enum: [CYCLE_COUNT, DAMAGE, RETURN, SHRINKAGE, FOUND, OTHER]
+        adjustedBy:
+          type: string
+        notes:
+          type: string
 
     Address:
       type: object

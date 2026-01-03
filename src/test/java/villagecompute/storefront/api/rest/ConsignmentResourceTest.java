@@ -129,8 +129,8 @@ class ConsignmentResourceTest {
     @Test
     void testGetConsignor() {
         adminRequest().when().get("/api/v1/admin/consignors/{id}", consignorId).then().statusCode(200)
-                .body("id", equalTo(consignorId.toString())).body("name", equalTo("Test Vendor")).body("status",
-                        equalTo("active"));
+                .body("id", equalTo(consignorId.toString())).body("name", equalTo("Test Vendor"))
+                .body("status", equalTo("active"));
     }
 
     @Test
@@ -152,8 +152,8 @@ class ConsignmentResourceTest {
                 """;
 
         adminRequest().contentType(ContentType.JSON).body(requestBody).when()
-                .put("/api/v1/admin/consignors/{id}", consignorId).then().statusCode(200).body("name",
-                        equalTo("Updated Vendor Name"));
+                .put("/api/v1/admin/consignors/{id}", consignorId).then().statusCode(200)
+                .body("name", equalTo("Updated Vendor Name"));
     }
 
     @Test
@@ -183,9 +183,9 @@ class ConsignmentResourceTest {
 
         adminRequest().contentType(ContentType.JSON).body(requestBody).when()
                 .post("/api/v1/admin/consignors/{consignorId}/items", consignorId).then().statusCode(201)
-                .body("id", notNullValue()).body("productId", equalTo(productId.toString())).body("consignorId",
-                        equalTo(consignorId.toString())).body("commissionRate", equalTo(15.00f)).body("status",
-                                equalTo("active"));
+                .body("id", notNullValue()).body("productId", equalTo(productId.toString()))
+                .body("consignorId", equalTo(consignorId.toString())).body("commissionRate", equalTo(15.00f))
+                .body("status", equalTo("active"));
     }
 
     @Test
@@ -203,8 +203,8 @@ class ConsignmentResourceTest {
         adminRequest().contentType(ContentType.JSON).queryParam("periodStart", "2026-01-01")
                 .queryParam("periodEnd", "2026-01-31").when()
                 .post("/api/v1/admin/consignors/{consignorId}/payouts", consignorId).then().statusCode(201)
-                .body("id", notNullValue()).body("consignorId", equalTo(consignorId.toString())).body("status",
-                        equalTo("pending"));
+                .body("id", notNullValue()).body("consignorId", equalTo(consignorId.toString()))
+                .body("status", equalTo("pending"));
     }
 
     @Test
