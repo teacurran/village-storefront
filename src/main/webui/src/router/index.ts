@@ -48,6 +48,23 @@ const router = createRouter({
       ],
     },
     {
+      path: '/consignor',
+      component: DefaultLayout,
+      meta: { requiresAuth: true, requiresVendorRole: true },
+      children: [
+        {
+          path: '',
+          redirect: '/consignor/dashboard',
+        },
+        {
+          path: 'dashboard',
+          name: 'consignor-dashboard',
+          component: () => import('@/modules/consignor/views/ConsignorDashboard.vue'),
+          meta: { title: 'Consignor Portal', requiresVendorRole: true },
+        },
+      ],
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -69,6 +86,10 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.name === 'login' && authStore.isAuthenticated) {
+    next({ name: 'dashboard' })
+  } else if (to.meta.requiresVendorRole && !authStore.hasRole('vendor')) {
+    // Vendor-only routes require vendor role
+    console.warn('Access denied: vendor role required')
     next({ name: 'dashboard' })
   } else {
     next()

@@ -12,6 +12,9 @@ export type TelemetryEventName =
   | 'command-palette:toggle'
   | 'command-palette:execute'
   | 'impersonation:banner'
+  | 'consignor:portal-loaded'
+  | 'consignor:payout-requested'
+  | 'consignor:notification-read'
 
 export interface TelemetryPayloads {
   'app:hydrated': {
@@ -42,6 +45,21 @@ export interface TelemetryPayloads {
     active: boolean
     tenantId: string | null
     adminEmail?: string
+  }
+  'consignor:portal-loaded': {
+    consignorId: string
+    balanceOwed: number
+    activeItemCount: number
+  }
+  'consignor:payout-requested': {
+    consignorId: string
+    amount: number
+    method: string
+  }
+  'consignor:notification-read': {
+    consignorId: string
+    notificationId: string
+    notificationType: string
   }
 }
 
