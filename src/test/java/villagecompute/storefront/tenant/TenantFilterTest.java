@@ -62,6 +62,10 @@ public class TenantFilterTest {
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
+        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
         entityManager.createQuery("DELETE FROM Category").executeUpdate();

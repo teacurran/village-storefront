@@ -139,4 +139,17 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return count(QUERY_FIND_BY_TENANT_AND_STATUS, Parameters.with("tenantId", tenantId).and("status", "active"));
     }
+
+    /**
+     * Find product by ID ensuring it belongs to the current tenant.
+     *
+     * @param id
+     *            product UUID
+     * @return product if tenant owns it
+     */
+    public Optional<Product> findByIdAndTenant(UUID id) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find("id = :id and tenant.id = :tenantId", Parameters.with("id", id).and("tenantId", tenantId))
+                .firstResultOptional();
+    }
 }
