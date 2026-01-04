@@ -12,6 +12,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
 import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import { emitTelemetryEvent } from '@/telemetry'
+import { ordersRoutes } from '@/modules/orders/routes'
+import { inventoryRoutes } from '@/modules/inventory/routes'
+import { reportingRoutes } from '@/modules/reporting/routes'
+import { loyaltyRoutes } from '@/modules/loyalty/routes'
+import { notificationsRoutes } from '@/modules/notifications/routes'
 
 const router = createRouter({
   history: createWebHistory('/admin'),
@@ -45,6 +50,12 @@ const router = createRouter({
           component: () => import('@/views/SettingsView.vue'),
           meta: { title: 'Settings' },
         },
+        // Admin module routes
+        ...ordersRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
+        ...inventoryRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
+        ...reportingRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
+        ...loyaltyRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
+        ...notificationsRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
       ],
     },
     {
@@ -76,6 +87,7 @@ const router = createRouter({
 // Navigation guard for authentication
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
+  const tenantStore = useTenantStore()
 
   // Set page title
   document.title = to.meta.title
@@ -85,15 +97,36 @@ router.beforeEach((to, _from, next) => {
   // Check authentication requirement
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if (to.name === 'login' && authStore.isAuthenticated) {
+    return
+  }
+
+  if (to.name === 'login' && authStore.isAuthenticated) {
     next({ name: 'dashboard' })
-  } else if (to.meta.requiresVendorRole && !authStore.hasRole('vendor')) {
-    // Vendor-only routes require vendor role
+    return
+  }
+
+  // Check vendor role requirement
+  if (to.meta.requiresVendorRole && !authStore.hasRole('vendor')) {
     console.warn('Access denied: vendor role required')
     next({ name: 'dashboard' })
-  } else {
-    next()
+    return
   }
+
+  // Check RBAC requirements
+  if (to.meta.requiredRole && !authStore.hasRole(to.meta.requiredRole as string)) {
+    console.warn('Access denied: required role not found')
+    next({ name: 'dashboard' })
+    return
+  }
+
+  // Check feature flag requirements
+  if (to.meta.featureFlag && !tenantStore.isFeatureEnabled(to.meta.featureFlag as string)) {
+    console.warn('Access denied: feature not enabled')
+    next({ name: 'dashboard' })
+    return
+  }
+
+  next()
 })
 
 router.afterEach((to, from) => {
