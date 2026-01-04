@@ -1,0 +1,175 @@
+%% Media Processing Pipeline Sequence Diagram
+%% Task: I4.T5
+%% References: docs/media/pipeline.md, Architecture §3.6, Foundation §6.0
+%%
+%% This diagram shows the complete media upload and processing flow from client
+%% upload negotiation through derivative generation and signed URL delivery.
+
+sequenceDiagram
+    actor Client
+    participant API as MediaResource
+    participant Storage as MediaStorageClient
+    participant R2 as Cloudflare R2
+    participant JobService as MediaJobService
+    participant Queue as PriorityJobQueue
+    participant Worker as Background Worker
+    participant Processor as MediaProcessor
+    participant DB as PostgreSQL
+
+    %% === PHASE 1: Upload Negotiation ===
+    Note over Client,DB: Phase 1: Upload Negotiation
+
+    Client->>+API: POST /api/v1/media/upload/negotiate<br/>{filename, contentType, fileSize, assetType}
+
+    API->>DB: Reserve quota & create MediaAsset<br/>status=uploading, tenant_id scoped
+
+    alt Quota exceeded
+        DB-->>API: HTTP 413 Payload Too Large<br/>media.quota.exceeded metric
+        API-->>Client: {error, remainingQuota, usagePercent}
+    else Quota available
+        API->>+Storage: getPresignedUploadUrl(key, contentType, 15min)
+        Note right of Storage: Tenant-scoped key:<br/>{tenantId}/media/{assetType}/{assetId}/original/{filename}
+        Storage->>R2: Generate presigned PUT URL
+        R2-->>Storage: Signed URL (15min expiry)
+        Storage-->>-API: PresignedUploadUrl
+
+        API-->>-Client: {uploadUrl, assetId, storageKey, expiresAt}
+    end
+
+    %% === PHASE 2: Client Upload ===
+    Note over Client,R2: Phase 2: Direct Client Upload (bypasses API server)
+
+    Client->>+R2: PUT {uploadUrl}<br/>Content-Type + file bytes
+    R2->>R2: Validate signature & tenant prefix
+    R2-->>-Client: 200 OK (upload complete)
+
+    %% === PHASE 3: Processing Trigger ===
+    Note over Client,Queue: Phase 3: Processing Job Enqueue
+
+    Client->>+API: POST /api/v1/media/{assetId}/complete
+
+    API->>DB: Update MediaAsset status=pending
+
+    API->>+JobService: enqueueProcessingJob(assetId, tenantId)
+
+    JobService->>Queue: Enqueue job<br/>Priority: DEFAULT (images) / LOW (videos)
+    Note right of Queue: Queue config:<br/>media.processing.dispatch-interval=3s<br/>jobs.queue.capacity.default=500
+
+    JobService-->>-API: Job enqueued
+    API-->>-Client: 202 Accepted
+
+    %% === PHASE 4: Background Processing ===
+    Note over Worker,R2: Phase 4: Async Processing (media.processing.dispatch-interval)
+
+    Worker->>+Queue: Poll for next job (priority order)
+    Queue-->>-Worker: MediaProcessingJobPayload
+
+    Worker->>DB: Update MediaAsset status=processing
+
+    Worker->>+Storage: downloadMedia(originalKey)
+    Storage->>R2: GET {tenantId}/media/{assetId}/original/*
+    R2-->>Storage: Binary stream
+    Storage-->>-Worker: InputStream → temp file
+
+    alt Image processing
+        Worker->>+Processor: processImage(sourceFile, outputDir)
+        Note right of Processor: Thumbnailator generates:<br/>thumbnail:150px, small:400px,<br/>medium:800px, large:1600px<br/>Quality: 0.85 JPEG
+        Processor->>Processor: For each size tier:<br/>resize with bicubic interpolation
+        Processor-->>-Worker: List&lt;ImageDerivative&gt;
+    else Video processing
+        Worker->>+Processor: processVideo(sourceFile, outputDir)
+        Note right of Processor: FFmpeg HLS variants:<br/>720p@2Mbps, 480p@1Mbps, 360p@500Kbps<br/>Segment duration: 6s (VOD)
+        Processor->>Processor: Generate master.m3u8 + variant playlists
+        Processor->>Processor: Transcode to H.264 + AAC, segment into .ts files
+        Processor->>Processor: Extract poster frame at 1s
+        Processor-->>-Worker: VideoProcessingResult{masterPlaylist, variants, poster}
+    end
+
+    %% === PHASE 5: Derivative Upload ===
+    Note over Worker,R2: Phase 5: Upload Derivatives to R2
+
+    loop For each derivative
+        Worker->>+Storage: uploadMedia(derivativeKey, stream, contentType, size)
+        Note right of Storage: Derivative key:<br/>{tenantId}/media/{assetId}/derivatives/{type}/{filename}
+        Storage->>R2: PUT derivative with tenant isolation
+        R2-->>Storage: 200 OK
+        Storage-->>-Worker: Object key
+
+        Worker->>DB: INSERT INTO media_derivatives<br/>(asset_id, type, width, height, size, storage_key)
+    end
+
+    %% === PHASE 6: Finalization ===
+    Note over Worker,DB: Phase 6: Status Update & Quota Tracking
+
+    Worker->>DB: UPDATE MediaAsset<br/>status=ready, processed_at=NOW()
+
+    Worker->>DB: UPDATE media_quotas<br/>used_bytes += (original + derivatives)
+
+    Worker->>Worker: Clean up temp files
+
+    Worker->>Queue: Mark job complete
+    Note right of Worker: Metrics emitted:<br/>media.job.success{tenant,type}<br/>media.job.duration{tenant,type}
+
+    %% === PHASE 7: Download URL Generation ===
+    Note over Client,R2: Phase 7: Signed Download URL (on-demand)
+
+    Client->>+API: GET /api/v1/media/{assetId}/download?derivative=medium
+
+    API->>DB: SELECT MediaAsset & MediaDerivative<br/>WHERE asset_id={assetId} AND tenant_id={current}
+
+    alt Asset ready
+        API->>+Storage: getSignedDownloadUrl(storageKey, 24h)
+        Note right of Storage: Config: media.signed-url.expiry-hours=24<br/>Digital products: max 5 download attempts
+        Storage->>R2: Generate signed GET URL
+        R2-->>Storage: Signed URL
+        Storage-->>-API: URL + expiresAt
+
+        API->>DB: Log access in media_access_logs<br/>Increment downloadAttempts (if digital product)
+
+        API-->>-Client: {url, expiresAt, remainingAttempts}
+    else Asset not ready
+        API-->>Client: HTTP 404 or 202 (still processing)
+    end
+
+    %% === ERROR SCENARIOS ===
+    Note over Worker,DB: Error Scenarios & Retry Policy
+
+    alt FFmpeg/Thumbnailator failure
+        Processor--xWorker: ProcessingException
+        Worker->>Queue: Retry with exponential backoff<br/>(1s, 2s, 4s) - max 3 attempts
+
+        alt Max retries exceeded
+            Worker->>DB: UPDATE MediaAsset status=failed<br/>error_message={details}
+            Worker->>+JobService: Move to DeadLetterQueue
+            JobService->>DB: INSERT INTO dead_letter_queue<br/>owning_module='media.processing'
+            JobService-->>-Worker: DLQ acknowledged
+            Note right of Worker: Metric: media.job.failed{tenant,type}
+        end
+    else R2 upload failure (transient)
+        Storage--xWorker: IOException (5xx)
+        Worker->>Queue: Retry (3 attempts with backoff)
+    else R2 auth/quota failure (permanent)
+        Storage--xWorker: IOException (4xx)
+        Worker->>DB: Fail immediately, status=failed
+    else Quota exceeded during processing
+        Worker->>Worker: Halt processing
+        Worker->>DB: status=failed<br/>error="Quota exceeded during processing"
+        Worker->>Worker: Cleanup partial derivatives
+        Note right of Worker: Admin notification sent
+    end
+
+    %% === KILL SWITCH ===
+    Note over API,Worker: Kill Switch via Feature Flags
+
+    opt Kill switch activated
+        API->>DB: Check FeatureToggle("media.upload.enabled")
+        alt Flag disabled
+            API-->>Client: HTTP 503 Service Unavailable<br/>"Media uploads temporarily disabled"
+        end
+
+        Worker->>DB: Check FeatureToggle("media.processing.enabled")
+        alt Flag disabled
+            Worker->>Worker: Skip job processing, requeue for later
+            Note right of Worker: Stops derivative generation without failing jobs
+        end
+    end

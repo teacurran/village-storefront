@@ -1,0 +1,98 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging environment overlay
+# Production-like configuration with sandbox external services
+# Used for final validation before production deployment
+
+namespace: village-storefront-staging
+
+# Reference base manifests and additional resources
+resources:
+  - ../../base
+  # Uncomment to enable dedicated critical workers in staging
+  # - ../../base/deployment-workers-critical.yaml
+  - ingress-staging.yaml
+  - network-policy-staging.yaml
+
+# Override common labels for environment
+commonLabels:
+  environment: staging
+
+# Add environment annotations
+commonAnnotations:
+  managed-by: kustomize
+  environment: staging
+
+# ConfigMap for staging-specific values
+configMapGenerator:
+  - name: village-storefront-config
+    behavior: merge
+    literals:
+      - r2-bucket-name=village-storefront-staging-reports
+      - mailer-host=smtp.sendgrid.net
+      - quarkus-profile=staging
+
+# Image tag override (staging builds from CI)
+images:
+  - name: ghcr.io/villagecompute/village-storefront
+    newTag: staging
+
+# Strategic merge patches
+patchesStrategicMerge:
+  - patches/deployment-workers-staging.yaml
+
+# JSON patches for replica/resource tuning
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 10
+      - op: replace
+        path: /spec/metrics/0/resource/target/averageUtilization
+        value: 70
+      - op: replace
+        path: /spec/metrics/1/resource/target/averageUtilization
+        value: 80
+
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 1
+
+# Note: Staging secrets should be created via Sealed Secrets or External Secrets Operator
+# Example with sealed-secrets:
+#
+# kubectl create secret generic village-storefront-db \
+#   --namespace village-storefront-staging \
+#   --from-literal=jdbc-url='jdbc:postgresql://postgres-staging.example.com:5432/storefront_staging' \
+#   --from-literal=username='storefront_staging' \
+#   --from-literal=password='STAGING_DB_PASSWORD' \
+#   --dry-run=client -o yaml | \
+#   kubeseal -o yaml > sealed-secret-db.yaml
+#
+# Same process for village-storefront-r2 (use sandbox Cloudflare account)
+# and village-storefront-stripe (use Stripe test mode keys)

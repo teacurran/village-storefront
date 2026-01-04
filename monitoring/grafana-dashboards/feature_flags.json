@@ -1,0 +1,574 @@
+{
+  "dashboard": {
+    "title": "Village Storefront - Feature Flag Governance",
+    "description": "Feature flag adoption, health, and governance metrics per Blueprint Section 3 and Rationale Section 4.1.12",
+    "tags": ["village-storefront", "feature-flags", "governance"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "tenant_id",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(tenant_id)",
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          }
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "datasource": "Prometheus",
+          "name": "Feature Flag Changes",
+          "enable": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "expr": "changes(feature_flags_total[1m]) > 0",
+          "tagKeys": "flag_key,action",
+          "textFormat": "Flag changed: {{flag_key}}",
+          "titleFormat": "Feature Flag Change"
+        },
+        {
+          "datasource": "Prometheus",
+          "name": "Deployments",
+          "enable": true,
+          "iconColor": "rgba(255, 96, 96, 1)",
+          "expr": "deployment_timestamp",
+          "titleFormat": "Deployment"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Feature Flag Adoption Overview",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "feature_flags_total",
+            "legendFormat": "Total Flags"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "fields": "",
+            "calcs": ["lastNotNull"]
+          },
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 50, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Enabled Flags",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "feature_flags_enabled",
+            "legendFormat": "Enabled"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name",
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "blue"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Expired Flags (Action Required)",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "feature_flags_expired",
+            "legendFormat": "Expired"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "red"}
+              ]
+            }
+          }
+        },
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [1],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "1h",
+          "handler": 1,
+          "name": "Expired Feature Flags Alert",
+          "message": "One or more feature flags have passed their expiry date. Review and remove from codebase.",
+          "noDataState": "no_data",
+          "executionErrorState": "alerting",
+          "for": "5m"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Review Overdue",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "feature_flags_review_overdue",
+            "legendFormat": "Needs Review"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Flag Distribution: Global vs Tenant Overrides",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "feature_flags_global",
+            "legendFormat": "Global Flags"
+          },
+          {
+            "expr": "feature_flags_tenant_overrides",
+            "legendFormat": "Tenant Overrides"
+          }
+        ],
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "right",
+            "values": ["value", "percent"]
+          },
+          "pieType": "donut",
+          "displayLabels": ["name", "percent"]
+        }
+      },
+      {
+        "id": 6,
+        "title": "Flag Enablement Over Time",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "feature_flags_enabled",
+            "legendFormat": "Enabled"
+          },
+          {
+            "expr": "feature_flags_total - feature_flags_enabled",
+            "legendFormat": "Disabled"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Count",
+            "logBase": 1
+          }
+        ],
+        "xaxis": {
+          "mode": "time"
+        },
+        "lines": true,
+        "fill": 2,
+        "linewidth": 2,
+        "steppedLine": false,
+        "pointradius": 5,
+        "tooltip": {
+          "shared": true,
+          "sort": 0,
+          "value_type": "individual"
+        },
+        "legend": {
+          "show": true,
+          "alignAsTable": true,
+          "avg": true,
+          "current": true,
+          "max": true,
+          "min": false,
+          "values": true
+        }
+      },
+      {
+        "id": 7,
+        "title": "Stale Flag Backlog Trend",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "feature_flags_expired",
+            "legendFormat": "Expired Flags"
+          },
+          {
+            "expr": "feature_flags_review_overdue",
+            "legendFormat": "Review Overdue"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Count",
+            "logBase": 1,
+            "min": 0
+          }
+        ],
+        "xaxis": {
+          "mode": "time"
+        },
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [5],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "or"
+              },
+              "query": {
+                "params": ["A", "1h", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "6h",
+          "handler": 1,
+          "name": "High Stale Flag Backlog",
+          "message": "Stale flag backlog exceeds 5 flags. Schedule cleanup sprint.",
+          "for": "1h"
+        },
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "tooltip": {
+          "shared": true
+        },
+        "legend": {
+          "show": true,
+          "values": true,
+          "current": true
+        }
+      },
+      {
+        "id": 8,
+        "title": "Flag Risk Level Distribution",
+        "type": "table",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (risk_level) (feature_flags_by_risk_level)",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "indexByName": {
+                "risk_level": 0,
+                "Value": 1
+              },
+              "renameByName": {
+                "risk_level": "Risk Level",
+                "Value": "Count"
+              }
+            }
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Count",
+              "desc": true
+            }
+          ]
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "auto",
+              "displayMode": "color-background"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "red"}
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Risk Level"
+              },
+              "properties": [
+                {
+                  "id": "custom.displayMode",
+                  "value": "color-text"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "CRITICAL": {
+                          "color": "dark-red",
+                          "index": 0
+                        },
+                        "HIGH": {
+                          "color": "dark-orange",
+                          "index": 1
+                        },
+                        "MEDIUM": {
+                          "color": "dark-yellow",
+                          "index": 2
+                        },
+                        "LOW": {
+                          "color": "dark-green",
+                          "index": 3
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "title": "Emergency Kill Switch Status (CRITICAL flags)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 20, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "count(feature_flags_by_risk_level{risk_level=\"CRITICAL\", enabled=\"true\"})",
+            "legendFormat": "Active CRITICAL Flags"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 3, "color": "red"}
+              ]
+            },
+            "mappings": []
+          }
+        },
+        "description": "Count of CRITICAL risk flags currently enabled (payment, checkout, media, impersonation per Section 3 Rulebook)"
+      },
+      {
+        "id": 10,
+        "title": "Flag Changes (Last 24h)",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 20, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "increase(feature_flags_total[24h])",
+            "legendFormat": "Changes"
+          }
+        ],
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Governance Health Score",
+        "type": "gauge",
+        "gridPos": {"x": 16, "y": 20, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "100 * (1 - ((feature_flags_expired + feature_flags_review_overdue) / feature_flags_total))",
+            "legendFormat": "Health %"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 70, "color": "yellow"},
+                {"value": 90, "color": "green"}
+              ]
+            }
+          }
+        },
+        "description": "Overall governance health: 100% = no stale flags, 0% = all flags stale"
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 36,
+    "version": 1,
+    "links": [
+      {
+        "title": "Feature Flag Governance Docs",
+        "url": "/docs/feature_flags/governance.md",
+        "type": "link",
+        "icon": "doc"
+      },
+      {
+        "title": "Platform Admin Console",
+        "url": "/admin/platform/feature-flags",
+        "type": "link",
+        "icon": "external link"
+      },
+      {
+        "title": "Runbook: Stale Flag Cleanup",
+        "url": "https://runbooks.example.com/feature-flags/stale-cleanup",
+        "type": "link",
+        "icon": "question"
+      }
+    ]
+  }
+}

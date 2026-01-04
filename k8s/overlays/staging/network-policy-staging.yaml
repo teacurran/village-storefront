@@ -1,0 +1,67 @@
+---
+# Network policy for staging environment
+# Restricts pod communication to known services only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: village-storefront-workers-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: village-storefront
+      component: workers
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+  # Allow ingress from NGINX ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow PostgreSQL access (staging database)
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow external HTTPS for Stripe, Cloudflare R2, etc.
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow SMTP for email (SendGrid)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 587
+    - protocol: TCP
+      port: 25

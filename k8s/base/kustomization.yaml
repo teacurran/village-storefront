@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment-workers.yaml
+  # Uncomment when deploying dedicated priority workers
+  # - deployment-workers-critical.yaml
+
+namespace: village-storefront
+
+commonLabels:
+  app.kubernetes.io/name: village-storefront
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/version: "1.0.0"
+
+# ConfigMap for worker configuration
+configMapGenerator:
+  - name: village-storefront-config
+    literals:
+      - r2-bucket-name=village-storefront-reports
+      - mailer-host=smtp.example.com
+
+# Note: Secrets should be created separately via sealed-secrets or external secrets operator
+# Example secret creation commands:
+#
+# kubectl create secret generic village-storefront-db \
+#   --from-literal=jdbc-url='jdbc:postgresql://postgres:5432/storefront' \
+#   --from-literal=username='storefront' \
+#   --from-literal=password='<PASSWORD>'
+#
+# kubectl create secret generic village-storefront-r2 \
+#   --from-literal=access-key-id='<ACCESS_KEY>' \
+#   --from-literal=secret-access-key='<SECRET_KEY>'
+#
+# kubectl create secret generic village-storefront-stripe \
+#   --from-literal=api-key='sk_live_...'

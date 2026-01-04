@@ -1,0 +1,190 @@
+[
+  {
+    "task_id": "I3.T1",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Implement consignment domain: Panache entities (`Consignor`, `ConsignmentItem`, `PayoutBatch`), services for intake, commission schedules, portal APIs, admin endpoints, MapStruct DTOs, repository/unit tests.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "ERD, OpenAPI spec, payment ADRs.",
+    "target_files": [
+      "src/main/java/com/village/consignment/**",
+      "tests/backend/ConsignmentServiceTest.java",
+      "tests/backend/ConsignmentControllerIT.java",
+      "docs/consignment/domain.md"
+    ],
+    "input_files": [
+      "docs/diagrams/datamodel_erd.puml",
+      "api/v1/openapi.yaml",
+      "docs/adr/ADR-003-checkout-saga.md"
+    ],
+    "deliverables": "Domain models, service APIs, REST controllers (admin + portal), DTO conversions, documentation describing data flows + commission rules.",
+    "acceptance_criteria": "CRUD + payout calculations pass tests, tenant filters applied, portal endpoints require vendor auth tokens, docs articulate commission/tax logic.",
+    "dependencies": [
+      "I2.T1",
+      "I2.T4"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I3.T2",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Extend inventory to support multi-location, transfers, adjustments, barcode printing: services, REST endpoints, job coordination for label generation, admin UI API contract.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Inventory module base, ERD, OpenAPI spec.",
+    "target_files": [
+      "src/main/java/com/village/inventory/transfer/**",
+      "tests/backend/InventoryTransferIT.java",
+      "docs/inventory/multi_location.md",
+      "api/v1/openapi.yaml"
+    ],
+    "input_files": [
+      "src/main/java/com/village/inventory/**",
+      "api/v1/openapi.yaml",
+      "docs/diagrams/datamodel_erd.puml"
+    ],
+    "deliverables": "Transfer services, adjustments, label job enqueue logic, doc describing workflows + barcode formats.",
+    "acceptance_criteria": "Transfers enforce source/destination validations, RLS protects tenant data, label job triggers background queue, docs include sequence + API usage.",
+    "dependencies": [
+      "I2.T1",
+      "I1.T6"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I3.T3",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Build reporting projection service + export jobs: domain event consumers, aggregate tables (sales by period, consignment payout, inventory aging), scheduled jobs, export API + storage to Cloudflare R2.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Domain events from catalog/orders/consignment, requirements (reports section).",
+    "target_files": [
+      "src/main/java/com/village/reporting/**",
+      "src/main/java/com/village/jobs/**",
+      "tests/backend/ReportingProjectionTest.java",
+      "tests/backend/ReportExportIT.java",
+      "docs/reporting/projections.md"
+    ],
+    "input_files": [
+      "docs/diagrams/component_overview.puml",
+      "docs/diagrams/datamodel_erd.puml",
+      "src/main/java/com/village/checkout/**",
+      "src/main/java/com/village/consignment/**"
+    ],
+    "deliverables": "Projection modules, SQL for aggregates, R2 upload client wrapper, scheduled job definitions, documentation detailing data freshness and retention.",
+    "acceptance_criteria": "Aggregates update within SLA (<15 min), exports available via signed URLs, tests verify domain event consumption + R2 upload stub.",
+    "dependencies": [
+      "I2.T4",
+      "I3.T1"
+    ],
+    "parallelizable": false,
+    "done": true
+  },
+  {
+    "task_id": "I3.T4",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Create consignment payout flow diagram + automation spec: Mermaid diagram covering admin approval -> Stripe Connect transfer -> reporting -> notification; ADR capturing automation + compliance guard rails.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Consignment services, reporting module, Stripe requirements.",
+    "target_files": [
+      "docs/diagrams/sequence_consignment_payout.mmd",
+      "docs/adr/ADR-004-consignment-payouts.md"
+    ],
+    "input_files": [
+      "src/main/java/com/village/consignment/**",
+      "docs/adr/ADR-001-tenancy.md",
+      "docs/reporting/projections.md"
+    ],
+    "deliverables": "Diagram + ADR with state transitions, audit logging guidelines, failure handling.",
+    "acceptance_criteria": "Diagram renders, ADR explains Stripe Connect Express onboarding handoff, includes impersonation logging instructions.",
+    "dependencies": [
+      "I3.T1",
+      "I3.T3"
+    ],
+    "parallelizable": false,
+    "done": true
+  },
+  {
+    "task_id": "I3.T5",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Build notification/email templates + service for consignor lifecycle: intake confirmation, sale notification, payout summary, expiration alerts; integrate with Quarkus Mailer + feature flags.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Consignment domain, design tokens, localization strategy.",
+    "target_files": [
+      "src/main/resources/templates/email/consignment/**",
+      "src/main/java/com/village/notifications/**",
+      "tests/backend/NotificationServiceTest.java",
+      "docs/notifications/playbook.md"
+    ],
+    "input_files": [
+      "src/main/java/com/village/consignment/**",
+      "docs/architecture_overview.md",
+      "src/main/resources/messages/messages.properties"
+    ],
+    "deliverables": "Email/Qute templates (EN/ES), notification service with queue integration, doc describing throttle + feature flags.",
+    "acceptance_criteria": "Templates render with sample data, i18n placeholders resolved, notifications enqueue background jobs, doc lists environment domain filtering rules.",
+    "dependencies": [
+      "I3.T1"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I3.T6",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Enhance background job framework: priority tuning, retry policies, dead-letter queue, Prometheus metrics, dashboard docs; ensure new queues handle reporting + payout loads.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Existing DelayedJob tables, reporting/export requirements, consignment jobs.",
+    "target_files": [
+      "src/main/java/com/village/jobs/config/**",
+      "tests/backend/JobSchedulerTest.java",
+      "docs/operations/job_runbook.md",
+      "k8s/base/deployment-workers.yaml"
+    ],
+    "input_files": [
+      "src/main/java/com/village/jobs/**",
+      "docs/architecture_overview.md",
+      "docs/reporting/projections.md"
+    ],
+    "deliverables": "Config updates, retry policy definitions, metrics instrumentation, runbook updates, Kubernetes worker tweaks.",
+    "acceptance_criteria": "Jobs expose Prometheus metrics (queue depth, failure rate), dead-letter handling documented, runbook instructions for pausing/resuming queues.",
+    "dependencies": [
+      "I1.T6",
+      "I3.T3"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I3.T7",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.",
+    "description": "Implement consignor portal UI (Vue module) consuming new APIs: dashboards, balance charts, payout requests, notification center; integrate localization + responsive design.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Consignment APIs, design tokens, notification templates.",
+    "target_files": [
+      "src/main/webui/admin-spa/src/modules/consignor/**",
+      "src/main/webui/admin-spa/src/locales/en.json",
+      "src/main/webui/admin-spa/src/locales/es.json",
+      "tests/admin/ConsignorPortal.spec.ts"
+    ],
+    "input_files": [
+      "src/main/java/com/village/consignment/**",
+      "tailwind.config.js",
+      "src/main/webui/admin-spa/storybook/**"
+    ],
+    "deliverables": "Vue module with dashboard widgets, forms for payout requests, localized copy, test coverage, Storybook stories.",
+    "acceptance_criteria": "Module builds, responsive layout validated, translations exist, e2e test passes (Cypress), docs describe launch instructions.",
+    "dependencies": [
+      "I3.T1",
+      "I3.T5"
+    ],
+    "parallelizable": false,
+    "done": true
+  }
+]

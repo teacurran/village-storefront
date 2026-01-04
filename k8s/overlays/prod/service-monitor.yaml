@@ -1,0 +1,152 @@
+---
+# ServiceMonitor for Prometheus Operator
+# Automatically configures Prometheus to scrape Village Storefront metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: village-storefront-workers
+  labels:
+    app: village-storefront
+    component: workers
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: workers
+
+  endpoints:
+  - port: http
+    path: /q/metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    scheme: http
+
+    # Relabel to add additional labels
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+
+    # Metric relabeling (drop high-cardinality metrics if needed)
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'go_.*'
+      action: drop  # Drop Go runtime metrics if using native image
+
+---
+# ServiceMonitor for critical workers
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: village-storefront-workers-critical
+  labels:
+    app: village-storefront
+    component: workers-critical
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: workers-critical
+
+  endpoints:
+  - port: http
+    path: /q/metrics
+    interval: 15s  # More frequent scraping for critical workers
+    scrapeTimeout: 10s
+    scheme: http
+
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_pod_label_priority]
+      targetLabel: priority
+
+---
+# PrometheusRule for Village Storefront alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: village-storefront-alerts
+  labels:
+    app: village-storefront
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: village-storefront.rules
+    interval: 30s
+    rules:
+    # Alert on high error rate
+    - alert: HighErrorRate
+      expr: |
+        (
+          sum(rate(http_server_requests_seconds_count{status=~"5..", job="village-storefront-workers"}[5m]))
+          /
+          sum(rate(http_server_requests_seconds_count{job="village-storefront-workers"}[5m]))
+        ) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+    # Alert on critical worker queue depth
+    - alert: CriticalQueueDepthHigh
+      expr: |
+        reporting_refresh_queue_depth_critical > 500
+      for: 10m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Critical job queue depth is high"
+        description: "CRITICAL queue has {{ $value }} pending jobs for more than 10 minutes"
+
+    # Alert on pod restart rate
+    - alert: HighPodRestartRate
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="village-storefront"}[15m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod restart rate is high"
+        description: "Pod {{ $labels.pod }} is restarting frequently"
+
+    # Alert on database connection pool exhaustion
+    - alert: DatabaseConnectionPoolExhausted
+      expr: |
+        (
+          hikaricp_connections_active{job="village-storefront-workers"}
+          /
+          hikaricp_connections_max{job="village-storefront-workers"}
+        ) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Database connection pool near capacity"
+        description: "Connection pool utilization is {{ $value | humanizePercentage }}"
+
+    # Alert on memory usage
+    - alert: HighMemoryUsage
+      expr: |
+        (
+          container_memory_working_set_bytes{namespace="village-storefront", container="worker"}
+          /
+          container_spec_memory_limit_bytes{namespace="village-storefront", container="worker"}
+        ) > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High memory usage detected"
+        description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}"

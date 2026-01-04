@@ -1,0 +1,200 @@
+%% ============================================================================
+%% Village Storefront - Tenant Routing Sequence Diagram
+%% ============================================================================
+%% Description: Request flow for tenant resolution via Host header parsing
+%% References:
+%%   - ADR-001 Tenancy Strategy (Section 2: Tenant Resolution Flow)
+%%   - Architecture Overview Section 3.2.1: Tenant Access Gateway
+%%   - Task I1.T5: Tenant Access Gateway Prototype
+%%
+%% Render with Mermaid CLI:
+%%   npx @mermaid-js/mermaid-cli -i docs/diagrams/sequence_tenant_routing.mmd -o docs/diagrams/sequence_tenant_routing.png
+%%   or
+%%   mmdc -i docs/diagrams/sequence_tenant_routing.mmd -o docs/diagrams/sequence_tenant_routing.svg
+%% ============================================================================
+
+sequenceDiagram
+    autonumber
+
+    participant Client
+    participant TenantResolutionFilter
+    participant TenantCache as Tenant Cache<br/>(Caffeine)
+    participant Database as PostgreSQL<br/>(custom_domains, tenants)
+    participant TenantContext as TenantContext<br/>(ThreadLocal)
+    participant CDI as CDI Events
+    participant FeatureToggle
+    participant Resource as REST Resource<br/>(e.g., ProductResource)
+    participant TenantContextClearFilter
+
+    %% Happy path: Custom domain resolution
+    rect rgb(220, 250, 220)
+        Note over Client,TenantContextClearFilter: Scenario 1: Custom Domain Resolution (shop.example.com)
+
+        Client->>TenantResolutionFilter: HTTP Request<br/>Host: shop.example.com
+        activate TenantResolutionFilter
+
+        TenantResolutionFilter->>TenantResolutionFilter: Extract & normalize host<br/>(lowercase, strip port)
+
+        TenantResolutionFilter->>TenantCache: get("shop.example.com")
+        activate TenantCache
+
+        alt Cache MISS
+            TenantCache->>Database: SELECT tenant FROM custom_domains<br/>WHERE domain = 'shop.example.com'<br/>AND verified = TRUE
+            activate Database
+            Database-->>TenantCache: TenantInfo(id, subdomain, name, status)
+            deactivate Database
+            TenantCache->>TenantCache: Cache result (5 min TTL)
+        end
+
+        TenantCache-->>TenantResolutionFilter: TenantInfo
+        deactivate TenantCache
+
+        TenantResolutionFilter->>TenantResolutionFilter: Validate status = 'active'
+
+        TenantResolutionFilter->>TenantContext: setCurrentTenant(tenantInfo)
+        activate TenantContext
+        TenantContext-->>TenantResolutionFilter: OK
+        deactivate TenantContext
+
+        TenantResolutionFilter->>CDI: fire(TenantResolved event)
+        activate CDI
+        Note over CDI: Subscribers can log,<br/>emit metrics, etc.
+        deactivate CDI
+
+        TenantResolutionFilter->>Resource: Continue filter chain
+        deactivate TenantResolutionFilter
+
+        activate Resource
+        Resource->>TenantContext: getCurrentTenantId()
+        activate TenantContext
+        TenantContext-->>Resource: UUID (tenant_id)
+        deactivate TenantContext
+
+        Resource->>FeatureToggle: isEnabled("storefront.hero.beta")
+        activate FeatureToggle
+        FeatureToggle->>TenantContext: getCurrentTenantId()
+        activate TenantContext
+        TenantContext-->>FeatureToggle: UUID
+        deactivate TenantContext
+        FeatureToggle->>Database: SELECT enabled FROM feature_flags<br/>WHERE tenant_id = ? AND flag_key = ?
+        activate Database
+        Database-->>FeatureToggle: Boolean
+        deactivate Database
+        FeatureToggle-->>Resource: true/false
+        deactivate FeatureToggle
+
+        Resource->>Database: Query products<br/>WHERE tenant_id = ?
+        activate Database
+        Database-->>Resource: Product list
+        deactivate Database
+
+        Resource-->>Client: HTTP 200 OK + JSON
+        deactivate Resource
+
+        Client->>TenantContextClearFilter: Response phase
+        activate TenantContextClearFilter
+        TenantContextClearFilter->>TenantContext: clear()
+        activate TenantContext
+        Note over TenantContext: Remove ThreadLocal<br/>to prevent leaks
+        deactivate TenantContext
+        deactivate TenantContextClearFilter
+    end
+
+    %% Subdomain resolution path
+    rect rgb(220, 240, 255)
+        Note over Client,TenantContextClearFilter: Scenario 2: Subdomain Resolution (teststore.villagecompute.com)
+
+        Client->>TenantResolutionFilter: HTTP Request<br/>Host: teststore.villagecompute.com
+        activate TenantResolutionFilter
+
+        TenantResolutionFilter->>TenantCache: get("teststore.villagecompute.com")
+        activate TenantCache
+
+        TenantCache->>Database: SELECT * FROM custom_domains<br/>WHERE domain = 'teststore.villagecompute.com'
+        activate Database
+        Database-->>TenantCache: No results
+        deactivate Database
+
+        TenantCache->>TenantCache: Extract subdomain: "teststore"
+
+        TenantCache->>Database: SELECT * FROM tenants<br/>WHERE subdomain = 'teststore'
+        activate Database
+        Database-->>TenantCache: TenantInfo(id, "teststore", name, "active")
+        deactivate Database
+
+        TenantCache->>TenantCache: Cache result
+        TenantCache-->>TenantResolutionFilter: TenantInfo
+        deactivate TenantCache
+
+        TenantResolutionFilter->>TenantContext: setCurrentTenant(tenantInfo)
+        TenantResolutionFilter->>CDI: fire(TenantResolved)
+        TenantResolutionFilter->>Resource: Continue
+        deactivate TenantResolutionFilter
+
+        Note over Resource: Same processing as Scenario 1
+    end
+
+    %% Error path: Tenant not found
+    rect rgb(255, 230, 230)
+        Note over Client,TenantContextClearFilter: Scenario 3: Tenant Not Found (unknown.com)
+
+        Client->>TenantResolutionFilter: HTTP Request<br/>Host: unknown.com
+        activate TenantResolutionFilter
+
+        TenantResolutionFilter->>TenantCache: get("unknown.com")
+        activate TenantCache
+
+        TenantCache->>Database: Check custom_domains
+        activate Database
+        Database-->>TenantCache: No results
+        deactivate Database
+
+        TenantCache->>TenantCache: No subdomain match<br/>(not *.villagecompute.com)
+        TenantCache-->>TenantResolutionFilter: null
+        deactivate TenantCache
+
+        TenantResolutionFilter->>CDI: fire(TenantMissing event<br/>reason: "tenant_not_found")
+        activate CDI
+        Note over CDI: Log warning,<br/>emit metrics
+        deactivate CDI
+
+        TenantResolutionFilter-->>Client: HTTP 404 Not Found<br/>{"error": "Store not found"}
+        deactivate TenantResolutionFilter
+
+        Note over TenantContext: No context set<br/>(filter aborted early)
+    end
+
+    %% Error path: Suspended tenant
+    rect rgb(255, 245, 220)
+        Note over Client,TenantContextClearFilter: Scenario 4: Suspended Tenant
+
+        Client->>TenantResolutionFilter: HTTP Request<br/>Host: suspended.villagecompute.com
+        activate TenantResolutionFilter
+
+        TenantResolutionFilter->>TenantCache: get("suspended.villagecompute.com")
+        activate TenantCache
+        TenantCache->>Database: Query tenants
+        activate Database
+        Database-->>TenantCache: TenantInfo(status: "suspended")
+        deactivate Database
+        TenantCache-->>TenantResolutionFilter: TenantInfo
+        deactivate TenantCache
+
+        TenantResolutionFilter->>TenantResolutionFilter: Check status<br/>isSuspended() = true
+
+        TenantResolutionFilter->>CDI: fire(TenantMissing event<br/>reason: "tenant_suspended")
+
+        TenantResolutionFilter-->>Client: HTTP 403 Forbidden<br/>{"error": "Store temporarily unavailable"}
+        deactivate TenantResolutionFilter
+    end
+
+%% ============================================================================
+%% Architecture Notes
+%% ============================================================================
+%% - Filter priority: AUTHENTICATION - 1 (runs before security checks)
+%% - ThreadLocal MUST be cleared in response filter (prevent leaks)
+%% - Cache TTL: 5 minutes for tenant resolution, 1 minute for feature flags
+%% - CDI events allow decoupled logging/metrics without filter bloat
+%% - Database queries use indexed columns (custom_domains.domain, tenants.subdomain)
+%% - TODO: Add Prometheus metrics (resolution latency, cache hit ratio, unknown hosts)
+%% ============================================================================

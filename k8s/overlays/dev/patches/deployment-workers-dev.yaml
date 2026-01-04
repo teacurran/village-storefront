@@ -1,0 +1,71 @@
+---
+# Development-specific patches for worker deployment
+# Reduces resource requests, relaxes probes for faster iteration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-workers
+spec:
+  template:
+    spec:
+      containers:
+      - name: worker
+        # Reduced resource requests for local/dev clusters
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+
+        # Relaxed probes for faster startup during dev
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 5
+
+        # Dev-specific environment overrides
+        env:
+        - name: QUARKUS_PROFILE
+          value: "dev"
+
+        - name: QUARKUS_LOG_LEVEL
+          value: "DEBUG"
+
+        - name: QUARKUS_LOG_CONSOLE_JSON
+          value: "false"  # Human-readable logs for dev
+
+        # Reduced job queue capacities for dev
+        - name: JOBS_QUEUE_CAPACITY_CRITICAL
+          value: "100"
+
+        - name: JOBS_QUEUE_CAPACITY_HIGH
+          value: "500"
+
+        - name: JOBS_QUEUE_CAPACITY_DEFAULT
+          value: "1000"
+
+        # Less aggressive retry for dev (fail fast)
+        - name: JOBS_RETRY_MAX_ATTEMPTS_CRITICAL
+          value: "3"
+
+        - name: JOBS_RETRY_MAX_ATTEMPTS_DEFAULT
+          value: "2"
+
+        # Development JVM options (more verbose GC logging)
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -Xlog:gc*:stdout:time,level,tags"

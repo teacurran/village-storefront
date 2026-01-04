@@ -1,0 +1,203 @@
+[
+  {
+    "task_id": "I5.T1",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Complete admin SPA modules for orders, inventory, reporting, loyalty, notifications using Vue + PrimeVue; wire data tables, filters, detail panels, inline actions, SSE notifications, feature flags.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Backend APIs from prior iterations, design tokens, UX guidelines.",
+    "target_files": [
+      "src/main/webui/admin-spa/src/modules/orders/**",
+      ".../inventory/**",
+      ".../reporting/**",
+      ".../loyalty/**",
+      ".../notifications/**",
+      "tests/admin/OrdersDashboard.spec.ts",
+      "tests/admin/ReportingDashboard.spec.ts"
+    ],
+    "input_files": [
+      "src/main/webui/admin-spa/src/modules/**",
+      "api/v1/openapi.yaml",
+      "tailwind.config.js",
+      "docs/notifications/playbook.md"
+    ],
+    "deliverables": "Feature-complete admin modules with RBAC gating, SSE-driven alerts, localization, Storybook stories, e2e tests.",
+    "acceptance_criteria": "Modules compile, RBAC enforced, feature flags hide beta features, e2e tests green, Storybook updated, docs show usage.",
+    "dependencies": [
+      "I2.T3",
+      "I3",
+      "I4"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I5.T2",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Build platform admin console: store directory, impersonation control, health dashboards, support tooling, audit log viewer; integrate RBAC + MFA + audit logging.",
+    "agent_type_hint": "FullStackAgent",
+    "inputs": "Platform requirements, audit schema, impersonation ADR.",
+    "target_files": [
+      "src/main/java/com/village/platformops/**",
+      "tests/backend/PlatformAdminIT.java",
+      "tests/admin/PlatformConsole.spec.ts",
+      "docs/platform/console.md"
+    ],
+    "input_files": [
+      "src/main/java/com/village/platformops/**",
+      "src/main/webui/admin-spa/src/modules/platform/**",
+      "docs/adr/ADR-001-tenancy.md",
+      "docs/adr/ADR-004-consignment-payouts.md"
+    ],
+    "deliverables": "APIs + UI modules for platform governance, impersonation banner, audit log viewer, system health charts, documentation.",
+    "acceptance_criteria": "Platform console enforces RBAC, impersonation requires reason + ticket, system health pulls Prometheus summaries, audit viewer paginates w/ filters.",
+    "dependencies": [
+      "I1.T5",
+      "I3.T3",
+      "I4.T1"
+    ],
+    "parallelizable": false,
+    "done": true
+  },
+  {
+    "task_id": "I5.T3",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Finalize deployment artifacts: PlantUML deployment diagram, Kustomize overlays per env, GitHub Actions release workflow (build, push, deploy), blue/green strategy doc, secrets management notes.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Architecture overview, Kubernetes manifests, CI pipeline.",
+    "target_files": [
+      "docs/diagrams/deployment_k8s.puml",
+      "k8s/overlays/dev|staging|prod/**",
+      ".github/workflows/release.yml",
+      "docs/operations/deployment.md"
+    ],
+    "input_files": [
+      "docs/diagrams/component_overview.puml",
+      "k8s/base/**",
+      "k8s/overlays/**",
+      ".github/workflows/ci.yml"
+    ],
+    "deliverables": "Deployment diagram, overlays with resource limits/HPAs/PDBs, release workflow, doc describing promotion + rollback steps.",
+    "acceptance_criteria": "Diagrams render, overlays deploy via `kubectl apply`, release workflow runs blue/green, documentation lists manual verification + rollback steps.",
+    "dependencies": [
+      "I1.T6",
+      "I3.T6",
+      "I4.T3"
+    ],
+    "parallelizable": false,
+    "done": true
+  },
+  {
+    "task_id": "I5.T4",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Establish observability dashboards + alerts: configure Prometheus/Grafana dashboards for KPIs, Jaeger traces, logging pipeline, alert catalog; integrate with Platform console.",
+    "agent_type_hint": "SREAgent",
+    "inputs": "Section 6 verification strategy, metrics emitted from previous iterations.",
+    "target_files": [
+      "docs/operations/observability.md",
+      "monitoring/grafana-dashboards/*.json",
+      "monitoring/prometheus-rules/*.yaml",
+      "docs/operations/alert_catalog.md"
+    ],
+    "input_files": [
+      "docs/operations/job_runbook.md",
+      "docs/media/pipeline.md",
+      "docs/checkout/saga.md",
+      "k8s/base/prometheus.yaml"
+    ],
+    "deliverables": "Dashboard JSON, alert rules, doc describing KPIs + ownership, integration instructions for Platform console widgets.",
+    "acceptance_criteria": "Dashboards cover KPIs per Section 4 component KPIs, alert rules tested, doc lists runbooks and escalate matrix.",
+    "dependencies": [
+      "I3.T3",
+      "I4.T1",
+      "I4.T7"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I5.T5",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Build verification suite: Playwright end-to-end (storefront checkout, admin flows, platform console), Cypress POS offline scenarios, k6 load tests (checkout, media uploads), manifest-driven retrieval tests.",
+    "agent_type_hint": "QualityAgent",
+    "inputs": "APIs, UI modules, manifest anchors.",
+    "target_files": [
+      "tests/e2e/playwright/*.ts",
+      "tests/load/k6/checkout.js",
+      "tests/manifest/anchor_validation.py",
+      ".github/workflows/test_suite.yml",
+      "docs/testing/strategy.md"
+    ],
+    "input_files": [
+      "tests/e2e/playwright/**",
+      "tests/admin",
+      "tests/storefront",
+      "docs/plan_manifest_template.md"
+    ],
+    "deliverables": "Full verification plan, scripts, CI workflow, docs describing smoke/regression cadence.",
+    "acceptance_criteria": "Tests run in CI, results archived, load tests hit target throughput, manifest validation ensures anchors resolvable.",
+    "dependencies": [],
+    "parallelizable": false,
+    "done": true
+  },
+  {
+    "task_id": "I5.T6",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Automate compliance workflows: privacy export/delete, archival job verification, consent management, audit export UI; integrate with platform console + docs.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Requirements (privacy, audit), reporting module, archival pipeline.",
+    "target_files": [
+      "src/main/java/com/village/compliance/**",
+      "tests/backend/ComplianceIT.java",
+      "docs/compliance/privacy.md",
+      "docs/operations/archive_runbook.md"
+    ],
+    "input_files": [
+      "docs/data_governance.md",
+      "src/main/java/com/village/reporting/**",
+      "src/main/java/com/village/platformops/**",
+      "docs/operations/observability.md"
+    ],
+    "deliverables": "APIs + jobs for export/delete, audit log for actions, docs covering process + retention.",
+    "acceptance_criteria": "Requests queue + notify, exports zipped JSONL to R2, delete workflow soft-deletes then purges after retention, docs describe manual review.",
+    "dependencies": [
+      "I3.T3",
+      "I5.T2"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I5.T7",
+    "iteration_id": "I5",
+    "iteration_goal": "Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.",
+    "description": "Finalize feature flag governance + release process: create governance doc, dashboards, automation for stale flag detection, CLI for toggles, integration with platform console.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Section 3 enforcement playbooks, feature flag service, platform console.",
+    "target_files": [
+      "docs/feature_flags/governance.md",
+      "tools/featureflag-cli/",
+      "monitoring/grafana-dashboards/feature_flags.json"
+    ],
+    "input_files": [
+      "docs/architecture_overview.md",
+      "docs/operations/observability.md",
+      "src/main/java/com/village/featureflag/**",
+      "src/main/webui/admin-spa/src/modules/platform/**"
+    ],
+    "deliverables": "Governance doc w/ owner/expiry fields, CLI for toggles + audits, dashboard tracking adoption, automation hooking to PR template.",
+    "acceptance_criteria": "CLI lists flags + toggles states, stale flags flagged via job, doc explains process + rollback.",
+    "dependencies": [
+      "I1.T5",
+      "I2.T3",
+      "I5.T2"
+    ],
+    "parallelizable": true,
+    "done": false
+  }
+]

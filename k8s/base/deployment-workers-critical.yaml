@@ -1,0 +1,237 @@
+---
+# Dedicated worker pool for CRITICAL priority jobs (payment webhooks, order confirmations)
+# Ensures high-priority jobs are never starved by lower-priority workloads
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-workers-critical
+  labels:
+    app: village-storefront
+    component: workers-critical
+    tier: backend
+    priority: critical
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: workers-critical
+  template:
+    metadata:
+      labels:
+        app: village-storefront
+        component: workers-critical
+        tier: backend
+        priority: critical
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/q/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: village-storefront
+
+      # High priority scheduling
+      priorityClassName: high-priority
+
+      # Ensure CRITICAL workers are spread across nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: component
+                operator: In
+                values:
+                - workers-critical
+            topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: worker
+        image: ghcr.io/villagecompute/village-storefront:latest
+        imagePullPolicy: IfNotPresent
+
+        # Higher resource allocation for CRITICAL jobs
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+
+        # Aggressive health checks for fast failure detection
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+
+        env:
+        - name: QUARKUS_PROFILE
+          value: "production"
+
+        - name: QUARKUS_SCHEDULER_ENABLED
+          value: "true"
+
+        # Filter to process only CRITICAL and HIGH priority jobs
+        - name: WORKER_PRIORITY_FILTER
+          value: "CRITICAL,HIGH"
+
+        # Database connection (shared secrets)
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: jdbc-url
+
+        - name: QUARKUS_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: username
+
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: password
+
+        # Metrics
+        - name: QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED
+          value: "true"
+
+        - name: QUARKUS_LOG_LEVEL
+          value: "INFO"
+
+        - name: QUARKUS_LOG_CONSOLE_JSON
+          value: "true"
+
+        # Job configuration (aggressive retry for CRITICAL)
+        - name: JOBS_QUEUE_CAPACITY_CRITICAL
+          value: "1000"
+
+        - name: JOBS_RETRY_MAX_ATTEMPTS_CRITICAL
+          value: "5"
+
+        - name: JOBS_RETRY_INITIAL_DELAY_MS_CRITICAL
+          value: "500"
+
+        # External service credentials
+        - name: R2_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: village-storefront-config
+              key: r2-bucket-name
+
+        - name: R2_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-r2
+              key: access-key-id
+
+        - name: R2_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-r2
+              key: secret-access-key
+
+        - name: STRIPE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-stripe
+              key: api-key
+
+        # JVM tuning for low-latency processing
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=50 -XX:+ExitOnOutOfMemoryError"
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: village-storefront-workers-critical-hpa
+  labels:
+    app: village-storefront
+    component: workers-critical
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: village-storefront-workers-critical
+  minReplicas: 3
+  maxReplicas: 30
+
+  metrics:
+  # Aggressive scaling on CPU
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+
+  # Custom metric: CRITICAL queue depth (requires Prometheus adapter)
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: reporting_refresh_queue_depth_critical
+  #     target:
+  #       type: AverageValue
+  #       averageValue: "50"
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30  # Fast scale-up for CRITICAL
+      policies:
+      - type: Percent
+        value: 100  # Double capacity quickly
+        periodSeconds: 30
+      - type: Pods
+        value: 5
+        periodSeconds: 30
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Slow scale-down to handle bursts
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: village-storefront-workers-critical-pdb
+  labels:
+    app: village-storefront
+    component: workers-critical
+spec:
+  minAvailable: 2  # Always keep at least 2 CRITICAL workers running
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: workers-critical

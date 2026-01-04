@@ -1,0 +1,383 @@
+%% ============================================================================
+%% Village Storefront - Checkout & Payment Sequence Diagram
+%% ============================================================================
+%% Description: Checkout orchestration flow showing address validation,
+%%              shipping rate calculation, and payment processing with
+%%              error handling and compensation points
+%% References:
+%%   - ADR-003 Checkout Saga Pattern (Orchestration & Compensation)
+%%   - Architecture Overview Section 3.2.7: Checkout & Order Orchestrator
+%%   - OpenAPI endpoints: /checkout/preview, /checkout/commit
+%%   - Component Diagram: docs/diagrams/component_overview.puml
+%%
+%% Render with Mermaid CLI:
+%%   npx @mermaid-js/mermaid-cli -i docs/diagrams/sequence_checkout_payment.mmd -o docs/diagrams/sequence_checkout_payment.png
+%%   or
+%%   mmdc -i docs/diagrams/sequence_checkout_payment.mmd -o docs/diagrams/sequence_checkout_payment.svg
+%% ============================================================================
+
+sequenceDiagram
+    autonumber
+
+    participant Browser
+    participant QuteStorefront as Qute Storefront<br/>(Template)
+    participant CheckoutOrchestrator as Checkout<br/>Orchestrator
+    participant IdempotencyStore as Idempotency<br/>Store (DB)
+    participant AddressValidator as Address<br/>Validation<br/>Adapter
+    participant CarrierAdapter as Carrier<br/>Rate Adapter
+    participant RateCache as Rate Cache<br/>(Caffeine)
+    participant InventoryService as Inventory<br/>Service
+    participant StripeAdapter as Stripe<br/>Adapter
+    participant Database as PostgreSQL
+    participant JobQueue as Background<br/>Job Queue
+
+    %% Happy path: Successful checkout
+    rect rgb(220, 250, 220)
+        Note over Browser,JobQueue: Scenario 1: Successful Checkout Flow
+
+        Browser->>QuteStorefront: POST /checkout/preview<br/>Cart + Shipping Address
+        activate QuteStorefront
+
+        QuteStorefront->>CheckoutOrchestrator: previewCheckout(CheckoutPreviewRequest)
+        activate CheckoutOrchestrator
+
+        %% Stage 1: Address Validation
+        Note over CheckoutOrchestrator,AddressValidator: SAGA STAGE 1: Address Validation<br/>Span: CheckoutSaga.addressValidation
+
+        CheckoutOrchestrator->>AddressValidator: validate(Address)
+        activate AddressValidator
+
+        AddressValidator->>AddressValidator: Normalize address<br/>(USPS API / Lob.com)
+
+        alt Address Valid
+            AddressValidator-->>CheckoutOrchestrator: ValidatedAddress<br/>(normalized, confidence: high)
+            deactivate AddressValidator
+        else Address Invalid/Ambiguous
+            AddressValidator-->>CheckoutOrchestrator: ValidationError<br/>(suggestions, confidence: low)
+            deactivate AddressValidator
+            CheckoutOrchestrator-->>QuteStorefront: HTTP 400 ProblemDetails<br/>type: address-validation-failed
+            deactivate CheckoutOrchestrator
+            QuteStorefront-->>Browser: Show address corrections
+            deactivate QuteStorefront
+            Note over CheckoutOrchestrator: No compensation needed<br/>(read-only operation)
+        end
+
+        %% Stage 2: Shipping Rate Calculation
+        Note over CheckoutOrchestrator,CarrierAdapter: SAGA STAGE 2: Shipping Rate Fetch<br/>Span: ShippingRateAdapter.quote<br/>Metric: checkout.rate_cache_hit_ratio
+
+        CheckoutOrchestrator->>RateCache: get(cartHash + address)
+        activate RateCache
+
+        alt Cache HIT
+            RateCache-->>CheckoutOrchestrator: Cached rates<br/>(TTL: 15 min)
+            deactivate RateCache
+            Note over CheckoutOrchestrator: Cache hit metric++
+        else Cache MISS
+            RateCache->>CarrierAdapter: getRates(address, packages)
+            deactivate RateCache
+            activate CarrierAdapter
+
+            CarrierAdapter->>CarrierAdapter: Call carrier APIs<br/>(UPS/FedEx/USPS)<br/>Timeout: 5s, Retry: 2x
+
+            alt Carrier API Success
+                CarrierAdapter-->>CheckoutOrchestrator: ShippingRates[]<br/>(service, cost, ETA)
+                deactivate CarrierAdapter
+                CheckoutOrchestrator->>RateCache: put(rates, TTL: 15 min)
+                activate RateCache
+                deactivate RateCache
+            else Carrier API Timeout/Failure
+                CarrierAdapter-->>CheckoutOrchestrator: CarrierError<br/>(timeout/unavailable)
+                deactivate CarrierAdapter
+                CheckoutOrchestrator->>RateCache: getFallback(tenant default rate)
+                activate RateCache
+                RateCache-->>CheckoutOrchestrator: FallbackRate<br/>(flat rate estimate)
+                deactivate RateCache
+                Note over CheckoutOrchestrator: Emit warning event:<br/>shipping.rate.fallback
+            end
+        end
+
+        %% Return preview totals
+        CheckoutOrchestrator->>CheckoutOrchestrator: Calculate totals<br/>(subtotal + tax + shipping)
+        CheckoutOrchestrator-->>QuteStorefront: CheckoutPreview<br/>(total, line items, rates)
+        deactivate CheckoutOrchestrator
+
+        QuteStorefront-->>Browser: Render review page<br/>(totals, payment form)
+        deactivate QuteStorefront
+    end
+
+    %% Commit checkout - Happy path
+    rect rgb(220, 240, 255)
+        Note over Browser,JobQueue: Scenario 2: Checkout Commit (Order Creation + Payment)
+
+        Browser->>QuteStorefront: POST /checkout/commit<br/>X-Idempotency-Key: {UUID}<br/>Payment Method + Address
+        activate QuteStorefront
+
+        QuteStorefront->>CheckoutOrchestrator: commitCheckout(CheckoutCommitRequest)
+        activate CheckoutOrchestrator
+
+        %% Idempotency check
+        Note over CheckoutOrchestrator,IdempotencyStore: Idempotency Guard
+
+        CheckoutOrchestrator->>IdempotencyStore: findByKey(idempotencyKey)
+        activate IdempotencyStore
+
+        alt Key Exists (Duplicate Request)
+            IdempotencyStore-->>CheckoutOrchestrator: ExistingOrder(orderId, status)
+            deactivate IdempotencyStore
+            CheckoutOrchestrator-->>QuteStorefront: HTTP 409 Conflict<br/>type: duplicate-idempotency-key<br/>Location: /orders/{orderId}
+            deactivate CheckoutOrchestrator
+            QuteStorefront-->>Browser: Redirect to existing order
+            deactivate QuteStorefront
+        else Key Not Found (New Request)
+            IdempotencyStore-->>CheckoutOrchestrator: null
+            deactivate IdempotencyStore
+
+            %% Store idempotency key
+            CheckoutOrchestrator->>IdempotencyStore: store(key, status: PENDING)
+            activate IdempotencyStore
+            deactivate IdempotencyStore
+        end
+
+        %% Stage 3: Re-validate address (defensive)
+        Note over CheckoutOrchestrator,AddressValidator: SAGA STAGE 3: Re-validate Address
+
+        CheckoutOrchestrator->>AddressValidator: validate(shippingAddress)
+        activate AddressValidator
+        AddressValidator-->>CheckoutOrchestrator: ValidatedAddress
+        deactivate AddressValidator
+
+        %% Stage 4: Inventory Reservation
+        Note over CheckoutOrchestrator,InventoryService: SAGA STAGE 4: Inventory Hold<br/>Span: CheckoutSaga.inventoryReservation<br/>COMPENSATION POINT: Release hold on failure
+
+        CheckoutOrchestrator->>InventoryService: reserveStock(lineItems)
+        activate InventoryService
+
+        InventoryService->>Database: BEGIN TRANSACTION<br/>SELECT FOR UPDATE inventory_levels<br/>WHERE variant_id IN (...)
+        activate Database
+
+        alt Stock Available
+            Database-->>InventoryService: Rows locked
+            InventoryService->>Database: INSERT inventory_reservations<br/>(cart_id, variant_id, qty, expires_at)
+            Database-->>InventoryService: Reservation IDs
+            deactivate Database
+            InventoryService-->>CheckoutOrchestrator: ReservationIds[]
+            deactivate InventoryService
+        else Out of Stock
+            Database-->>InventoryService: Insufficient stock
+            deactivate Database
+            InventoryService-->>CheckoutOrchestrator: OutOfStockError<br/>(variant_id, available vs requested)
+            deactivate InventoryService
+            CheckoutOrchestrator->>IdempotencyStore: update(key, status: FAILED)
+            activate IdempotencyStore
+            deactivate IdempotencyStore
+            CheckoutOrchestrator-->>QuteStorefront: HTTP 400 ProblemDetails<br/>type: out-of-stock
+            deactivate CheckoutOrchestrator
+            QuteStorefront-->>Browser: Show stock error
+            deactivate QuteStorefront
+        end
+
+        %% Stage 5: Create Order (tentative)
+        Note over CheckoutOrchestrator,Database: SAGA STAGE 5: Order Creation<br/>COMPENSATION POINT: Mark order CANCELLED on payment failure
+
+        CheckoutOrchestrator->>Database: BEGIN TRANSACTION<br/>INSERT orders (status: PENDING_PAYMENT)<br/>INSERT order_items
+        activate Database
+        Database-->>CheckoutOrchestrator: Order(id, orderNumber, status)
+        deactivate Database
+
+        %% Stage 6: Payment Processing
+        Note over CheckoutOrchestrator,StripeAdapter: SAGA STAGE 6: Payment Authorization<br/>Span: StripeIntentService.commit<br/>CRITICAL FAILURE POINT: Requires compensation
+
+        CheckoutOrchestrator->>StripeAdapter: createPaymentIntent(order, paymentMethodId)
+        activate StripeAdapter
+
+        StripeAdapter->>StripeAdapter: Call Stripe API<br/>POST /v1/payment_intents<br/>idempotency_key: {order_id}<br/>Timeout: 10s
+
+        alt Payment Authorized
+            StripeAdapter-->>CheckoutOrchestrator: PaymentIntent<br/>(status: succeeded, charge_id)
+            deactivate StripeAdapter
+
+            %% Finalize order
+            CheckoutOrchestrator->>Database: UPDATE orders<br/>SET status = PROCESSING, payment_intent_id = ?<br/>UPDATE inventory_reservations<br/>SET status = COMMITTED
+            activate Database
+            deactivate Database
+
+            CheckoutOrchestrator->>IdempotencyStore: update(key, status: SUCCESS, order_id)
+            activate IdempotencyStore
+            deactivate IdempotencyStore
+
+            %% Enqueue background jobs
+            CheckoutOrchestrator->>JobQueue: enqueue(SendOrderConfirmationEmail)
+            activate JobQueue
+            deactivate JobQueue
+
+            CheckoutOrchestrator->>JobQueue: enqueue(CreateShippingLabel)
+            activate JobQueue
+            deactivate JobQueue
+
+            CheckoutOrchestrator-->>QuteStorefront: OrderCreatedResponse<br/>(orderId, orderNumber, total)
+            deactivate CheckoutOrchestrator
+
+            QuteStorefront-->>Browser: HTTP 201 Created<br/>Location: /orders/{orderId}<br/>Redirect to confirmation
+            deactivate QuteStorefront
+
+        else Payment Declined/Failed
+            StripeAdapter-->>CheckoutOrchestrator: PaymentError<br/>(decline_code, message)
+            deactivate StripeAdapter
+
+            Note over CheckoutOrchestrator: COMPENSATION SAGA BEGINS
+
+            %% Compensation: Release inventory
+            CheckoutOrchestrator->>InventoryService: releaseReservations(reservationIds)
+            activate InventoryService
+            InventoryService->>Database: DELETE inventory_reservations<br/>WHERE id IN (?)
+            activate Database
+            deactivate Database
+            deactivate InventoryService
+
+            %% Compensation: Cancel order
+            CheckoutOrchestrator->>Database: UPDATE orders<br/>SET status = CANCELLED, cancellation_reason = 'payment_failed'
+            activate Database
+            deactivate Database
+
+            CheckoutOrchestrator->>IdempotencyStore: update(key, status: FAILED, error)
+            activate IdempotencyStore
+            deactivate IdempotencyStore
+
+            Note over CheckoutOrchestrator: Emit audit event:<br/>checkout.payment.failed
+
+            CheckoutOrchestrator-->>QuteStorefront: HTTP 402 Payment Required<br/>type: payment-declined<br/>detail: {decline_code}
+            deactivate CheckoutOrchestrator
+
+            QuteStorefront-->>Browser: Show payment error<br/>(retry with different method)
+            deactivate QuteStorefront
+        end
+    end
+
+    %% Error path: Shipping adapter failure with fallback
+    rect rgb(255, 245, 220)
+        Note over Browser,JobQueue: Scenario 3: Carrier API Failure (Fallback Strategy)
+
+        Browser->>QuteStorefront: POST /checkout/preview
+        activate QuteStorefront
+        QuteStorefront->>CheckoutOrchestrator: previewCheckout(...)
+        activate CheckoutOrchestrator
+
+        CheckoutOrchestrator->>CarrierAdapter: getRates(address, packages)
+        activate CarrierAdapter
+
+        CarrierAdapter->>CarrierAdapter: Carrier API call<br/>Timeout after 5s
+
+        alt All Carriers Timeout
+            CarrierAdapter-->>CheckoutOrchestrator: AllCarriersFailedError
+            deactivate CarrierAdapter
+
+            CheckoutOrchestrator->>Database: SELECT fallback_shipping_rate<br/>FROM tenant_settings<br/>WHERE tenant_id = ?
+            activate Database
+            Database-->>CheckoutOrchestrator: FallbackRate (e.g., $5.00)
+            deactivate Database
+
+            CheckoutOrchestrator->>CheckoutOrchestrator: Build preview with fallback rate<br/>+ warning flag
+
+            Note over CheckoutOrchestrator: Emit warning metric:<br/>checkout.shipping.fallback<br/>Metric: checkout.shipping_api_errors++
+
+            CheckoutOrchestrator-->>QuteStorefront: CheckoutPreview<br/>(total with fallback rate,<br/>warning: "estimated shipping")
+            deactivate CheckoutOrchestrator
+
+            QuteStorefront-->>Browser: Show totals + warning:<br/>"Shipping calculated at fulfillment"
+            deactivate QuteStorefront
+        end
+    end
+
+    %% Error path: Stripe webhook retry (async reconciliation)
+    rect rgb(255, 230, 230)
+        Note over Browser,JobQueue: Scenario 4: Payment Success but Network Failure (Webhook Reconciliation)
+
+        Note over CheckoutOrchestrator,StripeAdapter: Client submits checkout,<br/>Stripe payment succeeds,<br/>but HTTP response lost (network timeout)
+
+        CheckoutOrchestrator->>StripeAdapter: createPaymentIntent(order)
+        activate CheckoutOrchestrator
+        activate StripeAdapter
+
+        StripeAdapter->>StripeAdapter: Stripe API call succeeds<br/>(payment captured)
+
+        StripeAdapter--xCheckoutOrchestrator: Network timeout<br/>(HTTP response lost)
+        deactivate StripeAdapter
+        deactivate CheckoutOrchestrator
+
+        Note over CheckoutOrchestrator: Client retries with SAME<br/>idempotency key
+
+        Browser->>QuteStorefront: POST /checkout/commit<br/>X-Idempotency-Key: {same UUID}
+        activate QuteStorefront
+        QuteStorefront->>CheckoutOrchestrator: commitCheckout(...)
+        activate CheckoutOrchestrator
+
+        CheckoutOrchestrator->>IdempotencyStore: findByKey(idempotencyKey)
+        activate IdempotencyStore
+        IdempotencyStore-->>CheckoutOrchestrator: Entry(status: PENDING)
+        deactivate IdempotencyStore
+
+        CheckoutOrchestrator->>StripeAdapter: createPaymentIntent<br/>(Stripe idempotency: order_id)
+        activate StripeAdapter
+
+        StripeAdapter->>StripeAdapter: Stripe API returns<br/>EXISTING payment intent<br/>(idempotent response)
+
+        StripeAdapter-->>CheckoutOrchestrator: PaymentIntent (status: succeeded)
+        deactivate StripeAdapter
+
+        Note over CheckoutOrchestrator: Detect intent already succeeded,<br/>finalize order normally
+
+        CheckoutOrchestrator->>Database: UPDATE orders SET status = PROCESSING
+        activate Database
+        deactivate Database
+
+        CheckoutOrchestrator->>IdempotencyStore: update(key, status: SUCCESS)
+        activate IdempotencyStore
+        deactivate IdempotencyStore
+
+        CheckoutOrchestrator-->>QuteStorefront: OrderCreatedResponse
+        deactivate CheckoutOrchestrator
+        QuteStorefront-->>Browser: HTTP 201 Created
+        deactivate QuteStorefront
+
+        Note over CheckoutOrchestrator: Alternatively: Stripe webhook<br/>payment_intent.succeeded reconciles<br/>orphaned PENDING orders
+    end
+
+%% ============================================================================
+%% Architecture Notes
+%% ============================================================================
+%% SAGA STAGES & COMPENSATION:
+%% 1. Address Validation (read-only, no compensation)
+%% 2. Shipping Rate Fetch (cached, fallback on failure)
+%% 3. Re-validate Address (defensive check, no compensation)
+%% 4. Inventory Reservation (compensate: release hold)
+%% 5. Order Creation (compensate: mark CANCELLED)
+%% 6. Payment Processing (compensate: release inventory + cancel order)
+%%
+%% IDEMPOTENCY:
+%% - X-Idempotency-Key header (UUID) prevents duplicate orders
+%% - Stored in DB with status: PENDING → SUCCESS|FAILED
+%% - Stripe API calls use order_id as idempotency key
+%% - 24-hour idempotency window (per RFC 7231)
+%%
+%% CACHING STRATEGY:
+%% - Shipping rates: 15-minute TTL (Caffeine cache)
+%% - Address validation: No cache (real-time verification required)
+%% - Fallback rates: Per-tenant config in DB
+%%
+%% OBSERVABILITY:
+%% - Spans: CheckoutSaga.{addressValidation, inventoryReservation, payment}
+%% - Metrics: checkout.rate_cache_hit_ratio, checkout.address_validation_latency,
+%%            checkout.shipping_api_errors, checkout.payment.failed
+%% - Logs: All saga stage transitions, compensation actions, fallback usage
+%%
+%% ADAPTER CONTRACTS:
+%% - AddressValidationAdapter: validate(Address) → ValidatedAddress|ValidationError
+%% - CarrierRateAdapter: getRates(Address, Package[]) → ShippingRate[]|CarrierError
+%% - StripeAdapter: createPaymentIntent(Order, PaymentMethodId) → PaymentIntent|PaymentError
+%%
+%% REFERENCES:
+%% - ADR-003: Checkout Saga Pattern & Adapter Contracts
+%% - OpenAPI: api/v1/openapi.yaml#/components/parameters/IdempotencyKey
+%% - Architecture: docs/architecture_overview.md#section-4-blueprint
+%% - Component Diagram: docs/diagrams/component_overview.puml (Flow 1)
+%% ============================================================================

@@ -1,0 +1,44 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: village-storefront-dev-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # Allow HTTP for dev
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+  # Local development hostname (add to /etc/hosts or use minikube tunnel)
+  - host: storefront.local.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-workers
+            port:
+              number: 8080
+
+  # Wildcard for tenant subdomains in dev
+  - host: "*.storefront.local.dev"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-workers
+            port:
+              number: 8080
+
+  # Optional: TLS configuration for local dev (self-signed cert)
+  # tls:
+  # - hosts:
+  #   - storefront.local.dev
+  #   - "*.storefront.local.dev"
+  #   secretName: storefront-dev-tls

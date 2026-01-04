@@ -1,0 +1,4451 @@
+# Village Storefront API - OpenAPI 3.0.3 Specification
+#
+# Lint command: npx @stoplight/spectral-cli lint api/v1/openapi.yaml
+#
+# This specification defines the REST API contract for Village Storefront,
+# a multi-tenant ecommerce platform. All endpoints are tenant-scoped via
+# subdomain/custom domain resolution (see ADR-001).
+#
+# References:
+# - Architecture: docs/architecture_overview.md#section-5-api-contracts
+# - Tenancy: docs/adr/ADR-001-tenancy.md
+# - Standards: docs/java-project-standards.adoc
+
+openapi: 3.0.3
+
+info:
+  title: Village Storefront API
+  version: 1.0.0
+  description: |
+    **Multi-tenant SaaS ecommerce platform API**
+
+    Village Storefront provides a comprehensive REST API for managing online stores,
+    products, orders, payments, and consignment vendors. Each merchant operates an
+    isolated store accessible via subdomain (storename.villagecompute.com) or custom domain.
+
+    ## Tenant Resolution
+
+    The API automatically resolves the current tenant from the HTTP `Host` header:
+    - Subdomain: `storename.villagecompute.com` → tenant with subdomain "storename"
+    - Custom domain: `shop.merchant.com` → tenant with verified custom domain
+
+    All API operations are automatically scoped to the resolved tenant. No explicit
+    tenant ID parameter is required in requests.
+
+    ## Authentication
+
+    The API supports two authentication methods:
+
+    1. **JWT Bearer Tokens** (for user sessions):
+       - Access token (15 min expiry) + Refresh token (30 day expiry)
+       - Obtain via `/api/v1/auth/login`, refresh via `/api/v1/auth/refresh`
+       - Includes `tenant_id`, `sub` (user ID), and `roles` claims
+
+    2. **API Keys** (for server-to-server integrations):
+       - Long-lived tokens scoped to tenant + permissions
+       - Managed via admin dashboard at `/admin/settings/api-keys`
+       - Pass via `X-API-Key` header
+
+    ## Versioning
+
+    - URL-based versioning: `/api/v1`, `/api/v2` (breaking changes)
+    - Deprecation policy: 12-month notice, marked with `deprecated: true`
+
+    ## Error Handling
+
+    All errors follow RFC 7807 Problem Details format. See `ProblemDetails` schema.
+
+    ## Rate Limiting
+
+    Rate limits vary by authentication method and endpoint category:
+    - Public endpoints: 100 requests/min per IP
+    - Authenticated endpoints: 1000 requests/min per user
+    - Headless API: 5000 requests/min per API key
+
+    Rate limit headers included in all responses:
+    - `X-RateLimit-Limit`: Request limit per window
+    - `X-RateLimit-Remaining`: Remaining requests in window
+    - `X-RateLimit-Reset`: Unix timestamp when window resets
+
+  contact:
+    name: VillageCompute API Support
+    url: https://docs.villagecompute.com
+    email: api-support@villagecompute.com
+
+  license:
+    name: Proprietary
+    url: https://villagecompute.com/terms
+
+servers:
+  - url: /api/v1
+    description: API v1 (relative URL, resolves to current host)
+  - url: https://storename.villagecompute.com/api/v1
+    description: Example tenant subdomain (replace 'storename' with actual subdomain)
+
+tags:
+  - name: System
+    description: System health and platform metadata endpoints (public, no auth required)
+    externalDocs:
+      description: Architecture reference
+      url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-5-api-contracts
+
+  - name: Authentication
+    description: |
+      User authentication and session management. Supports JWT token-based auth
+      with access/refresh token flow. See ADR-001 for tenant context injection.
+
+  - name: Storefront
+    description: |
+      Customer-facing storefront operations (product browsing, cart, checkout).
+      These endpoints power the Qute-templated storefront UI and can also be
+      used by headless/mobile clients.
+    externalDocs:
+      description: Headless commerce guide
+      url: https://docs.villagecompute.com/guides/headless
+
+  - name: Admin
+    description: |
+      Store administration endpoints (product management, order fulfillment, settings).
+      Requires `admin` or `vendor` role. Powers the Vue.js admin dashboard at `/admin/*`.
+
+  - name: Vendor
+    description: |
+      Consignor-facing vendor portal endpoints for viewing intake items, payout batches, and account details.
+      Requires a vendor JWT with a `consignor_id` claim.
+
+  - name: Headless
+    description: |
+      Headless commerce API for custom frontend implementations. Supports cart
+      operations, checkout flows, and order management via API keys. Optimized
+      for high-throughput integrations.
+
+  - name: Platform
+    description: |
+      Platform-level administration (tenant management, billing, system config).
+      Restricted to platform administrators only. Not accessible to individual
+      store owners.
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+paths:
+  # ============================================================================
+  # SYSTEM ENDPOINTS
+  # ============================================================================
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      description: |
+        Returns the service health status. Used by Kubernetes liveness/readiness probes.
+        No authentication required.
+      tags: [System]
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Service is healthy and ready to accept requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: "ok"
+                version: "1.0.0"
+                timestamp: "2026-01-02T12:00:00Z"
+
+  # ============================================================================
+  # AUTHENTICATION ENDPOINTS
+  # ============================================================================
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Authenticate user and obtain JWT tokens
+      description: |
+        Authenticates a user (customer, admin, or vendor) and returns access + refresh tokens.
+        Tenant context is automatically resolved from the Host header before authentication.
+
+        **Token Claims:**
+        - `sub`: User ID (UUID)
+        - `tenant_id`: Tenant ID (UUID)
+        - `roles`: Array of role strings (admin, customer, vendor)
+        - `exp`: Expiration timestamp
+
+        **Session Logging:**
+        All login attempts are logged to the database for audit/compliance purposes.
+      tags: [Authentication]
+      security: []  # No auth required for login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@merchant.com
+                password:
+                  type: string
+                  format: password
+                  example: "********"
+                  minLength: 8
+      responses:
+        '200':
+          description: Authentication successful, tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Invalid credentials or account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Tenant not found (invalid subdomain/domain)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Refresh access token using refresh token
+      description: |
+        Exchanges a valid refresh token for a new access token + refresh token pair.
+        Refresh tokens are single-use; the old refresh token is invalidated upon successful refresh.
+      tags: [Authentication]
+      security: []  # Refresh token passed in request body, not header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  description: The refresh token obtained from login
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refresh successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Invalidate current session
+      description: |
+        Logs out the current user by invalidating the refresh token.
+        Access tokens cannot be invalidated (stateless JWT), but expire in 15 minutes.
+      tags: [Authentication]
+      responses:
+        '204':
+          description: Logout successful, refresh token invalidated
+        '401':
+          description: Invalid or missing authentication token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # TENANT RESOLUTION ENDPOINTS
+  # ============================================================================
+
+  /tenants/resolve:
+    get:
+      operationId: resolveTenant
+      summary: Resolve current tenant metadata
+      description: |
+        Returns metadata about the currently resolved tenant based on the Host header.
+        Useful for headless clients to verify tenant context and retrieve theme settings.
+
+        **No authentication required** - tenant resolution happens before authentication.
+      tags: [Platform]
+      security: []  # Public endpoint
+      responses:
+        '200':
+          description: Tenant successfully resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMetadata'
+        '404':
+          description: No tenant found for this domain/subdomain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # STOREFRONT - CATALOG ENDPOINTS (Placeholder)
+  # ============================================================================
+
+  /catalog/products:
+    get:
+      operationId: listProducts
+      summary: List products (catalog listing)
+      description: |
+        **TODO:** Implement product catalog listing with filtering, sorting, and pagination.
+
+        Returns paginated list of active products for the current tenant. Supports:
+        - Filtering by category, tags, price range, availability
+        - Sorting by name, price, created date, popularity
+        - Search by product name, SKU, description
+
+        **Authentication:** Optional (public catalog browsing, auth required for customer-specific pricing)
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by category slug
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            format: decimal
+          description: Minimum price filter (in tenant's default currency)
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            format: decimal
+          description: Maximum price filter
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search query (matches name, SKU, description)
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, price_asc, price_desc, created_desc, popularity]
+            default: name
+          description: Sort order
+      responses:
+        '200':
+          description: Product list successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /catalog/products/{productId}:
+    get:
+      operationId: getProduct
+      summary: Get product details
+      description: |
+        **TODO:** Implement product detail retrieval.
+
+        Returns full product details including variants, pricing, inventory, images.
+        Public endpoint (no auth required for browsing).
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      responses:
+        '200':
+          description: Product details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # STOREFRONT - CHECKOUT ENDPOINTS (Placeholder)
+  # ============================================================================
+
+  /checkout/preview:
+    post:
+      operationId: previewCheckout
+      summary: Preview checkout totals (cart calculation)
+      description: |
+        **TODO:** Implement checkout preview/calculation.
+
+        Calculates order totals including:
+        - Line item subtotals (product price × quantity)
+        - Discounts (promo codes, customer-specific pricing)
+        - Taxes (based on shipping address)
+        - Shipping costs (based on carrier rates)
+
+        **Idempotent:** Safe to call multiple times with same cart state.
+        Does not create order or charge payment method.
+      tags: [Storefront, Headless]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutPreviewRequest'
+      responses:
+        '200':
+          description: Checkout preview calculated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutPreview'
+        '400':
+          description: Invalid cart state (out of stock, invalid promo code, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /checkout/commit:
+    post:
+      operationId: commitCheckout
+      summary: Complete checkout and create order
+      description: |
+        **TODO:** Implement order creation and payment processing.
+
+        Atomically:
+        1. Creates order record
+        2. Charges payment method via Stripe
+        3. Reduces inventory
+        4. Enqueues fulfillment job
+
+        **Idempotent:** Uses `X-Idempotency-Key` header to prevent duplicate orders
+        if client retries due to network failure.
+
+        **Requires authentication:** Must be logged-in customer or use valid API key.
+      tags: [Storefront, Headless]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutCommitRequest'
+      responses:
+        '201':
+          description: Order successfully created and payment charged
+          headers:
+            Location:
+              description: URL of the created order resource
+              schema:
+                type: string
+                format: uri
+                example: https://storename.villagecompute.com/api/v1/orders/550e8400-e29b-41d4-a716-446655440000
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreatedResponse'
+        '400':
+          description: Invalid request (validation errors, out of stock, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '402':
+          description: Payment required (payment method declined)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Duplicate idempotency key (order already created)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # CART ENDPOINTS
+  # ============================================================================
+
+  /cart:
+    parameters:
+      - $ref: '#/components/parameters/GuestSessionId'
+    get:
+      operationId: getCart
+      summary: Get current user's cart
+      description: |
+        Returns the active cart for the authenticated user or guest session.
+        Includes all line items with calculated totals.
+
+        **Authentication:** Optional - guest carts tracked via session, user carts via JWT.
+        Provide the `X-Session-Id` header (or rely on the `vs_session` cookie issued by the API) to continue a guest cart.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Cart retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '404':
+          description: No active cart found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    delete:
+      operationId: clearCart
+      summary: Clear all items from cart
+      description: |
+        Removes all line items from the cart. The cart entity itself remains
+        and can be reused for future items.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: Cart cleared successfully
+        '404':
+          description: Cart not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /cart/items:
+    post:
+      operationId: addToCart
+      summary: Add item to cart
+      description: |
+        Adds a product variant to the cart with specified quantity.
+        If the variant already exists in the cart, the quantities are merged.
+
+        **Price Snapshot:** The current variant price is captured at add-to-cart
+        time to prevent cart total changes when product prices are updated.
+
+        **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+        **Guest Session:** Provide `X-Session-Id` or use the `vs_session` cookie to add to the same anonymous cart.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '201':
+          description: Item added to cart successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+        '400':
+          description: Validation error (invalid variant, negative quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Product variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock exception (concurrent modification detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /cart/items/{itemId}:
+    patch:
+      operationId: updateCartItem
+      summary: Update cart item quantity
+      description: |
+        Updates the quantity of a specific cart line item.
+
+        **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+      tags: [Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+      responses:
+        '200':
+          description: Cart item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+        '400':
+          description: Validation error (negative quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock exception (concurrent modification detected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # LOYALTY ENDPOINTS
+  # ============================================================================
+
+  /loyalty/program:
+    get:
+      operationId: getLoyaltyProgram
+      summary: Get active loyalty program
+      description: |
+        Returns the currently active loyalty program configuration for the tenant inferred from the `Host` header.
+        Responds with `404` if the tenant has not configured a program yet.
+      tags: [Storefront]
+      responses:
+        '200':
+          description: Loyalty program retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '404':
+          description: No loyalty program configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/member/{userId}:
+    get:
+      operationId: getLoyaltyMember
+      summary: Get loyalty member profile
+      description: |
+        Returns the loyalty membership record (balance, lifetime stats, tier) for the specified user. Requires the
+        caller to be authenticated as the same tenant.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Loyalty member retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyMember'
+        '404':
+          description: User is not enrolled in the loyalty program
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/enroll/{userId}:
+    post:
+      operationId: enrollLoyaltyMember
+      summary: Enroll user in loyalty program
+      description: |
+        Idempotently enrolls the specified user in the tenant's active loyalty program. Returns the existing membership
+        record if the user was already enrolled.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Member enrolled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyMember'
+        '400':
+          description: Enrollment failed (user not found or program disabled)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/redeem/{userId}:
+    post:
+      operationId: redeemLoyaltyPoints
+      summary: Redeem loyalty points for a discount
+      description: |
+        Redeems points from the user's balance for discounts during checkout. Enforces program-level minimum/maximum
+        thresholds and requires the `X-Idempotency-Key` header for safe retries.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemPointsRequest'
+      responses:
+        '200':
+          description: Points redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyTransaction'
+        '400':
+          description: Redemption failed (insufficient balance, invalid thresholds, or missing idempotency key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/transactions/{userId}:
+    get:
+      operationId: listLoyaltyTransactions
+      summary: List loyalty transactions for a member
+      description: |
+        Returns the immutable ledger entries for the specified user's loyalty account ordered by `createdAt DESC`.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Page number (0-indexed)
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoyaltyTransaction'
+        '400':
+          description: User is not enrolled in the loyalty program
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/loyalty/program:
+    get:
+      operationId: getAdminLoyaltyProgram
+      summary: Admin - get loyalty program configuration
+      description: |
+        Returns the loyalty program configuration for the current tenant, including disabled programs. Requires an admin
+        JWT.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Program configuration retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '404':
+          description: No configuration exists for this tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: upsertLoyaltyProgram
+      summary: Admin - upsert loyalty program configuration
+      description: |
+        Creates or updates the loyalty program configuration for the tenant. Setting `enabled` to `false` leaves the
+        configuration in place but disables accrual/redemption.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertLoyaltyProgramRequest'
+      responses:
+        '200':
+          description: Program updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '201':
+          description: Program created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyProgram'
+        '400':
+          description: Invalid configuration payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/loyalty/adjust/{userId}:
+    post:
+      operationId: adjustLoyaltyPoints
+      summary: Admin - adjust loyalty points
+      description: |
+        Adjusts a member's balance manually for customer service or remediation scenarios. Supports positive and
+        negative adjustments while preventing negative balances.
+      tags: [Admin]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustPointsRequest'
+      responses:
+        '200':
+          description: Adjustment recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyTransaction'
+        '400':
+          description: Adjustment failed (user not enrolled or invalid point amount)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # GIFT CARD ENDPOINTS
+  # ============================================================================
+
+  /gift-cards/check-balance:
+    post:
+      operationId: checkGiftCardBalance
+      summary: Check gift card balance
+      description: |
+        Returns the current balance and status of a gift card by its code. Does not require authentication,
+        allowing customers to check balances before redemption. Code lookups use secure SHA-256 hashing.
+      tags: [Storefront]
+      security: []  # Public endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckGiftCardBalanceRequest'
+      responses:
+        '200':
+          description: Gift card balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardBalanceResponse'
+        '404':
+          description: Gift card not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /gift-cards/redeem:
+    post:
+      operationId: redeemGiftCard
+      summary: Redeem gift card during checkout
+      description: |
+        Applies a gift card to an order, deducting the specified amount from the card's balance.
+        Supports partial redemption. Requires the `X-Idempotency-Key` header for safe retries.
+      tags: [Storefront]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemGiftCardRequest'
+      responses:
+        '200':
+          description: Gift card redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardTransaction'
+        '400':
+          description: Redemption failed (insufficient balance, expired card, or missing idempotency key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /gift-cards/transactions/{giftCardId}:
+    get:
+      operationId: listGiftCardTransactions
+      summary: List gift card transaction history
+      description: |
+        Returns the immutable ledger entries for the specified gift card ordered by `createdAt DESC`.
+      tags: [Storefront]
+      parameters:
+        - name: giftCardId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Page number (0-indexed)
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GiftCardTransaction'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/gift-cards:
+    get:
+      operationId: listGiftCards
+      summary: Admin - list gift cards
+      description: |
+        Returns a paginated list of gift cards with optional filtering by status. Requires admin role.
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, redeemed, expired, cancelled]
+          description: Filter by gift card status
+      responses:
+        '200':
+          description: Gift cards retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GiftCardDto'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+    post:
+      operationId: issueGiftCard
+      summary: Admin - issue a new gift card
+      description: |
+        Creates a new gift card with a secure randomly generated code. Can be used for promotional
+        purposes or customer service remediation.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueGiftCardRequest'
+      responses:
+        '201':
+          description: Gift card issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardDto'
+        '400':
+          description: Invalid request (e.g., negative balance)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/gift-cards/{giftCardId}:
+    get:
+      operationId: getGiftCard
+      summary: Admin - get gift card details
+      description: |
+        Returns full details of a gift card including transaction history and metadata.
+      tags: [Admin]
+      parameters:
+        - name: giftCardId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Gift card retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardDto'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      operationId: updateGiftCard
+      summary: Admin - update gift card status or balance
+      description: |
+        Allows admins to cancel gift cards, adjust balances, or update expiration dates.
+      tags: [Admin]
+      parameters:
+        - name: giftCardId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGiftCardRequest'
+      responses:
+        '200':
+          description: Gift card updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GiftCardDto'
+        '404':
+          description: Gift card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # STORE CREDIT ENDPOINTS
+  # ============================================================================
+
+  /store-credit/balance/{userId}:
+    get:
+      operationId: getStoreCreditBalance
+      summary: Get store credit balance for user
+      description: |
+        Returns the current store credit balance and account status for the specified user.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Store credit balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCreditAccountDto'
+        '404':
+          description: Store credit account not found for user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /store-credit/redeem/{userId}:
+    post:
+      operationId: redeemStoreCredit
+      summary: Redeem store credit during checkout
+      description: |
+        Applies store credit to an order, deducting the specified amount from the user's balance.
+        Requires the `X-Idempotency-Key` header for safe retries.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemStoreCreditRequest'
+      responses:
+        '200':
+          description: Store credit redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCreditTransaction'
+        '400':
+          description: Redemption failed (insufficient balance or missing idempotency key)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store credit account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /store-credit/transactions/{userId}:
+    get:
+      operationId: listStoreCreditTransactions
+      summary: List store credit transaction history
+      description: |
+        Returns the immutable ledger entries for the specified user's store credit account ordered by `createdAt DESC`.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Page number (0-indexed)
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+          description: Page size
+      responses:
+        '200':
+          description: Transactions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoreCreditTransaction'
+        '404':
+          description: Store credit account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/store-credit/accounts:
+    get:
+      operationId: listStoreCreditAccounts
+      summary: Admin - list store credit accounts
+      description: |
+        Returns a paginated list of store credit accounts with optional filtering by status.
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, closed]
+          description: Filter by account status
+      responses:
+        '200':
+          description: Store credit accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StoreCreditAccountDto'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+
+  /admin/store-credit/adjust/{userId}:
+    post:
+      operationId: adjustStoreCredit
+      summary: Admin - adjust store credit balance
+      description: |
+        Adjusts a user's store credit balance manually for refunds, customer service, or promotional purposes.
+        Supports positive and negative adjustments while preventing negative balances.
+      tags: [Admin]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustStoreCreditRequest'
+      responses:
+        '200':
+          description: Store credit adjusted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCreditTransaction'
+        '400':
+          description: Adjustment failed (invalid amount or would result in negative balance)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store credit account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/store-credit/convert-gift-card:
+    post:
+      operationId: convertGiftCardToStoreCredit
+      summary: Admin - convert gift card balance to store credit
+      description: |
+        Moves the remaining balance from a gift card to a user's store credit account.
+        This is useful for customer service scenarios or when a customer wants to consolidate balances.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConvertGiftCardRequest'
+      responses:
+        '200':
+          description: Gift card balance converted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [giftCardTransaction, storeCreditTransaction]
+                properties:
+                  giftCardTransaction:
+                    $ref: '#/components/schemas/GiftCardTransaction'
+                  storeCreditTransaction:
+                    $ref: '#/components/schemas/StoreCreditTransaction'
+        '400':
+          description: Conversion failed (gift card has no balance or user account issues)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Gift card or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # PLATFORM ADMIN ENDPOINTS (Placeholder)
+  # ============================================================================
+
+  /platform/tenants:
+    get:
+      operationId: listTenants
+      summary: List all tenants (platform admin only)
+      description: |
+        **TODO:** Implement tenant listing for platform administrators.
+
+        Returns paginated list of all tenants with status, creation date, and billing info.
+        **Restricted to platform administrators only** (not accessible to store owners).
+      tags: [Platform]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, suspended, deleted]
+          description: Filter by tenant status
+      responses:
+        '200':
+          description: Tenant list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '403':
+          description: Forbidden (requires platform admin role)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    post:
+      operationId: createTenant
+      summary: Create new tenant (platform admin only)
+      description: |
+        **TODO:** Implement tenant provisioning.
+
+        Creates a new tenant (merchant store) with subdomain and initial settings.
+        Atomically provisions:
+        - Tenant record
+        - Default store settings
+        - Initial admin user account
+
+        **Restricted to platform administrators only.**
+      tags: [Platform]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '201':
+          description: Tenant created successfully
+          headers:
+            Location:
+              description: URL of the created tenant resource
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+        '400':
+          description: Validation error (subdomain taken, invalid format, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (requires platform admin role)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # HEADLESS API ENDPOINTS
+  # ============================================================================
+
+  /api/v1/headless/catalog/products:
+    get:
+      operationId: listProductsHeadless
+      summary: List products (headless API)
+      description: |
+        **OAuth Scope Required:** `catalog:read`
+
+        List active products with optional search and pagination. Designed for headless/custom
+        frontends consuming the catalog API.
+
+        **Rate Limit:** 5000 requests/minute per client_id (configurable per OAuth client)
+
+        **Caching:** Search results are cached for 5 minutes. Cache is invalidated on catalog updates.
+
+        **Feature Flag:** `headless.api.enabled` (tenant-scoped)
+
+        **Authentication:** OAuth 2.0 Client Credentials flow via HTTP Basic Auth.
+        Pass client_id:client_secret as Authorization header.
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [catalog:read]
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "running shoes"
+          description: Search query (searches product names and descriptions)
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Paginated product list
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '401':
+          description: Invalid or missing OAuth credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: OAuth client does not have catalog:read scope or feature disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+            Retry-After:
+              $ref: '#/components/headers/Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/v1/headless/catalog/products/{productId}:
+    get:
+      operationId: getProductHeadless
+      summary: Get product details (headless API)
+      description: |
+        **OAuth Scope Required:** `catalog:read`
+
+        Retrieve detailed product information including variants, pricing, and inventory status.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [catalog:read]
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      responses:
+        '200':
+          description: Product details
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/v1/headless/cart:
+    get:
+      operationId: getCartHeadless
+      summary: Get cart (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:read`
+
+        Retrieve cart contents for a guest session. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:read]
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '200':
+          description: Cart contents
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartDto'
+        '400':
+          description: Missing X-Session-Id header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart not found for session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    delete:
+      operationId: clearCartHeadless
+      summary: Clear cart (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Remove all items from cart. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '204':
+          description: Cart cleared successfully
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+        '400':
+          description: Missing X-Session-Id header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart not found for session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/v1/headless/cart/items:
+    post:
+      operationId: addToCartHeadless
+      summary: Add item to cart (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Add a product variant to the cart or update quantity if already exists.
+        Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '201':
+          description: Item added to cart
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemDto'
+        '400':
+          description: Invalid request (missing session, invalid quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Product variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock conflict (cart modified concurrently)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /api/v1/headless/cart/items/{itemId}:
+    patch:
+      operationId: updateCartItemHeadless
+      summary: Update cart item quantity (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Update the quantity of an existing cart item. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCartItemRequest'
+      responses:
+        '200':
+          description: Cart item updated successfully
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItemDto'
+        '400':
+          description: Invalid request (missing session, invalid quantity, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic lock conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    delete:
+      operationId: removeCartItemHeadless
+      summary: Remove cart item (headless API)
+      description: |
+        **OAuth Scope Required:** `cart:write`
+
+        Remove an item from the cart. Requires X-Session-Id header.
+
+        **Rate Limit:** 5000 requests/minute per client_id
+
+        **Feature Flag:** `headless.api.enabled`
+      tags: [Headless]
+      security:
+        - oauthClientCredentials: [cart:write]
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '204':
+          description: Cart item removed successfully
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+        '400':
+          description: Missing X-Session-Id header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Cart item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+# ============================================================================
+# CONSIGNMENT ADMIN ENDPOINTS
+# ============================================================================
+
+  /admin/consignors:
+    get:
+      operationId: listConsignors
+      summary: List consignors for current tenant
+      description: Returns active consignors for the resolved tenant.
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: List of consignors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Consignor'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      operationId: createConsignor
+      summary: Create consignor
+      description: Creates a consignor profile scoped to the current tenant.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsignorRequest'
+      responses:
+        '201':
+          description: Consignor created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consignor'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+    get:
+      operationId: getConsignor
+      summary: Get consignor details
+      description: Retrieves a consignor by ID within the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Consignor retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consignor'
+        '404':
+          description: Consignor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateConsignor
+      summary: Update consignor
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsignorRequest'
+      responses:
+        '200':
+          description: Consignor updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consignor'
+        '404':
+          description: Consignor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteConsignor
+      summary: Delete consignor
+      description: Soft deletes a consignor by setting status to `deleted`.
+      tags: [Admin]
+      responses:
+        '204':
+          description: Consignor deleted
+        '404':
+          description: Consignor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/items:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+    get:
+      operationId: listConsignmentItems
+      summary: List consignment items for a consignor
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: List of consignment items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsignmentItem'
+        '404':
+          description: Consignor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      operationId: createConsignmentItem
+      summary: Create consignment item
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsignmentItemRequest'
+      responses:
+        '201':
+          description: Item created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsignmentItem'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Consignor or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/payouts:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+    get:
+      operationId: listPayoutBatches
+      summary: List payout batches for a consignor
+      tags: [Admin]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: List of payout batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PayoutBatch'
+        '404':
+          description: Consignor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      operationId: createPayoutBatch
+      summary: Create payout batch
+      description: Creates a payout batch for a consignor for a specific period.
+      tags: [Admin]
+      parameters:
+        - in: query
+          name: periodStart
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Inclusive start date (YYYY-MM-DD)
+        - in: query
+          name: periodEnd
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Inclusive end date (YYYY-MM-DD)
+      responses:
+        '201':
+          description: Payout batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayoutBatch'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Consignor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Batch already exists for period
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+# ============================================================================
+# VENDOR PORTAL ENDPOINTS
+# ============================================================================
+
+  /vendor/portal/profile:
+    get:
+      operationId: getVendorProfile
+      summary: Get consignor profile (vendor portal)
+      description: Returns the authenticated consignor profile derived from the vendor JWT `consignor_id` claim.
+      tags: [Vendor]
+      responses:
+        '200':
+          description: Vendor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consignor'
+        '403':
+          description: Forbidden or missing consignor claim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /vendor/portal/items:
+    get:
+      operationId: listVendorItems
+      summary: List consignment items (vendor portal)
+      description: Lists the authenticated consignor's items.
+      tags: [Vendor]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: List of consignment items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsignmentItem'
+        '403':
+          description: Forbidden or missing consignor claim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+# ============================================================================
+# INVENTORY ADMIN ENDPOINTS
+# ============================================================================
+
+  /admin/inventory/locations:
+    get:
+      operationId: listInventoryLocations
+      summary: List inventory locations
+      description: Returns all inventory locations for the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of inventory locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryLocation'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      operationId: createInventoryLocation
+      summary: Create inventory location
+      description: Creates a new inventory location (warehouse, store, etc.) for the current tenant.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryLocationRequest'
+      responses:
+        '201':
+          description: Location created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLocation'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Location code already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/transfers:
+    get:
+      operationId: listInventoryTransfers
+      summary: List inventory transfers
+      description: Returns all inventory transfers for the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryTransfer'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      operationId: createInventoryTransfer
+      summary: Create inventory transfer
+      description: |
+        Creates a new inventory transfer from source to destination location.
+        Validates stock availability, reserves inventory at source, and enqueues
+        background job for barcode label generation.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryTransferRequest'
+      responses:
+        '201':
+          description: Transfer created successfully, includes barcode job ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryTransfer'
+        '400':
+          description: Validation error (e.g., invalid quantity, same source/destination)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Location or variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/transfers/{transferId}:
+    parameters:
+      - name: transferId
+        in: path
+        required: true
+        description: Transfer UUID
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getInventoryTransfer
+      summary: Get transfer details
+      description: Retrieves a transfer by ID within the current tenant.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Transfer retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryTransfer'
+        '404':
+          description: Transfer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/transfers/{transferId}/receive:
+    parameters:
+      - name: transferId
+        in: path
+        required: true
+        description: Transfer UUID
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: receiveInventoryTransfer
+      summary: Mark transfer as received
+      description: |
+        Completes a transfer by marking it received, committing source reservations,
+        and adding inventory to destination location.
+      tags: [Admin]
+      responses:
+        '200':
+          description: Transfer received successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryTransfer'
+        '404':
+          description: Transfer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Transfer already received
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/adjustments:
+    post:
+      operationId: createInventoryAdjustment
+      summary: Record inventory adjustment
+      description: |
+        Records a manual inventory adjustment with reason code for audit trail.
+        Used for cycle counts, damages, returns, shrinkage, etc.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInventoryAdjustmentRequest'
+      responses:
+        '201':
+          description: Adjustment recorded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryAdjustment'
+        '400':
+          description: Validation error (e.g., invalid reason code)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Location or variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /vendor/portal/payouts:
+    get:
+      operationId: listVendorPayouts
+      summary: List payout batches (vendor portal)
+      description: Lists payout batches visible to the authenticated consignor.
+      tags: [Vendor]
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: List of payout batches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PayoutBatch'
+        '403':
+          description: Forbidden or missing consignor claim
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
+
+components:
+  # ============================================================================
+  # SECURITY SCHEMES
+  # ============================================================================
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token obtained from `/api/v1/auth/login` or `/api/v1/auth/refresh`.
+
+        **Token Claims:**
+        ```json
+        {
+          "sub": "user-uuid",
+          "tenant_id": "tenant-uuid",
+          "roles": ["admin"],
+          "exp": 1704110400
+        }
+        ```
+
+        **Token Lifecycle:**
+        - Access token: 15 minute expiry (short-lived, stateless)
+        - Refresh token: 30 day expiry (long-lived, stored in DB for revocation)
+
+        **Tenant Context:**
+        Tenant context is automatically injected from the `tenant_id` claim.
+        All API operations are scoped to this tenant.
+
+        **Note:** Role-based scopes like platform:admin are encoded in the JWT claims,
+        not as OAuth scopes. Access control is enforced at the application layer.
+
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Long-lived API key for server-to-server integrations and headless commerce.
+
+        **Key Characteristics:**
+        - Scoped to specific tenant + permission set
+        - Managed via admin dashboard at `/admin/settings/api-keys`
+        - Can be rotated or revoked instantly
+        - Rate limits: 5000 requests/min (higher than user tokens)
+
+        **Typical Use Cases:**
+        - Custom storefronts (React, Vue, mobile apps)
+        - Backend integrations (inventory sync, order webhooks)
+        - Automated workflows (scheduled imports, bulk operations)
+
+        **Security:**
+        Keys are hashed in database (bcrypt). Store securely, never commit to version control.
+
+    oauthClientCredentials:
+      type: http
+      scheme: basic
+      description: |
+        OAuth 2.0 Client Credentials flow for headless API access.
+
+        **Authentication:**
+        Use HTTP Basic Authentication with client_id as username and client_secret as password:
+        ```
+        Authorization: Basic base64(client_id:client_secret)
+        ```
+
+        **Scopes:**
+        - `catalog:read` - Read product catalog
+        - `cart:read` - Read cart contents
+        - `cart:write` - Modify cart (add/update/remove items)
+        - `orders:read` - Read order history
+        - `orders:write` - Create and update orders
+
+        **Rate Limits:**
+        Default: 5000 requests/minute per client_id (configurable per OAuth client)
+
+        **Management:**
+        OAuth clients are created and managed via admin dashboard at `/admin/settings/oauth-clients`.
+        Each client is scoped to a specific tenant and has a configurable set of allowed scopes.
+
+        **Security:**
+        - Client secrets are hashed (bcrypt) in database
+        - Clients can be instantly revoked by setting active=false
+        - All requests are logged with client_id + tenant_id for audit trails
+        - Tenant isolation enforced: client can only access data for its assigned tenant
+
+        **Feature Flag:** Requires `headless.api.enabled` feature flag to be enabled for tenant
+
+  # ============================================================================
+  # REUSABLE PARAMETERS
+  # ============================================================================
+
+  parameters:
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+      description: |
+        Idempotency key for safe retries of non-idempotent operations (POST, DELETE).
+        If a request with the same idempotency key is replayed within 24 hours,
+        the original response is returned (no duplicate side effects).
+
+        **Recommended:** Always generate a unique UUID v4 per logical operation.
+        Store the key client-side and reuse on retry.
+
+    GuestSessionId:
+      name: X-Session-Id
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+        example: "2f605a0b-93c0-4cf2-a6ed-2f139b31e9de"
+      description: |
+        Guest session identifier used to associate anonymous carts with the same browser/client.
+        If omitted, the API issues a `vs_session` HTTP-only cookie and returns the generated UUID in the response header.
+        Authenticated users can ignore this header because their carts are keyed to their account identity.
+
+    PageNumber:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number for pagination (1-indexed)
+
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Number of items per page (max 100)
+
+    TenantDomain:
+      name: X-Tenant-Domain
+      in: header
+      required: false
+      schema:
+        type: string
+        example: "storename.villagecompute.com"
+      description: |
+        **Optional override** for tenant resolution in testing/development.
+        Production requests should rely on the HTTP `Host` header for automatic resolution.
+
+        Useful for:
+        - Multi-tenant testing (switch tenants without DNS changes)
+        - Platform admin impersonation
+        - Local development with ngrok/tunnels
+
+    PageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Zero-indexed page number (0 = first page)
+
+    SizeParam:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Number of items per page (max 100)
+
+    ConsignorIdParam:
+      name: consignorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Consignor identifier
+
+  # ============================================================================
+  # REUSABLE HEADERS
+  # ============================================================================
+
+  headers:
+    X-RateLimit-Limit:
+      description: Maximum number of requests allowed in the current time window
+      schema:
+        type: integer
+        example: 5000
+
+    X-RateLimit-Remaining:
+      description: Number of requests remaining in the current time window
+      schema:
+        type: integer
+        example: 4998
+
+    X-RateLimit-Reset:
+      description: Unix timestamp when the rate limit window resets
+      schema:
+        type: integer
+        format: int64
+        example: 1704110460
+
+    Retry-After:
+      description: Number of seconds to wait before retrying the request
+      schema:
+        type: integer
+        example: 60
+
+  # ============================================================================
+  # REUSABLE RESPONSES
+  # ============================================================================
+
+  responses:
+    UnauthorizedError:
+      description: Invalid or missing OAuth credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    ForbiddenError:
+      description: OAuth client does not have required scope or feature disabled
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          $ref: '#/components/headers/X-RateLimit-Limit'
+        X-RateLimit-Remaining:
+          $ref: '#/components/headers/X-RateLimit-Remaining'
+        X-RateLimit-Reset:
+          $ref: '#/components/headers/X-RateLimit-Reset'
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # REUSABLE SCHEMAS
+  # ============================================================================
+
+  schemas:
+    # --------------------------------------------------------------------------
+    # Core Domain Schemas
+    # --------------------------------------------------------------------------
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: "ok"
+          description: Health status (ok, degraded, error)
+        version:
+          type: string
+          example: "1.0.0"
+          description: API version
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-01-02T12:00:00Z"
+          description: Server timestamp (ISO 8601)
+
+    AuthTokenResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - tokenType
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token (short-lived, 15 min)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          description: JWT refresh token (long-lived, 30 days)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expiresIn:
+          type: integer
+          description: Access token expiry in seconds
+          example: 900
+        tokenType:
+          type: string
+          description: Token type (always "Bearer")
+          example: "Bearer"
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - email
+        - roles
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: User ID
+        email:
+          type: string
+          format: email
+          description: User email address
+        name:
+          type: string
+          description: User full name
+          example: "John Doe"
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [customer, admin, vendor, platform_admin]
+          description: User roles within tenant
+          example: ["admin"]
+
+    TenantMetadata:
+      type: object
+      required:
+        - id
+        - subdomain
+        - name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Tenant ID
+        subdomain:
+          type: string
+          description: Tenant subdomain
+          example: "storename"
+        name:
+          type: string
+          description: Store name (display)
+          example: "Acme Store"
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+          description: Tenant status
+        customDomains:
+          type: array
+          items:
+            type: string
+          description: Verified custom domains for this tenant
+          example: ["shop.acme.com"]
+        settings:
+          type: object
+          description: Tenant-specific settings (theme, locale, features)
+          additionalProperties: true
+          example:
+            locale: "en-US"
+            currency: "USD"
+            theme: "default"
+
+    TenantSummary:
+      type: object
+      required:
+        - id
+        - subdomain
+        - name
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        subdomain:
+          type: string
+          example: "storename"
+        name:
+          type: string
+          example: "Acme Store"
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        planTier:
+          type: string
+          description: Billing plan tier
+          example: "professional"
+
+    TenantDetail:
+      allOf:
+        - $ref: '#/components/schemas/TenantSummary'
+        - type: object
+          properties:
+            customDomains:
+              type: array
+              items:
+                type: object
+                properties:
+                  domain:
+                    type: string
+                  verified:
+                    type: boolean
+            settings:
+              type: object
+              additionalProperties: true
+            updatedAt:
+              type: string
+              format: date-time
+
+    CreateTenantRequest:
+      type: object
+      required:
+        - subdomain
+        - name
+        - adminEmail
+      properties:
+        subdomain:
+          type: string
+          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+          minLength: 3
+          maxLength: 63
+          description: Tenant subdomain (lowercase alphanumeric + hyphens, 3-63 chars)
+          example: "acme-store"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Store display name
+          example: "Acme Store"
+        adminEmail:
+          type: string
+          format: email
+          description: Email for initial admin user account
+          example: "admin@acme.com"
+        adminPassword:
+          type: string
+          format: password
+          minLength: 8
+          description: Password for initial admin user (if not provided, generated and emailed)
+        settings:
+          type: object
+          description: Initial tenant settings (optional)
+          additionalProperties: true
+
+    ProductSummary:
+      type: object
+      required:
+        - id
+        - sku
+        - name
+        - price
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          example: "WIDGET-001"
+        name:
+          type: string
+          example: "Premium Widget"
+        description:
+          type: string
+          description: Short description (max 200 chars for listing)
+          example: "High-quality widget for all your needs"
+        price:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [active, draft, archived]
+        imageUrl:
+          type: string
+          format: uri
+          description: Primary product image URL
+          example: "https://cdn.villagecompute.com/products/widget-001.jpg"
+        inStock:
+          type: boolean
+          description: Aggregate stock availability (true if any variant in stock)
+
+    ProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/ProductSummary'
+        - type: object
+          properties:
+            longDescription:
+              type: string
+              description: Full product description (Markdown supported)
+            images:
+              type: array
+              items:
+                type: string
+                format: uri
+              description: All product image URLs
+            variants:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProductVariant'
+              description: Product variants (size, color, etc.)
+            categories:
+              type: array
+              items:
+                type: string
+              description: Category slugs
+              example: ["electronics", "widgets"]
+            tags:
+              type: array
+              items:
+                type: string
+              description: Product tags
+              example: ["featured", "on-sale"]
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    ProductVariant:
+      type: object
+      required:
+        - id
+        - sku
+        - price
+        - stock
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          example: "WIDGET-001-RED-L"
+        price:
+          $ref: '#/components/schemas/Money'
+        stock:
+          type: integer
+          minimum: 0
+          description: Available inventory quantity
+        options:
+          type: object
+          description: 'Variant option values (e.g., {"color": "Red", "size": "Large"})'
+          additionalProperties:
+            type: string
+          example:
+            color: "Red"
+            size: "Large"
+
+    Cart:
+      type: object
+      required:
+        - id
+        - items
+        - subtotal
+        - itemCount
+        - expiresAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Cart UUID
+        userId:
+          type: string
+          format: uuid
+          description: User UUID (null for guest carts)
+          nullable: true
+        sessionId:
+          type: string
+          description: Session identifier for guest carts
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+          description: Cart line items
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        itemCount:
+          type: integer
+          minimum: 0
+          description: Total number of distinct items in cart
+        expiresAt:
+          type: string
+          format: date-time
+          description: Cart expiration timestamp
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        loyalty:
+          $ref: '#/components/schemas/CartLoyaltySummary'
+
+    CartItem:
+      type: object
+      required:
+        - id
+        - variantId
+        - productName
+        - variantName
+        - sku
+        - quantity
+        - unitPrice
+        - lineTotal
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Cart item UUID
+        variantId:
+          type: string
+          format: uuid
+          description: Product variant UUID
+        productName:
+          type: string
+          description: Product name (snapshot)
+        variantName:
+          type: string
+          description: Variant name (snapshot)
+        sku:
+          type: string
+          description: Variant SKU (snapshot)
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity of this item
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        lineTotal:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CartLoyaltySummary:
+      type: object
+      required:
+        - programEnabled
+        - estimatedPointsEarned
+        - estimatedRewardValue
+        - availableRedemptionValue
+      properties:
+        programEnabled:
+          type: boolean
+          description: Indicates whether the loyalty program is enabled for the tenant
+        programId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Loyalty program identifier
+        memberPointsBalance:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Current balance for the authenticated user (null for guests)
+        estimatedPointsEarned:
+          type: integer
+          minimum: 0
+          description: Estimated points that will be earned for the current cart subtotal
+        estimatedRewardValue:
+          $ref: '#/components/schemas/Money'
+        availableRedemptionValue:
+          $ref: '#/components/schemas/Money'
+        currentTier:
+          type: string
+          nullable: true
+          description: Tier name resolved from the tenant's tier configuration
+        dataFreshnessTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp indicating when the loyalty data was last refreshed
+
+    LoyaltyProgram:
+      type: object
+      required:
+        - id
+        - name
+        - enabled
+        - pointsPerDollar
+        - redemptionValuePerPoint
+        - minRedemptionPoints
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        pointsPerDollar:
+          type: number
+          format: double
+        redemptionValuePerPoint:
+          type: number
+          format: double
+        minRedemptionPoints:
+          type: integer
+          minimum: 1
+        maxRedemptionPoints:
+          type: integer
+          nullable: true
+        pointsExpirationDays:
+          type: integer
+          nullable: true
+        tierConfig:
+          type: string
+          description: Raw JSON tier configuration for historical reference
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LoyaltyMember:
+      type: object
+      required:
+        - id
+        - programId
+        - pointsBalance
+        - lifetimePointsEarned
+        - lifetimePointsRedeemed
+        - status
+        - enrolledAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        programId:
+          type: string
+          format: uuid
+        pointsBalance:
+          type: integer
+        lifetimePointsEarned:
+          type: integer
+        lifetimePointsRedeemed:
+          type: integer
+        currentTier:
+          type: string
+          nullable: true
+        tierUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+        enrolledAt:
+          type: string
+          format: date-time
+
+    LoyaltyTransaction:
+      type: object
+      required:
+        - id
+        - memberId
+        - pointsDelta
+        - balanceAfter
+        - transactionType
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+          nullable: true
+        pointsDelta:
+          type: integer
+        balanceAfter:
+          type: integer
+        transactionType:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        source:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AdjustPointsRequest:
+      type: object
+      required:
+        - points
+        - reason
+      properties:
+        points:
+          type: integer
+          description: Positive to award points, negative to deduct points
+        reason:
+          type: string
+          description: Human-readable reason for the adjustment
+
+    RedeemPointsRequest:
+      type: object
+      required:
+        - pointsToRedeem
+      properties:
+        pointsToRedeem:
+          type: integer
+          minimum: 1
+        idempotencyKey:
+          type: string
+          description: Optional fallback idempotency key when the header cannot be set
+          nullable: true
+
+    UpsertLoyaltyProgramRequest:
+      type: object
+      required:
+        - name
+        - pointsPerDollar
+        - redemptionValuePerPoint
+        - minRedemptionPoints
+        - tiers
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+          default: true
+        pointsPerDollar:
+          type: number
+          format: double
+        redemptionValuePerPoint:
+          type: number
+          format: double
+        minRedemptionPoints:
+          type: integer
+        maxRedemptionPoints:
+          type: integer
+          nullable: true
+        pointsExpirationDays:
+          type: integer
+          nullable: true
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoyaltyTierConfig'
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    LoyaltyTierConfig:
+      type: object
+      required:
+        - name
+        - minPoints
+        - multiplier
+      properties:
+        name:
+          type: string
+        minPoints:
+          type: integer
+          minimum: 0
+        multiplier:
+          type: number
+          format: double
+
+    # ====== Gift Card Schemas ======
+
+    GiftCardDto:
+      type: object
+      required:
+        - id
+        - code
+        - initialBalance
+        - currentBalance
+        - currency
+        - status
+        - issuedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        code:
+          type: string
+          description: Display code (e.g., XXXX-XXXX-XXXX-XXXX) shown to customer
+        initialBalance:
+          type: number
+          format: double
+          minimum: 0
+        currentBalance:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+        status:
+          type: string
+          enum: [active, redeemed, expired, cancelled]
+        purchaserUserId:
+          type: string
+          format: uuid
+          nullable: true
+        purchaserEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientName:
+          type: string
+          nullable: true
+        personalMessage:
+          type: string
+          nullable: true
+        issuedAt:
+          type: string
+          format: date-time
+        activatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        fullyRedeemedAt:
+          type: string
+          format: date-time
+          nullable: true
+        sourceOrderId:
+          type: integer
+          format: int64
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GiftCardBalanceResponse:
+      type: object
+      required:
+        - currentBalance
+        - currency
+        - status
+      properties:
+        currentBalance:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        status:
+          type: string
+          enum: [active, redeemed, expired, cancelled]
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    GiftCardTransaction:
+      type: object
+      required:
+        - id
+        - giftCardId
+        - amount
+        - transactionType
+        - balanceAfter
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        giftCardId:
+          type: integer
+          format: int64
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+        amount:
+          type: number
+          format: double
+          description: Positive for load/refund, negative for redemption
+        transactionType:
+          type: string
+          enum: [issued, redeemed, refunded, adjusted, expired]
+        balanceAfter:
+          type: number
+          format: double
+          minimum: 0
+        reason:
+          type: string
+          nullable: true
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: POS device ID if redeemed offline
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when offline redemption synced to server
+        createdAt:
+          type: string
+          format: date-time
+
+    CheckGiftCardBalanceRequest:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: Gift card code (e.g., XXXX-XXXX-XXXX-XXXX)
+          minLength: 1
+
+    RedeemGiftCardRequest:
+      type: object
+      required:
+        - code
+        - amount
+      properties:
+        code:
+          type: string
+          description: Gift card code
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Amount to redeem from card
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Associated order ID
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Optional fallback idempotency key when header cannot be set
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: POS device identifier when redemption occurs offline
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when offline redemption synced to server
+
+    IssueGiftCardRequest:
+      type: object
+      required:
+        - initialBalance
+      properties:
+        initialBalance:
+          type: number
+          format: double
+          minimum: 0.01
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: USD
+        purchaserUserId:
+          type: string
+          format: uuid
+          nullable: true
+        purchaserEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientEmail:
+          type: string
+          format: email
+          nullable: true
+        recipientName:
+          type: string
+          nullable: true
+        personalMessage:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        sourceOrderId:
+          type: integer
+          format: int64
+          nullable: true
+
+    UpdateGiftCardRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, redeemed, expired, cancelled]
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+          description: Reason for status change or adjustment
+
+    # ====== Store Credit Schemas ======
+
+    StoreCreditAccountDto:
+      type: object
+      required:
+        - id
+        - userId
+        - balance
+        - currency
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: string
+          format: uuid
+        balance:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+        status:
+          type: string
+          enum: [active, suspended, closed]
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    StoreCreditTransaction:
+      type: object
+      required:
+        - id
+        - accountId
+        - amount
+        - transactionType
+        - balanceAfter
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        accountId:
+          type: integer
+          format: int64
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+        giftCardId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Gift card ID if credit from conversion
+        amount:
+          type: number
+          format: double
+          description: Positive for credit, negative for debit
+        transactionType:
+          type: string
+          enum: [issued, redeemed, refunded, adjusted, converted, expired]
+        balanceAfter:
+          type: number
+          format: double
+          minimum: 0
+        reason:
+          type: string
+          nullable: true
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    RedeemStoreCreditRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Amount to redeem from store credit
+        orderId:
+          type: integer
+          format: int64
+          nullable: true
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Optional fallback idempotency key when header cannot be set
+        posDeviceId:
+          type: integer
+          format: int64
+          nullable: true
+          description: POS device identifier when redemption happens offline
+        offlineSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp when offline redemption synced back to platform
+
+    AdjustStoreCreditRequest:
+      type: object
+      required:
+        - amount
+        - reason
+      properties:
+        amount:
+          type: number
+          format: double
+          description: Positive to credit, negative to debit
+        reason:
+          type: string
+          description: Human-readable reason for adjustment
+
+    ConvertGiftCardRequest:
+      type: object
+      required:
+        - giftCardId
+        - userId
+      properties:
+        giftCardId:
+          type: integer
+          format: int64
+          description: Gift card to convert
+        userId:
+          type: string
+          format: uuid
+          description: User who will receive the store credit
+        reason:
+          type: string
+          nullable: true
+          description: Reason for conversion
+
+    AddToCartRequest:
+      type: object
+      required:
+        - variantId
+        - quantity
+      properties:
+        variantId:
+          type: string
+          format: uuid
+          description: Product variant UUID to add
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Quantity to add
+
+    UpdateCartItemRequest:
+      type: object
+      required:
+        - quantity
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          description: New quantity for the cart item
+
+    CheckoutPreviewRequest:
+      type: object
+      required:
+        - lineItems
+      properties:
+        lineItems:
+          type: array
+          items:
+            type: object
+            required: [variantId, quantity]
+            properties:
+              variantId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        promoCode:
+          type: string
+          description: Promotional/discount code
+          example: "SAVE20"
+
+    CheckoutPreview:
+      type: object
+      required:
+        - subtotal
+        - tax
+        - shipping
+        - total
+        - currency
+      properties:
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        discounts:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              amount:
+                $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        shipping:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
+        currency:
+          type: string
+          example: "USD"
+        lineItems:
+          type: array
+          description: Calculated line items with final pricing
+          items:
+            type: object
+            properties:
+              variantId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+              unitPrice:
+                $ref: '#/components/schemas/Money'
+              lineTotal:
+                $ref: '#/components/schemas/Money'
+
+    CheckoutCommitRequest:
+      allOf:
+        - $ref: '#/components/schemas/CheckoutPreviewRequest'
+        - type: object
+          required:
+            - shippingAddress
+            - billingAddress
+            - paymentMethodId
+          properties:
+            billingAddress:
+              $ref: '#/components/schemas/Address'
+            paymentMethodId:
+              type: string
+              description: Stripe payment method ID (from Stripe Elements)
+              example: "pm_1234567890abcdef"
+
+    OrderCreatedResponse:
+      type: object
+      required:
+        - orderId
+        - orderNumber
+        - status
+        - total
+        - createdAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+          description: Human-readable order number
+          example: "ORD-2026-00042"
+        status:
+          type: string
+          enum: [pending, processing, shipped, delivered, cancelled]
+        total:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        estimatedDelivery:
+          type: string
+          format: date
+          description: Estimated delivery date
+
+    # --------------------------------------------------------------------------
+    # Shared/Utility Schemas
+    # --------------------------------------------------------------------------
+
+    Money:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: string
+          pattern: '^\d+\.\d{2}$'
+          description: Decimal amount as string (avoids floating-point precision issues)
+          example: "99.99"
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code
+          example: "USD"
+      description: |
+        Monetary value with currency. Amount stored as string to preserve precision.
+        Always includes exactly 2 decimal places (e.g., "10.00", not "10").
+
+    Consignor:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "John Doe Collectibles"
+        contactInfo:
+          type: string
+          description: JSON-encoded contact information (email, phone, address)
+          example: '{"email":"john@example.com","phone":"+1-555-123-4567"}'
+        payoutSettings:
+          type: string
+          description: JSON-encoded payout/tax settings
+          example: '{"default_commission_rate":15,"w9_on_file":true}'
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateConsignorRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        contactInfo:
+          type: string
+          description: JSON-encoded contact information
+        payoutSettings:
+          type: string
+          description: JSON-encoded payout/tax preferences
+
+    ConsignmentItem:
+      type: object
+      required:
+        - id
+        - productId
+        - consignorId
+        - commissionRate
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+        consignorId:
+          type: string
+          format: uuid
+        consignorName:
+          type: string
+        commissionRate:
+          type: number
+          format: double
+          example: 15.0
+        status:
+          type: string
+          enum: [active, sold, returned, deleted]
+        soldAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateConsignmentItemRequest:
+      type: object
+      required:
+        - productId
+        - commissionRate
+      properties:
+        productId:
+          type: string
+          format: uuid
+        commissionRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        consignorId:
+          type: string
+          format: uuid
+          description: Optional duplicate safeguard (must match path parameter if provided)
+
+    PayoutBatch:
+      type: object
+      required:
+        - id
+        - consignorId
+        - periodStart
+        - periodEnd
+        - totalAmount
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        consignorId:
+          type: string
+          format: uuid
+        consignorName:
+          type: string
+        periodStart:
+          type: string
+          format: date
+        periodEnd:
+          type: string
+          format: date
+        totalAmount:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+        paymentReference:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # --------------------------------------------------------------------------
+    # Inventory Domain Schemas
+    # --------------------------------------------------------------------------
+
+    InventoryLocation:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: "warehouse-1"
+          description: Unique location code within tenant
+        name:
+          type: string
+          example: "Main Warehouse"
+          description: Human-readable location name
+        type:
+          type: string
+          example: "warehouse"
+          description: Location type (warehouse, retail, supplier)
+        address:
+          type: string
+          description: Physical address in JSON format
+          example: '{"street":"123 Main St","city":"Seattle","state":"WA","zip":"98101"}'
+        active:
+          type: boolean
+          description: Whether location is active for transactions
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateInventoryLocationRequest:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        type:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+          description: Physical address in JSON format
+        active:
+          type: boolean
+          default: true
+
+    InventoryTransfer:
+      type: object
+      required:
+        - transferId
+        - sourceLocationId
+        - destinationLocationId
+        - status
+        - lines
+        - createdAt
+        - updatedAt
+      properties:
+        transferId:
+          type: string
+          format: uuid
+        sourceLocationId:
+          type: string
+          format: uuid
+        destinationLocationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, IN_TRANSIT, RECEIVED, CANCELLED]
+          description: Current transfer status
+        initiatedBy:
+          type: string
+          description: User or system that initiated transfer
+        expectedArrivalDate:
+          type: string
+          format: date-time
+          nullable: true
+        carrier:
+          type: string
+          example: "FedEx"
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        shippingCost:
+          type: integer
+          description: Shipping cost in cents
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferLine'
+          description: Transfer line items
+        barcodeJobId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Background job ID for barcode label generation
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransferLine:
+      type: object
+      required:
+        - variantId
+        - quantity
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        receivedQuantity:
+          type: integer
+          nullable: true
+          description: Actual quantity received (may differ from requested)
+        notes:
+          type: string
+          nullable: true
+
+    CreateInventoryTransferRequest:
+      type: object
+      required:
+        - sourceLocationId
+        - destinationLocationId
+        - lines
+      properties:
+        sourceLocationId:
+          type: string
+          format: uuid
+        destinationLocationId:
+          type: string
+          format: uuid
+        initiatedBy:
+          type: string
+        expectedArrivalDate:
+          type: string
+          format: date-time
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        shippingCost:
+          type: integer
+          description: Shipping cost in cents
+        notes:
+          type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - variantId
+              - quantity
+            properties:
+              variantId:
+                type: string
+                format: uuid
+              quantity:
+                type: integer
+                minimum: 1
+              notes:
+                type: string
+
+    InventoryAdjustment:
+      type: object
+      required:
+        - id
+        - variantId
+        - locationId
+        - quantityChange
+        - quantityBefore
+        - quantityAfter
+        - reason
+        - adjustedBy
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        quantityChange:
+          type: integer
+          description: Quantity delta (positive or negative)
+        quantityBefore:
+          type: integer
+          description: Quantity before adjustment
+        quantityAfter:
+          type: integer
+          description: Quantity after adjustment
+        reason:
+          type: string
+          enum: [CYCLE_COUNT, DAMAGE, RETURN, SHRINKAGE, FOUND, OTHER]
+          description: Adjustment reason code
+        adjustedBy:
+          type: string
+          description: User who performed adjustment
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateInventoryAdjustmentRequest:
+      type: object
+      required:
+        - variantId
+        - locationId
+        - quantityChange
+        - reason
+        - adjustedBy
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        quantityChange:
+          type: integer
+          description: Quantity delta (positive or negative)
+        reason:
+          type: string
+          enum: [CYCLE_COUNT, DAMAGE, RETURN, SHRINKAGE, FOUND, OTHER]
+        adjustedBy:
+          type: string
+        notes:
+          type: string
+
+    Address:
+      type: object
+      required:
+        - line1
+        - city
+        - country
+        - postalCode
+      properties:
+        line1:
+          type: string
+          description: Street address line 1
+          example: "123 Main St"
+        line2:
+          type: string
+          description: Street address line 2 (apt, suite, etc.)
+          example: "Apt 4B"
+        city:
+          type: string
+          example: "San Francisco"
+        state:
+          type: string
+          description: State/province/region code
+          example: "CA"
+        postalCode:
+          type: string
+          example: "94102"
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+          description: ISO 3166-1 alpha-2 country code
+          example: "US"
+        phone:
+          type: string
+          description: Contact phone number
+          example: "+1-415-555-1234"
+      description: Physical address for shipping/billing
+
+    PaginationMetadata:
+      type: object
+      required:
+        - page
+        - pageSize
+        - totalItems
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: Current page number (1-indexed)
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          description: Items per page
+          example: 20
+        totalItems:
+          type: integer
+          minimum: 0
+          description: Total number of items across all pages
+          example: 142
+        totalPages:
+          type: integer
+          minimum: 0
+          description: Total number of pages
+          example: 8
+        hasNext:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        hasPrev:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+      description: |
+        Pagination metadata for paginated list responses.
+        Includes navigation helpers (hasNext, hasPrev) to simplify client logic.
+
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference identifying the problem type
+          example: "https://docs.villagecompute.com/errors/validation-error"
+        title:
+          type: string
+          description: Short, human-readable summary of the problem
+          example: "Validation Failed"
+        status:
+          type: integer
+          description: HTTP status code
+          example: 400
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence
+          example: "Product SKU must be unique within tenant"
+        instance:
+          type: string
+          format: uri
+          description: URI reference identifying the specific occurrence
+          example: "https://storename.villagecompute.com/api/v1/products"
+        errors:
+          type: object
+          description: Field-level validation errors (key = field name, value = error messages)
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            sku: ["SKU 'WIDGET-001' already exists"]
+            price: ["Price must be greater than 0"]
+      description: |
+        RFC 7807 Problem Details for HTTP APIs.
+        Standard error response format used across all endpoints.
+
+        **Common Error Types:**
+        - `validation-error`: Input validation failed (400)
+        - `authentication-required`: Missing or invalid auth token (401)
+        - `forbidden`: Insufficient permissions (403)
+        - `not-found`: Resource not found (404)
+        - `conflict`: Resource conflict (409)
+        - `rate-limit-exceeded`: Too many requests (429)
+        - `internal-error`: Unexpected server error (500)

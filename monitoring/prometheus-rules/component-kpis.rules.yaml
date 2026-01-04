@@ -1,0 +1,391 @@
+---
+# Prometheus alerting rules for Village Storefront Component KPIs
+# Aligned with Blueprint Foundation Section 4 and Architecture §3.7
+# Validation: promtool check rules monitoring/prometheus-rules/*.yaml
+
+groups:
+- name: tenant-access-gateway
+  interval: 30s
+  rules:
+  - alert: TenantResolutionLatencyHigh
+    expr: |
+      histogram_quantile(0.50, sum(rate(tenant_resolution_duration_bucket[5m])) by (le)) > 0.010
+    for: 5m
+    labels:
+      severity: warning
+      component: tenant-gateway
+      kpi: resolution-latency
+    annotations:
+      summary: "Tenant resolution median latency exceeds 10ms SLA"
+      description: "Median tenant resolution is {{ $value | humanizeDuration }} (target: <10ms per Section 4 KPI)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/tenant-gateway"
+
+  - alert: TenantMisclassificationRateHigh
+    expr: |
+      rate(tenant_resolution_misclassified_total[5m]) / rate(tenant_resolution_total[5m]) > 0.001
+    for: 10m
+    labels:
+      severity: critical
+      component: tenant-gateway
+      kpi: misclassification-rate
+    annotations:
+      summary: "Tenant misclassification rate exceeds 0.1% threshold"
+      description: "Misclassification rate is {{ $value | humanizePercentage }} (target: <0.1%)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/tenant-gateway"
+
+- name: identity-session
+  interval: 30s
+  rules:
+  - alert: TokenIssuanceLatencyHigh
+    expr: |
+      histogram_quantile(0.50, sum(rate(token_issuance_duration_bucket[5m])) by (le)) > 0.050
+    for: 5m
+    labels:
+      severity: warning
+      component: identity
+      kpi: token-issuance
+    annotations:
+      summary: "Token issuance median latency exceeds 50ms target"
+      description: "Median token issuance is {{ $value | humanizeDuration }} (target: <50ms)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/identity"
+
+  - alert: TokenRefreshSuccessRateLow
+    expr: |
+      rate(token_refresh_success_total[5m]) / rate(token_refresh_total[5m]) < 0.99
+    for: 10m
+    labels:
+      severity: warning
+      component: identity
+      kpi: refresh-success
+    annotations:
+      summary: "Token refresh success ratio below 99% SLA"
+      description: "Refresh success ratio is {{ $value | humanizePercentage }} (target: >99%)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/identity"
+
+- name: storefront-rendering
+  interval: 30s
+  rules:
+  - alert: StorefrontColdRenderSlow
+    expr: |
+      histogram_quantile(0.95, sum(rate(storefront_render_duration_bucket{cold="true"}[5m])) by (le)) > 0.150
+    for: 10m
+    labels:
+      severity: warning
+      component: storefront
+      kpi: cold-render
+    annotations:
+      summary: "Cold render p95 exceeds 150ms target"
+      description: "Cold render p95 is {{ $value | humanizeDuration }} (target: <150ms per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/storefront-rendering"
+
+  - alert: HydrationBundleSizeLarge
+    expr: |
+      storefront_bundle_size_bytes{type="hydration"} / 1024 > 120
+    for: 15m
+    labels:
+      severity: warning
+      component: storefront
+      kpi: bundle-size
+    annotations:
+      summary: "Hydration bundle exceeds 120KB gzipped target"
+      description: "Bundle size is {{ $value }}KB (target: <120KB)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/storefront-rendering"
+
+- name: admin-spa-delivery
+  interval: 30s
+  rules:
+  - alert: AdminBundleSizeTooLarge
+    expr: |
+      avg(admin_spa_bundle_size_bytes{type="initial"}) > 2097152
+    for: 15m
+    labels:
+      severity: warning
+      component: admin-spa
+      kpi: bundle-size
+    annotations:
+      summary: "Admin SPA initial bundle exceeds 2MB gzipped target"
+      description: "Bundle size is {{ $value | humanize }} bytes (target: <2MB per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/admin-spa"
+
+  - alert: AdminNavigationLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(admin_spa_navigation_latency_bucket[5m])) by (le)) > 0.200
+    for: 5m
+    labels:
+      severity: warning
+      component: admin-spa
+      kpi: navigation-latency
+    annotations:
+      summary: "Admin SPA navigation p95 exceeds 200ms target"
+      description: "Navigation p95 is {{ $value | humanizeDuration }} (target: <200ms with cached APIs)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/admin-spa"
+
+- name: catalog-inventory
+  interval: 30s
+  rules:
+  - alert: CatalogBulkImportThroughputLow
+    expr: |
+      rate(catalog_bulk_import_products_total[5m]) * 60 < 5000
+    for: 10m
+    labels:
+      severity: warning
+      component: catalog
+      kpi: bulk-import-throughput
+    annotations:
+      summary: "Catalog bulk import throughput below 5k products/min"
+      description: "Throughput is {{ $value }}/min (target: >=5k per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/catalog-inventory"
+
+  - alert: VariantUpsertLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(variant_upsert_duration_bucket[5m])) by (le)) > 0.200
+    for: 5m
+    labels:
+      severity: warning
+      component: catalog
+      kpi: variant-upsert-latency
+    annotations:
+      summary: "Variant upsert p95 exceeds 200ms target"
+      description: "Variant upsert latency is {{ $value | humanizeDuration }} (batch SQL expected per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/catalog-inventory"
+
+- name: consignment-module
+  interval: 30s
+  rules:
+  - alert: ConsignmentIntakeLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(consignment_intake_duration_bucket[5m])) by (le)) > 0.500
+    for: 10m
+    labels:
+      severity: warning
+      component: consignment
+      kpi: intake-batch-latency
+    annotations:
+      summary: "Consignment intake batch p95 exceeds 500ms target"
+      description: "Intake p95 is {{ $value | humanizeDuration }} for {{ $labels.consignor_id }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
+      reference: "ADR-004 Consignment Payouts"
+
+  - alert: ConsignmentPayoutClosureSlow
+    expr: |
+      histogram_quantile(0.95, sum(rate(consignment_payout_close_duration_bucket[5m])) by (le)) > 300
+    for: 15m
+    labels:
+      severity: warning
+      component: consignment
+      kpi: payout-close
+    annotations:
+      summary: "Consignment payout batch close exceeds 5-minute SLA"
+      description: "Payout close p95 is {{ $value | humanizeDuration }} (target: <5 minutes per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
+      reference: "docs/adr/ADR-004-consignment-payouts.md"
+
+- name: checkout-orchestrator
+  interval: 30s
+  rules:
+  - alert: CheckoutLatencyWarning
+    expr: |
+      histogram_quantile(0.95, sum(rate(checkout_saga_duration_bucket{stage="complete"}[5m])) by (le)) > 0.300
+    for: 5m
+    labels:
+      severity: warning
+      component: checkout
+      kpi: checkout-latency
+    annotations:
+      summary: "Checkout p95 >300ms triggers warnings per Architecture §3.7"
+      description: "Checkout p95 is {{ $value | humanizeDuration }} (warning threshold: 300ms)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/checkout"
+      link_to_dashboard: "https://grafana.villagecompute.com/d/component-kpis?panelId=7"
+
+  - alert: CheckoutLatencyCritical
+    expr: |
+      histogram_quantile(0.95, sum(rate(checkout_saga_duration_bucket{stage="complete"}[5m])) by (le)) > 0.800
+    for: 2m
+    labels:
+      severity: critical
+      component: checkout
+      kpi: checkout-latency
+    annotations:
+      summary: "Checkout p95 exceeds 800ms SLA target"
+      description: "Checkout p95 is {{ $value | humanizeDuration }} (target: <800ms per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/checkout"
+
+  - alert: CheckoutFailureRateHigh
+    expr: |
+      sum(rate(checkout_saga_failed_total[5m])) / sum(rate(checkout_saga_total[5m])) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: checkout
+      kpi: failure-rate
+    annotations:
+      summary: "Checkout failure rate exceeds 5%"
+      description: "Failure rate is {{ $value | humanizePercentage }} by stage/error: {{ $labels.stage }}/{{ $labels.error_type }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/checkout"
+
+- name: media-pipeline
+  interval: 30s
+  rules:
+  - alert: MediaQueueDepthHigh
+    expr: |
+      media_queue_depth{priority=~"default|low"} > 100
+    for: 5m
+    labels:
+      severity: warning
+      component: media
+      kpi: queue-depth
+    annotations:
+      summary: "Media queue depth >100 for 5 minutes triggers scaling"
+      description: "Queue depth is {{ $value }} jobs for priority {{ $labels.priority }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/media"
+      action: "Scale worker pods per Architecture §3.7"
+
+  - alert: MediaSuccessRateLow
+    expr: |
+      rate(media_job_success_total[5m]) / rate(media_job_total[5m]) < 0.995
+    for: 15m
+    labels:
+      severity: warning
+      component: media
+      kpi: success-rate
+    annotations:
+      summary: "Media job success rate below 99.5% target"
+      description: "Success rate is {{ $value | humanizePercentage }} (target: >99.5% per docs/media/pipeline.md)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/media"
+
+  - alert: MediaQuotaExceededFrequent
+    expr: |
+      rate(media_quota_exceeded_total[5m]) > 0.1
+    for: 10m
+    labels:
+      severity: info
+      component: media
+      kpi: quota-enforcement
+    annotations:
+      summary: "Frequent quota exceeded events detected"
+      description: "Quota rejections at {{ $value }}/sec for tenant {{ $labels.tenant_id }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/media"
+
+- name: payment-layer
+  interval: 30s
+  rules:
+  - alert: StripeWebhookIdempotencyViolation
+    expr: |
+      rate(stripe_webhook_duplicate_total[5m]) / rate(stripe_webhook_received_total[5m]) > 0.5
+    for: 10m
+    labels:
+      severity: warning
+      component: payment
+      kpi: webhook-idempotency
+    annotations:
+      summary: "High duplicate webhook rate indicates idempotency issue"
+      description: "Duplicate rate is {{ $value | humanizePercentage }} (expected: minimal duplicates)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payment"
+
+  - alert: PayoutReconciliationDiscrepancy
+    expr: |
+      payout_reconciliation_unresolved_total > 0
+    for: 1h
+    labels:
+      severity: critical
+      component: payment
+      kpi: reconciliation
+    annotations:
+      summary: "Unresolved payout discrepancies detected"
+      description: "{{ $value }} unresolved discrepancies after daily reconciliation cycle"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payment"
+      escalation: "Contact finance team immediately"
+
+- name: loyalty-rewards
+  interval: 30s
+  rules:
+  - alert: LoyaltyPointsAccrualOverhead
+    expr: |
+      histogram_quantile(0.95, sum(rate(loyalty_points_accrual_duration_bucket[5m])) by (le)) > 0.020
+    for: 10m
+    labels:
+      severity: warning
+      component: loyalty
+      kpi: accrual-overhead
+    annotations:
+      summary: "Points accrual p95 overhead exceeds 20ms target"
+      description: "Accrual overhead is {{ $value | humanizeDuration }} (target: <20ms per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/loyalty"
+
+  - alert: LoyaltyTierRecalculationSlow
+    expr: |
+      loyalty_tier_recalc_job_duration_seconds > 600
+    for: 5m
+    labels:
+      severity: warning
+      component: loyalty
+      kpi: tier-recalc
+    annotations:
+      summary: "Tier recalculation job exceeds 10-minute target"
+      description: "Recalculation took {{ $value | humanizeDuration }} (target: <10 minutes nightly)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/loyalty"
+
+- name: pos-offline
+  interval: 30s
+  rules:
+  - alert: POSOfflineFlushSlow
+    expr: |
+      histogram_quantile(0.95, sum(rate(pos_offline_flush_duration_bucket[5m])) by (le)) > 60
+    for: 5m
+    labels:
+      severity: warning
+      component: pos-offline
+      kpi: flush-time
+    annotations:
+      summary: "Offline queue flush p95 exceeds 60-second target"
+      description: "Flush time is {{ $value }}s (target: <60s upon reconnect per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/pos-offline"
+
+- name: reporting-service
+  interval: 30s
+  rules:
+  - alert: ReportGenerationThroughputLow
+    expr: |
+      rate(reporting_rows_generated_total[5m]) * 60 < 50000
+    for: 10m
+    labels:
+      severity: warning
+      component: reporting
+      kpi: throughput
+    annotations:
+      summary: "Report generation throughput below 50k rows/min target"
+      description: "Throughput is {{ $value }}/min (target: >50k rows/min per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/reporting"
+
+- name: platform-admin
+  interval: 30s
+  rules:
+  - alert: PlatformAdminStoreListSlow
+    expr: |
+      histogram_quantile(0.95, sum(rate(platform_admin_store_list_duration_bucket[5m])) by (le)) > 0.300
+    for: 10m
+    labels:
+      severity: warning
+      component: platform-admin
+      kpi: query-latency
+    annotations:
+      summary: "Global store list query p95 exceeds 300ms target"
+      description: "Query latency is {{ $value | humanizeDuration }} (target: <300ms with pagination)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/platform-admin"
+
+- name: integration-adapters
+  interval: 30s
+  rules:
+  - alert: IntegrationAdapterFailureRateHigh
+    expr: |
+      sum(rate(integration_adapter_failed_total[5m])) by (adapter, failure_type) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: integration
+      kpi: failure-rate
+    annotations:
+      summary: "External call failure rate high for {{ $labels.adapter }}"
+      description: "Failure type {{ $labels.failure_type }} at {{ $value }}/sec"
+      runbook_url: "https://docs.villagecompute.com/runbooks/integration-adapters"
+      note: "Distinguish between dependency outage vs local misconfiguration per Section 4"

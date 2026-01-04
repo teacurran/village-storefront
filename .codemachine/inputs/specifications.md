@@ -55,11 +55,36 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 
 ### 1. Multi-Tenancy & Store Management
 
+#### Tenant Isolation Architecture
+- **Database strategy**: Shared database with `tenant_id` discriminator column on all tenant-scoped tables
+- **Row-Level Security**: PostgreSQL RLS policies enforce tenant isolation at database layer
+- **Application-layer enforcement**: Defense-in-depth via Panache query filters
+
+#### Tenant Resolution (Request Filter Pattern)
+- **TenantContext**: `@RequestScoped` CDI bean holding current tenant ID
+  ```java
+  @RequestScoped
+  public class TenantContext {
+      private UUID tenantId;
+      private Store store;
+      // getters/setters
+  }
+  ```
+- **TenantFilter**: `@Provider` JAX-RS `ContainerRequestFilter` executes before all requests
+  - Extracts tenant from Host header subdomain (e.g., `acme.storefront.com` → `acme`)
+  - Resolves subdomain to Store entity, populates TenantContext
+  - For custom domains: lookup domain in `custom_domains` table
+  - Returns 404 if tenant not found (invalid subdomain/domain)
+- **Service injection**: All services `@Inject TenantContext` for tenant-aware operations
+- **Panache integration**: Base repository class automatically applies `tenant_id` filter to all queries
+
+#### Store Features
 - **Store creation**: Merchants sign up and create a store with unique subdomain
-- **Custom domains**: Merchants can add custom domains with automatic SSL handling
+- **Custom domains**: Merchants can add custom domains with automatic SSL via Let's Encrypt (ACME HTTP-01 challenge)
 - **Store settings**: Business info, branding (logo, colors, fonts), policies
 - **Tenant isolation**: All data strictly scoped to tenant; no cross-tenant data leakage
 - **Store suspension/deletion**: Platform admin can manage store lifecycle
+- **CORS configuration**: Enable cross-origin requests for subdomain-based access
 
 ### 2. User Authentication & Accounts
 
@@ -458,13 +483,139 @@ For static site integration and custom frontends:
 ## Constraints & Assumptions
 
 1. **Single base currency per store**: Payments processed in one currency, display in multiple
-2. **English-only for v1**: Internationalization deferred to future version
+2. **Internationalized UI**: English and Spanish supported from v1 (see Internationalization section)
 3. **Stripe-only payments for v1**: Pluggable provider architecture ready for PayPal, CashApp, etc.
-4. **US shipping focus**: USPS, UPS, FedEx initially; international carriers later
+4. **US shipping focus**: USPS, UPS, FedEx direct API integrations
 5. **No marketplace features**: Stores are independent; no cross-store discovery
 6. **No AI features in v1**: Focus on core functionality first
 7. **No B2B features in v1**: Wholesale pricing, purchase orders deferred
 8. **No Redis**: Stateless JWT auth + Caffeine caching; add distributed cache later if needed
+
+---
+
+## Technical Architecture Decisions
+
+### Background Job Processing
+- **Async tasks (emails, media processing, payouts)**: DelayedJob pattern (see `java-project-standards.adoc`)
+  - Database-persisted job queue with retry logic
+  - Priority queues (CRITICAL, HIGH, DEFAULT, LOW, BULK)
+  - Exponential backoff retry strategy
+- **Recurring batch jobs (cleanup, reports, cert renewal)**: Quarkus `@Scheduled` annotations
+- **No external message broker**: Adheres to "No Redis" constraint
+
+### Shipping Rate Integration
+- **Direct carrier API integrations**: USPS Web Tools, UPS Rating API, FedEx Web Services
+- **Per-carrier credential management**: Store-level API keys
+- **Fallback strategy**: Table-rate/flat-rate shipping if carrier API unavailable
+- **Rate caching**: Cache rates for identical origin/destination/weight for 15 minutes
+
+### Consignment Vendor Payouts
+- **Stripe Connect Express accounts**: Vendors onboard via Stripe-hosted flow
+- **Compliance delegation**: Stripe handles 1099-K reporting and identity verification
+- **Payout timing**: Controlled by Stripe (2-7 day settlement)
+- **Platform fee collection**: Deducted at time of charge via Stripe Connect
+- **Vendor tax details**: SSN/EIN collected during Stripe onboarding
+
+### Media Processing Execution
+- **Short operations (image resize, thumbnail)**: In-process via Thumbnailator, immediate response
+- **Long operations (video transcode)**: Queued via DelayedJob, processed asynchronously
+- **Execution environment**: FFmpeg invoked via ProcessBuilder within application pods
+- **Resource limits**:
+  - Image processing timeout: 30 seconds
+  - Video processing timeout: 10 minutes
+  - Upload limits enforced before processing begins
+- **Failure handling**: Failed transcodes logged, original preserved, retry via DelayedJob
+
+### Session & Audit Log Storage
+- **Hot storage**: PostgreSQL with time-based partitioning (monthly partitions)
+- **Retention in database**: 90 days of session activity and audit logs
+- **Archival**: Records older than 90 days compressed and archived to R2 object storage
+- **Archive format**: JSONL (newline-delimited JSON) with gzip compression
+- **Historical queries**: Application queries archive via S3 API when date range exceeds 90 days
+- **Partition maintenance**: Scheduled job creates new partitions, archives and drops old ones
+
+### Platform Admin Data Access
+- **Access model**: Shared isolation layer with context overrides
+- **Impersonation**: Platform admins use same RLS/Panache filters with tenant context override
+- **Audit logging**: All platform admin actions logged to separate audit tables (outside RLS scope)
+- **Compliance**: Audit logs retained per regulatory requirements (SOC2, GDPR as applicable)
+
+### SSL Certificate Management
+- **Strategy**: Operator-delegated using cert-manager
+- **ACME provider**: Let's Encrypt with HTTP-01 challenges
+- **Certificate lifecycle**: cert-manager handles issuance, renewal, and secret management
+- **Application role**: Register custom domain records, cert-manager handles the rest
+- **Infrastructure dependency**: Requires cert-manager operator installed in k8s cluster
+
+### Multi-Currency Display
+- **Conversion model**: Display-only conversion
+- **Exchange rate source**: Daily-refreshed cache from free API (e.g., exchangerate-api.com)
+- **Settlement**: All transactions charged in store's base currency at Stripe's market rate
+- **Customer UX**: Prominent disclaimer that final charge is in store's base currency
+- **Rate caching**: Caffeine cache with 24-hour TTL, fallback to last known rate
+
+### Consignment Payout Mechanics
+- **Fee deduction timing**: Platform fee deducted at point-of-sale via Stripe Connect application fee
+- **Commission crediting**: Vendor balance credited after refund window expires (30 days post-fulfillment)
+- **Chargeback handling**: Chargebacks deducted from vendor balance; if insufficient, flagged for merchant resolution
+- **Payout frequency**: Configurable per-store (daily, weekly, monthly)
+- **Stripe settlement**: 2-7 day payout timing controlled by Stripe Express account settings
+
+### Session & Audit Log Analytics
+- **Query tier**: Tier 2 - Moderate analytics with indexed searches
+- **Indexing strategy**: Composite indexes on (tenant_id, timestamp), (tenant_id, user_id), (session_type, timestamp)
+- **Aggregation**: Scheduled jobs roll up data into aggregate tables for dashboard performance
+- **Tenant isolation**: All reports scoped to single tenant; no cross-tenant queries in store admin
+- **Platform admin reports**: Aggregate counts only (tenant count, logins, account creations, etc.)
+- **Query SLA**: Admin dashboard queries < 500ms for 30-day ranges
+- **Archive access**: CSV export tool for archived data beyond 90 days
+
+### Media Processing Deployment
+- **Execution model**: In-process within application pods via DelayedJob
+- **Queue configuration**: Per-pod configurable queue subscriptions via environment variables
+  - `DELAYED_JOB_QUEUES=CRITICAL,HIGH,DEFAULT` - which queues this pod processes
+  - `DELAYED_JOB_ENABLED=true|false` - enable/disable job processing entirely
+- **Deployment flexibility**:
+  - Web-only pods: `DELAYED_JOB_ENABLED=false`
+  - Video processing pods: `DELAYED_JOB_QUEUES=CRITICAL` (media jobs)
+  - Notification pods: `DELAYED_JOB_QUEUES=HIGH,DEFAULT` (emails, webhooks)
+  - All-purpose pods: `DELAYED_JOB_QUEUES=CRITICAL,HIGH,DEFAULT,LOW,BULK`
+- **Resource limits**: JVM heap constraints, 10-minute timeout for video, 30-second for images
+- **Scaling**: Horizontal pod autoscaling based on queue depth metrics
+
+### Loyalty Program Configuration
+- **Multi-model support**: Stores can configure one or more redemption models
+- **Available models**:
+  - **Points-to-Currency**: Flexible conversion (e.g., 1 point = $0.01), applied as payment method
+  - **Fixed Tiers**: Threshold rewards (e.g., 100 points = $5 discount code)
+  - **Product Rewards**: Punch-card style (e.g., buy 10 coffees, get 1 free)
+- **Earning rules**: Configurable points-per-dollar or points-per-item by category
+- **Stacking rules**: Merchant-configurable; default allows one loyalty reward + one coupon code
+- **Refund handling**: Points reinstated on full refund; partial refunds prorate point reinstatement
+- **Expiration**: Optional points expiration after configurable inactivity period
+- **Tier benefits**: Optional tier levels with bonus multipliers and exclusive rewards
+
+### Internationalization (i18n)
+- **Supported languages**: English (en), Spanish (es) at launch; extensible for future languages
+- **Language selection**:
+  - Customer storefront: Browser `Accept-Language` header with manual override (stored in cookie/session)
+  - Admin dashboard: User preference stored in account settings
+- **Translation strategy**:
+  - **Qute templates (storefront)**: Quarkus `MessageBundle` with `.properties` files per locale
+  - **Vue.js admin**: `vue-i18n` with JSON message files per locale
+  - **API error messages**: Localized via `MessageBundle`, locale from request header
+- **Message file structure**:
+  ```
+  src/main/resources/messages/
+  ├── messages.properties        # English (default)
+  ├── messages_es.properties     # Spanish
+  src/main/webui/src/locales/
+  ├── en.json                    # English (admin)
+  └── es.json                    # Spanish (admin)
+  ```
+- **Content translation**: Product descriptions, store policies, email templates are merchant-managed (not system-translated)
+- **Date/number formatting**: Locale-aware formatting via `java.time` and `Intl` APIs
+- **RTL support**: Not required for v1 (English/Spanish are LTR)
 
 ---
 

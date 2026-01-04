@@ -1,0 +1,522 @@
+%% ============================================================================
+%% Village Storefront - Consignment Payout Flow Sequence Diagram
+%% ============================================================================
+%% Description: Consignment payout orchestration flow showing automated batch
+%%              creation, admin approval, Stripe Connect transfer, reporting
+%%              reconciliation, notifications, and audit logging with error
+%%              handling and compensation points
+%% References:
+%%   - ADR-004 Consignment Payout Automation & Compliance Guard Rails
+%%   - ADR-001 Multi-Tenant Tenant Isolation
+%%   - Architecture Overview Section 2: Standard Technology Kit (Consignment + Payments)
+%%   - Architecture Overview Section 3.2.6: Consignment Module
+%%   - ConsignmentService: src/main/java/villagecompute/storefront/services/ConsignmentService.java
+%%   - Reporting Projections: docs/reporting/projections.md (consignment_payout_aggregates)
+%%
+%% Render with Mermaid CLI:
+%%   npx @mermaid-js/mermaid-cli -i docs/diagrams/sequence_consignment_payout.mmd -o docs/diagrams/sequence_consignment_payout.png
+%%   or
+%%   mmdc -i docs/diagrams/sequence_consignment_payout.mmd -o docs/diagrams/sequence_consignment_payout.svg
+%% ============================================================================
+
+sequenceDiagram
+    autonumber
+
+    participant Scheduler as Scheduled Job<br/>(Quarkus)
+    participant AdminSPA as Admin SPA<br/>(Vue + PrimeVue)
+    participant ConsignmentAPI as Consignment<br/>API Resource
+    participant ConsignmentService as Consignment<br/>Service
+    participant ReportingProjection as Reporting<br/>Projection Service
+    participant StripeConnect as Stripe Connect<br/>Integration
+    participant Database as PostgreSQL<br/>(payout_batches)
+    participant AuditLog as Audit Log<br/>(platform_commands)
+    participant NotificationService as Notification<br/>Service
+    participant JobQueue as Background<br/>Job Queue
+
+    %% Happy path: Automated payout batch creation
+    rect rgb(220, 250, 220)
+        Note over Scheduler,JobQueue: Scenario 1: Automated Payout Batch Creation (Monthly Schedule)
+
+        %% Scheduled job triggers batch creation
+        Scheduler->>ConsignmentService: Monthly Job: createPayoutBatches()<br/>Cron: 0 0 1 * * ? (1st of month)
+        activate Scheduler
+        activate ConsignmentService
+
+        Note over ConsignmentService: STAGE 1: Aggregate Validation<br/>Span: ConsignmentPayout.aggregateValidation
+
+        ConsignmentService->>ReportingProjection: getConsignmentPayoutAggregates(lastMonth)
+        activate ReportingProjection
+
+        ReportingProjection->>Database: SELECT * FROM consignment_payout_aggregates<br/>WHERE period_start = ? AND period_end = ?<br/>AND tenant_id = ?
+        activate Database
+        Database-->>ReportingProjection: Aggregates[tenant, consignor, totalOwed]
+        deactivate Database
+
+        %% Check data freshness SLA
+        alt Aggregates Fresh (< 30 min lag)
+            ReportingProjection-->>ConsignmentService: PayoutAggregates[]<br/>(data_freshness_timestamp, total_owed)
+            deactivate ReportingProjection
+
+            Note over ConsignmentService: Validate freshness timestamp<br/>against 30-min SLA
+
+        else Aggregates Stale (> 30 min lag)
+            ReportingProjection-->>ConsignmentService: StaleDataWarning<br/>(lag: 45 minutes)
+            deactivate ReportingProjection
+
+            Note over ConsignmentService: Emit warning metric:<br/>consignment.payout.stale_data
+
+            ConsignmentService->>ReportingProjection: refreshConsignmentPayoutAggregates()
+            activate ReportingProjection
+            ReportingProjection->>Database: Recalculate aggregates
+            activate Database
+            deactivate Database
+            deactivate ReportingProjection
+        end
+
+        %% Create payout batches
+        Note over ConsignmentService,Database: STAGE 2: Batch Creation<br/>Span: ConsignmentPayout.batchCreation
+
+        loop For each consignor with sales
+            ConsignmentService->>Database: BEGIN TRANSACTION<br/>INSERT payout_batches (consignor_id, period_start,<br/>period_end, total_amount, status='pending')
+            activate Database
+
+            alt Batch Already Exists
+                Database-->>ConsignmentService: UniqueConstraintViolation<br/>(consignor_id, period_start, period_end)
+                deactivate Database
+
+                Note over ConsignmentService: Skip duplicate batch<br/>Emit metric: consignment.payout.batch.duplicate
+
+            else New Batch
+                Database-->>ConsignmentService: PayoutBatch(id, status='pending')
+                deactivate Database
+
+                ConsignmentService->>Database: INSERT payout_line_items<br/>(batch_id, consignment_item_id, amount)
+                activate Database
+                deactivate Database
+
+                Note over ConsignmentService: Emit metric:<br/>consignment.payout.batch.created
+            end
+        end
+
+        ConsignmentService-->>Scheduler: BatchCreationSummary<br/>(batches_created, total_amount)
+        deactivate ConsignmentService
+        deactivate Scheduler
+
+        Note over Scheduler: Emit gauge:<br/>consignment.payout.pending.amount
+    end
+
+    %% Admin approval workflow
+    rect rgb(220, 240, 255)
+        Note over AdminSPA,JobQueue: Scenario 2: Admin Approval & Stripe Connect Transfer
+
+        %% Admin reviews pending batches
+        AdminSPA->>ConsignmentAPI: GET /api/v1/admin/consignment/payout-batches?status=pending
+        activate AdminSPA
+        activate ConsignmentAPI
+
+        ConsignmentAPI->>ConsignmentService: getConsignorPayoutBatches(status='pending')
+        activate ConsignmentService
+
+        ConsignmentService->>Database: SELECT * FROM payout_batches<br/>WHERE tenant_id = ? AND status = 'pending'
+        activate Database
+        Database-->>ConsignmentService: PayoutBatch[]
+        deactivate Database
+
+        ConsignmentService-->>ConsignmentAPI: PayoutBatchDto[]
+        deactivate ConsignmentService
+
+        ConsignmentAPI-->>AdminSPA: HTTP 200 OK<br/>[{id, consignor, period, totalAmount}]
+        deactivate ConsignmentAPI
+
+        AdminSPA->>AdminSPA: Render review table<br/>(amounts, line items, consignor details)
+
+        Note over AdminSPA: Admin reviews:<br/>- Reconciliation against sales reports<br/>- Consignor onboarding status<br/>- Stripe Connect account status
+
+        %% Admin approves batch
+        AdminSPA->>ConsignmentAPI: POST /api/v1/admin/consignment/payout-batches/{batchId}/approve<br/>X-Ticket-Number: {ticketId}<br/>X-User-Context: {adminUserId}
+        activate ConsignmentAPI
+
+        Note over ConsignmentAPI,AuditLog: CRITICAL: Capture approval audit trail
+
+        ConsignmentAPI->>AuditLog: INSERT platform_commands<br/>(action='approve_payout_batch', batch_id, user_id,<br/>ticket_number, tenant_id, timestamp)
+        activate AuditLog
+        deactivate AuditLog
+
+        ConsignmentAPI->>ConsignmentService: approvePayoutBatch(batchId, approvalContext)
+        activate ConsignmentService
+
+        Note over ConsignmentService,Database: STAGE 3: Pre-Transfer Validation<br/>Span: ConsignmentPayout.preTransferValidation
+
+        ConsignmentService->>Database: SELECT * FROM payout_batches<br/>WHERE id = ? AND tenant_id = ?<br/>FOR UPDATE
+        activate Database
+
+        alt Batch Not Found or Wrong Tenant
+            Database-->>ConsignmentService: Empty result set
+            deactivate Database
+
+            ConsignmentService-->>ConsignmentAPI: HTTP 404 Not Found<br/>type: batch-not-found
+            deactivate ConsignmentService
+
+            ConsignmentAPI-->>AdminSPA: HTTP 404 Error
+            deactivate ConsignmentAPI
+            deactivate AdminSPA
+
+        else Batch Already Processed
+            Database-->>ConsignmentService: PayoutBatch(status='completed' or 'processing')
+            deactivate Database
+
+            ConsignmentService-->>ConsignmentAPI: HTTP 409 Conflict<br/>type: batch-already-processed
+            deactivate ConsignmentService
+
+            ConsignmentAPI-->>AdminSPA: HTTP 409 Error<br/>"Batch already in state: completed"
+            deactivate ConsignmentAPI
+            deactivate AdminSPA
+
+        else Batch Pending (Valid)
+            Database-->>ConsignmentService: PayoutBatch(status='pending')
+            deactivate Database
+
+            %% Verify Stripe Connect account
+            Note over ConsignmentService,StripeConnect: STAGE 4: Stripe Connect Capability Check<br/>GUARD RAIL: Ensure consignor onboarded
+
+            ConsignmentService->>ConsignmentService: Get consignor's Stripe Connect account ID<br/>from payout_settings JSONB
+
+            alt Consignor Not Onboarded (No Stripe Account)
+                ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'failed', error_message = 'consignor_not_onboarded'
+                activate Database
+                deactivate Database
+
+                ConsignmentService->>NotificationService: enqueue(NotifyAdminPayoutFailed)
+                activate NotificationService
+                deactivate NotificationService
+
+                ConsignmentService-->>ConsignmentAPI: HTTP 400 Bad Request<br/>type: consignor-not-onboarded
+                deactivate ConsignmentService
+
+                ConsignmentAPI-->>AdminSPA: HTTP 400 Error<br/>"Consignor must complete Stripe onboarding"
+                deactivate ConsignmentAPI
+                deactivate AdminSPA
+
+            else Stripe Account Exists
+                ConsignmentService->>StripeConnect: retrieveAccount(stripeAccountId)
+                activate StripeConnect
+
+                StripeConnect->>StripeConnect: GET /v1/accounts/{account_id}<br/>Check capabilities.transfers: active<br/>Check charges_enabled: true
+
+                alt Stripe Account Not Ready (KYC Pending)
+                    StripeConnect-->>ConsignmentService: Account(charges_enabled=false,<br/>requirements=[identity_verification])
+                    deactivate StripeConnect
+
+                    ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'failed',<br/>error_message = 'stripe_account_not_ready'
+                    activate Database
+                    deactivate Database
+
+                    ConsignmentService->>NotificationService: enqueue(NotifyConsignorCompleteKYC)
+                    activate NotificationService
+                    deactivate NotificationService
+
+                    ConsignmentService-->>ConsignmentAPI: HTTP 400 Bad Request<br/>type: stripe-account-not-ready
+                    deactivate ConsignmentService
+
+                    ConsignmentAPI-->>AdminSPA: HTTP 400 Error<br/>"Consignor must complete Stripe onboarding"
+                    deactivate ConsignmentAPI
+                    deactivate AdminSPA
+
+                else Stripe Account Ready
+                    StripeConnect-->>ConsignmentService: Account(charges_enabled=true,<br/>capabilities.transfers=active)
+                    deactivate StripeConnect
+
+                    %% Update batch status
+                    ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'awaiting_approval', approved_at = NOW(),<br/>approved_by = ?
+                    activate Database
+                    deactivate Database
+
+                    %% Enqueue transfer job
+                    Note over ConsignmentService,JobQueue: STAGE 5: Async Transfer Enqueue<br/>Span: ConsignmentPayout.transferEnqueue
+
+                    ConsignmentService->>JobQueue: enqueue(ExecuteStripeTransfer,<br/>payload: {batchId, stripeAccountId})
+                    activate JobQueue
+                    deactivate JobQueue
+
+                    ConsignmentService-->>ConsignmentAPI: HTTP 202 Accepted<br/>{batchId, status: 'awaiting_approval'}
+                    deactivate ConsignmentService
+
+                    ConsignmentAPI-->>AdminSPA: HTTP 202 Accepted<br/>"Payout queued for processing"
+                    deactivate ConsignmentAPI
+                    deactivate AdminSPA
+
+                    Note over JobQueue: Background job picks up transfer<br/>within 5 minutes (queue processing interval)
+                end
+            end
+        end
+    end
+
+    %% Stripe transfer execution
+    rect rgb(255, 250, 220)
+        Note over JobQueue,AuditLog: Scenario 3: Stripe Connect Transfer Execution (Background Job)
+
+        JobQueue->>ConsignmentService: ExecuteStripeTransfer(batchId)
+        activate JobQueue
+        activate ConsignmentService
+
+        ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'processing', started_at = NOW()
+        activate Database
+        deactivate Database
+
+        Note over ConsignmentService,StripeConnect: STAGE 6: Create Stripe Transfer<br/>Span: StripeConnectService.createTransfer<br/>CRITICAL FAILURE POINT
+
+        ConsignmentService->>StripeConnect: createTransfer({<br/>  amount: batch.totalAmount,<br/>  currency: 'usd',<br/>  destination: consignor.stripeAccountId,<br/>  idempotency_key: batch.id<br/>})
+        activate StripeConnect
+
+        StripeConnect->>StripeConnect: POST /v1/transfers<br/>Stripe-Idempotency-Key: {batch.id}<br/>Timeout: 10s
+
+        alt Transfer Succeeded
+            StripeConnect-->>ConsignmentService: Transfer(id: 'tr_xxx',<br/>status: 'paid', amount: 15000)
+            deactivate StripeConnect
+
+            Note over ConsignmentService,Database: STAGE 7: Reconciliation & Finalization
+
+            ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'completed', processed_at = NOW(),<br/>payment_reference = 'tr_xxx'
+            activate Database
+            deactivate Database
+
+            ConsignmentService->>AuditLog: INSERT platform_commands<br/>(action='payout_completed', batch_id, payment_ref,<br/>amount, timestamp)
+            activate AuditLog
+            deactivate AuditLog
+
+            Note over ConsignmentService: Emit metrics:<br/>consignment.payout.batch.completed<br/>consignment.payout.transfer.latency
+
+            %% Send notifications
+            ConsignmentService->>NotificationService: enqueue(SendPayoutConfirmationEmail,<br/>consignorId, batchId, amount)
+            activate NotificationService
+            deactivate NotificationService
+
+            ConsignmentService->>NotificationService: enqueue(SendAdminPayoutCompletedNotification,<br/>batchId, transferId)
+            activate NotificationService
+            deactivate NotificationService
+
+            ConsignmentService-->>JobQueue: Job completed successfully
+            deactivate ConsignmentService
+            deactivate JobQueue
+
+        else Transfer Failed (Insufficient Balance)
+            StripeConnect-->>ConsignmentService: StripeException(code: 'balance_insufficient',<br/>message: 'Account balance too low')
+            deactivate StripeConnect
+
+            Note over ConsignmentService: COMPENSATION: Revert batch status
+
+            ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'failed', processed_at = NOW(),<br/>error_message = 'stripe_balance_insufficient'
+            activate Database
+            deactivate Database
+
+            ConsignmentService->>AuditLog: INSERT platform_commands<br/>(action='payout_failed', batch_id, error,<br/>timestamp)
+            activate AuditLog
+            deactivate AuditLog
+
+            Note over ConsignmentService: Emit metric:<br/>consignment.payout.batch.failed
+
+            ConsignmentService->>NotificationService: enqueue(NotifyAdminPayoutFailed,<br/>batchId, reason: 'balance_insufficient')
+            activate NotificationService
+            deactivate NotificationService
+
+            ConsignmentService-->>JobQueue: Job failed, retry in 1 hour
+            deactivate ConsignmentService
+            deactivate JobQueue
+
+        else Transfer Timeout (Network Failure)
+            StripeConnect--xConsignmentService: Network timeout (no response)
+            deactivate StripeConnect
+
+            Note over ConsignmentService: CRITICAL: Transfer may have succeeded<br/>but response lost - idempotency prevents duplicate
+
+            ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'uncertain',<br/>error_message = 'stripe_timeout_awaiting_webhook'
+            activate Database
+            deactivate Database
+
+            ConsignmentService->>AuditLog: INSERT platform_commands<br/>(action='payout_uncertain', batch_id,<br/>error: 'timeout', timestamp)
+            activate AuditLog
+            deactivate AuditLog
+
+            Note over ConsignmentService: Webhook reconciliation required<br/>within 24 hours
+
+            ConsignmentService->>NotificationService: enqueue(NotifyAdminPayoutUncertain,<br/>batchId, requires_manual_check: true)
+            activate NotificationService
+            deactivate NotificationService
+
+            ConsignmentService-->>JobQueue: Job deferred, await webhook
+            deactivate ConsignmentService
+            deactivate JobQueue
+
+            Note over JobQueue: Stripe webhook 'transfer.paid'<br/>or 'transfer.failed' will reconcile
+        end
+    end
+
+    %% Webhook reconciliation
+    rect rgb(255, 230, 230)
+        Note over StripeConnect,Database: Scenario 4: Webhook Reconciliation (Async Recovery)
+
+        StripeConnect->>ConsignmentAPI: POST /api/v1/webhooks/stripe<br/>Event: transfer.paid<br/>Stripe-Signature: {hmac}
+        activate StripeConnect
+        activate ConsignmentAPI
+
+        Note over ConsignmentAPI: SECURITY: Verify webhook signature<br/>using tenant's Stripe webhook secret
+
+        ConsignmentAPI->>ConsignmentAPI: Validate HMAC signature<br/>Prevent replay attacks
+
+        alt Signature Invalid
+            ConsignmentAPI-->>StripeConnect: HTTP 401 Unauthorized
+            deactivate ConsignmentAPI
+            deactivate StripeConnect
+
+        else Signature Valid
+            ConsignmentAPI->>ConsignmentService: handleTransferPaidWebhook(transferId, event)
+            activate ConsignmentService
+
+            ConsignmentService->>Database: SELECT * FROM payout_batches<br/>WHERE payment_reference = ? OR<br/>status IN ('processing', 'uncertain')<br/>FOR UPDATE
+            activate Database
+            Database-->>ConsignmentService: PayoutBatch(status='uncertain')
+            deactivate Database
+
+            Note over ConsignmentService: Reconcile uncertain batch
+
+            ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'completed',<br/>processed_at = NOW(), payment_reference = ?
+            activate Database
+            deactivate Database
+
+            ConsignmentService->>AuditLog: INSERT platform_commands<br/>(action='payout_reconciled_via_webhook',<br/>batch_id, transfer_id, timestamp)
+            activate AuditLog
+            deactivate AuditLog
+
+            ConsignmentService->>NotificationService: enqueue(SendPayoutConfirmationEmail)
+            activate NotificationService
+            deactivate NotificationService
+
+            ConsignmentService-->>ConsignmentAPI: Webhook processed
+            deactivate ConsignmentService
+
+            ConsignmentAPI-->>StripeConnect: HTTP 200 OK
+            deactivate ConsignmentAPI
+            deactivate StripeConnect
+
+            Note over StripeConnect: Stripe marks webhook as delivered
+        end
+    end
+
+    %% Manual intervention scenario
+    rect rgb(255, 220, 220)
+        Note over AdminSPA,Database: Scenario 5: Manual Intervention (Failed Transfer Retry)
+
+        AdminSPA->>ConsignmentAPI: GET /api/v1/admin/consignment/payout-batches?status=failed
+        activate AdminSPA
+        activate ConsignmentAPI
+
+        ConsignmentAPI->>ConsignmentService: getPayoutBatches(status='failed')
+        activate ConsignmentService
+
+        ConsignmentService->>Database: SELECT * FROM payout_batches<br/>WHERE status = 'failed' AND tenant_id = ?
+        activate Database
+        Database-->>ConsignmentService: PayoutBatch[]
+        deactivate Database
+
+        ConsignmentService-->>ConsignmentAPI: FailedBatches[{id, consignor, error_message}]
+        deactivate ConsignmentService
+
+        ConsignmentAPI-->>AdminSPA: HTTP 200 OK<br/>[{id, error: 'consignor_not_onboarded'}]
+        deactivate ConsignmentAPI
+
+        AdminSPA->>AdminSPA: Admin reviews error<br/>Confirms consignor completed onboarding
+
+        %% Admin retries batch
+        AdminSPA->>ConsignmentAPI: POST /api/v1/admin/consignment/payout-batches/{batchId}/retry<br/>X-Ticket-Number: {ticketId}
+        activate ConsignmentAPI
+
+        ConsignmentAPI->>AuditLog: INSERT platform_commands<br/>(action='retry_payout_batch', batch_id,<br/>user_id, ticket_number, timestamp)
+        activate AuditLog
+        deactivate AuditLog
+
+        ConsignmentAPI->>ConsignmentService: retryPayoutBatch(batchId)
+        activate ConsignmentService
+
+        ConsignmentService->>Database: UPDATE payout_batches<br/>SET status = 'pending', error_message = NULL
+        activate Database
+        deactivate Database
+
+        ConsignmentService->>JobQueue: enqueue(ExecuteStripeTransfer, batchId)
+        activate JobQueue
+        deactivate JobQueue
+
+        ConsignmentService-->>ConsignmentAPI: HTTP 202 Accepted
+        deactivate ConsignmentService
+
+        ConsignmentAPI-->>AdminSPA: HTTP 202 Accepted<br/>"Batch re-queued for processing"
+        deactivate ConsignmentAPI
+        deactivate AdminSPA
+
+        Note over JobQueue: Transfer retried in background<br/>follows Scenario 3 flow
+    end
+
+%% ============================================================================
+%% Architecture Notes
+%% ============================================================================
+%% PAYOUT LIFECYCLE STATES:
+%% 1. pending          - Batch created, awaiting admin approval
+%% 2. awaiting_approval - Admin approved, queued for transfer
+%% 3. processing       - Stripe transfer in progress
+%% 4. completed        - Transfer succeeded, consignor paid
+%% 5. failed           - Transfer failed (retryable)
+%% 6. uncertain        - Transfer timeout (awaiting webhook reconciliation)
+%%
+%% COMPLIANCE & AUDIT REQUIREMENTS (ADR-004):
+%% - Every approval action logged to platform_commands with ticket number
+%% - All Stripe transfers use batch.id as idempotency key (prevents duplicates)
+%% - Impersonation actions captured in audit log (user_id, impersonator_id)
+%% - All state transitions emit Micrometer metrics for monitoring
+%%
+%% GUARD RAILS:
+%% - Stripe Connect account must be verified (charges_enabled=true)
+%% - Consignor must complete KYC (identity_verification)
+%% - Aggregate freshness validated against 30-min SLA (projections.md)
+%% - Duplicate batch creation prevented by unique constraint
+%% - Batch approval requires explicit ticket number for compliance
+%%
+%% STRIPE CONNECT ONBOARDING HANDOFF:
+%% - Consignor portal provides OAuth link to Stripe Connect Express
+%% - After onboarding, Stripe redirects back with account_id
+%% - System stores account_id in consignor.payout_settings JSONB
+%% - Account status verified before each transfer (charges_enabled check)
+%%
+%% RECONCILIATION & FAILURE HANDLING:
+%% - Network timeout: Batch marked 'uncertain', webhook reconciles within 24h
+%% - Balance insufficient: Batch marked 'failed', admin retries after funding
+%% - KYC incomplete: Batch marked 'failed', consignor notified to complete
+%% - Duplicate transfer prevented by Stripe idempotency (batch.id key)
+%%
+%% OBSERVABILITY HOOKS (see ConsignmentService.java):
+%% - Metrics: consignment.payout.batch.created, .completed, .failed
+%% - Gauges: consignment.payout.pending.amount (per tenant)
+%% - Timers: consignment.payout.transfer.latency (Stripe API call duration)
+%% - Spans: ConsignmentPayout.{aggregateValidation, batchCreation, transferEnqueue}
+%% - Logs: All state transitions logged with tenant_id, batch_id, user_id
+%%
+%% IMPERSONATION LOGGING (per ADR-001):
+%% - Platform admins can impersonate tenant admins for support
+%% - All impersonation sessions logged: impersonator_id, impersonated_user_id
+%% - Audit log captures both user_id and impersonator_id in platform_commands
+%% - Example: Admin approves payout while impersonating tenant owner
+%%   - platform_commands.user_id = tenant_owner_id
+%%   - platform_commands.metadata JSONB = {"impersonator_id": "platform_admin_id"}
+%%
+%% DATA SOURCES & CONTRACTS:
+%% - consignment_payout_aggregates: Pre-computed totals (refreshed every 30min)
+%% - payout_batches: State machine (pending → processing → completed/failed)
+%% - platform_commands: Audit trail (approvals, retries, reconciliations)
+%% - Consignor.payoutSettings JSONB: {"stripe_account_id": "acct_xxx"}
+%%
+%% REFERENCES:
+%% - ADR-004: Consignment Payout Automation & Compliance Guard Rails
+%% - ADR-001: Multi-Tenant Tenant Isolation (TenantContext filtering)
+%% - Reporting Projections: docs/reporting/projections.md (Section 75-102)
+%% - ConsignmentService: src/main/java/villagecompute/storefront/services/ConsignmentService.java
+%% - PayoutBatch Entity: src/main/java/villagecompute/storefront/data/models/PayoutBatch.java
+%% - Stripe Connect API: https://stripe.com/docs/connect/payouts
+%% ============================================================================

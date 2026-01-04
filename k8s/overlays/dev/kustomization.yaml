@@ -1,0 +1,91 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Development environment overlay
+# Optimized for fast iteration, minimal resource usage, relaxed health checks
+
+namespace: village-storefront-dev
+
+# Reference base manifests and additional resources
+resources:
+  - ../../base
+  - ingress-dev.yaml
+
+# Override common labels for environment
+commonLabels:
+  environment: dev
+
+# Add namespace-specific annotations
+commonAnnotations:
+  managed-by: kustomize
+  environment: development
+
+# ConfigMap patches for dev-specific values
+configMapGenerator:
+  - name: village-storefront-config
+    behavior: merge
+    literals:
+      - r2-bucket-name=village-storefront-dev-reports
+      - mailer-host=mailpit.village-storefront-dev.svc.cluster.local
+      - quarkus-profile=dev
+
+# Image tag override (typically dev builds or latest)
+images:
+  - name: ghcr.io/villagecompute/village-storefront
+    newTag: dev
+
+# Strategic merge patches
+patchesStrategicMerge:
+  - patches/deployment-workers-dev.yaml
+
+# JSON patches for fine-grained modifications
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+
+# Note: Secrets should be created manually in dev namespace:
+# kubectl create namespace village-storefront-dev
+# kubectl create secret generic village-storefront-db \
+#   --namespace village-storefront-dev \
+#   --from-literal=jdbc-url='jdbc:postgresql://postgres.village-storefront-dev:5432/storefront_dev' \
+#   --from-literal=username='storefront' \
+#   --from-literal=password='dev_password_change_me'
+#
+# kubectl create secret generic village-storefront-r2 \
+#   --namespace village-storefront-dev \
+#   --from-literal=access-key-id='dev_access_key' \
+#   --from-literal=secret-access-key='dev_secret_key'
+#
+# kubectl create secret generic village-storefront-stripe \
+#   --namespace village-storefront-dev \
+#   --from-literal=api-key='sk_test_...'

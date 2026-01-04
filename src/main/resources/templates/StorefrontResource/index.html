@@ -1,0 +1,101 @@
+{#include base.html}
+
+{#head}
+<meta name="description" content="{msg.home_meta_description}">
+{/head}
+
+{#content}
+<!-- Hero Section -->
+{#if heroData}
+{#include components/hero.html hero=heroData /}
+{/if}
+
+<!-- Category Rail -->
+{#if rootCategories && rootCategories.size > 0}
+<section class="py-12 bg-white" aria-labelledby="categories-heading">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 id="categories-heading" class="text-3xl font-bold text-neutral-900 mb-8">
+            {msg.shop_by_category}
+        </h2>
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {#for category in rootCategories}
+            <a href="/category/{category.slug}"
+               class="group relative flex flex-col items-center p-6 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors duration-200">
+                {#if category.imageUrl}
+                <img src="{category.imageUrl}"
+                     alt="{category.name}"
+                     class="w-20 h-20 object-cover rounded-full mb-3"
+                     loading="lazy">
+                {#else}
+                <div class="w-20 h-20 bg-neutral-200 rounded-full mb-3 flex items-center justify-center">
+                    <span class="text-2xl text-neutral-400">📦</span>
+                </div>
+                {/if}
+                <h3 class="text-sm font-medium text-neutral-900 text-center group-hover:text-primary-600 transition-colors">
+                    {category.name}
+                </h3>
+            </a>
+            {/for}
+        </div>
+    </div>
+</section>
+{/if}
+
+<!-- Featured Products -->
+{#if featuredProducts && featuredProducts.size > 0}
+<section class="py-12 bg-neutral-50" aria-labelledby="featured-heading">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between mb-8">
+            <h2 id="featured-heading" class="text-3xl font-bold text-neutral-900">
+                {msg.featured_products}
+            </h2>
+            <a href="/category/all" class="text-primary-600 hover:text-primary-700 font-medium">
+                {msg.view_all} →
+            </a>
+        </div>
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {#for product in featuredProducts}
+            {#include components/product-card.html product=product /}
+            {/for}
+        </div>
+    </div>
+</section>
+{/if}
+
+<!-- Collections Teaser (if any) -->
+{#if collections && collections.size > 0}
+<section class="py-16 bg-white" aria-labelledby="collections-heading">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 id="collections-heading" class="text-3xl font-bold text-neutral-900 mb-8 text-center">
+            {msg.featured_collections}
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {#for collection in collections}
+            <a href="/collections/{collection.slug}"
+               class="group relative overflow-hidden rounded-lg shadow-medium hover:shadow-strong transition-shadow duration-200">
+                {#if collection.imageUrl}
+                <img src="{collection.imageUrl}"
+                     alt="{collection.name}"
+                     class="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
+                     loading="lazy">
+                {#else}
+                <div class="w-full h-64 bg-gradient-to-br from-primary-400 to-secondary-500"></div>
+                {/if}
+                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
+                    <div>
+                        <h3 class="text-2xl font-bold text-white mb-2">{collection.name}</h3>
+                        {#if collection.description}
+                        <p class="text-white/90 text-sm">{collection.description}</p>
+                        {/if}
+                    </div>
+                </div>
+            </a>
+            {/for}
+        </div>
+    </div>
+</section>
+{/if}
+
+{/content}
+
+{/include}

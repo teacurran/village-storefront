@@ -1,0 +1,579 @@
+@startuml datamodel_erd
+!theme plain
+
+title Village Storefront - Entity Relationship Diagram (ERD)
+note as N1
+  **Database Schema Design**
+  Version: Baseline (2026-01-02)
+
+  **References:**
+  - Architecture Overview: docs/architecture_overview.md Section 5
+  - Tenancy ADR: docs/adr/ADR-001-tenancy.md
+  - OpenAPI Contract: api/v1/openapi.yaml
+
+  **Conventions:**
+  - All tenant-scoped tables include tenant_id (UUID FK → tenants)
+  - Audit columns: created_at, updated_at (TIMESTAMPTZ)
+  - Monetary values: NUMERIC(19,4) mapped to Money schema in API
+  - Flexible data: JSONB columns for settings, metadata, addresses
+  - Soft deletes: status enum includes 'deleted' where applicable
+
+  **RLS (Row-Level Security):**
+  Placeholders added per ADR-001; policies to be implemented in future iteration
+
+  **Rendering:**
+  plantuml docs/diagrams/datamodel_erd.puml
+end note
+
+legend
+|= Symbol |= Meaning |
+|**bold**|Primary key|
+|<<FK>>|Foreign key|
+|<<UNIQUE>>|Unique constraint|
+endlegend
+
+' =======================
+' TENANCY MODULE
+' =======================
+package "Tenancy" {
+  entity "tenants" as tenants {
+    * **id** : UUID <<PK>>
+    --
+    * subdomain : VARCHAR(63) <<UNIQUE>>
+    * name : VARCHAR(255)
+    * status : VARCHAR(20) [active|suspended|deleted]
+    settings : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "custom_domains" as custom_domains {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * domain : VARCHAR(253) <<UNIQUE>>
+    verified : BOOLEAN
+    verification_token : VARCHAR(64)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  tenants ||--o{ custom_domains : "has many"
+}
+
+' =======================
+' IDENTITY MODULE
+' =======================
+package "Identity" {
+  entity "users" as users {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * email : VARCHAR(255)
+    password_hash : VARCHAR(255)
+    * status : VARCHAR(20) [active|suspended|deleted]
+    first_name : VARCHAR(100)
+    last_name : VARCHAR(100)
+    phone : VARCHAR(20)
+    metadata : JSONB
+    email_verified : BOOLEAN
+    last_login_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, email)>>
+  }
+
+  entity "roles" as roles {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * name : VARCHAR(100)
+    description : TEXT
+    permissions : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, name)>>
+  }
+
+  entity "user_roles" as user_roles {
+    * **tenant_id** : UUID <<PK,FK>>
+    * **user_id** : UUID <<PK,FK>>
+    * **role_id** : UUID <<PK,FK>>
+    --
+    * assigned_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "api_keys" as api_keys {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    * key_hash : VARCHAR(255)
+    key_prefix : VARCHAR(20)
+    * name : VARCHAR(100)
+    scopes : JSONB
+    expires_at : TIMESTAMPTZ
+    last_used_at : TIMESTAMPTZ
+    * status : VARCHAR(20) [active|revoked]
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  tenants ||--o{ users : "has many"
+  tenants ||--o{ roles : "has many"
+  users ||--o{ user_roles : "has many"
+  roles ||--o{ user_roles : "has many"
+  tenants ||--o{ api_keys : "has many"
+  users ||--o{ api_keys : "has many"
+}
+
+' =======================
+' CATALOG MODULE
+' =======================
+package "Catalog" {
+  entity "categories" as categories {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    parent_id : UUID <<FK>>
+    * code : VARCHAR(50)
+    * name : VARCHAR(255)
+    slug : VARCHAR(255)
+    description : TEXT
+    display_order : INTEGER
+    * status : VARCHAR(20) [active|deleted]
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, code)>>
+    <<UNIQUE (tenant_id, slug)>>
+  }
+
+  entity "products" as products {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * sku : VARCHAR(100)
+    * name : VARCHAR(255)
+    slug : VARCHAR(255)
+    description : TEXT
+    * type : VARCHAR(20) [physical|digital|service]
+    * status : VARCHAR(20) [draft|active|archived|deleted]
+    metadata : JSONB
+    seo_title : VARCHAR(255)
+    seo_description : TEXT
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, sku)>>
+    <<UNIQUE (tenant_id, slug)>>
+  }
+
+  entity "product_variants" as product_variants {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * product_id : UUID <<FK>>
+    * sku : VARCHAR(100)
+    * name : VARCHAR(255)
+    attributes : JSONB
+    * price : NUMERIC(19,4)
+    compare_at_price : NUMERIC(19,4)
+    cost : NUMERIC(19,4)
+    weight : NUMERIC(10,2)
+    weight_unit : VARCHAR(10)
+    barcode : VARCHAR(100)
+    * requires_shipping : BOOLEAN
+    * taxable : BOOLEAN
+    * position : INTEGER
+    * status : VARCHAR(20) [active|archived|deleted]
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, sku)>>
+  }
+
+  entity "product_categories" as product_categories {
+    * **tenant_id** : UUID <<PK,FK>>
+    * **product_id** : UUID <<PK,FK>>
+    * **category_id** : UUID <<PK,FK>>
+    --
+    display_order : INTEGER
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "product_images" as product_images {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * product_id : UUID <<FK>>
+    variant_id : UUID <<FK>>
+    * url : VARCHAR(500)
+    * position : INTEGER
+    alt_text : VARCHAR(255)
+    width : INTEGER
+    height : INTEGER
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "inventory_levels" as inventory_levels {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * variant_id : UUID <<FK>>
+    location : VARCHAR(100)
+    * quantity : INTEGER
+    reserved : INTEGER
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, variant_id, location)>>
+  }
+
+  tenants ||--o{ categories : "has many"
+  categories ||--o{ categories : "parent-child"
+  tenants ||--o{ products : "has many"
+  products ||--o{ product_variants : "has many"
+  products ||--o{ product_categories : "has many"
+  categories ||--o{ product_categories : "has many"
+  products ||--o{ product_images : "has many"
+  product_variants ||--o{ product_images : "has many"
+  tenants ||--o{ inventory_levels : "has many"
+  product_variants ||--o{ inventory_levels : "has many"
+}
+
+' =======================
+' CART/ORDER/PAYMENT MODULE
+' =======================
+package "Cart/Order/Payment" {
+  entity "carts" as carts {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    session_id : VARCHAR(255)
+    metadata : JSONB
+    * expires_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "cart_items" as cart_items {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * cart_id : UUID <<FK>>
+    * variant_id : UUID <<FK>>
+    * quantity : INTEGER
+    * unit_price : NUMERIC(19,4)
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "orders" as orders {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_number : VARCHAR(50)
+    user_id : UUID <<FK>>
+    * status : VARCHAR(20) [pending|confirmed|processing|shipped|delivered|cancelled|refunded]
+    totals : JSONB
+    shipping_address : JSONB
+    billing_address : JSONB
+    customer_notes : TEXT
+    internal_notes : TEXT
+    * currency : VARCHAR(3)
+    cancelled_at : TIMESTAMPTZ
+    cancellation_reason : TEXT
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, order_number)>>
+  }
+
+  entity "order_line_items" as order_line_items {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_id : UUID <<FK>>
+    * variant_id : UUID <<FK>>
+    * quantity : INTEGER
+    * unit_price : NUMERIC(19,4)
+    totals : JSONB
+    product_snapshot : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "shipments" as shipments {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_id : UUID <<FK>>
+    carrier : VARCHAR(100)
+    tracking_number : VARCHAR(255)
+    tracking_url : VARCHAR(500)
+    * status : VARCHAR(20) [pending|in_transit|delivered|failed]
+    shipped_at : TIMESTAMPTZ
+    estimated_delivery_at : TIMESTAMPTZ
+    delivered_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "payment_methods" as payment_methods {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    * type : VARCHAR(20) [card|bank_account|wallet]
+    provider_id : VARCHAR(255)
+    last_four : VARCHAR(4)
+    brand : VARCHAR(50)
+    expiry_month : INTEGER
+    expiry_year : INTEGER
+    billing_address : JSONB
+    * is_default : BOOLEAN
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "payments" as payments {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_id : UUID <<FK>>
+    payment_method_id : UUID <<FK>>
+    * amount : NUMERIC(19,4)
+    * currency : VARCHAR(3)
+    * status : VARCHAR(20) [pending|processing|succeeded|failed|cancelled]
+    provider : VARCHAR(50)
+    provider_transaction_id : VARCHAR(255)
+    provider_response : JSONB
+    metadata : JSONB
+    error_message : TEXT
+    processed_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "refunds" as refunds {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * payment_id : UUID <<FK>>
+    * amount : NUMERIC(19,4)
+    reason : TEXT
+    * status : VARCHAR(20) [pending|processing|succeeded|failed]
+    provider_refund_id : VARCHAR(255)
+    processed_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  tenants ||--o{ carts : "has many"
+  users ||--o{ carts : "has many"
+  carts ||--o{ cart_items : "has many"
+  product_variants ||--o{ cart_items : "has many"
+
+  tenants ||--o{ orders : "has many"
+  users ||--o{ orders : "has many"
+  orders ||--o{ order_line_items : "has many"
+  product_variants ||--o{ order_line_items : "has many"
+  orders ||--o{ shipments : "has many"
+
+  tenants ||--o{ payment_methods : "has many"
+  users ||--o{ payment_methods : "has many"
+  tenants ||--o{ payments : "has many"
+  orders ||--o{ payments : "has many"
+  payment_methods ||--o{ payments : "has many"
+  payments ||--o{ refunds : "has many"
+}
+
+' =======================
+' CONSIGNMENT MODULE
+' =======================
+package "Consignment" {
+  entity "consignors" as consignors {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * name : VARCHAR(255)
+    contact_info : JSONB
+    payout_settings : JSONB
+    * status : VARCHAR(20) [active|suspended|deleted]
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "consignment_items" as consignment_items {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * product_id : UUID <<FK>>
+    * consignor_id : UUID <<FK>>
+    * commission_rate : NUMERIC(5,2)
+    * status : VARCHAR(20) [active|sold|returned|deleted]
+    sold_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "payout_batches" as payout_batches {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * consignor_id : UUID <<FK>>
+    * period_start : DATE
+    * period_end : DATE
+    * total_amount : NUMERIC(19,4)
+    * currency : VARCHAR(3)
+    * status : VARCHAR(20) [pending|processing|completed|failed]
+    processed_at : TIMESTAMPTZ
+    payment_reference : VARCHAR(255)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "payout_line_items" as payout_line_items {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * batch_id : UUID <<FK>>
+    * order_line_item_id : UUID <<FK>>
+    * item_subtotal : NUMERIC(19,4)
+    * commission_amount : NUMERIC(19,4)
+    * net_payout : NUMERIC(19,4)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  tenants ||--o{ consignors : "has many"
+  tenants ||--o{ consignment_items : "has many"
+  products ||--o{ consignment_items : "has many"
+  consignors ||--o{ consignment_items : "has many"
+  tenants ||--o{ payout_batches : "has many"
+  consignors ||--o{ payout_batches : "has many"
+  payout_batches ||--o{ payout_line_items : "has many"
+  order_line_items ||--o{ payout_line_items : "has many"
+}
+
+' =======================
+' LOYALTY MODULE
+' =======================
+package "Loyalty" {
+  entity "loyalty_programs" as loyalty_programs {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * code : VARCHAR(50)
+    * name : VARCHAR(255)
+    description : TEXT
+    rules : JSONB
+    * active : BOOLEAN
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, code)>>
+  }
+
+  entity "loyalty_members" as loyalty_members {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * program_id : UUID <<FK>>
+    * user_id : UUID <<FK>>
+    * points_balance : INTEGER
+    tier : VARCHAR(50)
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, program_id, user_id)>>
+  }
+
+  entity "loyalty_transactions" as loyalty_transactions {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * member_id : UUID <<FK>>
+    order_id : UUID <<FK>>
+    * points_delta : INTEGER
+    * transaction_type : VARCHAR(50) [earned|redeemed|adjusted|expired]
+    description : TEXT
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  tenants ||--o{ loyalty_programs : "has many"
+  tenants ||--o{ loyalty_members : "has many"
+  loyalty_programs ||--o{ loyalty_members : "has many"
+  users ||--o{ loyalty_members : "has many"
+  tenants ||--o{ loyalty_transactions : "has many"
+  loyalty_members ||--o{ loyalty_transactions : "has many"
+  orders ||--o{ loyalty_transactions : "has many"
+}
+
+' =======================
+' CROSS-CUTTING TABLES
+' =======================
+package "Cross-Cutting" {
+  entity "audit_log_entries" as audit_log_entries {
+    * **id** : UUID <<PK>>
+    --
+    tenant_id : UUID <<FK>> <<NULLABLE>>
+    user_id : UUID <<FK>> <<NULLABLE>>
+    * action : VARCHAR(100)
+    entity_type : VARCHAR(100)
+    entity_id : UUID
+    changes : JSONB
+    ip_address : INET
+    user_agent : TEXT
+    * created_at : TIMESTAMPTZ
+  }
+
+  entity "delayed_jobs" as delayed_jobs {
+    * **id** : UUID <<PK>>
+    --
+    tenant_id : UUID <<FK>> <<NULLABLE>>
+    * queue : VARCHAR(100)
+    * handler_class : VARCHAR(255)
+    payload : JSONB
+    * status : VARCHAR(20) [pending|locked|processing|completed|failed]
+    attempts : INTEGER
+    last_error : TEXT
+    run_at : TIMESTAMPTZ
+    locked_until : TIMESTAMPTZ
+    locked_by : VARCHAR(255)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+  }
+
+  entity "feature_flags" as feature_flags {
+    * **id** : UUID <<PK>>
+    --
+    tenant_id : UUID <<FK>> <<NULLABLE>>
+    * flag_key : VARCHAR(100)
+    * enabled : BOOLEAN
+    config : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, flag_key)>>
+  }
+
+  tenants ||--o{ audit_log_entries : "has many (nullable)"
+  users ||--o{ audit_log_entries : "has many (nullable)"
+  tenants ||--o{ delayed_jobs : "has many (nullable)"
+  tenants ||--o{ feature_flags : "has many (nullable)"
+}
+
+@enduml

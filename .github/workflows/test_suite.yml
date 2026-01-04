@@ -1,0 +1,781 @@
+name: Test Suite
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+      - release/**
+    paths:
+      - 'tests/**'
+      - '.github/workflows/test_suite.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'tests/**'
+      - '.github/workflows/test_suite.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+  K6_VERSION: '0.48.0'
+  GRAFANA_PUSH_URL: ${{ secrets.GRAFANA_PUSH_URL }}
+  GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+
+jobs:
+  playwright-e2e:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: storefront
+          POSTGRES_USER: storefront
+          POSTGRES_PASSWORD: storefront
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U storefront"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    outputs:
+      total: ${{ steps.playwright-metrics.outputs.total }}
+      passed: ${{ steps.playwright-metrics.outputs.passed }}
+      failed: ${{ steps.playwright-metrics.outputs.failed }}
+      skipped: ${{ steps.playwright-metrics.outputs.skipped }}
+      durationMs: ${{ steps.playwright-metrics.outputs.durationMs }}
+      status: ${{ steps.playwright-metrics.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: tests/e2e/playwright/package-lock.json
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e/playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps
+
+      - name: Start application
+        run: |
+          ./mvnw quarkus:dev &
+          echo "Waiting for application to start..."
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/live; do sleep 2; done'
+        env:
+          MAVEN_OPTS: -Xmx2g
+
+      - name: Run Playwright tests
+        id: run-playwright
+        working-directory: tests/e2e/playwright
+        run: npm test
+        env:
+          BASE_URL: http://localhost:8080
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: target/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright videos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-videos
+          path: target/playwright-videos/
+          retention-days: 7
+
+      - name: Upload Playwright screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: target/playwright-screenshots/
+          retention-days: 7
+
+      - name: Collect Playwright metrics
+        if: always()
+        id: playwright-metrics
+        env:
+          SUITE_STATUS: ${{ steps.run-playwright.conclusion == 'success' && 'passed' || steps.run-playwright.conclusion == 'skipped' && 'skipped' || 'failed' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const resultsPath = path.resolve('target/playwright-results.json');
+          const metricsPath = path.resolve('target/playwright-metrics.json');
+          const stats = { total: 0, passed: 0, failed: 0, skipped: 0, durationMs: 0 };
+
+          const processSuite = (suite) => {
+            (suite.specs || []).forEach((spec) => {
+              (spec.tests || []).forEach((test) => {
+                stats.total += 1;
+                const attempts = test.results || [];
+                const finalResult = attempts.length ? attempts[attempts.length - 1] : null;
+                if (!finalResult) {
+                  stats.skipped += 1;
+                  return;
+                }
+
+                if (typeof finalResult.duration === 'number') {
+                  stats.durationMs += finalResult.duration;
+                }
+
+                const status = finalResult.status || 'skipped';
+                if (status === 'passed') {
+                  stats.passed += 1;
+                } else if (status === 'skipped') {
+                  stats.skipped += 1;
+                } else {
+                  stats.failed += 1;
+                }
+              });
+            });
+
+            (suite.suites || []).forEach(processSuite);
+          };
+
+          if (fs.existsSync(resultsPath)) {
+            const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+            (results.suites || []).forEach(processSuite);
+          }
+
+          const status = process.env.SUITE_STATUS || 'unknown';
+          const payload = { status, ...stats };
+          fs.mkdirSync(path.dirname(metricsPath), { recursive: true });
+          fs.writeFileSync(metricsPath, JSON.stringify(payload, null, 2));
+
+          const output = process.env.GITHUB_OUTPUT;
+          if (output) {
+            for (const [key, value] of Object.entries(payload)) {
+              fs.appendFileSync(output, `${key}=${value}\n`);
+            }
+          }
+          NODE
+
+      - name: Publish Playwright metrics to Grafana
+        if: always()
+        run: |
+          node tools/publish-test-metrics.cjs --suite "Playwright E2E" --status "${{ steps.playwright-metrics.outputs.status || 'unknown' }}" --metrics-file target/playwright-metrics.json
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## Playwright E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f target/playwright-metrics.json ]; then
+            node -e "
+              const fs = require('node:fs');
+              const metrics = JSON.parse(fs.readFileSync('target/playwright-metrics.json', 'utf8'));
+              console.log(\`- ✅ Passed: \${metrics.passed}/\${metrics.total}\`);
+              console.log(\`- ❌ Failed: \${metrics.failed}\`);
+              console.log(\`- ⏭️  Skipped: \${metrics.skipped}\`);
+              console.log(\`- ⏱️ Duration: \${(Number(metrics.durationMs || 0) / 1000).toFixed(1)}s\`);
+            " >> $GITHUB_STEP_SUMMARY || echo "Could not parse metrics" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No metrics file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  cypress-pos:
+    name: Cypress POS Offline Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: storefront
+          POSTGRES_USER: storefront
+          POSTGRES_PASSWORD: storefront
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U storefront"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    outputs:
+      total: ${{ steps.cypress-metrics.outputs.total }}
+      passed: ${{ steps.cypress-metrics.outputs.passed }}
+      failed: ${{ steps.cypress-metrics.outputs.failed }}
+      skipped: ${{ steps.cypress-metrics.outputs.skipped }}
+      durationMs: ${{ steps.cypress-metrics.outputs.durationMs }}
+      status: ${{ steps.cypress-metrics.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: tests/admin/package-lock.json
+
+      - name: Install Cypress dependencies
+        working-directory: tests/admin
+        run: npm ci
+
+      - name: Start application
+        run: |
+          ./mvnw quarkus:dev &
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/live; do sleep 2; done'
+        env:
+          MAVEN_OPTS: -Xmx2g
+
+      - name: Run Cypress tests
+        id: run-cypress
+        working-directory: tests/admin
+        run: |
+          mkdir -p ../../target
+          npm test -- --reporter json --reporter-options "output=../../target/cypress-results.json"
+        env:
+          BASE_URL: http://localhost:8080
+          CI: true
+
+      - name: Upload Cypress videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: target/cypress-videos/
+          retention-days: 14
+
+      - name: Upload Cypress screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: target/cypress-screenshots/
+          retention-days: 7
+
+      - name: Collect Cypress metrics
+        if: always()
+        id: cypress-metrics
+        env:
+          SUITE_STATUS: ${{ steps.run-cypress.conclusion == 'success' && 'passed' || steps.run-cypress.conclusion == 'skipped' && 'skipped' || 'failed' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const resultsPath = path.resolve('target/cypress-results.json');
+          const metricsPath = path.resolve('target/cypress-metrics.json');
+          const stats = { total: 0, passed: 0, failed: 0, skipped: 0, durationMs: 0 };
+
+          if (fs.existsSync(resultsPath)) {
+            const data = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
+            const cypressStats = data.stats || {};
+            stats.total = Number(cypressStats.tests || 0);
+            stats.passed = Number(cypressStats.passes || 0);
+            stats.failed = Number(cypressStats.failures || 0);
+            stats.skipped = Number(cypressStats.pending || 0);
+            stats.durationMs = Number(cypressStats.duration || 0);
+          }
+
+          const status = process.env.SUITE_STATUS || 'unknown';
+          const payload = { status, ...stats };
+          fs.mkdirSync(path.dirname(metricsPath), { recursive: true });
+          fs.writeFileSync(metricsPath, JSON.stringify(payload, null, 2));
+
+          const output = process.env.GITHUB_OUTPUT;
+          if (output) {
+            for (const [key, value] of Object.entries(payload)) {
+              fs.appendFileSync(output, `${key}=${value}\n`);
+            }
+          }
+          NODE
+
+      - name: Publish Cypress metrics to Grafana
+        if: always()
+        run: |
+          node tools/publish-test-metrics.cjs --suite "Cypress POS Offline" --status "${{ steps.cypress-metrics.outputs.status || 'unknown' }}" --metrics-file target/cypress-metrics.json
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## Cypress POS Offline Test Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f target/cypress-metrics.json ]; then
+            node -e "
+              const fs = require('node:fs');
+              const metrics = JSON.parse(fs.readFileSync('target/cypress-metrics.json', 'utf8'));
+              console.log(\`- ✅ Passed: \${metrics.passed}/\${metrics.total}\`);
+              console.log(\`- ❌ Failed: \${metrics.failed}\`);
+              console.log(\`- ⏭️  Skipped: \${metrics.skipped}\`);
+              console.log(\`- ⏱️ Duration: \${(Number(metrics.durationMs || 0) / 1000).toFixed(1)}s\`);
+            " >> $GITHUB_STEP_SUMMARY || echo "Could not parse metrics" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No metrics file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  k6-load-tests:
+    name: k6 Load Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: storefront
+          POSTGRES_USER: storefront
+          POSTGRES_PASSWORD: storefront
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U storefront"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    outputs:
+      checkout_status: ${{ steps.checkout-metrics.outputs.status }}
+      checkout_p95: ${{ steps.checkout-metrics.outputs.p95Ms }}
+      checkout_error_rate: ${{ steps.checkout-metrics.outputs.errorRate }}
+      checkout_throughput: ${{ steps.checkout-metrics.outputs.throughput }}
+      media_status: ${{ steps.media-metrics.outputs.status }}
+      media_p95: ${{ steps.media-metrics.outputs.p95Ms }}
+      media_error_rate: ${{ steps.media-metrics.outputs.errorRate }}
+      media_throughput: ${{ steps.media-metrics.outputs.throughput }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Start application
+        run: |
+          ./mvnw quarkus:dev &
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/live; do sleep 2; done'
+        env:
+          MAVEN_OPTS: -Xmx2g
+
+      - name: Run checkout load test
+        id: run-k6-checkout
+        working-directory: tests/load/k6
+        run: |
+          k6 run --out json=checkout-results.json --summary-export=checkout-summary.json checkout.js
+        env:
+          BASE_URL: http://localhost:8080
+
+      - name: Collect checkout metrics
+        if: always()
+        id: checkout-metrics
+        env:
+          SUITE_STATUS: ${{ steps.run-k6-checkout.conclusion == 'success' && 'passed' || steps.run-k6-checkout.conclusion == 'skipped' && 'skipped' || 'failed' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const summaryPath = path.resolve('tests/load/k6/checkout-summary.json');
+          const metricsPath = path.resolve('tests/load/k6/checkout-metrics.json');
+          const stats = { throughput: 0, p95Ms: 0, avgMs: 0, errorRate: 0, totalRequests: 0 };
+
+          if (fs.existsSync(summaryPath)) {
+            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+            const metrics = summary.metrics || {};
+            const httpReqs = metrics.http_reqs?.values || {};
+            const httpReqDuration = metrics.http_req_duration?.values || {};
+            const httpReqFailed = metrics.http_req_failed?.values || {};
+            stats.totalRequests = Number(httpReqs.count || 0);
+            stats.throughput = Number(httpReqs.rate || 0);
+            stats.avgMs = Number(httpReqDuration.avg || 0);
+            stats.p95Ms = Number(httpReqDuration['p(95)'] || 0);
+            stats.errorRate = Number(httpReqFailed.rate || 0);
+          }
+
+          const status = process.env.SUITE_STATUS || 'unknown';
+          const payload = { status, ...stats };
+          fs.writeFileSync(metricsPath, JSON.stringify(payload, null, 2));
+
+          const output = process.env.GITHUB_OUTPUT;
+          if (output) {
+            for (const [key, value] of Object.entries(payload)) {
+              fs.appendFileSync(output, `${key}=${value}\n`);
+            }
+          }
+          NODE
+
+      - name: Publish checkout metrics to Grafana
+        if: always()
+        run: |
+          node tools/publish-test-metrics.cjs --suite "k6 Checkout" --status "${{ steps.checkout-metrics.outputs.status || 'unknown' }}" --metrics-file tests/load/k6/checkout-metrics.json
+
+      - name: Run media upload load test
+        id: run-k6-media
+        working-directory: tests/load/k6
+        run: |
+          k6 run --out json=media-results.json --summary-export=media-summary.json media-upload.js
+        env:
+          BASE_URL: http://localhost:8080
+
+      - name: Collect media metrics
+        if: always()
+        id: media-metrics
+        env:
+          SUITE_STATUS: ${{ steps.run-k6-media.conclusion == 'success' && 'passed' || steps.run-k6-media.conclusion == 'skipped' && 'skipped' || 'failed' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const summaryPath = path.resolve('tests/load/k6/media-summary.json');
+          const metricsPath = path.resolve('tests/load/k6/media-metrics.json');
+          const stats = { throughput: 0, p95Ms: 0, avgMs: 0, errorRate: 0, totalRequests: 0 };
+
+          if (fs.existsSync(summaryPath)) {
+            const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+            const metrics = summary.metrics || {};
+            const httpReqs = metrics.http_reqs?.values || {};
+            const httpReqDuration = metrics.http_req_duration?.values || {};
+            const httpReqFailed = metrics.http_req_failed?.values || {};
+            stats.totalRequests = Number(httpReqs.count || 0);
+            stats.throughput = Number(httpReqs.rate || 0);
+            stats.avgMs = Number(httpReqDuration.avg || 0);
+            stats.p95Ms = Number(httpReqDuration['p(95)'] || 0);
+            stats.errorRate = Number(httpReqFailed.rate || 0);
+          }
+
+          const status = process.env.SUITE_STATUS || 'unknown';
+          const payload = { status, ...stats };
+          fs.writeFileSync(metricsPath, JSON.stringify(payload, null, 2));
+
+          const output = process.env.GITHUB_OUTPUT;
+          if (output) {
+            for (const [key, value] of Object.entries(payload)) {
+              fs.appendFileSync(output, `${key}=${value}\n`);
+            }
+          }
+          NODE
+
+      - name: Publish media metrics to Grafana
+        if: always()
+        run: |
+          node tools/publish-test-metrics.cjs --suite "k6 Media Upload" --status "${{ steps.media-metrics.outputs.status || 'unknown' }}" --metrics-file tests/load/k6/media-metrics.json
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: |
+            tests/load/k6/*-results.json
+            tests/load/k6/*-summary.json
+            tests/load/k6/*-metrics.json
+          retention-days: 30
+
+      - name: Generate load test summary
+        if: always()
+        run: |
+          echo "## k6 Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f tests/load/k6/checkout-metrics.json ]; then
+            echo "### Checkout Flow" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const fs = require('node:fs');
+              const metrics = JSON.parse(fs.readFileSync('tests/load/k6/checkout-metrics.json', 'utf8'));
+              console.log(\`- Requests: \${metrics.totalRequests}\`);
+              console.log(\`- Throughput: \${metrics.throughput.toFixed(2)} rps\`);
+              console.log(\`- Avg Duration: \${metrics.avgMs.toFixed(2)}ms\`);
+              console.log(\`- P95 Duration: \${metrics.p95Ms.toFixed(2)}ms\`);
+              console.log(\`- Error Rate: \${(metrics.errorRate * 100).toFixed(2)}%\`);
+            " >> $GITHUB_STEP_SUMMARY || echo "Could not parse checkout metrics" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f tests/load/k6/media-metrics.json ]; then
+            echo "### Media Upload" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const fs = require('node:fs');
+              const metrics = JSON.parse(fs.readFileSync('tests/load/k6/media-metrics.json', 'utf8'));
+              console.log(\`- Uploads: \${metrics.totalRequests}\`);
+              console.log(\`- Throughput: \${metrics.throughput.toFixed(2)} rps\`);
+              console.log(\`- Avg Duration: \${metrics.avgMs.toFixed(2)}ms\`);
+              console.log(\`- P95 Duration: \${metrics.p95Ms.toFixed(2)}ms\`);
+              console.log(\`- Error Rate: \${(metrics.errorRate * 100).toFixed(2)}%\`);
+            " >> $GITHUB_STEP_SUMMARY || echo "Could not parse media metrics" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  manifest-validation:
+    name: Manifest Anchor Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      total: ${{ steps.manifest-metrics.outputs.totalAnchors }}
+      missing: ${{ steps.manifest-metrics.outputs.missingAnchors }}
+      status: ${{ steps.manifest-metrics.outputs.status }}
+      success: ${{ steps.manifest-metrics.outputs.success }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: tests/manifest/requirements.txt
+
+      - name: Install dependencies
+        working-directory: tests/manifest
+        run: pip install -r requirements.txt
+
+      - name: Run manifest validation
+        id: run-manifest
+        working-directory: tests/manifest
+        run: python anchor_validation.py --verbose --json-output manifest-results.json
+
+      - name: Collect manifest metrics
+        if: always()
+        id: manifest-metrics
+        working-directory: tests/manifest
+        env:
+          SUITE_STATUS: ${{ steps.run-manifest.conclusion == 'success' && 'passed' || steps.run-manifest.conclusion == 'skipped' && 'skipped' || 'failed' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const resultPath = path.resolve('manifest-results.json');
+          const metricsPath = path.resolve('manifest-metrics.json');
+          const payload = {
+            status: process.env.SUITE_STATUS || 'unknown',
+            totalAnchors: 0,
+            missingAnchors: 0,
+            planValid: 0,
+            archValid: 0,
+            success: false,
+          };
+
+          if (fs.existsSync(resultPath)) {
+            const data = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+            const plan = data.plan || {};
+            const arch = data.architecture || {};
+            const total = data.total || {};
+            payload.totalAnchors = Number(total.total || 0);
+            payload.missingAnchors = Number(total.missing || 0);
+            payload.planValid = Number(plan.total || 0) - Number(plan.missing || 0);
+            payload.archValid = Number(arch.total || 0) - Number(arch.missing || 0);
+            payload.success = Boolean(data.success);
+          }
+
+          fs.writeFileSync(metricsPath, JSON.stringify(payload, null, 2));
+
+          const output = process.env.GITHUB_OUTPUT;
+          if (output) {
+            for (const [key, value] of Object.entries(payload)) {
+              fs.appendFileSync(output, `${key}=${value}\n`);
+            }
+          }
+          NODE
+
+      - name: Publish manifest metrics to Grafana
+        if: always()
+        run: |
+          node tools/publish-test-metrics.cjs --suite "Manifest Validation" --status "${{ steps.manifest-metrics.outputs.status || 'unknown' }}" --metrics-file tests/manifest/manifest-metrics.json
+
+      - name: Generate validation summary
+        if: always()
+        run: |
+          echo "## Manifest Validation Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f tests/manifest/manifest-metrics.json ]; then
+            node -e "
+              const fs = require('node:fs');
+              const metrics = JSON.parse(fs.readFileSync('tests/manifest/manifest-metrics.json', 'utf8'));
+              const valid = metrics.totalAnchors - metrics.missingAnchors;
+              console.log(\`- Anchors Valid: \${valid}/\${metrics.totalAnchors}\`);
+              console.log(\`- Missing Anchors: \${metrics.missingAnchors}\`);
+            " >> $GITHUB_STEP_SUMMARY || echo "Manifest metrics unavailable" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Manifest anchor validation completed." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  test-results-summary:
+    name: Test Results Summary
+    runs-on: ubuntu-latest
+    needs: [playwright-e2e, cypress-pos, k6-load-tests, manifest-validation]
+    if: always()
+
+    steps:
+      - name: Build summary markdown
+        env:
+          PLAYWRIGHT_STATUS: ${{ needs.playwright-e2e.outputs.status }}
+          PLAYWRIGHT_PASSED: ${{ needs.playwright-e2e.outputs.passed }}
+          PLAYWRIGHT_TOTAL: ${{ needs.playwright-e2e.outputs.total }}
+          PLAYWRIGHT_DURATION: ${{ needs.playwright-e2e.outputs.durationMs }}
+          CYPRESS_STATUS: ${{ needs.cypress-pos.outputs.status }}
+          CYPRESS_PASSED: ${{ needs.cypress-pos.outputs.passed }}
+          CYPRESS_TOTAL: ${{ needs.cypress-pos.outputs.total }}
+          CYPRESS_DURATION: ${{ needs.cypress-pos.outputs.durationMs }}
+          MANIFEST_STATUS: ${{ needs.manifest-validation.outputs.status }}
+          MANIFEST_TOTAL: ${{ needs.manifest-validation.outputs.total }}
+          MANIFEST_MISSING: ${{ needs.manifest-validation.outputs.missing }}
+          K6_CHECKOUT_STATUS: ${{ needs.k6-load-tests.outputs.checkout_status }}
+          K6_CHECKOUT_P95: ${{ needs.k6-load-tests.outputs.checkout_p95 }}
+          K6_CHECKOUT_ERROR: ${{ needs.k6-load-tests.outputs.checkout_error_rate }}
+          K6_CHECKOUT_THROUGHPUT: ${{ needs.k6-load-tests.outputs.checkout_throughput }}
+          K6_MEDIA_STATUS: ${{ needs.k6-load-tests.outputs.media_status }}
+          K6_MEDIA_P95: ${{ needs.k6-load-tests.outputs.media_p95 }}
+          K6_MEDIA_ERROR: ${{ needs.k6-load-tests.outputs.media_error_rate }}
+          K6_MEDIA_THROUGHPUT: ${{ needs.k6-load-tests.outputs.media_throughput }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const outPath = 'test-summary.md';
+
+          const toNumber = (value) => {
+            if (value === undefined || value === null || value === '') {
+              return 0;
+            }
+            const num = Number(value);
+            return Number.isFinite(num) ? num : 0;
+          };
+
+          const statusLabel = (status) => {
+            switch (status) {
+              case 'passed':
+              case 'success':
+                return '✅ Passed';
+              case 'failed':
+              case 'failure':
+                return '❌ Failed';
+              case 'skipped':
+                return '⚪️ Skipped';
+              default:
+                return '⚪️ Not Run';
+            }
+          };
+
+          const formatTests = (passed, total, durationMs) => {
+            const totalNum = toNumber(total);
+            const passedNum = toNumber(passed);
+            if (!totalNum) {
+              return 'Not run';
+            }
+            const seconds = (toNumber(durationMs) / 1000).toFixed(1);
+            return `${passedNum}/${totalNum} passed (${seconds}s)`;
+          };
+
+          const formatManifest = (total, missing) => {
+            const totalNum = toNumber(total);
+            if (!totalNum) {
+              return 'Not run';
+            }
+            const missingNum = toNumber(missing);
+            return `${totalNum - missingNum}/${totalNum} anchors valid`;
+          };
+
+          const formatLoad = (p95, throughput, errorRate) => {
+            const p95Num = toNumber(p95);
+            const throughputNum = toNumber(throughput);
+            if (!p95Num && !throughputNum) {
+              return 'Not run';
+            }
+            const errorPercent = (toNumber(errorRate) * 100).toFixed(2);
+            return `p95 ${p95Num.toFixed(0)}ms • ${throughputNum.toFixed(2)} rps • err ${errorPercent}%`;
+          };
+
+          const suites = [
+            {
+              name: 'Playwright E2E',
+              status: process.env.PLAYWRIGHT_STATUS,
+              details: formatTests(process.env.PLAYWRIGHT_PASSED, process.env.PLAYWRIGHT_TOTAL, process.env.PLAYWRIGHT_DURATION),
+            },
+            {
+              name: 'Cypress POS Offline',
+              status: process.env.CYPRESS_STATUS,
+              details: formatTests(process.env.CYPRESS_PASSED, process.env.CYPRESS_TOTAL, process.env.CYPRESS_DURATION),
+            },
+            {
+              name: 'Manifest Validation',
+              status: process.env.MANIFEST_STATUS,
+              details: formatManifest(process.env.MANIFEST_TOTAL, process.env.MANIFEST_MISSING),
+            },
+            {
+              name: 'k6 Checkout',
+              status: process.env.K6_CHECKOUT_STATUS,
+              details: formatLoad(process.env.K6_CHECKOUT_P95, process.env.K6_CHECKOUT_THROUGHPUT, process.env.K6_CHECKOUT_ERROR),
+            },
+            {
+              name: 'k6 Media Upload',
+              status: process.env.K6_MEDIA_STATUS,
+              details: formatLoad(process.env.K6_MEDIA_P95, process.env.K6_MEDIA_THROUGHPUT, process.env.K6_MEDIA_ERROR),
+            },
+          ];
+
+          const lines = [];
+          lines.push('<!-- test-suite-summary -->');
+          lines.push('# Test Suite Execution Summary');
+          lines.push('');
+          lines.push('| Suite | Status | Details |');
+          lines.push('|-------|--------|---------|');
+          for (const suite of suites) {
+            lines.push(`| ${suite.name} | ${statusLabel(suite.status)} | ${suite.details} |`);
+          }
+          lines.push('');
+          lines.push(`Workflow run: ${process.env.RUN_URL}`);
+
+          fs.writeFileSync(outPath, lines.join('\n'));
+          NODE
+
+      - name: Publish GitHub summary
+        run: cat test-summary.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment on PR with summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const marker = '<!-- test-suite-summary -->';
+            const body = fs.readFileSync('test-summary.md', 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }

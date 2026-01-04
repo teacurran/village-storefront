@@ -1,0 +1,389 @@
+{
+  "dashboard": {
+    "title": "Village Storefront - Background Job Health",
+    "description": "Background job monitoring per docs/operations/job_runbook.md",
+    "tags": ["village-storefront", "background-jobs", "queues"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "queue",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(reporting_refresh_queue_depth, queue)",
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*"
+        },
+        {
+          "name": "priority",
+          "type": "custom",
+          "options": [
+            {"text": "All", "value": ".*", "selected": true},
+            {"text": "CRITICAL", "value": "critical"},
+            {"text": "HIGH", "value": "high"},
+            {"text": "DEFAULT", "value": "default"},
+            {"text": "LOW", "value": "low"},
+            {"text": "BULK", "value": "bulk"}
+          ]
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Queue Depth by Priority",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
+        "description": "Stacked area chart of queue depth per priority. CRITICAL >100 for 2min = P1 alert.",
+        "targets": [
+          {
+            "expr": "sum(reporting_refresh_queue_depth{priority=~\"$priority\"}) by (priority)",
+            "legendFormat": "{{priority}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "fillOpacity": 10,
+              "lineWidth": 2,
+              "stacking": {
+                "mode": "normal"
+              }
+            }
+          }
+        },
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Jobs"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Job Throughput by Status",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "description": "Success/failed rate over time",
+        "targets": [
+          {
+            "expr": "sum(rate(reporting_job_completed_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "Success - {{priority}}"
+          },
+          {
+            "expr": "sum(rate(reporting_job_failed_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "Failed - {{priority}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Jobs/sec"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Dead-Letter Queue Depth",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "description": "DLQ depth >10 triggers P2 alert per runbook",
+        "targets": [
+          {
+            "expr": "sum(reporting_dlq_depth) by (queue)",
+            "legendFormat": "{{queue}}"
+          },
+          {
+            "expr": "10",
+            "legendFormat": "Alert Threshold"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Jobs"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [10],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "60s",
+          "handler": 1,
+          "name": "DLQ Depth High",
+          "message": "Dead-letter queue depth >10 requires investigation (see docs/operations/job_runbook.md)"
+        }
+      },
+      {
+        "id": 4,
+        "title": "Job Duration Percentiles",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "description": "p50/p95/p99 by priority",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(reporting_job_duration_bucket{priority=~\"$priority\",status=\"success\"}[5m])) by (le, priority))",
+            "legendFormat": "p50 - {{priority}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(reporting_job_duration_bucket{priority=~\"$priority\",status=\"success\"}[5m])) by (le, priority))",
+            "legendFormat": "p95 - {{priority}}"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(reporting_job_duration_bucket{priority=~\"$priority\",status=\"success\"}[5m])) by (le, priority))",
+            "legendFormat": "p99 - {{priority}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Retry Attempt Distribution",
+        "type": "heatmap",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "description": "Heatmap of retry attempts over time",
+        "targets": [
+          {
+            "expr": "sum(rate(reporting_job_retried_total{priority=~\"$priority\"}[5m])) by (attempt)",
+            "format": "time_series",
+            "legendFormat": "Attempt {{attempt}}"
+          }
+        ],
+        "dataFormat": "timeseries",
+        "heatmap": {},
+        "cards": {
+          "cardPadding": null,
+          "cardRound": null
+        },
+        "color": {
+          "mode": "spectrum",
+          "cardColor": "#b4ff00",
+          "colorScale": "sqrt",
+          "exponent": 0.5,
+          "colorScheme": "interpolateSpectral"
+        },
+        "legend": {
+          "show": true
+        },
+        "yAxis": {
+          "format": "short",
+          "logBase": 1
+        }
+      },
+      {
+        "id": 6,
+        "title": "Queue Overflow Events",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "description": "Any overflow events trigger P1 alert",
+        "targets": [
+          {
+            "expr": "sum(increase(reporting_queue_overflow_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "{{priority}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Events"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [0],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "sum"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Queue Overflow",
+          "message": "Queue capacity exceeded - P1 alert per job_runbook.md"
+        }
+      },
+      {
+        "id": 7,
+        "title": "Job Wait Time (Queue Latency)",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "description": "p95 wait time >2x target latency triggers P2 alert",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(reporting_job_wait_time_bucket{priority=\"critical\"}[5m])) by (le))",
+            "legendFormat": "CRITICAL p95"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(reporting_job_wait_time_bucket{priority=\"high\"}[5m])) by (le))",
+            "legendFormat": "HIGH p95"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(reporting_job_wait_time_bucket{priority=\"default\"}[5m])) by (le))",
+            "legendFormat": "DEFAULT p95"
+          },
+          {
+            "expr": "1000",
+            "legendFormat": "CRITICAL Target (1s)"
+          },
+          {
+            "expr": "5000",
+            "legendFormat": "HIGH Target (5s)"
+          },
+          {
+            "expr": "30000",
+            "legendFormat": "DEFAULT Target (30s)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Wait Time"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Job Lifecycle Funnel",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+        "description": "Enqueued → Started → Completed/Failed flow",
+        "targets": [
+          {
+            "expr": "sum(rate(reporting_job_enqueued_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "Enqueued - {{priority}}"
+          },
+          {
+            "expr": "sum(rate(reporting_job_started_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "Started - {{priority}}"
+          },
+          {
+            "expr": "sum(rate(reporting_job_completed_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "Completed - {{priority}}"
+          },
+          {
+            "expr": "sum(rate(reporting_job_exhausted_total{priority=~\"$priority\"}[5m])) by (priority)",
+            "legendFormat": "Exhausted - {{priority}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Jobs/sec"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Average Retry Attempts Before Success",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 32, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(reporting_job_retried_total[5m])) / sum(rate(reporting_job_completed_total[5m]))",
+            "legendFormat": "Avg Retry Attempts"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 2, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Failure Rate by Priority",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 32, "w": 6, "h": 4},
+        "description": "Target: <0.5% per Architecture §3.6",
+        "targets": [
+          {
+            "expr": "rate(reporting_job_failed_total[5m]) / rate(reporting_job_started_total[5m])",
+            "legendFormat": "Failure Rate"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 0.005, "color": "red"}
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "changes(kube_deployment_status_observed_generation{namespace=\"village-storefront\"}[5m]) > 0",
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "tagKeys": "deployment"
+        }
+      ]
+    }
+  }
+}
