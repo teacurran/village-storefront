@@ -1,0 +1,157 @@
+---
+# Production network policy - strict pod-to-pod communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: village-storefront-workers-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: village-storefront
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+  # Allow ingress from NGINX ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow Prometheus scraping from monitoring namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow pod-to-pod communication within same namespace
+  - from:
+    - podSelector:
+        matchLabels:
+          app: village-storefront
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  egress:
+  # Allow DNS resolution (CoreDNS)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow PostgreSQL access (production database - external or in-cluster)
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow HTTPS egress for external APIs (Stripe, Cloudflare R2, shipping carriers)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow SMTP for email delivery (SendGrid, Mailgun)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 587  # TLS SMTP
+    - protocol: TCP
+      port: 465  # SSL SMTP
+
+  # Allow HTTP egress (for webhooks, APIs without TLS)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 80
+
+  # Allow NTP for time synchronization
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 123
+
+---
+# Network policy for critical workers (stricter isolation)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: village-storefront-workers-critical-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: village-storefront
+      component: workers-critical
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+  # Critical workers only accept internal traffic (no direct ingress)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: village-storefront
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow Prometheus scraping
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  egress:
+  # DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # PostgreSQL
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # External APIs (Stripe webhooks, payment processing)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443

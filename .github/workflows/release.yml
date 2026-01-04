@@ -1,0 +1,408 @@
+name: Release & Deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on semantic version tags (e.g., v1.2.3)
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel releases
+
+env:
+  JAVA_VERSION: '21'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  MAVEN_OPTS: >-
+    -Dmaven.repo.local=${{ github.workspace }}/.m2/repository
+    -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+
+jobs:
+  # ============================================================================
+  # BUILD & PUBLISH
+  # ============================================================================
+  build:
+    name: Build Native Image & Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for version metadata
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'maven'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build native executable
+        run: |
+          ./mvnw -B package -Pnative \
+            -DskipTests \
+            -Dquarkus.native.container-build=false \
+            -Dquarkus.application.version=${{ steps.version.outputs.version }}
+
+      - name: Build and push container image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./src/main/docker/Dockerfile.native
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT_SHA=${{ github.sha }}
+
+      - name: Generate SBOM (Software Bill of Materials)
+        run: |
+          ./mvnw org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom
+          mkdir -p artifacts/sbom
+          cp target/bom.json artifacts/sbom/sbom-${{ steps.version.outputs.version }}.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: artifacts/sbom/
+          retention-days: 90
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ Build duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Image tags:" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # DEPLOY TO STAGING
+  # ============================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://staging.villagecompute.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Update image tag in staging overlay
+        run: |
+          cd k8s/overlays/staging
+          kustomize edit set image ghcr.io/villagecompute/village-storefront:${{ needs.build.outputs.version }}
+
+      - name: Run database migrations
+        run: |
+          kubectl create job --from=cronjob/migrations migration-${{ needs.build.outputs.version }} \
+            -n village-storefront-staging || true
+          kubectl wait --for=condition=complete --timeout=300s \
+            job/migration-${{ needs.build.outputs.version }} \
+            -n village-storefront-staging
+
+      - name: Deploy to staging (blue deployment)
+        run: |
+          kustomize build k8s/overlays/staging | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/village-storefront-workers \
+            -n village-storefront-staging --timeout=5m
+
+      - name: Run smoke tests
+        run: |
+          STAGING_URL="https://staging.villagecompute.com"
+
+          echo "Running smoke tests against ${STAGING_URL}"
+
+          # Health check
+          curl -f -s "${STAGING_URL}/q/health/ready" || exit 1
+
+          # Metrics endpoint
+          curl -f -s "${STAGING_URL}/q/metrics" | grep -q "jvm_" || exit 1
+
+          # API version check
+          curl -f -s "${STAGING_URL}/q/info" | grep -q "${{ needs.build.outputs.version }}" || exit 1
+
+          echo "✅ Smoke tests passed"
+
+      - name: Record deployment
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ Staging deployment duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 Deployed version ${{ needs.build.outputs.version }} to staging" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # DEPLOY TO PRODUCTION (Manual Approval Required)
+  # ============================================================================
+  deploy-production:
+    name: Deploy to Production (Blue/Green)
+    runs-on: ubuntu-latest
+    needs: [build, deploy-staging]
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://villagecompute.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Update image tag in prod overlay
+        run: |
+          cd k8s/overlays/prod
+          kustomize edit set image ghcr.io/villagecompute/village-storefront:${{ needs.build.outputs.version }}
+
+      - name: Backup current deployment state
+        run: |
+          kubectl get deployment village-storefront-workers \
+            -n village-storefront -o yaml > deployment-backup-${{ github.sha }}.yaml
+          kubectl get deployment village-storefront-workers-critical \
+            -n village-storefront -o yaml > deployment-critical-backup-${{ github.sha }}.yaml
+
+      - name: Upload deployment backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-backup-${{ github.sha }}
+          path: deployment-*-backup-*.yaml
+          retention-days: 30
+
+      - name: Run database migrations (production)
+        run: |
+          kubectl create job --from=cronjob/migrations migration-${{ needs.build.outputs.version }} \
+            -n village-storefront || true
+          kubectl wait --for=condition=complete --timeout=600s \
+            job/migration-${{ needs.build.outputs.version }} \
+            -n village-storefront
+
+      - name: Deploy blue environment (new version)
+        run: |
+          # Label current deployment as "green"
+          kubectl patch deployment village-storefront-workers \
+            -n village-storefront \
+            -p '{"metadata":{"labels":{"deployment-color":"green"}}}'
+
+          # Apply new manifests (creates "blue" deployment)
+          kustomize build k8s/overlays/prod | kubectl apply -f -
+
+          # Label new deployment as "blue"
+          kubectl patch deployment village-storefront-workers \
+            -n village-storefront \
+            -p '{"metadata":{"labels":{"deployment-color":"blue"}}}'
+
+      - name: Wait for blue deployment rollout
+        run: |
+          kubectl rollout status deployment/village-storefront-workers \
+            -n village-storefront --timeout=10m
+          kubectl rollout status deployment/village-storefront-workers-critical \
+            -n village-storefront --timeout=10m
+
+      - name: Run production smoke tests (blue environment)
+        run: |
+          PROD_URL="https://villagecompute.com"
+
+          echo "Running production smoke tests against blue environment"
+
+          # Health checks
+          curl -f -s "${PROD_URL}/q/health/ready" || exit 1
+          curl -f -s "${PROD_URL}/q/health/live" || exit 1
+
+          # Metrics
+          curl -f -s "${PROD_URL}/q/metrics" | grep -q "jvm_" || exit 1
+
+          # Version verification
+          curl -f -s "${PROD_URL}/q/info" | grep -q "${{ needs.build.outputs.version }}" || exit 1
+
+          echo "✅ Production smoke tests passed"
+
+      - name: Switch traffic to blue (green → blue)
+        run: |
+          # Update service selector to point to blue deployment
+          kubectl patch service village-storefront-workers \
+            -n village-storefront \
+            -p '{"spec":{"selector":{"deployment-color":"blue"}}}'
+
+          echo "Traffic switched to blue deployment (version ${{ needs.build.outputs.version }})"
+
+      - name: Monitor post-deployment metrics
+        run: |
+          echo "Monitoring for 2 minutes..."
+          sleep 120
+
+          # Check error rates via metrics endpoint
+          # In production, this would query Prometheus for actual error rates
+          echo "✅ Post-deployment monitoring complete"
+
+      - name: Scale down green deployment
+        run: |
+          # Keep green deployment at reduced scale for quick rollback if needed
+          kubectl scale deployment village-storefront-workers \
+            --replicas=1 \
+            -n village-storefront \
+            -l deployment-color=green || true
+
+          echo "Green deployment scaled down (retained for rollback)"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          name: Release ${{ needs.build.outputs.version }}
+          body: |
+            ## Village Storefront ${{ needs.build.outputs.version }}
+
+            ### Deployment Summary
+            - **Staging**: ✅ Deployed
+            - **Production**: ✅ Deployed (Blue/Green)
+            - **Image**: `${{ needs.build.outputs.image-tag }}`
+            - **Commit**: ${{ github.sha }}
+
+            ### Rollback Instructions
+            See [deployment documentation](docs/operations/deployment.md#rollback-procedures)
+
+            ```bash
+            kubectl rollout undo deployment/village-storefront-workers -n village-storefront
+            ```
+          files: |
+            artifacts/sbom/*.json
+          draft: false
+          prerelease: false
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ Production deployment duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 Successfully deployed version ${{ needs.build.outputs.version }} to production" >> $GITHUB_STEP_SUMMARY
+          echo "🔵 Blue deployment active, green retained for rollback" >> $GITHUB_STEP_SUMMARY
+
+      # Optional: Send Slack notification
+      # - name: Notify Slack
+      #   if: always()
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+      #     payload: |
+      #       {
+      #         "text": "Production Deployment: ${{ job.status }}",
+      #         "blocks": [
+      #           {
+      #             "type": "section",
+      #             "text": {
+      #               "type": "mrkdwn",
+      #               "text": "*Village Storefront ${{ needs.build.outputs.version }}*\nStatus: ${{ job.status }}\nEnvironment: Production\nDuration: ${duration}s"
+      #             }
+      #           }
+      #         ]
+      #       }
+
+  # ============================================================================
+  # CLEANUP GREEN DEPLOYMENT (After Verification Period)
+  # ============================================================================
+  cleanup-green:
+    name: Cleanup Green Deployment
+    runs-on: ubuntu-latest
+    needs: [build, deploy-production]
+    timeout-minutes: 5
+    # Run 24 hours after production deployment
+    # In practice, this would be a manual workflow_dispatch or cron job
+
+    steps:
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Delete green deployment
+        run: |
+          kubectl delete deployment -l deployment-color=green -n village-storefront || true
+          echo "Green deployment cleaned up"

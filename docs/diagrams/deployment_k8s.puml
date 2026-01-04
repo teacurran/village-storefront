@@ -1,0 +1,310 @@
+@startuml deployment_k8s
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
+' Rendering command:
+' docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/deployment_k8s.puml -tpng
+' Or with local PlantUML: plantuml docs/diagrams/deployment_k8s.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Village Storefront - Kubernetes Deployment Architecture\n(k3s Target Environment)
+
+' ============================================================================
+' EXTERNAL USER NODES
+' ============================================================================
+Deployment_Node(internet, "Internet", "Global CDN") {
+    Deployment_Node(cdn, "Cloudflare CDN", "Edge Network") {
+        Container(cdnCache, "CDN Cache", "Cloudflare", "Static assets, media, edge caching")
+    }
+}
+
+' ============================================================================
+' KUBERNETES CLUSTER
+' ============================================================================
+Deployment_Node(k3s, "k3s Cluster", "Kubernetes 1.28+") {
+
+    ' INGRESS TIER
+    Deployment_Node(ingressTier, "Ingress Tier", "NGINX Ingress Controller") {
+        Container(ingress, "NGINX Ingress", "NGINX", "TLS termination (cert-manager), tenant routing")
+
+        note right of ingress
+            **Tenant Resolution:**
+            Routes by Host header to backend
+            storename.platform.com → TenantFilter
+            custom.domain.com → TenantFilter
+
+            **TLS:**
+            cert-manager ACME automation
+            Cloudflare origin certificates
+        end note
+    }
+
+    ' APPLICATION POD TIER
+    Deployment_Node(appTier, "Application Pods", "Quarkus Native Deployments") {
+
+        ' GATEWAY PODS
+        Deployment_Node(gatewayPods, "Gateway/Storefront Pods", "3-20 replicas (HPA)") {
+            Container(gateway, "Quarkus Gateway", "Java 21 GraalVM Native", "TenantFilter, Qute templates, REST API /api/v1/*")
+
+            note right of gateway
+                **Responsibilities:**
+                - Tenant context resolution
+                - Storefront rendering (Qute)
+                - Admin SPA delivery (Vue assets)
+                - REST API endpoints
+
+                **Probes:**
+                /q/health/live, /q/health/ready
+
+                **Metrics:**
+                /q/metrics → Prometheus
+            end note
+        }
+
+        ' CATALOG/CHECKOUT PODS
+        Deployment_Node(catalogPods, "Catalog/Checkout Pods", "3-15 replicas (HPA)") {
+            Container(catalog, "Catalog Service", "Quarkus Native", "Product, Inventory, Consignment APIs")
+            Container(checkout, "Checkout Service", "Quarkus Native", "Cart, Orders, Payments orchestration")
+
+            note right of catalogPods
+                **Catalog:**
+                - Product/variant CRUD
+                - Inventory tracking
+                - Consignment management
+
+                **Checkout:**
+                - Cart session management
+                - Payment orchestration
+                - Order creation workflow
+            end note
+        }
+
+        ' BACKGROUND WORKER PODS
+        Deployment_Node(workerPods, "Background Workers", "2-20 replicas (HPA)") {
+            Container(workers, "Standard Workers", "Quarkus Native", "DelayedJob executor (DEFAULT, BULK priorities)")
+            Container(criticalWorkers, "Critical Workers", "Quarkus Native", "DelayedJob executor (CRITICAL, HIGH priorities)")
+
+            note right of workerPods
+                **Standard Workers:**
+                - Email delivery
+                - Report generation
+                - Media processing (FFmpeg)
+                - Webhook delivery
+
+                **Critical Workers:**
+                - Payment webhooks (Stripe)
+                - Order confirmations
+                - Inventory updates
+                - PriorityClass: high-priority
+            end note
+        }
+
+        ' ADMIN SPA DELIVERY
+        Deployment_Node(adminPods, "Admin SPA Pods", "2-5 replicas") {
+            Container(admin, "Admin SPA Delivery", "Quarkus + Quinoa", "Serves compiled Vue.js assets, admin bootstrap API")
+        }
+    }
+
+    ' OBSERVABILITY STACK
+    Deployment_Node(observability, "Observability Stack", "Monitoring & Tracing") {
+        Container(prometheus, "Prometheus", "Metrics", "Scrapes /q/metrics from all pods")
+        Container(grafana, "Grafana", "Dashboards", "Visualizes metrics, SLO tracking")
+        Container(jaeger, "Jaeger", "Distributed Tracing", "OpenTelemetry spans collector")
+
+        note right of observability
+            **Metrics:**
+            - Request rates, latencies
+            - Queue depths, job processing times
+            - Database connection pools
+            - JVM/native memory usage
+
+            **Traces:**
+            - End-to-end request flows
+            - Cross-module interactions
+            - External API call timing
+        end note
+    }
+
+    ' STORAGE TIER (ConfigMaps/Secrets)
+    Deployment_Node(config, "Configuration Layer", "K8s Resources") {
+        ContainerDb(configMap, "ConfigMap", "village-storefront-config", "Non-sensitive config (bucket names, mailer host)")
+        ContainerDb(secrets, "Secrets", "Sealed Secrets/External Secrets Operator", "DB credentials, Stripe keys, R2 access keys")
+
+        note right of config
+            **Secrets Management:**
+            Created externally via:
+            - Sealed Secrets (SealedSecret CRD)
+            - External Secrets Operator
+            - Manual kubectl create secret
+
+            **Referenced by:**
+            - village-storefront-db
+            - village-storefront-r2
+            - village-storefront-stripe
+        end note
+    }
+}
+
+' ============================================================================
+' EXTERNAL DATA TIER
+' ============================================================================
+Deployment_Node(dataExternal, "External Data Tier", "Managed Services") {
+
+    Deployment_Node(pgCluster, "Managed PostgreSQL 17", "HA Cluster") {
+        ContainerDb(postgres, "PostgreSQL", "Primary + Replicas", "Row-level security, partitioned audit tables, tenant_id isolation")
+
+        note right of postgres
+            **Schema:**
+            - Multi-tenant shared database
+            - All tables include tenant_id
+            - RLS policies enforce isolation
+            - Partitioned: sessions, audit_logs
+            - MyBatis Migrations manage schema
+
+            **Connection Pooling:**
+            - Quarkus Agroal (default pool)
+            - Reactive pool for async queries
+        end note
+    }
+
+    Deployment_Node(r2Storage, "Cloudflare R2", "S3-Compatible Object Storage") {
+        Container(mediaBucket, "Media Buckets", "R2", "Product images, video variants, PDF receipts")
+
+        note right of mediaBucket
+            **Lifecycle:**
+            - Original uploads retained 90 days
+            - Derivatives cached indefinitely
+            - Signed URLs (15-min expiry)
+
+            **Processing:**
+            - FFmpeg workers transcode video
+            - ImageMagick resizes images
+            - Results uploaded to R2
+        end note
+    }
+}
+
+' ============================================================================
+' EXTERNAL SERVICES
+' ============================================================================
+Deployment_Node(externalServices, "External APIs", "Third-Party Services") {
+
+    Deployment_Node(stripeCloud, "Stripe Connect", "Payment Gateway") {
+        Container(stripeApi, "Stripe APIs", "REST/Webhooks", "Payment intents, payouts, refunds")
+
+        note right of stripeApi
+            **Integration:**
+            - PaymentService → StripeAdapter
+            - Webhook signature verification
+            - Idempotency keys for retries
+            - Connect platform model
+        end note
+    }
+
+    Deployment_Node(shippingCloud, "Shipping Carriers", "External APIs") {
+        Container(shippingApis, "UPS/FedEx/USPS", "REST APIs", "Rate calculation, label generation")
+    }
+
+    Deployment_Node(emailCloud, "Email Service", "SMTP Provider") {
+        Container(mailer, "SMTP/Mailpit", "SMTP", "Transactional emails (order confirmations, password resets)")
+
+        note right of mailer
+            **Development:**
+            Mailpit (local SMTP mock)
+
+            **Production:**
+            SendGrid/Mailgun/SES
+            Domain filtering in non-prod
+        end note
+    }
+}
+
+' ============================================================================
+' RELATIONSHIPS - INGRESS FLOW
+' ============================================================================
+Rel(cdnCache, ingress, "HTTPS requests", "TLS 1.3")
+Rel(ingress, gateway, "Routes by Host header", "HTTP/2")
+
+' ============================================================================
+' RELATIONSHIPS - APPLICATION TIER
+' ============================================================================
+Rel(gateway, catalog, "Service mesh / ClusterIP", "HTTP")
+Rel(gateway, checkout, "Service mesh / ClusterIP", "HTTP")
+Rel(gateway, admin, "Admin routes /admin/*", "HTTP")
+
+Rel(checkout, catalog, "Inventory checks, product lookups", "HTTP")
+Rel(workers, catalog, "Consignment payout calculations", "HTTP")
+Rel(criticalWorkers, checkout, "Order confirmation processing", "HTTP")
+
+' ============================================================================
+' RELATIONSHIPS - DATA/STORAGE
+' ============================================================================
+Rel(gateway, postgres, "Panache queries (tenant-scoped)", "JDBC / PostgreSQL wire")
+Rel(catalog, postgres, "Product/inventory CRUD", "JDBC")
+Rel(checkout, postgres, "Order/payment CRUD", "JDBC")
+Rel(workers, postgres, "DelayedJob queue polling", "JDBC")
+Rel(criticalWorkers, postgres, "CRITICAL job claims", "JDBC")
+
+Rel(workers, mediaBucket, "Upload processed media", "S3 API / HTTPS")
+Rel(catalog, mediaBucket, "Signed URL generation", "S3 API / HTTPS")
+
+Rel(gateway, configMap, "Load bucket names, mailer config", "K8s API")
+Rel(gateway, secrets, "Inject DB/R2/Stripe credentials", "K8s API")
+Rel(workers, secrets, "Inject credentials", "K8s API")
+
+' ============================================================================
+' RELATIONSHIPS - EXTERNAL SERVICES
+' ============================================================================
+Rel(checkout, stripeApi, "Create payment intents, charge", "HTTPS / REST")
+Rel(criticalWorkers, stripeApi, "Process webhooks (payment.succeeded)", "Webhook callback")
+Rel(checkout, shippingApis, "Calculate rates, generate labels", "HTTPS / REST")
+Rel(workers, mailer, "Send emails via SMTP", "SMTP / TLS")
+
+' ============================================================================
+' RELATIONSHIPS - OBSERVABILITY
+' ============================================================================
+Rel(gateway, prometheus, "Expose /q/metrics", "HTTP scrape")
+Rel(catalog, prometheus, "Expose /q/metrics", "HTTP scrape")
+Rel(checkout, prometheus, "Expose /q/metrics", "HTTP scrape")
+Rel(workers, prometheus, "Expose /q/metrics", "HTTP scrape")
+Rel(criticalWorkers, prometheus, "Expose /q/metrics", "HTTP scrape")
+
+Rel(gateway, jaeger, "Export OpenTelemetry traces", "gRPC/HTTP")
+Rel(catalog, jaeger, "Export traces", "gRPC/HTTP")
+Rel(checkout, jaeger, "Export traces", "gRPC/HTTP")
+
+Rel(prometheus, grafana, "Query metrics data", "PromQL / HTTP")
+
+' ============================================================================
+' DEPLOYMENT NOTES
+' ============================================================================
+note as DeploymentNotes
+    **Deployment Strategy:**
+    - Blue/Green via Kustomize overlays (dev/staging/prod)
+    - GitHub Actions release workflow builds native image
+    - Quarkus Kubernetes extension generates base manifests
+    - cert-manager handles TLS automation (ACME)
+    - HPAs scale based on CPU, memory, custom queue metrics
+    - PodDisruptionBudgets ensure HA during node maintenance
+
+    **Resource Allocation (Production):**
+    - Gateway: 250m-1000m CPU, 512Mi-2Gi RAM
+    - Catalog/Checkout: 250m-1000m CPU, 512Mi-2Gi RAM
+    - Workers: 250m-1000m CPU, 512Mi-2Gi RAM
+    - Critical Workers: 500m-2000m CPU, 1Gi-4Gi RAM
+
+    **Network Policies:**
+    - Gateway: ingress from ingress-controller
+    - Catalog/Checkout: ingress from gateway only
+    - Workers: egress to external APIs, postgres, R2
+    - PostgreSQL: ingress from app pods only
+
+    **Anchors:**
+    - docs/operations/deployment.md (promotion/rollback procedures)
+    - docs/architecture/04_Operational_Architecture.md §3.9
+    - .github/workflows/release.yml (automated deployment)
+end note
+
+SHOW_LEGEND()
+
+@enduml

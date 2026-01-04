@@ -1,0 +1,162 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Production environment overlay
+# Full HA configuration with strict resource limits, HPAs, and PDBs
+# Blue/green deployment ready with traffic splitting capabilities
+
+namespace: village-storefront
+
+# Reference base manifests and additional resources
+resources:
+  - ../../base
+  - deployment-workers-critical.yaml
+  - ingress-prod.yaml
+  - network-policy-prod.yaml
+  - priority-class.yaml
+  - service-monitor.yaml
+
+# Production labels
+commonLabels:
+  environment: production
+
+# Production annotations
+commonAnnotations:
+  managed-by: kustomize
+  environment: production
+  deployment-strategy: blue-green
+
+# ConfigMap for production values
+configMapGenerator:
+  - name: village-storefront-config
+    behavior: merge
+    literals:
+      - r2-bucket-name=village-storefront-prod-reports
+      - mailer-host=smtp.sendgrid.net
+      - quarkus-profile=production
+
+# Image tag (set dynamically by release workflow)
+images:
+  - name: ghcr.io/villagecompute/village-storefront
+    newTag: latest  # Overridden by release workflow with specific version
+
+# Strategic merge patches
+patchesStrategicMerge:
+  - patches/deployment-workers-prod.yaml
+  - patches/deployment-workers-critical-prod.yaml
+
+# JSON patches for production-specific tuning
+patchesJson6902:
+  # Standard workers: production replica count
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+
+  # Standard workers HPA: production scaling thresholds
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+      - op: replace
+        path: /spec/metrics/0/resource/target/averageUtilization
+        value: 70
+      - op: replace
+        path: /spec/metrics/1/resource/target/averageUtilization
+        value: 80
+      - op: replace
+        path: /spec/behavior/scaleUp/stabilizationWindowSeconds
+        value: 60
+      - op: replace
+        path: /spec/behavior/scaleDown/stabilizationWindowSeconds
+        value: 300
+
+  # Standard workers PDB: ensure minimum availability
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+
+  # Critical workers: production replica count
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers-critical
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 5
+
+  # Critical workers HPA: aggressive scaling
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-critical-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 30
+
+  # Critical workers PDB: strict availability guarantee
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-workers-critical-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+
+# IMPORTANT: Production secrets MUST be managed via External Secrets Operator or Sealed Secrets
+# Never commit production credentials to version control
+#
+# Example with external-secrets:
+# apiVersion: external-secrets.io/v1beta1
+# kind: ExternalSecret
+# metadata:
+#   name: village-storefront-db
+#   namespace: village-storefront
+# spec:
+#   refreshInterval: 1h
+#   secretStoreRef:
+#     name: vault-backend
+#     kind: ClusterSecretStore
+#   target:
+#     name: village-storefront-db
+#   data:
+#   - secretKey: jdbc-url
+#     remoteRef:
+#       key: village-storefront/prod/db
+#       property: jdbc-url
+#   - secretKey: username
+#     remoteRef:
+#       key: village-storefront/prod/db
+#       property: username
+#   - secretKey: password
+#     remoteRef:
+#       key: village-storefront/prod/db
+#       property: password
