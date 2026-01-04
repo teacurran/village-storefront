@@ -1,0 +1,258 @@
+---
+# Prometheus alerting rules for Background Job Framework
+# Per docs/operations/job_runbook.md metrics and thresholds
+# Validation: promtool check rules monitoring/prometheus-rules/*.yaml
+
+groups:
+- name: background-jobs-critical
+  interval: 30s
+  rules:
+  - alert: CriticalQueueDepthHigh
+    expr: |
+      reporting_refresh_queue_depth{priority="critical"} > 100
+    for: 2m
+    labels:
+      severity: critical
+      component: background-jobs
+      priority: critical
+      oncall: true
+    annotations:
+      summary: "CRITICAL queue depth >100 for 2 minutes → P1 alert"
+      description: "CRITICAL queue has {{ $value }} pending jobs (threshold: 100 per job_runbook.md)"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#scenario-1-critical-queue-backing-up"
+      action: "Scale worker replicas immediately or investigate failures"
+      dashboard: "https://grafana.villagecompute.com/d/background-jobs?panelId=1"
+
+  - alert: CriticalJobFailureRateHigh
+    expr: |
+      rate(reporting_job_failed_total{priority="critical"}[5m]) / rate(reporting_job_started_total{priority="critical"}[5m]) > 0.01
+    for: 5m
+    labels:
+      severity: critical
+      component: background-jobs
+      priority: critical
+      oncall: true
+    annotations:
+      summary: "CRITICAL job failure rate exceeds 1%"
+      description: "Failure rate is {{ $value | humanizePercentage }} for CRITICAL priority jobs"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#investigating-job-failures"
+      action: "Check logs for 'Job failed' with priority=CRITICAL filter"
+
+- name: background-jobs-default
+  interval: 30s
+  rules:
+  - alert: DefaultQueueDepthHigh
+    expr: |
+      reporting_refresh_queue_depth{priority="default"} > 1000
+    for: 5m
+    labels:
+      severity: warning
+      component: background-jobs
+      priority: default
+    annotations:
+      summary: "DEFAULT queue depth >1000 for 5 minutes → P2 alert"
+      description: "DEFAULT queue has {{ $value }} pending jobs (threshold: 1000)"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#scaling-guidance"
+      action: "Consider scaling worker pool or investigate slow jobs"
+
+  - alert: AnyQueueDepthCritical
+    expr: |
+      reporting_refresh_queue_depth > 10000
+    for: 1m
+    labels:
+      severity: critical
+      component: background-jobs
+      oncall: true
+    annotations:
+      summary: "Queue depth >10,000 indicates backpressure issue → P1 alert"
+      description: "Queue {{ $labels.queue }} has {{ $value }} jobs (critical threshold: 10k)"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#troubleshooting-scenarios"
+      action: "Immediate investigation required - potential processing bottleneck"
+
+- name: background-jobs-dlq
+  interval: 30s
+  rules:
+  - alert: DeadLetterQueueDepthHigh
+    expr: |
+      reporting_dlq_depth > 10
+    for: 5m
+    labels:
+      severity: warning
+      component: background-jobs
+      kpi: dlq-depth
+    annotations:
+      summary: "Dead-letter queue depth >10 → P2 alert requires investigation"
+      description: "DLQ for {{ $labels.queue }} has {{ $value }} failed jobs (threshold: 10)"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#scenario-2-dead-letter-queue-accumulating"
+      action: "Inspect DLQ via logs: kubectl logs | grep 'Job moved to DLQ'"
+      investigation: "Group errors by type and tenant to identify root cause"
+
+  - alert: DeadLetterQueueGrowthRate
+    expr: |
+      rate(reporting_dlq_added_total[5m]) > 0.5
+    for: 10m
+    labels:
+      severity: warning
+      component: background-jobs
+    annotations:
+      summary: "DLQ accumulating rapidly (>0.5 jobs/sec)"
+      description: "Jobs moving to DLQ at {{ $value }}/sec for queue {{ $labels.queue }}"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#step-3-determine-root-cause"
+      action: "Check recent deployments and feature flag changes"
+
+- name: background-jobs-performance
+  interval: 30s
+  rules:
+  - alert: JobWaitTimeExceedsTarget
+    expr: |
+      histogram_quantile(0.95, sum(rate(reporting_job_wait_time_bucket{priority="critical"}[5m])) by (le)) > 2000
+        or
+      histogram_quantile(0.95, sum(rate(reporting_job_wait_time_bucket{priority="high"}[5m])) by (le)) > 10000
+        or
+      histogram_quantile(0.95, sum(rate(reporting_job_wait_time_bucket{priority="default"}[5m])) by (le)) > 60000
+    for: 10m
+    labels:
+      severity: warning
+      component: background-jobs
+      kpi: wait-time
+    annotations:
+      summary: "p95 wait time exceeds target latency by 2x → P2 alert"
+      description: "{{ $labels.priority }} priority wait time is {{ $value | humanizeDuration }} (exceeds 2x target)"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#capacity-planning"
+      action: "Scale worker pool or optimize job processing time"
+
+  - alert: JobDurationP99High
+    expr: |
+      histogram_quantile(0.99, sum(rate(reporting_job_duration_bucket{priority="default",status="success"}[5m])) by (le)) > 60000
+    for: 10m
+    labels:
+      severity: warning
+      component: background-jobs
+      kpi: duration
+    annotations:
+      summary: "p99 job duration >60s for DEFAULT priority jobs → P2 alert"
+      description: "Job duration p99 is {{ $value | humanizeDuration }} for queue {{ $labels.queue }}"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#common-operations"
+      action: "Profile slow jobs and optimize processing logic"
+
+- name: background-jobs-capacity
+  interval: 30s
+  rules:
+  - alert: QueueOverflowEvents
+    expr: |
+      increase(reporting_queue_overflow_total[5m]) > 0
+    for: 1m
+    labels:
+      severity: critical
+      component: background-jobs
+      oncall: true
+    annotations:
+      summary: "Queue overflow events detected → P1 alert (capacity exceeded)"
+      description: "{{ $value }} overflow events in last 5min for {{ $labels.priority }} queue"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#scenario-3-queue-overflow-events"
+      action_short_term: "Increase queue capacity via ConfigMap: jobs.queue.capacity.default"
+      action_long_term: "Scale worker pool or optimize job processing"
+      investigation: "Why is enqueue rate exceeding processing rate?"
+
+  - alert: JobsNotProcessing
+    expr: |
+      rate(reporting_job_started_total[5m]) == 0
+        and
+      reporting_refresh_queue_depth > 0
+    for: 5m
+    labels:
+      severity: critical
+      component: background-jobs
+      oncall: true
+    annotations:
+      summary: "Jobs stuck in queue (not processing) → P1 alert"
+      description: "Queue has {{ $value }} jobs but no job.started metrics incrementing"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#scenario-4-jobs-stuck-in-queue"
+      action: "Check scheduler health: kubectl exec <pod> -- curl localhost:8080/q/health"
+      remediation: "Restart worker pods: kubectl rollout restart deployment/village-storefront-workers"
+
+- name: background-jobs-sla
+  interval: 30s
+  rules:
+  - alert: BackgroundJobFailureRateSLAViolation
+    expr: |
+      rate(reporting_job_failed_total[5m]) / rate(reporting_job_started_total[5m]) > 0.005
+    for: 15m
+    labels:
+      severity: warning
+      component: background-jobs
+      kpi: failure-rate
+    annotations:
+      summary: "Job failure rate exceeds 0.5% SLA target"
+      description: "Failure rate is {{ $value | humanizePercentage }} (target: <0.5% per Architecture §3.6)"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#monitoring-alerting"
+      note: "Instrumentation distinguishes retriable vs permanent failures"
+
+  - alert: MediaJobLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(media_job_duration_bucket{type="image"}[5m])) by (le)) > 60000
+        or
+      histogram_quantile(0.95, sum(rate(media_job_duration_bucket{type="video"}[5m])) by (le)) > 300000
+    for: 10m
+    labels:
+      severity: warning
+      component: media
+      kpi: job-latency
+    annotations:
+      summary: "Media job duration p95 exceeds target (image: 60s, video: 300s)"
+      description: "{{ $labels.type }} processing p95 is {{ $value | humanizeDuration }}"
+      runbook_url: "https://docs.villagecompute.com/media/pipeline#failure-handling-retries"
+      action: "Check FFmpeg process health and R2 upload latency"
+
+- name: background-jobs-worker-health
+  interval: 30s
+  rules:
+  - alert: WorkerPodRestartRate
+    expr: |
+      rate(kube_pod_container_status_restarts_total{namespace="village-storefront",container="worker"}[15m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      component: background-jobs
+      infrastructure: kubernetes
+    annotations:
+      summary: "Worker pod restart rate is high"
+      description: "Pod {{ $labels.pod }} is restarting {{ $value }}/sec"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#scenario-1-critical-queue-backing-up"
+      action: "Check resource limits (OOM, CPU throttling): kubectl describe pod <pod>"
+
+  - alert: WorkerMemoryPressure
+    expr: |
+      (
+        container_memory_working_set_bytes{namespace="village-storefront", container="worker"}
+        /
+        container_spec_memory_limit_bytes{namespace="village-storefront", container="worker"}
+      ) > 0.9
+    for: 5m
+    labels:
+      severity: warning
+      component: background-jobs
+      infrastructure: kubernetes
+    annotations:
+      summary: "Worker pod memory usage >90%"
+      description: "Pod {{ $labels.pod }} memory at {{ $value | humanizePercentage }} of limit"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#worker-sizing"
+      action: "Consider increasing memory limits or investigate memory leak"
+
+  - alert: DatabaseConnectionPoolExhausted
+    expr: |
+      (
+        hikaricp_connections_active{job="village-storefront-workers"}
+        /
+        hikaricp_connections_max{job="village-storefront-workers"}
+      ) > 0.9
+    for: 5m
+    labels:
+      severity: warning
+      component: background-jobs
+      infrastructure: database
+    annotations:
+      summary: "Database connection pool near capacity (>90%)"
+      description: "Connection pool utilization is {{ $value | humanizePercentage }}"
+      runbook_url: "https://docs.villagecompute.com/operations/job_runbook#common-failure-patterns"
+      action: "Check for connection leaks or increase pool size"

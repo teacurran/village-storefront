@@ -1,0 +1,634 @@
+{
+  "dashboard": {
+    "title": "Village Storefront - Component KPIs",
+    "description": "Comprehensive component-level KPIs per Blueprint Foundation Section 4",
+    "tags": ["village-storefront", "kpis", "components"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "tenant_id",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(tenant_id)",
+          "multi": true,
+          "includeAll": true,
+          "allValue": ".*",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          }
+        },
+        {
+          "name": "correlation_id",
+          "type": "textbox",
+          "label": "Correlation ID",
+          "description": "Filter by X-Request-ID for cross-service tracing"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Tenant Access Gateway - Resolution Latency",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(tenant_resolution_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(tenant_resolution_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(tenant_resolution_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency",
+            "logBase": 1
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [10],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Tenant Resolution Latency High",
+          "message": "Median tenant resolution exceeds 10ms target (Section 4 KPI)"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Tenant Access Gateway - Misclassification Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(tenant_resolution_misclassified_total[5m]) / rate(tenant_resolution_total[5m])",
+            "legendFormat": "Misclassification Rate"
+          },
+          {
+            "expr": "0.001",
+            "legendFormat": "SLA Threshold (0.1%)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "label": "Rate"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Identity & Session - Token Issuance Latency",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(token_issuance_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "50",
+            "legendFormat": "Target (50ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Identity & Session - Refresh Success Ratio",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 8, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(token_refresh_success_total[5m]) / rate(token_refresh_total[5m])",
+            "legendFormat": "Success Ratio"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.99, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Storefront Rendering - Server-Side Render Time",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(storefront_render_duration_bucket{tenant_id=~\"$tenant_id\",cold=\"true\"}[5m])) by (le))",
+            "legendFormat": "p95 Cold Render"
+          },
+          {
+            "expr": "150",
+            "legendFormat": "Target (150ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Catalog & Inventory - Bulk Import Throughput",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(catalog_bulk_import_products_total{tenant_id=~\"$tenant_id\"}[5m]) * 60",
+            "legendFormat": "Products/Minute ({{tenant_id}})"
+          },
+          {
+            "expr": "5000",
+            "legendFormat": "Target (5k/min)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Products/Minute"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Checkout - 95th Percentile Latency",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(checkout_saga_duration_bucket{tenant_id=~\"$tenant_id\",stage=\"complete\"}[5m])) by (le))",
+            "legendFormat": "p95 Checkout"
+          },
+          {
+            "expr": "800",
+            "legendFormat": "Target (800ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [300],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Checkout Latency Warning",
+          "message": "Checkout p95 >300ms triggers warnings per Architecture §3.7"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Checkout - Failure Funnel by Stage",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(checkout_saga_failed_total{tenant_id=~\"$tenant_id\"}[5m])) by (stage, error_type)",
+            "legendFormat": "{{stage}} - {{error_type}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Failures/sec"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Media Pipeline - Job Success Rate",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 32, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(media_job_success_total{tenant_id=~\"$tenant_id\"}[5m]) / rate(media_job_total{tenant_id=~\"$tenant_id\"}[5m])",
+            "legendFormat": "Success Rate"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.995, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Media Pipeline - Queue Depth",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 32, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "media_queue_depth{tenant_id=~\"$tenant_id\",priority=~\"default|low\"}",
+            "legendFormat": "{{priority}} ({{tenant_id}})"
+          },
+          {
+            "expr": "100",
+            "legendFormat": "Scaling Threshold"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Jobs"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [100],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Media Queue Depth High",
+          "message": "Media queue depth >100 for 5 minutes triggers scaling per Architecture §3.7"
+        }
+      },
+      {
+        "id": 11,
+        "title": "Background Jobs - Queue Depth by Priority",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "reporting_refresh_queue_depth{priority=\"critical\"}",
+            "legendFormat": "CRITICAL"
+          },
+          {
+            "expr": "reporting_refresh_queue_depth{priority=\"high\"}",
+            "legendFormat": "HIGH"
+          },
+          {
+            "expr": "reporting_refresh_queue_depth{priority=\"default\"}",
+            "legendFormat": "DEFAULT"
+          },
+          {
+            "expr": "reporting_refresh_queue_depth{priority=\"low\"}",
+            "legendFormat": "LOW"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Jobs"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Background Jobs - Failure Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(reporting_job_failed_total{priority=~\"critical|high\"}[5m]) / rate(reporting_job_started_total{priority=~\"critical|high\"}[5m])",
+            "legendFormat": "{{priority}} Failure Rate"
+          },
+          {
+            "expr": "0.005",
+            "legendFormat": "Target (0.5%)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "percentunit",
+            "label": "Rate"
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Payment - Webhook Idempotency Ratio",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 48, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(stripe_webhook_duplicate_total[5m]) / rate(stripe_webhook_received_total[5m])",
+            "legendFormat": "Duplicate Webhook Rate"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 0.1, "color": "yellow"},
+                {"value": 0.5, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Loyalty - Points Accrual Overhead",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 48, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(loyalty_points_accrual_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p95 Overhead"
+          },
+          {
+            "expr": "20",
+            "legendFormat": "Target (20ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "POS Offline - Queue Flush Time",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 56, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(pos_offline_flush_duration_bucket[5m])) by (le))",
+            "legendFormat": "p95 Flush Time"
+          },
+          {
+            "expr": "60",
+            "legendFormat": "Target (60s)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "title": "Reporting - Report Generation Throughput",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 56, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(reporting_rows_generated_total[5m]) * 60",
+            "legendFormat": "Rows/Minute"
+          },
+          {
+            "expr": "50000",
+            "legendFormat": "Target (50k rows/min)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "short",
+            "label": "Rows/Minute"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "Platform Admin - Global Store List Query Latency",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 64, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(platform_admin_store_list_duration_bucket[5m])) by (le))",
+            "legendFormat": "p95 Query Latency"
+          },
+          {
+            "expr": "300",
+            "legendFormat": "Target (300ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "Integration Adapters - External Call Failure Rate",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 64, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(integration_adapter_failed_total[5m])) by (adapter, failure_type)",
+            "legendFormat": "{{adapter}} - {{failure_type}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Failures/sec"
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "title": "Admin SPA Delivery - Initial Bundle Size",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 72, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "avg(admin_spa_bundle_size_bytes{tenant_id=~\"$tenant_id\",type=\"initial\"})",
+            "legendFormat": "Initial Bundle Size"
+          },
+          {
+            "expr": "2097152",
+            "legendFormat": "Target (2MB gzipped)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "decbytes",
+            "label": "Bytes"
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "title": "Admin SPA Delivery - Navigation Latency",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 72, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(admin_spa_navigation_latency_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p95 Navigation"
+          },
+          {
+            "expr": "0.200",
+            "legendFormat": "Target (200ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "title": "Consignment Module - Intake Batch Duration",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 80, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(consignment_intake_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p95 Intake Batch"
+          },
+          {
+            "expr": "0.500",
+            "legendFormat": "Target (500ms)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 22,
+        "title": "Consignment Module - Payout Closing Duration",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 80, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(consignment_payout_close_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
+            "legendFormat": "p95 Payout Close"
+          },
+          {
+            "expr": "300",
+            "legendFormat": "Target (5 minutes)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Latency"
+          }
+        ]
+      }
+    ]
+  }
+}

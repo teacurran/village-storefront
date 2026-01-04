@@ -1,0 +1,208 @@
+{
+  "dashboard": {
+    "title": "Village Storefront - Distributed Tracing",
+    "description": "OpenTelemetry trace correlation and service dependencies per Architecture §3.7",
+    "tags": ["village-storefront", "tracing", "jaeger", "correlation"],
+    "timezone": "browser",
+    "editable": true,
+    "graphTooltip": 1,
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "service",
+          "type": "query",
+          "datasource": "Jaeger",
+          "query": "service",
+          "multi": false,
+          "includeAll": false
+        },
+        {
+          "name": "tenant_id",
+          "type": "textbox",
+          "label": "Tenant ID"
+        },
+        {
+          "name": "correlation_id",
+          "type": "textbox",
+          "label": "Correlation ID (X-Request-ID)"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Latency by Operation",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(span_duration_bucket{service_name=~\"$service\"}[5m])) by (le, operation_name))",
+            "legendFormat": "{{operation_name}} p95"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "µs",
+            "label": "Latency"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Request Rate by Service",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "expr": "sum(rate(span_count_total{service_name=~\"$service\"}[5m])) by (service_name)",
+            "legendFormat": "{{service_name}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Requests/sec"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate by Service",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "expr": "sum(rate(span_count_total{service_name=~\"$service\",span_kind=\"error\"}[5m])) by (service_name)",
+            "legendFormat": "{{service_name}}"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "reqps",
+            "label": "Errors/sec"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Trace Search (by Correlation ID)",
+        "type": "trace",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 16},
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "query": "correlation_id=$correlation_id",
+            "queryType": "search"
+          }
+        ],
+        "options": {
+          "showSearchBar": true
+        }
+      },
+      {
+        "id": 5,
+        "title": "Checkout Saga Span Hierarchy",
+        "type": "trace",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 12},
+        "description": "Visualize StorefrontController.checkout → CheckoutSaga.* hierarchy per ADR-003",
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "query": "service=village-storefront operation=StorefrontController.checkout",
+            "queryType": "search"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Service Dependency Graph",
+        "type": "nodeGraph",
+        "gridPos": {"x": 0, "y": 28, "w": 24, "h": 12},
+        "description": "Visualize call relationships between services",
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "queryType": "dependencies",
+            "service": "$service"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Tenant-Filtered Trace Count",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 40, "w": 6, "h": 4},
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "expr": "count(span_count_total{tenant_id=\"$tenant_id\"})",
+            "legendFormat": "Traces for Tenant"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Media Pipeline FFmpeg Span Duration",
+        "type": "graph",
+        "gridPos": {"x": 6, "y": 40, "w": 12, "h": 8},
+        "description": "Track FFmpeg processing time per docs/media/pipeline.md",
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(span_duration_bucket{service_name=\"media-processor\",operation_name=~\"FFmpeg.*\"}[5m])) by (le, operation_name))",
+            "legendFormat": "{{operation_name}} p95"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "s",
+            "label": "Duration"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "External API Call Duration",
+        "type": "graph",
+        "gridPos": {"x": 18, "y": 40, "w": 6, "h": 8},
+        "description": "Track shipping, payment, address validation API latency",
+        "datasource": "Jaeger",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(span_duration_bucket{span_kind=\"client\",operation_name=~\".*Adapter.*\"}[5m])) by (le, operation_name))",
+            "legendFormat": "{{operation_name}} p95"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ]
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "name": "Feature Flag Changes",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "changes(feature_flag_state{tenant_id=\"$tenant_id\"}[5m]) > 0",
+          "iconColor": "rgba(255, 96, 96, 1)",
+          "tagKeys": "flag_key"
+        }
+      ]
+    }
+  }
+}
