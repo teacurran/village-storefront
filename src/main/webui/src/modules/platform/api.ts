@@ -5,6 +5,7 @@
  *
  * References:
  * - Task I5.T2: Platform admin console
+ * - Task I5.T7: Feature flag governance
  */
 
 import type {
@@ -15,6 +16,9 @@ import type {
   HealthMetricsSummary,
   StoreFilters,
   AuditLogFilters,
+  FeatureFlagDto,
+  UpdateFeatureFlagRequest,
+  StaleFlagReport,
 } from './types'
 
 const BASE_PATH = '/api/v1/platform'
@@ -175,6 +179,68 @@ export async function getAuditStats(days = 7): Promise<any> {
 export async function getSystemHealth(): Promise<HealthMetricsSummary> {
   const response = await fetch(`${BASE_PATH}/health`)
   if (!response.ok) throw new Error(`Failed to fetch system health: ${response.statusText}`)
+
+  return response.json()
+}
+
+/**
+ * Get all feature flags with optional filters.
+ */
+export async function getFeatureFlags(staleOnly = false): Promise<FeatureFlagDto[]> {
+  const params = staleOnly ? '?stale_only=true' : ''
+  const response = await fetch(`${BASE_PATH}/feature-flags${params}`)
+  if (!response.ok) throw new Error(`Failed to fetch feature flags: ${response.statusText}`)
+
+  return response.json()
+}
+
+/**
+ * Get single feature flag by ID.
+ */
+export async function getFeatureFlag(flagId: string): Promise<FeatureFlagDto> {
+  const response = await fetch(`${BASE_PATH}/feature-flags/${flagId}`)
+  if (!response.ok) throw new Error(`Failed to fetch feature flag: ${response.statusText}`)
+
+  return response.json()
+}
+
+/**
+ * Get stale flag report.
+ */
+export async function getStaleFlagReport(): Promise<StaleFlagReport> {
+  const response = await fetch(`${BASE_PATH}/feature-flags/stale-report`)
+  if (!response.ok) throw new Error(`Failed to fetch stale flag report: ${response.statusText}`)
+
+  return response.json()
+}
+
+/**
+ * Update feature flag.
+ */
+export async function updateFeatureFlag(
+  flagId: string,
+  request: UpdateFeatureFlagRequest,
+): Promise<FeatureFlagDto> {
+  const response = await fetch(`${BASE_PATH}/feature-flags/${flagId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to update feature flag')
+  }
+
+  return response.json()
+}
+
+/**
+ * Get feature flag change history.
+ */
+export async function getFeatureFlagHistory(flagId: string): Promise<any[]> {
+  const response = await fetch(`${BASE_PATH}/feature-flags/${flagId}/history`)
+  if (!response.ok) throw new Error(`Failed to fetch flag history: ${response.statusText}`)
 
   return response.json()
 }

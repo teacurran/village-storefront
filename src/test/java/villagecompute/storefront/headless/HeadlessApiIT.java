@@ -92,6 +92,8 @@ class HeadlessApiIT {
         flag.enabled = true;
         flag.createdAt = OffsetDateTime.now();
         flag.updatedAt = OffsetDateTime.now();
+        flag.owner = "headless-tests@villagecompute.dev";
+        flag.lastReviewedAt = OffsetDateTime.now();
         entityManager.persist(flag);
 
         product = new Product();

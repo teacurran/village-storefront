@@ -105,6 +105,8 @@ class NotificationServiceTest {
         flag.config = "{}";
         flag.createdAt = OffsetDateTime.now();
         flag.updatedAt = OffsetDateTime.now();
+        flag.owner = "notifications-tests@villagecompute.dev";
+        flag.lastReviewedAt = OffsetDateTime.now();
         entityManager.persist(flag);
         entityManager.flush();
     }
@@ -244,6 +246,8 @@ class NotificationServiceTest {
         disabledFlag.config = "{}";
         disabledFlag.createdAt = OffsetDateTime.now();
         disabledFlag.updatedAt = OffsetDateTime.now();
+        disabledFlag.owner = "notifications-tests@villagecompute.dev";
+        disabledFlag.lastReviewedAt = OffsetDateTime.now();
         entityManager.persist(disabledFlag);
         entityManager.flush();
 

@@ -2,10 +2,11 @@
  * Platform Console Module Types
  *
  * Type definitions for platform admin console including store directory, impersonation,
- * audit logs, and health dashboards.
+ * audit logs, health dashboards, and feature flag governance.
  *
  * References:
  * - Task I5.T2: Platform admin console
+ * - Task I5.T7: Feature flag governance
  * - Architecture: 01_Blueprint_Foundation.md Section 4.0
  */
 
@@ -89,4 +90,43 @@ export interface AuditLogFilters {
   targetType?: string
   startDate?: string
   endDate?: string
+}
+
+export interface FeatureFlagDto {
+  id: string
+  tenantId?: string // null for global flags
+  flagKey: string
+  enabled: boolean
+  config: string
+  owner: string
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  reviewCadenceDays?: number
+  expiryDate?: string
+  lastReviewedAt?: string
+  description?: string
+  rollbackInstructions?: string
+  stale?: boolean
+  staleReason?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpdateFeatureFlagRequest {
+  enabled?: boolean
+  owner?: string
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  reviewCadenceDays?: number
+  expiryDate?: string
+  description?: string
+  rollbackInstructions?: string
+  markReviewed?: boolean
+  reason?: string
+}
+
+export interface StaleFlagReport {
+  expiredCount: number
+  expiredFlags: FeatureFlagDto[]
+  needsReviewCount: number
+  needsReviewFlags: FeatureFlagDto[]
+  generatedAt: string
 }

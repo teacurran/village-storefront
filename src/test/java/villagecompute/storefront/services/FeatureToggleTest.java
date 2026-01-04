@@ -132,6 +132,8 @@ class FeatureToggleTest {
         flag.config = "{}";
         flag.createdAt = OffsetDateTime.now();
         flag.updatedAt = OffsetDateTime.now();
+        flag.owner = "feature-toggle-tests@villagecompute.dev";
+        flag.lastReviewedAt = OffsetDateTime.now();
         entityManager.persist(flag);
         entityManager.flush();
     }
@@ -145,6 +147,8 @@ class FeatureToggleTest {
         flag.config = "{}";
         flag.createdAt = OffsetDateTime.now();
         flag.updatedAt = OffsetDateTime.now();
+        flag.owner = "feature-toggle-tests@villagecompute.dev";
+        flag.lastReviewedAt = OffsetDateTime.now();
         entityManager.persist(flag);
         entityManager.flush();
     }

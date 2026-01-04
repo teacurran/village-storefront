@@ -62,4 +62,36 @@ public class FeatureFlag extends PanacheEntityBase {
             name = "updated_at",
             nullable = false)
     public OffsetDateTime updatedAt;
+
+    @Column(
+            nullable = false,
+            length = 255)
+    public String owner;
+
+    @Column(
+            name = "risk_level",
+            nullable = false,
+            length = 20)
+    public String riskLevel = "LOW";
+
+    @Column(
+            name = "review_cadence_days")
+    public Integer reviewCadenceDays = 90;
+
+    @Column(
+            name = "expiry_date")
+    public OffsetDateTime expiryDate;
+
+    @Column(
+            name = "last_reviewed_at")
+    public OffsetDateTime lastReviewedAt;
+
+    @Column(
+            columnDefinition = "TEXT")
+    public String description;
+
+    @Column(
+            name = "rollback_instructions",
+            columnDefinition = "TEXT")
+    public String rollbackInstructions;
 }

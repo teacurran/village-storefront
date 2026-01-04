@@ -20,6 +20,9 @@ import type {
   PaginationState,
   StoreFilters,
   AuditLogFilters,
+  FeatureFlagDto,
+  UpdateFeatureFlagRequest,
+  StaleFlagReport,
 } from './types'
 import * as platformApi from './api'
 import { emitTelemetryEvent } from '@/telemetry'
@@ -38,6 +41,10 @@ export const usePlatformStore = defineStore('platform', () => {
   const impersonation = ref<ImpersonationContext | null>(null)
   const healthMetrics = ref<HealthMetricsSummary | null>(null)
 
+  const featureFlags = ref<FeatureFlagDto[]>([])
+  const selectedFlag = ref<FeatureFlagDto | null>(null)
+  const staleFlagReport = ref<StaleFlagReport | null>(null)
+
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -45,6 +52,9 @@ export const usePlatformStore = defineStore('platform', () => {
   const isImpersonating = computed(() => impersonation.value !== null)
   const storeCount = computed(() => stores.value.length)
   const auditLogCount = computed(() => auditLogs.value.length)
+  const flagCount = computed(() => featureFlags.value.length)
+  const staleFlags = computed(() => featureFlags.value.filter((f) => f.stale))
+  const staleFlagCount = computed(() => staleFlags.value.length)
 
   // --- Actions: Store Directory ---
 
@@ -239,6 +249,108 @@ export const usePlatformStore = defineStore('platform', () => {
     }
   }
 
+  // --- Actions: Feature Flags ---
+
+  async function loadFeatureFlags(staleOnly = false): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const flags = await platformApi.getFeatureFlags(staleOnly)
+      featureFlags.value = flags
+
+      emitTelemetryEvent('platform_view_feature_flags', {
+        count: flags.length,
+        staleOnly,
+        staleCount: flags.filter((f) => f.stale).length,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to load feature flags'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function loadFeatureFlag(flagId: string): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const flag = await platformApi.getFeatureFlag(flagId)
+      selectedFlag.value = flag
+
+      emitTelemetryEvent('platform_view_feature_flag', { flagId, flagKey: flag.flagKey })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to load feature flag'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function loadStaleFlagReport(): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const report = await platformApi.getStaleFlagReport()
+      staleFlagReport.value = report
+
+      emitTelemetryEvent('platform_view_stale_flags', {
+        expiredCount: report.expiredCount,
+        needsReviewCount: report.needsReviewCount,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to load stale flag report'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updateFeatureFlag(
+    flagId: string,
+    request: UpdateFeatureFlagRequest,
+  ): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const updatedFlag = await platformApi.updateFeatureFlag(flagId, request)
+
+      // Update in list
+      const index = featureFlags.value.findIndex((f) => f.id === flagId)
+      if (index !== -1) {
+        featureFlags.value[index] = updatedFlag
+      }
+
+      // Update selected if matches
+      if (selectedFlag.value?.id === flagId) {
+        selectedFlag.value = updatedFlag
+      }
+
+      emitTelemetryEvent('platform_update_feature_flag', {
+        flagId,
+        flagKey: updatedFlag.flagKey,
+        changes: Object.keys(request),
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to update feature flag'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function toggleFeatureFlag(flagId: string, enabled: boolean, reason: string): Promise<void> {
+    await updateFeatureFlag(flagId, { enabled, reason })
+  }
+
+  async function reviewFeatureFlag(flagId: string, reason: string): Promise<void> {
+    await updateFeatureFlag(flagId, { markReviewed: true, reason })
+  }
+
   // --- Helper: Clear State ---
 
   function clearError(): void {
@@ -253,6 +365,9 @@ export const usePlatformStore = defineStore('platform', () => {
     auditFilters.value = {}
     impersonation.value = null
     healthMetrics.value = null
+    featureFlags.value = []
+    selectedFlag.value = null
+    staleFlagReport.value = null
     error.value = null
   }
 
@@ -267,6 +382,9 @@ export const usePlatformStore = defineStore('platform', () => {
     auditPagination,
     impersonation,
     healthMetrics,
+    featureFlags,
+    selectedFlag,
+    staleFlagReport,
     loading,
     error,
 
@@ -274,6 +392,9 @@ export const usePlatformStore = defineStore('platform', () => {
     isImpersonating,
     storeCount,
     auditLogCount,
+    flagCount,
+    staleFlags,
+    staleFlagCount,
 
     // Actions
     loadStores,
@@ -287,6 +408,12 @@ export const usePlatformStore = defineStore('platform', () => {
     loadAuditLogs,
     updateAuditFilters,
     loadHealthMetrics,
+    loadFeatureFlags,
+    loadFeatureFlag,
+    loadStaleFlagReport,
+    updateFeatureFlag,
+    toggleFeatureFlag,
+    reviewFeatureFlag,
     clearError,
     reset,
   }
