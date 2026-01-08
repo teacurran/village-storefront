@@ -25,6 +25,7 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 - **Payments**: Stripe (including Stripe Connect for platform fees)
 - **Email**: Quarkus Mailer with domain filtering for non-production environments
 - **Object Storage**: AWS SDK S3 client (compatible with Cloudflare R2)
+- **Code Standards**: Java code should follow the included java-project-standards.md guidelines
 - **Media Processing**:
   - Images: Java ImageIO + Thumbnailator for resizing/compression
   - Video: FFmpeg (via process execution) for transcoding
@@ -48,6 +49,12 @@ Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc
 - **Orchestration**: Kubernetes (k3s target)
 - **K8s manifests**: Generated via Quarkus Kubernetes extension
 - **CI/CD**: GitHub Actions with native build
+
+## Local Development
+
+The project should include set-up and instructions for runnint the application locally.  These should include:
+* a docker-compose file to run dependent services (PostgreSQL, MinIO for S3, etc.)
+* services within docker-compose for running migrations and doing other setup tasks a developer might need
 
 ---
 
