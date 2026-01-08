@@ -1,47 +1,27 @@
 <!-- anchor: verification-and-integration-strategy -->
-## 5. Verification and Integration Strategy
+## 6. Verification and Integration Strategy
 
 *   **Testing Levels:**
-    - **Unit Tests:** Required for every module (catalog, consignment, checkout, payments, loyalty, media, feature flags). Aim for ≥85% coverage per module, focusing on business logic, tenant isolation, commission math, loyalty tiers, POS offline queue handlers.
-    - **Integration Tests:** Use Quarkus + Testcontainers or native tests to verify Postgres RLS, job queues, Stripe/FFmpeg stubs, reporting aggregates, headless APIs. Run in both JVM + native profiles to detect GraalVM quirks.
-    - **End-to-End Tests:** Playwright for storefront/checkout, Cypress for admin/POS and consignor portal, POS offline scenarios, Platform console impersonation flows. Schedule nightly plus per-release runs with screenshot diffs.
-    - **Load/Performance Tests:** k6 suites exercising checkout, cart, catalog search, media uploads, consignment payouts; ensures latency budgets (<200ms API median, <2s storefront). Run pre-release and during significant schema/index changes.
-    - **Security/Compliance Tests:** Automated privacy export/delete flows, impersonation reason enforcement, feature flag audits, Stripe webhook replay tests, rate-limit guard tests.
-*   **CI/CD Expectations:**
-    - GitHub Actions `ci.yml` (I1.T6) runs Spotless, Maven tests (JVM + native), npm lint/test, OpenAPI lint, PlantUML validation, coverage gating (JaCoCo ≥80%).
-    - Dedicated workflows: `release.yml` (I5.T3) for blue/green deploy, `test_suite.yml` (I5.T5) for E2E/load/manifest checks, nightly scheduled jobs for long-running suites.
-    - Build caching enabled for Maven + npm to keep runtime <12 minutes on CI, <20 minutes for full suite.
-*   **Quality Gates:**
-    - Spotless + ESLint + Stylelint must pass; Redwood-coded gating ensures no formatting drift.
-    - JaCoCo coverage (backend) ≥80% overall, ≥75% per module; Vitest/Cypress coverage tracked for admin SPA and POS.
-    - OpenAPI diff review: spec changes require docs/regression plan; PR template includes checklist referencing anchors.
-    - Manifest validation: custom script ensures anchors referenced in `plan_manifest.json` exist in Markdown files.
+    - **Unit:** Required on every module (Panache repositories, services, Vue components) with mocks for external adapters; enforce factory tests for TenantContext, FeatureToggle, loyalty math, ledger updates, and background job handlers.
+    - **Integration:** Use Quarkus dev services + docker-compose stack to run tenant-aware API flows (catalog CRUD, checkout saga, consignment balance, payment webhooks, media upload handshake) with real Postgres RLS + MinIO + Mock carriers; include Playwright/Cypress runs for storefront/admin/POS with multi-tenant fixtures.
+    - **End-to-End:** Staging deployments run nightly synthetic journeys (guest checkout, staff fulfillment, consignment payout, loyalty redemption, POS offline queue flush, headless order) plus cross-tenant impersonation/resume; baseline snapshots stored for regression diffing.
+*   **CI/CD:**
+    - GitHub Actions pipeline triggered on PR + main; stages: lint (Spotless, ESLint, Stylelint), unit/integration (Maven + Vitest), OpenAPI lint (Spectral), security scans (OWASP dep check/Trivy), native build + Docker image, Cypress/Playwright e2e, SonarCloud gates, artifact signing, preview deploy to dev (k3s overlay) with smoke tests, manual approval for staging/prod, blue/green switch with health + e2e smoke gating, feature flag toggles captured in release notes.
+*   **Code Quality Gates:**
+    - Spotless + ESLint/Prettier must pass; JaCoCo coverage ≥80% per module; SonarCloud quality gate (no blocker/critical issues, maintainability rating ≥A); OWASP dep check no high/critical vulnerabilities; Quarkus `mvn verify -Dnative -pl modules/*` must pass before merge; TypeScript strict mode enforced; Storybook/axe accessibility snapshots must pass before UI merge.
 *   **Artifact Validation:**
-    - Diagrams (PlantUML/Mermaid) rendered via CI script; PNGs stored as artifacts for review.
-    - ADRs linted for metadata completeness (status, context, decision, consequences).
-    - OpenAPI spec validated (`spectral`, `swagger-cli`), clients regenerated for admin/headless to detect breaking changes.
-    - Kustomize overlays validated via `kubectl apply --dry-run=client`; release workflow performs smoke tests using synthetic tenant before traffic shift.
-    - Observability dashboards (Grafana JSON) validated with `grafana-toolkit`, Prometheus rules with `promtool check rules`.
-    - Compliance exports hashed + verified; audit logs cross-checked to ensure traceability across impersonation flows.
-*   **Integration Strategy:**
-    - All modules integrate via CDI/service interfaces; rely on contract tests derived from OpenAPI to detect API drift.
-    - Feature flags gate new behavior; release process includes canary tenants with Observability watchers before global rollout.
-    - Background jobs orchestrated by priority queues; monitoring ensures new workloads (media, reporting, compliance) do not starve CRITICAL queues.
-    - Platform console aggregates metrics from Prometheus + domain services; ensures ops/support visibility before GA.
+    - PlantUML/Mermaid diagrams validated via CI rendering step; OpenAPI spec diff + lint per PR; MyBatis migrations tested against throwaway Postgres with RLS verification script; DelayedJob payloads validated via JSON schema; docker-compose health check ensures local stack parity; documentation builds (MkDocs/pandoc) produce site verifying anchor references; release packages include diagram PNG exports + README version stamp.
 
 <!-- anchor: glossary -->
-## 6. Glossary
+## 7. Glossary
 
-*   **ADR:** Architecture Decision Record capturing rationale/implications for structural choices (e.g., tenancy, checkout saga, consignment payouts).
-*   **Caffeine Cache:** In-process caching layer for feature flags, tenant resolution, search caching, headless APIs.
-*   **CDI:** Contexts and Dependency Injection in Quarkus enabling module boundaries.
-*   **DelayedJob:** Database-backed queue pattern with CRITICAL→BULK priorities powering background workers.
-*   **HLS:** HTTP Live Streaming output produced by media pipeline for video playback.
-*   **Panache:** Quarkus ORM abstraction used for repositories/entities with tenant filters.
-*   **PlatformCommand:** Audit entity capturing platform admin actions, impersonation operations, and compliance changes.
-*   **POS Offline Queue:** Encrypted storage of in-store transactions processed without network connectivity, replayed through checkout once online.
-*   **TenantContext:** Request-scoped bean with tenant_id/store+flag info used for all service calls.
-*   **Feature Flag Governance:** Process + tooling ensuring each runtime toggle has owner, expiry, manifest entry, and monitoring (Task I5.T7).
-*   **Manifest Anchor:** Unique identifier linking plan sections/tasks to manifest entries for downstream agent retrieval.
-*   **Saga:** Long-running transaction coordination pattern used in checkout to orchestrate address validation, shipping, payments, loyalty, gift cards, refunds.
-*   **Stripe Connect:** Payment platform enabling merchant payouts, platform fees, and consignment vendor payments.
+*   **TenantContext:** Request-scoped CDI bean capturing tenant_id, store metadata, feature flags; all services fetch scoped data through it to honor RLS.
+*   **FeatureToggle Service:** Caffeine-backed resolver layering platform defaults, tenant overrides, and emergency kill switches; documented in `feature-flags.md`.
+*   **DelayedJob:** Database queue pattern storing job payload JSON, priority, attempts; processed by dedicated worker pods for emails, media, payouts, reports.
+*   **PaymentProvider:** Interface encapsulating payment processor operations (intent, capture, refund, payout, webhook handling); Stripe Connect is first implementation.
+*   **Domain Event:** Immutable JSON row capturing aggregate change (ProductPublished, OrderPaid) used for projections, reports, and integrations.
+*   **Consignment Ledger (Pending/Available):** Balance mechanism crediting pending amounts immediately after sale, moving to available post-refund window, supporting Stripe payouts.
+*   **Media Pipeline:** Upload workflow (presigned URL → MinIO/R2 → validation → FFmpeg/Thumbnailator job) generating tenant-scoped variants served via signed URLs.
+*   **POS Offline Queue:** Encrypted IndexedDB storage capturing transactions when offline, replayed sequentially via REST once connectivity restored.
+*   **Headless API Client:** OAuth client credentials issued per tenant for catalog/cart/order scopes; rate limited via token bucket combining Caffeine + Postgres counters.
+*   **Platform Command:** Audit-tracked action executed by platform admins (suspend store, toggle flag, run DR command), stored with reason/ticket reference and surfaced in audit exports.

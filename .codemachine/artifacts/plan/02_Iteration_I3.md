@@ -1,141 +1,98 @@
 <!-- anchor: iteration-3-plan -->
-### Iteration 3: Consignment, Advanced Inventory & Reporting
+### Iteration 3: Checkout, Payments, Consignment & Fulfillment Core
 
 *   **Iteration ID:** `I3`
-*   **Goal:** Deliver consignment domain parity (ConsignCloud-level), multi-location inventory tooling, background report projections, and tenant-facing portals.
+*   **Goal:** Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.
 *   **Prerequisites:** `I1`, `I2`
-*   **Retrospective Carryover:**
-    - Protect CI budget by reusing caches for heavy integration suites; capture metrics for each new suite and update ADR-002 appendix.
-    - Expand documentation while implementing features to avoid large catch-up tasks; each task must note doc deliverables explicitly.
-    - Keep bilingual assets in sync; when generating new templates include Spanish placeholders.
-*   **Iteration Milestones & Exit Criteria:**
-    1. Consignment entities/services/payout ledger implemented with APIs + portal endpoints and tests.
-    2. Multi-location inventory transfer workflows + barcode printing ready for admin UI integration.
-    3. Reporting projection service building sales/inventory/consignment aggregates plus export job queue.
-    4. Consignment payout flow diagram + Stripe Connect automation spec documented.
-    5. Notification/email templates for consignor lifecycle events, localized and feature-flag controlled.
-    6. Background job improvements (priority tuning, metrics, dashboards) supporting new workloads.
+*   **Tasks:**
 
 <!-- anchor: task-i3-t1 -->
 *   **Task 3.1:**
     *   **Task ID:** `I3.T1`
-    *   **Description:** Implement consignment domain: Panache entities (`Consignor`, `ConsignmentItem`, `PayoutBatch`), services for intake, commission schedules, portal APIs, admin endpoints, MapStruct DTOs, repository/unit tests.
+    *   **Description:** Implement Cart + Checkout services (cart storage, promo validation, saga orchestrator) with transactional safeguards, idempotency keys, and domain events (CartUpdated, OrderInitiated, OrderPaid).
     *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** ERD, OpenAPI spec, payment ADRs.
-    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `api/v1/openapi.yaml`, `docs/adr/ADR-003-checkout-saga.md`]
-    *   **Target Files:** [`src/main/java/com/village/consignment/**`, `tests/backend/ConsignmentServiceTest.java`, `tests/backend/ConsignmentControllerIT.java`, `docs/consignment/domain.md`]
-    *   **Deliverables:** Domain models, service APIs, REST controllers (admin + portal), DTO conversions, documentation describing data flows + commission rules.
-    *   **Acceptance Criteria:** CRUD + payout calculations pass tests, tenant filters applied, portal endpoints require vendor auth tokens, docs articulate commission/tax logic.
-    *   **Testing Guidance:** Use Testcontainers for payout ledger, stub Stripe Connect interactions, verify multi-tenant restrictions.
-    *   **Observability Hooks:** Add structured logs for consignor actions, metrics for pending payout amount per tenant, and log audit events for portal access.
-    *   **Dependencies:** `I2.T1`, `I2.T4`.
-    *   **Parallelizable:** Yes.
+    *   **Inputs:** Catalog APIs, ERD, feature flags.
+    *   **Input Files:** [`modules/checkout-orders/src/main/java/...`, `docs/diagrams/erd.mmd`, `api/storefront-admin-platform.yaml`]
+    *   **Target Files:** [`modules/checkout-orders/src/main/java/.../CartService.java`, `CheckoutOrchestrator.java`, `OrderEntity.java`, `CartRepository.java`, `modules/checkout-orders/src/test/java/...`]
+    *   **Deliverables:** Services managing guest/auth carts, promotions, line-level adjustments; Order aggregate with statuses/states; domain events persisted; tests for concurrency + RLS.
+    *   **Acceptance Criteria:** Integration tests simulate multi-tenant carts + orders; idempotency key support validated; events recorded for reporting; documentation updated.
+    *   **Dependencies:** `I2.T1-T2`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i3-t2 -->
 *   **Task 3.2:**
     *   **Task ID:** `I3.T2`
-    *   **Description:** Extend inventory to support multi-location, transfers, adjustments, barcode printing: services, REST endpoints, job coordination for label generation, admin UI API contract.
-    *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Inventory module base, ERD, OpenAPI spec.
-    *   **Input Files:** [`src/main/java/com/village/inventory/**`, `api/v1/openapi.yaml`, `docs/diagrams/datamodel_erd.puml`]
-    *   **Target Files:** [`src/main/java/com/village/inventory/transfer/**`, `tests/backend/InventoryTransferIT.java`, `docs/inventory/multi_location.md`, `api/v1/openapi.yaml`]
-    *   **Deliverables:** Transfer services, adjustments, label job enqueue logic, doc describing workflows + barcode formats.
-    *   **Acceptance Criteria:** Transfers enforce source/destination validations, RLS protects tenant data, label job triggers background queue, docs include sequence + API usage.
-    *   **Testing Guidance:** Integration tests verifying quantity updates + audit logging; include barcode data validation harness.
-    *   **Observability Hooks:** Emit metrics for transfer volume and queue depth; add logs for adjustment reason codes.
-    *   **Dependencies:** `I2.T1`, `I1.T6`.
+    *   **Description:** Extend OpenAPI + REST controllers for cart/checkout/order endpoints (storefront + admin), including ProblemDetails, rate limits, and webhook callback modeling.
+    *   **Agent Type Hint:** `DocumentationAgent`
+    *   **Inputs:** Task I3.T1, API skeleton.
+    *   **Input Files:** [`api/storefront-admin-platform.yaml`, `modules/checkout-orders/src/main/java/.../CheckoutResource.java`]
+    *   **Target Files:** [`api/storefront-admin-platform.yaml`, `modules/checkout-orders/src/main/java/.../CartResource.java`, `CheckoutResource.java`, `OrderResource.java`, `modules/checkout-orders/src/test/java/.../CheckoutResourceTest.java`]
+    *   **Deliverables:** Documented endpoints for cart operations, checkout steps, order admin operations; tests verifying success/errors and security scopes.
+    *   **Acceptance Criteria:** Spec lint + contract tests pass; controllers use TenantContext & feature flags; e2e stub uses RestAssured to run sample checkout.
+    *   **Dependencies:** `I3.T1`, `I1.T4`.
     *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i3-t3 -->
 *   **Task 3.3:**
     *   **Task ID:** `I3.T3`
-    *   **Description:** Build reporting projection service + export jobs: domain event consumers, aggregate tables (sales by period, consignment payout, inventory aging), scheduled jobs, export API + storage to Cloudflare R2.
+    *   **Description:** Implement PaymentProvider abstraction + Stripe Connect provider (charge/capture/refund/payout, onboarding, webhook receiver) plus PaymentIntent/Refund entities + migrations.
     *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Domain events from catalog/orders/consignment, requirements (reports section).
-    *   **Input Files:** [`docs/diagrams/component_overview.puml`, `docs/diagrams/datamodel_erd.puml`, `src/main/java/com/village/checkout/**`, `src/main/java/com/village/consignment/**`]
-    *   **Target Files:** [`src/main/java/com/village/reporting/**`, `src/main/java/com/village/jobs/**`, `tests/backend/ReportingProjectionTest.java`, `tests/backend/ReportExportIT.java`, `docs/reporting/projections.md`]
-    *   **Deliverables:** Projection modules, SQL for aggregates, R2 upload client wrapper, scheduled job definitions, documentation detailing data freshness and retention.
-    *   **Acceptance Criteria:** Aggregates update within SLA (<15 min), exports available via signed URLs, tests verify domain event consumption + R2 upload stub.
-    *   **Testing Guidance:** Simulate event streams, use test double for R2, ensure scheduled jobs tested via Quarkus scheduler harness.
-    *   **Observability Hooks:** Metrics for job duration, aggregate lag, export queue depth; structured logs for job start/finish.
-    *   **Dependencies:** `I2.T4`, `I3.T1`.
-    *   **Parallelizable:** Limited (requires domain events).
+    *   **Inputs:** Payment requirements, Stripe docs.
+    *   **Input Files:** [`modules/payments/src/main/java/...`, `migrations/mybatis`, `docs/java-project-standards.adoc`]
+    *   **Target Files:** [`modules/payments/src/main/java/.../PaymentProvider.java`, `StripePaymentProvider.java`, `WebhookHandler.java`, `modules/payments/src/test/java/...`, `migrations/mybatis/20240713_payments.sql`, `docs/architecture/async/job-catalog.md`]
+    *   **Deliverables:** Interfaces + implementation, webhook endpoint, MyBatis migrations for payment tables, job catalog entry for payout reconciliation, tests mocking Stripe SDK.
+    *   **Acceptance Criteria:** Stripe sandbox integration test passes (intent create/capture/refund), webhooks stored idempotently, payout job enqueues; provider annotated with feature flag for future processors.
+    *   **Dependencies:** `I3.T1`, `I1.T7` (compose), `I1.T6`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i3-t4 -->
 *   **Task 3.4:**
     *   **Task ID:** `I3.T4`
-    *   **Description:** Create consignment payout flow diagram + automation spec: Mermaid diagram covering admin approval -> Stripe Connect transfer -> reporting -> notification; ADR capturing automation + compliance guard rails.
-    *   **Agent Type Hint:** `DiagrammingAgent`
-    *   **Inputs:** Consignment services, reporting module, Stripe requirements.
-    *   **Input Files:** [`src/main/java/com/village/consignment/**`, `docs/adr/ADR-001-tenancy.md`, `docs/reporting/projections.md`]
-    *   **Target Files:** [`docs/diagrams/sequence_consignment_payout.mmd`, `docs/adr/ADR-004-consignment-payouts.md`]
-    *   **Deliverables:** Diagram + ADR with state transitions, audit logging guidelines, failure handling.
-    *   **Acceptance Criteria:** Diagram renders, ADR explains Stripe Connect Express onboarding handoff, includes impersonation logging instructions.
-    *   **Testing Guidance:** Peer review with finance/security, ensure diagram cross-links to Section 2 components.
-    *   **Observability Hooks:** Document metrics to emit (payout latency, failure counts) and log schema for audit events.
-    *   **Dependencies:** `I3.T1`, `I3.T3`.
-    *   **Parallelizable:** No.
+    *   **Description:** Integrate address validation + shipping rate adapters (USPS Web Tools, UPS, FedEx) with caching + fallback table rates; expose shipping profiles + label endpoints.
+    *   **Agent Type Hint:** `IntegrationAgent`
+    *   **Inputs:** Shipping requirements, integration adapter pattern.
+    *   **Input Files:** [`modules/integration/src/main/java/...`, `modules/checkout-orders/src/main/java/.../ShippingService.java`]
+    *   **Target Files:** [`modules/integration/src/main/java/.../CarrierRateAdapter.java`, `USPSAdapter.java`, `UPSAdapter.java`, `FedExAdapter.java`, `modules/checkout-orders/src/main/java/.../ShippingService.java`, `modules/checkout-orders/src/test/java/.../ShippingServiceTest.java`, `docs/architecture/ops/catalog-runbook.md`]
+    *   **Deliverables:** Adapter interfaces w/ retries/backoff, shipping service hooking into checkout, caching for 15 minutes, tests mocking carrier responses, runbook updates.
+    *   **Acceptance Criteria:** Rate caching working (unit test verifying TTL), fallback table rate when carrier offline, logging includes correlation IDs, OpenAPI updated with rate endpoints.
+    *   **Dependencies:** `I2` outputs, `I3.T1`.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i3-t5 -->
 *   **Task 3.5:**
     *   **Task ID:** `I3.T5`
-    *   **Description:** Build notification/email templates + service for consignor lifecycle: intake confirmation, sale notification, payout summary, expiration alerts; integrate with Quarkus Mailer + feature flags.
+    *   **Description:** Build Consignment domain foundations (entities, services, payouts ledger) tying variants to consignors, commission rules, intake + status tracking.
     *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Consignment domain, design tokens, localization strategy.
-    *   **Input Files:** [`src/main/java/com/village/consignment/**`, `docs/architecture_overview.md`, `src/main/resources/messages/messages.properties`]
-    *   **Target Files:** [`src/main/resources/templates/email/consignment/**`, `src/main/java/com/village/notifications/**`, `tests/backend/NotificationServiceTest.java`, `docs/notifications/playbook.md`]
-    *   **Deliverables:** Email/Qute templates (EN/ES), notification service with queue integration, doc describing throttle + feature flags.
-    *   **Acceptance Criteria:** Templates render with sample data, i18n placeholders resolved, notifications enqueue background jobs, doc lists environment domain filtering rules.
-    *   **Testing Guidance:** Snapshot tests for templates, integration tests verifying Mailer stub, manual proof w/ Mailhog.
-    *   **Observability Hooks:** Add metrics for notification volume, bounce tracking, and structured logs including tenant/consignor ids.
-    *   **Dependencies:** `I3.T1`.
-    *   **Parallelizable:** Yes.
+    *   **Inputs:** Consignment requirements, ERD.
+    *   **Input Files:** [`modules/consignment/src/main/java/...`, `docs/diagrams/erd.mmd`, `migrations/mybatis`]
+    *   **Target Files:** [`migrations/mybatis/20240713_consignment.sql`, `modules/consignment/src/main/java/.../ConsignorEntity.java`, `ConsignmentItemEntity.java`, `ConsignmentService.java`, `PayoutLedgerService.java`, `modules/consignment/src/test/java/...`]
+    *   **Deliverables:** Data model + services for consignor registration, commission rules, balance ledger (pending/available), event emission (ConsignmentItemReceived, ConsignmentPayoutDue), unit/integration tests.
+    *   **Acceptance Criteria:** Services enforce commission configs, ledger updates triggered by sale/refund events; tests verifying multi-tenant RLS; docs describing payout sweep logic.
+    *   **Dependencies:** `I2` outputs, `I3.T1` (order events).
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i3-t6 -->
 *   **Task 3.6:**
     *   **Task ID:** `I3.T6`
-    *   **Description:** Enhance background job framework: priority tuning, retry policies, dead-letter queue, Prometheus metrics, dashboard docs; ensure new queues handle reporting + payout loads.
-    *   **Agent Type Hint:** `DevOpsAgent`
-    *   **Inputs:** Existing DelayedJob tables, reporting/export requirements, consignment jobs.
-    *   **Input Files:** [`src/main/java/com/village/jobs/**`, `docs/architecture_overview.md`, `docs/reporting/projections.md`]
-    *   **Target Files:** [`src/main/java/com/village/jobs/config/**`, `tests/backend/JobSchedulerTest.java`, `docs/operations/job_runbook.md`, `k8s/base/deployment-workers.yaml`]
-    *   **Deliverables:** Config updates, retry policy definitions, metrics instrumentation, runbook updates, Kubernetes worker tweaks.
-    *   **Acceptance Criteria:** Jobs expose Prometheus metrics (queue depth, failure rate), dead-letter handling documented, runbook instructions for pausing/resuming queues.
-    *   **Testing Guidance:** Simulate job failures, ensure retries/backoff recorded; include integration tests verifying metrics endpoints.
-    *   **Observability Hooks:** Add trace IDs to job payload logs and dashboards showing queue lengths per priority.
-    *   **Dependencies:** `I1.T6`, `I3.T3`.
+    *   **Description:** Document Media + POS critical flows via Mermaid sequence diagrams (media upload→processing→delivery, POS offline queue→replay) referencing future implementation steps.
+    *   **Agent Type Hint:** `DiagrammingAgent`
+    *   **Inputs:** Requirements sections (media, POS), architecture plan.
+    *   **Input Files:** [`docs/diagrams/media-flow.mmd`, `docs/diagrams/pos-offline.mmd`, `.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md`]
+    *   **Target Files:** [`docs/diagrams/media-flow.mmd`, `docs/diagrams/pos-offline.mmd`, `docs/architecture/ops/deployment-architecture.md`]
+    *   **Deliverables:** Sequence diagrams covering presigned uploads, FFmpeg workers, R2 storage, admin/storefront updates; POS offline capture/resume, encryption, replay; notes on metrics/alerts.
+    *   **Acceptance Criteria:** Diagrams reference queue priorities, API endpoints, feature flags; runbook updated with cross-links; reviewed with Media/POS leads.
+    *   **Dependencies:** `I1` outputs.
     *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i3-t7 -->
 *   **Task 3.7:**
     *   **Task ID:** `I3.T7`
-    *   **Description:** Implement consignor portal UI (Vue module) consuming new APIs: dashboards, balance charts, payout requests, notification center; integrate localization + responsive design.
-    *   **Agent Type Hint:** `FrontendAgent`
-    *   **Inputs:** Consignment APIs, design tokens, notification templates.
-    *   **Input Files:** [`src/main/java/com/village/consignment/**`, `tailwind.config.js`, `src/main/webui/admin-spa/storybook/**`]
-    *   **Target Files:** [`src/main/webui/admin-spa/src/modules/consignor/**`, `src/main/webui/admin-spa/src/locales/en.json`, `src/main/webui/admin-spa/src/locales/es.json`, `tests/admin/ConsignorPortal.spec.ts`]
-    *   **Deliverables:** Vue module with dashboard widgets, forms for payout requests, localized copy, test coverage, Storybook stories.
-    *   **Acceptance Criteria:** Module builds, responsive layout validated, translations exist, e2e test passes (Cypress), docs describe launch instructions.
-    *   **Testing Guidance:** Use Cypress scenario covering login -> view -> payout request; include visual regression snapshots.
-    *   **Observability Hooks:** Emit frontend analytics events for portal usage and tie to backend audit logs.
-    *   **Dependencies:** `I3.T1`, `I3.T5`.
-    *   **Parallelizable:** Limited.
-
-*   **Iteration KPIs & Validation Strategy:**
-    - Consignment service tests ≥85% coverage; payout calculations fuzz-tested with 100+ scenarios.
-    - Inventory transfer flow processes 1k items in <5 min dev benchmark; queue metrics captured.
-    - Reporting aggregates refresh <15m with dashboards showing freshness timestamp.
-    - Notifications deliver bilingual emails; unit tests confirm translations exist.
-    - Background job metrics exported to Prometheus + dashboards screenshot attached to PR.
-    - Consignor portal e2e success rate ≥95% across supported browsers.
-*   **Iteration Risk Log & Mitigations:**
-    - *Financial correctness:* Commission math errors costly; mitigation—dual reviewer sign-off + fuzz tests.
-    - *Queue overload:* Reporting + payouts may starve other jobs; mitigation—priority segmentation + autoscaling from Task 3.6.
-    - *Portal security:* Vendor tokens must be scoped; mitigation—pen tests + audit logging.
-    - *Localization accuracy:* Spanish content might lag; mitigation—include placeholders + translation backlog.
-    - *Export privacy:* Reports contain PII; mitigation—encrypt archives + access logging.
-*   **Iteration Backlog & Follow-ups:**
-    - Plan I4 task for automated Stripe Connect Express onboarding UI improvements.
-    - Schedule design review for inventory UI once backend ready.
-    - Draft metrics spec for platform-level consignment dashboards (I5).
-    - Capture future requirement for consignment contract attachments stored in R2.
+    *   **Description:** Expand docker-compose + dev bootstrap to include Stripe CLI forwarder, USPS mock, UPS/FedEx stubs, and seeding for consignment data to support QA.
+    *   **Agent Type Hint:** `DevExAgent`
+    *   **Inputs:** Local dev requirements, tasks I3.T3-T5 outputs.
+    *   **Input Files:** [`docker/docker-compose.yml`, `scripts/dev/bootstrap.sh`]
+    *   **Target Files:** [`docker/docker-compose.yml`, `scripts/dev/bootstrap.sh`, `README.md`]
+    *   **Deliverables:** Additional services + docs for running Stripe CLI webhook tunnel, shipping mock APIs, consignment sample data, instructions for QA flows.
+    *   **Acceptance Criteria:** Compose stack runs new services; README describes hooking Stripe CLI; sample data demonstrates multi-tenant consignment; tests referencing mocks run in CI.
+    *   **Dependencies:** `I1.T7`, `I3.T3`, `I3.T4`, `I3.T5`.
+    *   **Parallelizable:** Yes.
