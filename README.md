@@ -788,6 +788,7 @@ mvn migration:up -Dmigration.env=development
 - **ADRs:** `docs/adr/` (Architecture Decision Records)
 - **Java Standards:** `docs/java-project-standards.adoc`
 - **Storefront Theming:** `docs/storefront-theming.md` (Tailwind, design tokens, localization)
+- **Feature Flag Governance:** `docs/feature_flags/governance.md` (Kill switches, rollout process, flag lifecycle)
 - **API Spec:** `api/v1/openapi.yaml`
 - **Diagrams:** `docs/diagrams/` (PlantUML source files)
 

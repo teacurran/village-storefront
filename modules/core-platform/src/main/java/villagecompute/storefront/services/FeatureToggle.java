@@ -233,4 +233,60 @@ public class FeatureToggle {
     private String buildCacheKey(UUID tenantId, String flagKey) {
         return "tenant:" + tenantId + ":flag:" + flagKey;
     }
+
+    // ========================================================================
+    // EMERGENCY KILL SWITCH HELPERS
+    // ========================================================================
+    // These methods provide convenient access to CRITICAL-level feature flags
+    // that serve as emergency kill switches for core platform capabilities.
+    // References:
+    // - Architecture Overview Section 3: Feature Flag Strategy
+    // - Governance: docs/feature_flags/governance.md (Kill Switch Matrix)
+    // - Rationale Section 4.1.12: Feature Flag Discipline
+    // ========================================================================
+
+    /**
+     * Check if payment processing is enabled (emergency kill switch).
+     *
+     * @return true if payments.stripe.enabled flag is true
+     */
+    public boolean isPaymentsEnabled() {
+        return isEnabled("payments.stripe.enabled");
+    }
+
+    /**
+     * Check if checkout/order creation is enabled (emergency kill switch).
+     *
+     * @return true if checkout.order-creation.enabled flag is true
+     */
+    public boolean isCheckoutEnabled() {
+        return isEnabled("checkout.order-creation.enabled");
+    }
+
+    /**
+     * Check if media uploads are enabled (emergency kill switch).
+     *
+     * @return true if media.uploads.enabled flag is true
+     */
+    public boolean isMediaUploadEnabled() {
+        return isEnabled("media.uploads.enabled");
+    }
+
+    /**
+     * Check if media processing (resize/derivatives) is enabled (emergency kill switch).
+     *
+     * @return true if media.processing.enabled flag is true
+     */
+    public boolean isMediaProcessingEnabled() {
+        return isEnabled("media.processing.enabled");
+    }
+
+    /**
+     * Check if platform admin impersonation is enabled (emergency kill switch).
+     *
+     * @return true if admin.impersonation.enabled flag is true
+     */
+    public boolean isImpersonationEnabled() {
+        return isEnabled("admin.impersonation.enabled");
+    }
 }

@@ -56,8 +56,11 @@ Every feature flag MUST include:
 | `riskLevel` | Enum | Yes | LOW, MEDIUM, HIGH, CRITICAL |
 | `reviewCadenceDays` | Integer | No | How often to review (default: 90 days) |
 | `expiryDate` | Timestamp | No | When to remove from codebase |
+| `rolloutPlan` | Text | Yes | Timeline + tenant cohort strategy for gradual enablement |
 | `description` | Text | No | What this flag controls and why |
 | `rollbackInstructions` | Text | Recommended | How to safely disable |
+
+> Governance board treats `owner`, `expiryDate`, and `rolloutPlan` as non-negotiable metadata for any production-bound flag.
 
 ### Ownership Model
 
@@ -102,6 +105,7 @@ Every feature flag MUST include:
      "riskLevel": "HIGH",
      "reviewCadenceDays": 30,
      "expiryDate": "2026-12-31T23:59:59Z",
+     "rolloutPlan": "Pilot tenant → 10% → 50% → 100% (monitor conversions + error rate)",
      "description": "Enable Apple Pay integration at checkout",
      "rollbackInstructions": "Set enabled=false. Fallback to card/PayPal only."
    }
@@ -234,6 +238,18 @@ Flags exceeding `expiryDate` trigger:
 3. **Media processing**: Upload, resize, derivative generation
 4. **Impersonation**: Platform admin → tenant user
 
+#### Initial Kill Switch Matrix
+
+The following emergency kill switches MUST be implemented in I1:
+
+| Flag Key | Risk Level | Owner | Description | Rollback Impact |
+|----------|------------|-------|-------------|-----------------|
+| `payments.stripe.enabled` | CRITICAL | payments@example.com | Master switch for Stripe payment processing | Orders fail gracefully with "Payment system unavailable" message |
+| `checkout.order-creation.enabled` | CRITICAL | platform-team | Controls cart-to-order conversion | Checkout button disabled with maintenance notice |
+| `media.uploads.enabled` | CRITICAL | media-team | Controls all media upload operations | Upload UI hidden, existing media still served |
+| `media.processing.enabled` | CRITICAL | media-team | Controls image resize/derivative generation | Uploads accepted but queued, no derivatives created |
+| `admin.impersonation.enabled` | CRITICAL | security-team | Platform admin impersonation capability | Impersonation UI hidden, audit log continues tracking |
+
 **Kill switch requirements:**
 
 - `riskLevel = CRITICAL`
@@ -241,6 +257,7 @@ Flags exceeding `expiryDate` trigger:
 - Automated monitoring (error rate thresholds)
 - On-call escalation if disabled
 - 24/7 access for platform admins
+- Review cadence: 14 days maximum
 
 **Emergency disable procedure:**
 
@@ -253,6 +270,36 @@ node tools/featureflag-cli/featureflag.cjs set <flag-id> \
 
 # Verify cache invalidated (should take <5 seconds)
 curl https://api.example.com/q/health/feature-flags
+```
+
+**Service-level kill switch helpers:**
+
+```java
+@Inject
+FeatureToggle featureToggle;
+
+// Check emergency kill switches
+if (!featureToggle.isPaymentsEnabled()) {
+    return Response.status(503).entity("Payment system temporarily unavailable").build();
+}
+
+if (!featureToggle.isCheckoutEnabled()) {
+    return Response.status(503).entity("Checkout temporarily unavailable").build();
+}
+
+if (!featureToggle.isMediaUploadEnabled()) {
+    return Response.status(503).entity("Media uploads temporarily unavailable").build();
+}
+
+if (!featureToggle.isMediaProcessingEnabled()) {
+    // Queue for later processing
+    mediaQueue.enqueue(uploadRequest);
+    return Response.accepted().build();
+}
+
+if (!featureToggle.isImpersonationEnabled()) {
+    throw new ForbiddenException("Impersonation feature temporarily disabled");
+}
 ```
 
 ---

@@ -29,6 +29,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import villagecompute.storefront.data.models.CustomDomain;
 import villagecompute.storefront.data.models.Tenant;
+
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 
@@ -54,7 +55,8 @@ public class TenantFilterTest {
     @Inject
     EntityManager entityManager;
 
-    private static final List<String> RLS_TABLES = List.of("users", "products", "product_variants", "carts", "cart_items");
+    private static final List<String> RLS_TABLES = List.of("users", "products", "product_variants", "carts",
+            "cart_items");
 
     private static boolean rlsInstalled = false;
 
