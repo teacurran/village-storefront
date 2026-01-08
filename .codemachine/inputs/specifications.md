@@ -64,8 +64,12 @@ The project should include set-up and instructions for runnint the application l
 
 #### Tenant Isolation Architecture
 - **Database strategy**: Shared database with `tenant_id` discriminator column on all tenant-scoped tables
-- **Row-Level Security**: PostgreSQL RLS policies enforce tenant isolation at database layer
-- **Application-layer enforcement**: Defense-in-depth via Panache query filters
+- **Enforcement model**: Application-Primary with RLS Safety Net
+  - **Primary isolation**: Panache base entity/repository applies `tenant_id` filter to all queries
+  - **Safety net**: PostgreSQL RLS policies serve as defense-in-depth to catch filter bypass bugs
+  - **Rationale**: Simpler connection pooling (no session variable management) while maintaining security guarantee
+- **RLS policy pattern**: `CREATE POLICY tenant_isolation ON table_name FOR ALL USING (tenant_id = current_setting('app.tenant_id')::uuid)`
+- **Application responsibility**: All tenant-scoped queries MUST go through Panache base class; direct SQL requires manual tenant filter
 
 #### Tenant Resolution (Request Filter Pattern)
 - **TenantContext**: `@RequestScoped` CDI bean holding current tenant ID
@@ -519,39 +523,94 @@ For static site integration and custom frontends:
 ### Consignment Vendor Payouts
 - **Stripe Connect Express accounts**: Vendors onboard via Stripe-hosted flow
 - **Compliance delegation**: Stripe handles 1099-K reporting and identity verification
-- **Payout timing**: Controlled by Stripe (2-7 day settlement)
 - **Platform fee collection**: Deducted at time of charge via Stripe Connect
 - **Vendor tax details**: SSN/EIN collected during Stripe onboarding
+- **Balance model**: Two-Phase Balance (Path A)
+  - **Database columns**: `pending_balance` and `available_balance` per vendor
+  - **On sale**: Credit `pending_balance` immediately (sale amount minus commission)
+  - **Balance sweep**: Scheduled job runs daily, moves `pending_balance → available_balance` for items fulfilled >30 days ago
+  - **On refund**: Deduct from `pending_balance` if still pending; otherwise deduct from `available_balance`
+  - **On chargeback**: Deduct from `available_balance`; if insufficient, flag as negative balance requiring merchant resolution
+- **Negative balance handling**:
+  - Vendor payouts suspended when `available_balance < 0`
+  - Merchant notified via email with vendor details and amount owed
+  - Future sales credits applied to negative balance until resolved
+- **Payout timing**: Controlled by Stripe (2-7 day settlement) after funds transferred from `available_balance`
+- **Payout frequency**: Configurable per-store (daily, weekly, monthly)
 
 ### Media Processing Execution
 - **Short operations (image resize, thumbnail)**: In-process via Thumbnailator, immediate response
 - **Long operations (video transcode)**: Queued via DelayedJob, processed asynchronously
-- **Execution environment**: FFmpeg invoked via ProcessBuilder within application pods
+- **Execution model**: Dedicated Worker Pods (Tier 2)
+  - **Web pods**: `DELAYED_JOB_QUEUES=HIGH,DEFAULT,LOW` (no media processing)
+  - **Media worker pods**: `DELAYED_JOB_QUEUES=CRITICAL` (video transcoding isolated)
+  - **Rationale**: Clean resource isolation; video processing cannot starve web requests
+- **Worker pod resources**:
+  - CPU request: 1 core, limit: 4 cores
+  - Memory request: 2Gi, limit: 8Gi
+  - Concurrency: 2 concurrent video jobs per pod (configurable via env)
+- **Autoscaling**: HPA triggered when queue depth > 10 jobs for 2 minutes
+- **Execution environment**: FFmpeg invoked via ProcessBuilder within worker pods
 - **Resource limits**:
   - Image processing timeout: 30 seconds
   - Video processing timeout: 10 minutes
   - Upload limits enforced before processing begins
-- **Failure handling**: Failed transcodes logged, original preserved, retry via DelayedJob
+- **Failure handling**: Failed transcodes logged, original preserved, retry via DelayedJob (max 3 retries)
 
 ### Session & Audit Log Storage
 - **Hot storage**: PostgreSQL with time-based partitioning (monthly partitions)
 - **Retention in database**: 90 days of session activity and audit logs
 - **Archival**: Records older than 90 days compressed and archived to R2 object storage
 - **Archive format**: JSONL (newline-delimited JSON) with gzip compression
-- **Historical queries**: Application queries archive via S3 API when date range exceeds 90 days
 - **Partition maintenance**: Scheduled job creates new partitions, archives and drops old ones
+- **Historical query strategy**: Admin Export Tool (Tier 2)
+  - **In-database queries**: Date ranges within 90 days query PostgreSQL directly
+  - **Archived data access**: "Export to CSV" feature for date ranges beyond 90 days
+  - **Export workflow**:
+    1. Admin selects date range and data type (sessions, audit logs, etc.)
+    2. If range includes archived data, backend streams from R2
+    3. Decompress JSONL, convert to CSV, return as download
+  - **Export limits**: Maximum 1 year per export; larger ranges require multiple exports
+  - **Export formats**: CSV (primary), JSON (optional)
+  - **Latency SLA**: Archived data exports complete within 60 seconds for 30-day ranges
+- **No unified query layer**: Interactive queries limited to 90-day hot storage; historical data via exports only
 
 ### Platform Admin Data Access
-- **Access model**: Shared isolation layer with context overrides
-- **Impersonation**: Platform admins use same RLS/Panache filters with tenant context override
+- **Access scope**: Store-Level Metadata (Scope B)
+  - **Without impersonation**: Platform admins can view store-level summaries only
+    - Store name, subdomain, custom domain, plan/tier
+    - Aggregate metrics: revenue, order count, product count, customer count
+    - Store status: active, suspended, created date, last activity
+  - **Requires impersonation**: Access to customer PII, order details, product data, or any tenant-scoped records
+  - **Rationale**: Enables platform operations while enforcing privacy boundaries; GDPR/SOC2 compliant
+- **Impersonation workflow**:
+  - Platform admin selects store and provides reason/ticket reference (required)
+  - System creates impersonation session with start timestamp
+  - Admin operates with tenant context override (sees what store admin sees)
+  - All actions logged with impersonation context
+  - Admin explicitly ends session or auto-expires after 1 hour
 - **Audit logging**: All platform admin actions logged to separate audit tables (outside RLS scope)
-- **Compliance**: Audit logs retained per regulatory requirements (SOC2, GDPR as applicable)
+- **Audit log retention**: 7 years for compliance (SOC2, GDPR, financial regulations)
+- **Access reviews**: Quarterly review of platform admin access patterns required
 
 ### SSL Certificate Management
-- **Strategy**: Operator-delegated using cert-manager
+- **Strategy**: Merchant-Managed DNS with HTTP-01 (Path B)
 - **ACME provider**: Let's Encrypt with HTTP-01 challenges
 - **Certificate lifecycle**: cert-manager handles issuance, renewal, and secret management
-- **Application role**: Register custom domain records, cert-manager handles the rest
+- **Domain verification workflow**:
+  1. Merchant adds custom domain in admin UI (e.g., `shop.example.com`)
+  2. Application displays required CNAME: `shop.example.com → {store}.platform.com`
+  3. Merchant creates CNAME record in their DNS provider
+  4. Merchant clicks "Verify Domain" in admin UI
+  5. Application validates CNAME target resolves correctly
+  6. Application creates cert-manager Certificate resource
+  7. cert-manager performs HTTP-01 challenge via Ingress
+  8. Domain activated upon successful certificate issuance
+- **Error states**:
+  - CNAME not found: "DNS record not detected. Please wait up to 24 hours for propagation."
+  - CNAME wrong target: "DNS record points to wrong destination. Expected: {store}.platform.com"
+  - Challenge failed: "Certificate issuance failed. Please verify DNS and try again."
+  - Certificate expiring: Email notification 14 days and 3 days before expiration
 - **Infrastructure dependency**: Requires cert-manager operator installed in k8s cluster
 
 ### Multi-Currency Display
@@ -598,9 +657,18 @@ For static site integration and custom frontends:
   - **Product Rewards**: Punch-card style (e.g., buy 10 coffees, get 1 free)
 - **Earning rules**: Configurable points-per-dollar or points-per-item by category
 - **Stacking rules**: Merchant-configurable; default allows one loyalty reward + one coupon code
-- **Refund handling**: Points reinstated on full refund; partial refunds prorate point reinstatement
 - **Expiration**: Optional points expiration after configurable inactivity period
 - **Tier benefits**: Optional tier levels with bonus multipliers and exclusive rewards
+- **Point redemption atomicity**: Two-Phase Commit (Path B)
+  - **Reservation phase**: At checkout, points reserved via `points_reserved` column; available points decremented
+  - **Commit phase**: Upon payment success, reservation converted to permanent deduction + order created in single transaction
+  - **Rollback phase**: If payment fails, reservation released (points restored to available)
+  - **Reservation timeout**: 15 minutes; expired reservations auto-released by scheduled job
+  - **Concurrent redemption**: Second checkout attempt while reservation active will see reduced available balance
+- **Refund handling**:
+  - **Full refund**: Points reinstated immediately to available balance
+  - **Partial refund**: Points reinstated proportionally (e.g., 50% refund = 50% points reinstated)
+  - **Timing**: Points reinstated asynchronously via background job (within 5 minutes of refund)
 
 ### Internationalization (i18n)
 - **Supported languages**: English (en), Spanish (es) at launch; extensible for future languages
