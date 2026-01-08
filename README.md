@@ -71,8 +71,14 @@ npm run diagrams:generate
 - **Node.js 18+** (for admin SPA and build tools)
 - **Docker** (for local development services)
 - **Maven** (included via wrapper: `./mvnw`)
+- **PostgreSQL client tools** (optional, for manual database access)
+- **FFmpeg** (optional, required for media processing features)
 
 ### Local Development Setup
+
+#### Option 1: Automated Bootstrap (Recommended)
+
+The fastest way to get started is using the bootstrap script:
 
 1. **Clone the repository:**
    ```bash
@@ -80,19 +86,59 @@ npm run diagrams:generate
    cd village-storefront
    ```
 
-2. **Start local services (PostgreSQL, Mailpit, Jaeger):**
+2. **Run the bootstrap script:**
    ```bash
-   docker-compose up -d
+   ./scripts/dev/bootstrap.sh
    ```
 
-3. **Run database migrations:**
+   This script will:
+   - Validate prerequisites (Docker, psql, FFmpeg)
+   - Create `.env` from `.env.example` if needed
+   - Start Docker Compose services (PostgreSQL, MinIO, Mailhog)
+   - Wait for PostgreSQL to be ready
+   - Run Flyway database migrations
+   - Seed sample catalog + staff data (2 tenants, admin/staff logins, products, inventory)
+   - Create MinIO bucket for media storage
+
+3. **Start the development server:**
    ```bash
-   cd migrations
-   mvn migration:up -Dmigration.env=development
+   npm install
+   npm run dev
+   ```
+
+   The application will start at `http://localhost:8080` with hot reload enabled.
+
+#### Option 2: Manual Setup
+
+If you prefer manual control:
+
+1. **Clone and configure environment:**
+   ```bash
+   git clone https://github.com/teacurran/village-storefront.git
+   cd village-storefront
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+2. **Start Docker Compose services:**
+   ```bash
+   cd docker
+   docker compose up -d
    cd ..
    ```
 
-4. **Install dependencies and start development server:**
+3. **Wait for PostgreSQL and run migrations:**
+   ```bash
+   ./scripts/dev/wait-for-postgres.sh
+   ./mvnw -pl modules/core-platform flyway:migrate
+   ```
+
+4. **Load sample data (optional, creates tenants + staff accounts):**
+   ```bash
+   psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
+   ```
+
+5. **Install dependencies and start development server:**
    ```bash
    npm install
    npm run dev
@@ -114,11 +160,28 @@ All Maven commands run from the root directory. Use `-pl modules/core-platform` 
 **Quickstart for local development:**
 
 ```bash
-# Start local services (PostgreSQL, Mailpit, Jaeger)
-docker-compose up -d
+# Automated bootstrap (recommended)
+./scripts/dev/bootstrap.sh
+
+# Install dependencies and start Quarkus dev mode
+npm install
+npm run dev
+
+# Or run Quarkus directly:
+./mvnw -pl modules/core-platform quarkus:dev
+```
+
+**Manual approach:**
+
+```bash
+# Start local services (PostgreSQL, MinIO, Mailhog)
+cd docker && docker compose up -d && cd ..
 
 # Run database migrations
-cd migrations && mvn migration:up -Dmigration.env=development && cd ..
+./mvnw -pl modules/core-platform flyway:migrate
+
+# Load sample data (optional)
+psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
 
 # Start Quarkus dev mode with hot reload
 ./mvnw -pl modules/core-platform quarkus:dev
@@ -236,7 +299,7 @@ For development and testing purposes, you can load sample catalog data (products
 
 ```bash
 # Ensure PostgreSQL is running
-docker-compose up -d
+docker compose up -d
 
 # Load sample data (creates Tech Gadgets store with products)
 psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
@@ -251,14 +314,91 @@ This will create:
 - 3 products (Wireless Earbuds, Phone Cases, USB-C Cables)
 - 7 product variants with pricing
 - 8 inventory records across multiple locations
+- Tenant admin/staff users (password: `changeme123!`) for quick login
 
 **Test tenant access:**
 - Subdomain: `techgadgets` (use as Host header or in local DNS)
 - Tenant ID: `a0000000-0000-0000-0000-000000000001`
 
+**Default staff logins (after running the seed script or bootstrap):**
+- `owner@techgadgets.local` (Store Owner role)
+- `staff@techgadgets.local` (Staff role)
+- `owner@artisancrafts.local` (Store Owner role)
+- _Password for all accounts:_ `changeme123!`
+
 **Verify data loading:**
 ```bash
 psql -h localhost -U appuser -d storefront_dev -c "SELECT * FROM products WHERE tenant_id = 'a0000000-0000-0000-0000-000000000001'::uuid;"
+```
+
+### FFmpeg Installation (Media Processing)
+
+FFmpeg is required for media processing features (video transcoding, thumbnail generation). The application will work without it, but media upload features will fail.
+
+**macOS (Homebrew):**
+```bash
+brew install ffmpeg
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+**Windows:**
+1. Download FFmpeg from [ffmpeg.org](https://ffmpeg.org/download.html)
+2. Extract to `C:\ffmpeg`
+3. Add `C:\ffmpeg\bin` to your PATH
+4. Update `.env`: `MEDIA_FFMPEG_PATH=C:/ffmpeg/bin/ffmpeg.exe`
+
+**Verify installation:**
+```bash
+ffmpeg -version
+```
+
+**Custom FFmpeg location:**
+
+If FFmpeg is installed in a non-standard location, update your `.env` file:
+```bash
+# Default paths:
+# macOS (Homebrew): /opt/homebrew/bin/ffmpeg
+# Linux (apt): /usr/bin/ffmpeg
+# Windows: C:/ffmpeg/bin/ffmpeg.exe
+MEDIA_FFMPEG_PATH=/path/to/your/ffmpeg
+```
+
+### Local Services Access
+
+After running `./scripts/dev/bootstrap.sh` or `docker compose up`, these services are available:
+
+| Service | URL | Credentials | Purpose |
+|---------|-----|-------------|---------|
+| **Application** | http://localhost:8080 | - | Quarkus application (after `npm run dev`) |
+| **Swagger UI** | http://localhost:8080/q/swagger-ui | - | Interactive API documentation |
+| **PostgreSQL** | localhost:5432 | appuser / apppass | Database (connect via psql or IDE) |
+| **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin | S3-compatible storage web UI |
+| **MinIO API** | http://localhost:9000 | minioadmin / minioadmin | S3 API endpoint |
+| **Mailhog UI** | http://localhost:8025 | - | Email testing interface |
+| **Jaeger UI** | http://localhost:16686 | - | Tracing (requires `--profile observability`) |
+
+**Common operations:**
+
+```bash
+# View service logs
+docker compose logs -f [postgres|minio|mailhog]
+
+# Stop all services
+docker compose down
+
+# Restart a specific service
+docker compose restart postgres
+
+# Connect to database
+psql -h localhost -U appuser -d storefront_dev
+
+# Check service status
+docker compose ps
 ```
 
 ## Code Quality & CI/CD
