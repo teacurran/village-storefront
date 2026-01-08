@@ -50,18 +50,7 @@ class CatalogServiceTest {
     @BeforeEach
     @Transactional
     void setUp() {
-        // Clean up existing data
-        entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM Cart").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
-        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
-        entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
-        entityManager.createQuery("DELETE FROM Product").executeUpdate();
-        entityManager.createQuery("DELETE FROM Category").executeUpdate();
-        entityManager.createQuery("DELETE FROM User").executeUpdate();
-        entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
+        purgeCatalogTables();
 
         // Create test tenant
         Tenant tenant = new Tenant();
@@ -92,8 +81,10 @@ class CatalogServiceTest {
     }
 
     @AfterEach
+    @Transactional
     void tearDown() {
         TenantContext.clear();
+        purgeCatalogTables();
     }
 
     // ========================================
@@ -391,5 +382,28 @@ class CatalogServiceTest {
         variant.status = "active";
         variant.attributes = "{}";
         return variant;
+    }
+
+    private void purgeCatalogTables() {
+        entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Cart").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
+        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryTransfer").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryAgingAggregate").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryLocation").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductImage").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
+        entityManager.createQuery("DELETE FROM Collection").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
+        entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM Category").executeUpdate();
+        entityManager.createQuery("DELETE FROM User").executeUpdate();
+        entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
     }
 }

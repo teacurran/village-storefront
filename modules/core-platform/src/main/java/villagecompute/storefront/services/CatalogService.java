@@ -12,11 +12,14 @@ import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 
 import villagecompute.storefront.data.models.Category;
+import villagecompute.storefront.data.models.Collection;
 import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.repositories.CategoryRepository;
+import villagecompute.storefront.data.repositories.CollectionRepository;
 import villagecompute.storefront.data.repositories.ProductRepository;
 import villagecompute.storefront.data.repositories.ProductVariantRepository;
+import villagecompute.storefront.services.validation.CatalogValidator;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -50,6 +53,12 @@ public class CatalogService {
     CategoryRepository categoryRepository;
 
     @Inject
+    CollectionRepository collectionRepository;
+
+    @Inject
+    CatalogValidator catalogValidator;
+
+    @Inject
     CatalogCacheService catalogCacheService;
 
     @Inject
@@ -70,6 +79,11 @@ public class CatalogService {
     public Product createProduct(Product product) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("Creating product - tenantId=%s, sku=%s, name=%s", tenantId, product.sku, product.name);
+
+        // Validate before persisting
+        catalogValidator.validateProductType(product.type);
+        catalogValidator.validateSlugFormat(product.slug);
+        catalogValidator.validateProductSlugUniqueness(product.slug, null);
 
         productRepository.persist(product);
         catalogCacheService.invalidateTenantCache(tenantId, "product-created");
@@ -103,6 +117,17 @@ public class CatalogService {
         // Verify tenant ownership
         if (!product.tenant.id.equals(tenantId)) {
             throw new IllegalArgumentException("Product does not belong to current tenant");
+        }
+
+        // Validate status transition
+        if (!product.status.equals(updatedProduct.status)) {
+            catalogValidator.validateStatusTransition(product.status, updatedProduct.status);
+        }
+
+        // Validate slug if changed
+        if (updatedProduct.slug != null && !updatedProduct.slug.equals(product.slug)) {
+            catalogValidator.validateSlugFormat(updatedProduct.slug);
+            catalogValidator.validateProductSlugUniqueness(updatedProduct.slug, productId);
         }
 
         // Update fields (selective update pattern)
@@ -278,6 +303,230 @@ public class CatalogService {
         LOG.debugf("Fetching child categories - tenantId=%s, parentId=%s", tenantId, parentId);
 
         return categoryRepository.findByParent(parentId);
+    }
+
+    /**
+     * Update an existing category.
+     *
+     * @param categoryId
+     *            category UUID
+     * @param updatedCategory
+     *            updated category data
+     * @return updated category
+     * @throws IllegalArgumentException
+     *             if category not found
+     */
+    @Transactional
+    public Category updateCategory(UUID categoryId, Category updatedCategory) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Updating category - tenantId=%s, categoryId=%s", tenantId, categoryId);
+
+        Category category = categoryRepository.findByIdOptional(categoryId)
+                .orElseThrow(() -> new IllegalArgumentException("Category not found: " + categoryId));
+
+        if (!category.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Category does not belong to current tenant");
+        }
+
+        // Validate status transition
+        if (!category.status.equals(updatedCategory.status)) {
+            catalogValidator.validateStatusTransition(category.status, updatedCategory.status);
+        }
+
+        // Validate slug if changed
+        if (updatedCategory.slug != null && !updatedCategory.slug.equals(category.slug)) {
+            catalogValidator.validateSlugFormat(updatedCategory.slug);
+            catalogValidator.validateCategorySlugUniqueness(updatedCategory.slug, categoryId);
+        }
+
+        category.name = updatedCategory.name;
+        category.slug = updatedCategory.slug;
+        category.description = updatedCategory.description;
+        category.displayOrder = updatedCategory.displayOrder;
+        category.status = updatedCategory.status;
+        category.updatedAt = OffsetDateTime.now();
+
+        categoryRepository.persist(category);
+        catalogCacheService.invalidateTenantCache(tenantId, "category-updated");
+
+        LOG.infof("Category updated successfully - tenantId=%s, categoryId=%s", tenantId, categoryId);
+        return category;
+    }
+
+    // ========================================
+    // Collection Operations
+    // ========================================
+
+    /**
+     * Create a new collection.
+     *
+     * @param collection
+     *            collection to create
+     * @return created collection
+     */
+    @Transactional
+    public Collection createCollection(Collection collection) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Creating collection - tenantId=%s, code=%s, name=%s", tenantId, collection.code, collection.name);
+
+        // Validate before persisting
+        catalogValidator.validateCollectionType(collection.collectionType);
+        catalogValidator.validateSlugFormat(collection.slug);
+        catalogValidator.validateCollectionSlugUniqueness(collection.slug, null);
+
+        collectionRepository.persist(collection);
+        catalogCacheService.invalidateTenantCache(tenantId, "collection-created");
+
+        LOG.infof("Collection created successfully - tenantId=%s, collectionId=%s", tenantId, collection.id);
+        meterRegistry.counter("catalog.collection.created", "tenant_id", tenantId.toString()).increment();
+
+        return collection;
+    }
+
+    /**
+     * Update an existing collection.
+     *
+     * @param collectionId
+     *            collection UUID
+     * @param updatedCollection
+     *            updated collection data
+     * @return updated collection
+     * @throws IllegalArgumentException
+     *             if collection not found
+     */
+    @Transactional
+    public Collection updateCollection(UUID collectionId, Collection updatedCollection) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Updating collection - tenantId=%s, collectionId=%s", tenantId, collectionId);
+
+        Collection collection = collectionRepository.findByIdOptional(collectionId)
+                .orElseThrow(() -> new IllegalArgumentException("Collection not found: " + collectionId));
+
+        if (!collection.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Collection does not belong to current tenant");
+        }
+
+        // Validate status transition
+        if (!collection.status.equals(updatedCollection.status)) {
+            catalogValidator.validateStatusTransition(collection.status, updatedCollection.status);
+        }
+
+        // Validate slug if changed
+        if (updatedCollection.slug != null && !updatedCollection.slug.equals(collection.slug)) {
+            catalogValidator.validateSlugFormat(updatedCollection.slug);
+            catalogValidator.validateCollectionSlugUniqueness(updatedCollection.slug, collectionId);
+        }
+
+        collection.name = updatedCollection.name;
+        collection.slug = updatedCollection.slug;
+        collection.description = updatedCollection.description;
+        collection.imageUrl = updatedCollection.imageUrl;
+        collection.displayOrder = updatedCollection.displayOrder;
+        collection.collectionType = updatedCollection.collectionType;
+        collection.selectionRules = updatedCollection.selectionRules;
+        collection.published = updatedCollection.published;
+        collection.publishedAt = updatedCollection.publishedAt;
+        collection.status = updatedCollection.status;
+        collection.seoTitle = updatedCollection.seoTitle;
+        collection.seoDescription = updatedCollection.seoDescription;
+        collection.updatedAt = OffsetDateTime.now();
+
+        collectionRepository.persist(collection);
+        catalogCacheService.invalidateTenantCache(tenantId, "collection-updated");
+
+        LOG.infof("Collection updated successfully - tenantId=%s, collectionId=%s", tenantId, collectionId);
+        return collection;
+    }
+
+    /**
+     * Get collection by ID.
+     *
+     * @param collectionId
+     *            collection UUID
+     * @return collection if found
+     */
+    public Optional<Collection> getCollection(UUID collectionId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Fetching collection - tenantId=%s, collectionId=%s", tenantId, collectionId);
+
+        Optional<Collection> collection = collectionRepository.findByIdOptional(collectionId);
+
+        if (collection.isPresent() && !collection.get().tenant.id.equals(tenantId)) {
+            LOG.warnf("Tenant mismatch detected - tenantId=%s, collectionId=%s", tenantId, collectionId);
+            return Optional.empty();
+        }
+
+        return collection;
+    }
+
+    /**
+     * Get collection by slug.
+     *
+     * @param slug
+     *            collection slug
+     * @return collection if found
+     */
+    public Optional<Collection> getCollectionBySlug(String slug) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Fetching collection by slug - tenantId=%s, slug=%s", tenantId, slug);
+
+        return collectionRepository.findBySlug(slug);
+    }
+
+    /**
+     * List published collections for storefront display.
+     *
+     * @return list of published collections
+     */
+    public List<Collection> listPublishedCollections() {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Listing published collections - tenantId=%s", tenantId);
+
+        return collectionRepository.findPublished();
+    }
+
+    /**
+     * List collections by status with pagination.
+     *
+     * @param status
+     *            collection status
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @return list of collections
+     */
+    public List<Collection> listCollectionsByStatus(String status, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Listing collections by status - tenantId=%s, status=%s, page=%d, size=%d", tenantId, status, page,
+                size);
+
+        return collectionRepository.findByStatus(status, page, size);
+    }
+
+    /**
+     * Delete a collection (soft delete by setting status to 'deleted').
+     *
+     * @param collectionId
+     *            collection UUID
+     */
+    @Transactional
+    public void deleteCollection(UUID collectionId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Deleting collection - tenantId=%s, collectionId=%s", tenantId, collectionId);
+
+        Collection collection = collectionRepository.findByIdOptional(collectionId)
+                .orElseThrow(() -> new IllegalArgumentException("Collection not found: " + collectionId));
+
+        if (!collection.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Collection does not belong to current tenant");
+        }
+
+        collection.status = "deleted";
+        collectionRepository.persist(collection);
+        catalogCacheService.invalidateTenantCache(tenantId, "collection-deleted");
+
+        LOG.infof("Collection deleted successfully - tenantId=%s, collectionId=%s", tenantId, collectionId);
     }
 
     // ========================================
