@@ -15,7 +15,10 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import io.quarkus.cache.CacheManager;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * JAX-RS filter that resolves tenant context from HTTP Host header. Executes before authentication to populate tenant
@@ -68,12 +71,22 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
     @Inject
     Event<TenantMissing> tenantMissingEvent;
 
+    @ConfigProperty(
+            name = "tenant.rls.enabled",
+            defaultValue = "true")
+    boolean rlsEnabled;
+
+    @ConfigProperty(
+            name = "tenant.cache.enabled",
+            defaultValue = "true")
+    boolean cacheEnabled;
+
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
         String host = extractHost(requestContext);
 
         if (host == null || host.isBlank()) {
-            LOG.warning("Missing Host header in request");
+            logStructured(Level.WARNING, "missing_host_header", null, null, null, 0);
             tenantMissingEvent.fire(new TenantMissing("<missing>", "missing_host_header"));
             requestContext.abortWith(
                     Response.status(Response.Status.BAD_REQUEST).entity("{\"error\":\"Missing Host header\"}").build());
@@ -83,14 +96,17 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
         // Normalize hostname to lowercase
         String normalizedHost = host.toLowerCase();
 
-        // TODO: Add structured logging with resolution latency (Section 6 instrumentation)
         long startTime = System.currentTimeMillis();
+        Span currentSpan = Span.current();
+        currentSpan.setAttribute("tenant.hostname", normalizedHost);
 
         try {
             TenantInfo tenantInfo = resolveTenant(normalizedHost);
 
             if (tenantInfo == null) {
-                LOG.log(Level.WARNING, "Tenant not found for host: {0}", normalizedHost);
+                long duration = System.currentTimeMillis() - startTime;
+                logStructured(Level.WARNING, "tenant_not_found", normalizedHost, null, null, duration);
+                currentSpan.setStatus(StatusCode.ERROR, "Tenant not found");
                 tenantMissingEvent.fire(new TenantMissing(normalizedHost, "tenant_not_found"));
                 requestContext.abortWith(
                         Response.status(Response.Status.NOT_FOUND).entity("{\"error\":\"Store not found\"}").build());
@@ -98,7 +114,11 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
             }
 
             if (tenantInfo.isSuspended()) {
-                LOG.log(Level.WARNING, "Tenant suspended for host: {0}", normalizedHost);
+                long duration = System.currentTimeMillis() - startTime;
+                logStructured(Level.WARNING, "tenant_suspended", normalizedHost, tenantInfo.tenantId(),
+                        tenantInfo.subdomain(), duration);
+                currentSpan.setStatus(StatusCode.ERROR, "Tenant suspended");
+                currentSpan.setAttribute("tenant.id", tenantInfo.tenantId().toString());
                 tenantMissingEvent.fire(new TenantMissing(normalizedHost, "tenant_suspended"));
                 requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
                         .entity("{\"error\":\"Store temporarily unavailable\"}").build());
@@ -106,8 +126,12 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
             }
 
             if (!tenantInfo.isActive()) {
-                LOG.log(Level.WARNING, "Tenant inactive (status={0}) for host: {1}",
-                        new Object[]{tenantInfo.status(), normalizedHost});
+                long duration = System.currentTimeMillis() - startTime;
+                logStructured(Level.WARNING, "tenant_inactive", normalizedHost, tenantInfo.tenantId(),
+                        tenantInfo.subdomain(), duration);
+                currentSpan.setStatus(StatusCode.ERROR, "Tenant inactive");
+                currentSpan.setAttribute("tenant.id", tenantInfo.tenantId().toString());
+                currentSpan.setAttribute("tenant.status", tenantInfo.status());
                 tenantMissingEvent.fire(new TenantMissing(normalizedHost, "tenant_inactive"));
                 requestContext.abortWith(
                         Response.status(Response.Status.NOT_FOUND).entity("{\"error\":\"Store not found\"}").build());
@@ -116,15 +140,25 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
 
             // Populate ThreadLocal context
             TenantContext.setCurrentTenant(tenantInfo);
+            if (rlsEnabled) {
+                seedTenantSessionVariable(tenantInfo.tenantId());
+            }
 
-            // Fire CDI event for downstream subscribers
+            // Fire CDI event for downstream subscribers (feature flag hydration, etc.)
             tenantResolvedEvent.fire(new TenantResolved(tenantInfo, normalizedHost));
 
-            // TODO: Emit metrics (counter per tenant, gauge for cache size) - Section 6
             long duration = System.currentTimeMillis() - startTime;
-            LOG.log(Level.FINE, "Tenant resolved: {0} in {1}ms", new Object[]{tenantInfo.tenantId(), duration});
+            logStructured(Level.FINE, "tenant_resolved", normalizedHost, tenantInfo.tenantId(), tenantInfo.subdomain(),
+                    duration);
+            currentSpan.setAttribute("tenant.id", tenantInfo.tenantId().toString());
+            currentSpan.setAttribute("tenant.subdomain", tenantInfo.subdomain());
+            currentSpan.setAttribute("tenant.resolution.duration_ms", duration);
 
         } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            logStructured(Level.SEVERE, "resolution_error", normalizedHost, null, null, duration);
+            currentSpan.recordException(e);
+            currentSpan.setStatus(StatusCode.ERROR, "Tenant resolution failed");
             LOG.log(Level.SEVERE, "Error resolving tenant for host: " + normalizedHost, e);
             tenantMissingEvent.fire(new TenantMissing(normalizedHost, "resolution_error"));
             requestContext.abortWith(Response.status(Response.Status.INTERNAL_SERVER_ERROR)
@@ -141,6 +175,11 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
      * @return tenant info or null if not found
      */
     private TenantInfo resolveTenant(String hostname) {
+        if (!cacheEnabled) {
+            TenantInfo fromCustomDomain = resolveFromCustomDomain(hostname);
+            return fromCustomDomain != null ? fromCustomDomain : resolveFromSubdomain(hostname);
+        }
+
         // Use Caffeine cache to avoid repeated database queries
         return cacheManager.getCache("tenant-cache").map(cache -> (TenantInfo) cache.get(hostname, h -> {
             // Strategy 1: Check custom_domains table
@@ -227,5 +266,41 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
         }
 
         return host;
+    }
+
+    /**
+     * Emit structured log entry for tenant resolution events. Produces JSON-compatible log format with context fields
+     * for observability tooling (Prometheus, Jaeger, Grafana).
+     *
+     * @param level
+     *            log level
+     * @param event
+     *            event type (tenant_resolved, tenant_not_found, etc.)
+     * @param hostname
+     *            requested hostname
+     * @param tenantId
+     *            resolved tenant ID (nullable if not resolved)
+     * @param subdomain
+     *            resolved subdomain (nullable if not resolved)
+     * @param durationMs
+     *            resolution duration in milliseconds
+     */
+    private void logStructured(Level level, String event, String hostname, UUID tenantId, String subdomain,
+            long durationMs) {
+        String logMessage = String.format(
+                "{\"event\":\"%s\",\"hostname\":\"%s\",\"tenant_id\":\"%s\",\"subdomain\":\"%s\",\"duration_ms\":%d}",
+                event, hostname != null ? hostname : "null", tenantId != null ? tenantId.toString() : "null",
+                subdomain != null ? subdomain : "null", durationMs);
+        LOG.log(level, logMessage);
+    }
+
+    private void seedTenantSessionVariable(UUID tenantId) {
+        try {
+            entityManager.createNativeQuery("SELECT set_current_tenant_id(:tenantId)")
+                    .setParameter("tenantId", tenantId).getSingleResult();
+        } catch (Exception e) {
+            LOG.log(Level.SEVERE, "Failed to seed tenant session variable for tenant " + tenantId, e);
+            throw e;
+        }
     }
 }

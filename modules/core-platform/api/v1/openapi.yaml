@@ -1,0 +1,2405 @@
+---
+openapi: 3.1.0
+components:
+  schemas:
+    AddToCartRequest:
+      type: object
+      required:
+      - variantId
+      - quantity
+      properties:
+        variantId:
+          $ref: "#/components/schemas/UUID"
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    AdjustPointsRequest:
+      type: object
+      required:
+      - points
+      - reason
+      properties:
+        points:
+          type: integer
+          format: int32
+        reason:
+          type: string
+    AdjustStoreCreditRequest:
+      type: object
+      required:
+      - amount
+      - reason
+      properties:
+        amount:
+          type: number
+        reason:
+          type: string
+          pattern: \S
+    ApprovePrivacyRequestRequest:
+      type: object
+      properties:
+        approverEmail:
+          type: string
+        approvalNotes:
+          type: string
+    CheckGiftCardBalanceRequest:
+      type: object
+      required:
+      - code
+      properties:
+        code:
+          type: string
+          pattern: \S
+    CompletePairingRequest:
+      type: object
+      properties:
+        pairingCode:
+          type: string
+    ConvertGiftCardRequest:
+      type: object
+      required:
+      - giftCardId
+      - userId
+      properties:
+        giftCardId:
+          type: integer
+          format: int64
+        userId:
+          $ref: "#/components/schemas/UUID"
+        reason:
+          type: string
+    CreateConsignmentItemRequest:
+      type: object
+      required:
+      - productId
+      - commissionRate
+      properties:
+        productId:
+          $ref: "#/components/schemas/UUID"
+        consignorId:
+          $ref: "#/components/schemas/UUID"
+        commissionRate:
+          type: number
+          maximum: 100.00
+          minimum: 0.00
+    CreateConsignorRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          pattern: \S
+        contactInfo:
+          type: string
+        payoutSettings:
+          type: string
+    CreateInventoryAdjustmentRequest:
+      type: object
+      required:
+      - variantId
+      - locationId
+      - quantityChange
+      - reason
+      - adjustedBy
+      properties:
+        variantId:
+          $ref: "#/components/schemas/UUID"
+        locationId:
+          $ref: "#/components/schemas/UUID"
+        quantityChange:
+          type: integer
+          format: int32
+        reason:
+          type: string
+          pattern: \S
+        adjustedBy:
+          type: string
+          pattern: \S
+        notes:
+          type: string
+    CreateInventoryLocationRequest:
+      type: object
+      required:
+      - code
+      - name
+      properties:
+        code:
+          type: string
+          pattern: \S
+          maxLength: 100
+        name:
+          type: string
+          pattern: \S
+          maxLength: 255
+        type:
+          type: string
+          maxLength: 50
+        address:
+          type: string
+        active:
+          type: boolean
+    CreateInventoryTransferRequest:
+      type: object
+      required:
+      - sourceLocationId
+      - destinationLocationId
+      - lines
+      properties:
+        sourceLocationId:
+          $ref: "#/components/schemas/UUID"
+        destinationLocationId:
+          $ref: "#/components/schemas/UUID"
+        initiatedBy:
+          type: string
+        expectedArrivalDate:
+          $ref: "#/components/schemas/OffsetDateTime"
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        shippingCost:
+          type: integer
+          format: int32
+        notes:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransferLineRequest"
+          minItems: 1
+    DevicePairingRequest:
+      type: object
+      properties:
+        deviceIdentifier:
+          type: string
+        deviceName:
+          type: string
+        locationName:
+          type: string
+        hardwareModel:
+          type: string
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+    ImpersonationRequest:
+      type: object
+      properties:
+        targetTenantId:
+          $ref: "#/components/schemas/UUID"
+        targetUserId:
+          $ref: "#/components/schemas/UUID"
+        reason:
+          type: string
+        ticketNumber:
+          type: string
+    InvalidateFeatureFlagRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+    IssueGiftCardRequest:
+      type: object
+      required:
+      - initialBalance
+      properties:
+        initialBalance:
+          type: number
+          minimum: 0.01
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        purchaserUserId:
+          $ref: "#/components/schemas/UUID"
+        purchaserEmail:
+          type: string
+        recipientEmail:
+          type: string
+        recipientName:
+          type: string
+        personalMessage:
+          type: string
+        expiresAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        sourceOrderId:
+          type: integer
+          format: int64
+    LoyaltyTierConfigRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          pattern: \S
+        minPoints:
+          type: integer
+          format: int32
+          minimum: 0
+        multiplier:
+          type: number
+          exclusiveMinimum: 0.0
+    MediaUploadCompleteRequest:
+      type: object
+      properties:
+        checksumSha256:
+          type: string
+    MediaUploadNegotiationRequest:
+      type: object
+      required:
+      - filename
+      - contentType
+      - fileSize
+      - assetType
+      properties:
+        filename:
+          type: string
+          pattern: \S
+        contentType:
+          type: string
+          pattern: \S
+        fileSize:
+          type: integer
+          format: int64
+          minimum: 1
+        assetType:
+          type: string
+          pattern: \S
+        maxDownloadAttempts:
+          type: integer
+          format: int32
+          minimum: 1
+    OfflineBatchUploadRequest:
+      type: object
+      properties:
+        deviceId:
+          type: integer
+          format: int64
+        firmwareVersion:
+          type: string
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfflineTransactionUpload"
+    OfflineTransactionUpload:
+      type: object
+      properties:
+        localTransactionId:
+          type: string
+        encryptedPayload:
+          type: string
+        encryptionIv:
+          type: string
+        encryptionKeyVersion:
+          type: integer
+          format: int32
+        transactionTimestamp:
+          type: string
+        transactionAmount:
+          type: number
+        idempotencyKey:
+          type: string
+        priority:
+          type: string
+    OffsetDateTime:
+      type: string
+      format: date-time
+      examples:
+      - 2022-03-10T12:15:50-04:00
+    RecordConsentRequest:
+      type: object
+      properties:
+        customerId:
+          $ref: "#/components/schemas/UUID"
+        channel:
+          type: string
+        consented:
+          type: boolean
+        consentSource:
+          type: string
+        consentMethod:
+          type: string
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        notes:
+          type: string
+    RedeemGiftCardRequest:
+      type: object
+      required:
+      - code
+      - amount
+      properties:
+        code:
+          type: string
+          pattern: \S
+        amount:
+          type: number
+          minimum: 0.01
+        orderId:
+          type: integer
+          format: int64
+        idempotencyKey:
+          type: string
+        posDeviceId:
+          type: integer
+          format: int64
+        offlineSyncedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+    RedeemPointsRequest:
+      type: object
+      required:
+      - pointsToRedeem
+      properties:
+        pointsToRedeem:
+          type: integer
+          format: int32
+          minimum: 1
+        idempotencyKey:
+          type: string
+    RedeemStoreCreditRequest:
+      type: object
+      required:
+      - amount
+      properties:
+        amount:
+          type: number
+          minimum: 0.01
+        orderId:
+          type: integer
+          format: int64
+        idempotencyKey:
+          type: string
+        posDeviceId:
+          type: integer
+          format: int64
+        offlineSyncedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+    SubmitPrivacyRequestRequest:
+      type: object
+      properties:
+        requestType:
+          type: string
+        requesterEmail:
+          type: string
+        subjectEmail:
+          type: string
+        reason:
+          type: string
+        ticketNumber:
+          type: string
+    TransferLineRequest:
+      type: object
+      required:
+      - variantId
+      - quantity
+      properties:
+        variantId:
+          $ref: "#/components/schemas/UUID"
+        quantity:
+          type: integer
+          format: int32
+        notes:
+          type: string
+    UUID:
+      type: string
+      format: uuid
+      pattern: "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+    UpdateCartItemRequest:
+      type: object
+      required:
+      - quantity
+      properties:
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    UpdateFeatureFlagRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        owner:
+          type: string
+        riskLevel:
+          type: string
+        reviewCadenceDays:
+          type: integer
+          format: int32
+        expiryDate:
+          $ref: "#/components/schemas/OffsetDateTime"
+        description:
+          type: string
+        rollbackInstructions:
+          type: string
+        markReviewed:
+          type: boolean
+        reason:
+          type: string
+    UpdateGiftCardRequest:
+      type: object
+      properties:
+        status:
+          type: string
+        expiresAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        reason:
+          type: string
+    UpsertLoyaltyProgramRequest:
+      type: object
+      required:
+      - name
+      - pointsPerDollar
+      - redemptionValuePerPoint
+      - minRedemptionPoints
+      - tiers
+      properties:
+        name:
+          type: string
+          pattern: \S
+        description:
+          type: string
+        enabled:
+          type: boolean
+        pointsPerDollar:
+          type: number
+          exclusiveMinimum: 0.0
+        redemptionValuePerPoint:
+          type: number
+          exclusiveMinimum: 0.0
+        minRedemptionPoints:
+          type: integer
+          format: int32
+          minimum: 1
+        maxRedemptionPoints:
+          type: integer
+          format: int32
+        pointsExpirationDays:
+          type: integer
+          format: int32
+        tiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoyaltyTierConfigRequest"
+          minItems: 1
+        metadata:
+          type: object
+          additionalProperties: {}
+paths:
+  /:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema:
+                type: string
+      summary: Index
+      tags:
+      - Storefront Resource
+  /api/pos/devices:
+    get:
+      summary: List POS devices
+      description: Get all active POS devices for current tenant
+      tags:
+      - POS Offline
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      security:
+      - SecurityScheme: []
+  /api/pos/devices/complete-pairing:
+    post:
+      summary: Complete device pairing
+      description: Activate device using pairing code
+      tags:
+      - POS Offline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompletePairingRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      security:
+      - SecurityScheme: []
+  /api/pos/devices/pair:
+    post:
+      summary: Initiate device pairing
+      description: Generate pairing code for new POS device
+      tags:
+      - POS Offline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevicePairingRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      security:
+      - SecurityScheme: []
+  /api/pos/devices/{deviceId}/terminal/token:
+    post:
+      summary: Create Stripe Terminal connection token
+      description: Request a new connection token for an active POS device
+      tags:
+      - POS Offline
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      security:
+      - SecurityScheme: []
+  /api/pos/offline/status/{deviceId}:
+    get:
+      summary: Get offline sync status
+      description: Check sync queue status for device
+      tags:
+      - POS Offline
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      security:
+      - SecurityScheme: []
+  /api/pos/offline/upload:
+    post:
+      summary: Upload offline batch
+      description: Upload encrypted offline transactions for sync
+      tags:
+      - POS Offline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfflineBatchUploadRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      security:
+      - SecurityScheme: []
+  /api/v1/admin/consignors:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: List Consignors
+      tags:
+      - Consignment Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConsignorRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Consignor
+      tags:
+      - Consignment Resource
+  /api/v1/admin/consignors/{consignorId}/items:
+    get:
+      parameters:
+      - name: consignorId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: List Consignment Items
+      tags:
+      - Consignment Resource
+    post:
+      parameters:
+      - name: consignorId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConsignmentItemRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Consignment Item
+      tags:
+      - Consignment Resource
+  /api/v1/admin/consignors/{consignorId}/payouts:
+    get:
+      parameters:
+      - name: consignorId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: List Payout Batches
+      tags:
+      - Consignment Resource
+    post:
+      parameters:
+      - name: consignorId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: periodEnd
+        in: query
+        schema:
+          type: string
+      - name: periodStart
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Create Payout Batch
+      tags:
+      - Consignment Resource
+  /api/v1/admin/consignors/{id}:
+    put:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConsignorRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Update Consignor
+      tags:
+      - Consignment Resource
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Consignor
+      tags:
+      - Consignment Resource
+    delete:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Delete Consignor
+      tags:
+      - Consignment Resource
+  /api/v1/admin/gift-cards:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Gift Cards
+      tags:
+      - Gift Card Resource
+      security:
+      - SecurityScheme:
+        - admin
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueGiftCardRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Issue Gift Card
+      tags:
+      - Gift Card Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/admin/gift-cards/{giftCardId}:
+    put:
+      parameters:
+      - name: giftCardId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGiftCardRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Update Gift Card
+      tags:
+      - Gift Card Resource
+      security:
+      - SecurityScheme:
+        - admin
+    get:
+      parameters:
+      - name: giftCardId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Gift Card
+      tags:
+      - Gift Card Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/admin/inventory/adjustments:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInventoryAdjustmentRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Adjustment
+      tags:
+      - Inventory Admin Resource
+  /api/v1/admin/inventory/locations:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: List Locations
+      tags:
+      - Inventory Admin Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInventoryLocationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Location
+      tags:
+      - Inventory Admin Resource
+  /api/v1/admin/inventory/transfers:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: List Transfers
+      tags:
+      - Inventory Admin Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInventoryTransferRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Transfer
+      tags:
+      - Inventory Admin Resource
+  /api/v1/admin/inventory/transfers/{transferId}:
+    get:
+      parameters:
+      - name: transferId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Transfer
+      tags:
+      - Inventory Admin Resource
+  /api/v1/admin/inventory/transfers/{transferId}/receive:
+    post:
+      parameters:
+      - name: transferId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Receive Transfer
+      tags:
+      - Inventory Admin Resource
+  /api/v1/admin/loyalty/adjust/{userId}:
+    post:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustPointsRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Adjust Points
+      tags:
+      - Loyalty Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/admin/loyalty/program:
+    put:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertLoyaltyProgramRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Upsert Program
+      tags:
+      - Loyalty Resource
+      security:
+      - SecurityScheme:
+        - admin
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Program Admin
+      tags:
+      - Loyalty Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/admin/reports/aggregates/consignment-payouts:
+    get:
+      parameters:
+      - name: consignorId
+        in: query
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: endDate
+        in: query
+        schema:
+          type: string
+      - name: startDate
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Get Consignment Payout Aggregates
+      tags:
+      - Reports Resource
+  /api/v1/admin/reports/aggregates/inventory-aging:
+    get:
+      parameters:
+      - name: locationId
+        in: query
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: minDays
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: Get Inventory Aging Aggregates
+      tags:
+      - Reports Resource
+  /api/v1/admin/reports/aggregates/sales:
+    get:
+      parameters:
+      - name: endDate
+        in: query
+        schema:
+          type: string
+      - name: startDate
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Get Sales Aggregates
+      tags:
+      - Reports Resource
+  /api/v1/admin/reports/jobs:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: List Export Jobs
+      tags:
+      - Reports Resource
+  /api/v1/admin/reports/jobs/{jobId}:
+    get:
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Export Job Status
+      tags:
+      - Reports Resource
+  /api/v1/admin/reports/{reportType}/export:
+    post:
+      parameters:
+      - name: reportType
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Request Export
+      tags:
+      - Reports Resource
+  /api/v1/admin/store-credit/accounts:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Accounts
+      tags:
+      - Store Credit Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/admin/store-credit/adjust/{userId}:
+    post:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustStoreCreditRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Adjust
+      tags:
+      - Store Credit Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/admin/store-credit/convert-gift-card:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConvertGiftCardRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Convert Gift Card
+      tags:
+      - Store Credit Resource
+      security:
+      - SecurityScheme:
+        - admin
+  /api/v1/cart:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: Get Cart
+      tags:
+      - Cart Resource
+    delete:
+      responses:
+        "200":
+          description: OK
+      summary: Clear Cart
+      tags:
+      - Cart Resource
+  /api/v1/cart/items:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddToCartRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Add To Cart
+      tags:
+      - Cart Resource
+  /api/v1/cart/items/{itemId}:
+    patch:
+      parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCartItemRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Update Cart Item
+      tags:
+      - Cart Resource
+    delete:
+      parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Remove Cart Item
+      tags:
+      - Cart Resource
+  /api/v1/gift-cards/check-balance:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckGiftCardBalanceRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Check Balance
+      tags:
+      - Gift Card Resource
+  /api/v1/gift-cards/redeem:
+    post:
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemGiftCardRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Redeem
+      tags:
+      - Gift Card Resource
+  /api/v1/gift-cards/transactions/{giftCardId}:
+    get:
+      parameters:
+      - name: giftCardId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: List Transactions
+      tags:
+      - Gift Card Resource
+  /api/v1/headless/cart:
+    get:
+      parameters:
+      - name: X-Session-Id
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Get Cart
+      tags:
+      - Headless Cart Resource
+    delete:
+      parameters:
+      - name: X-Session-Id
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Clear Cart
+      tags:
+      - Headless Cart Resource
+  /api/v1/headless/cart/items:
+    post:
+      parameters:
+      - name: X-Session-Id
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddToCartRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Add To Cart
+      tags:
+      - Headless Cart Resource
+  /api/v1/headless/cart/items/{itemId}:
+    patch:
+      parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: X-Session-Id
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCartItemRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Update Cart Item
+      tags:
+      - Headless Cart Resource
+    delete:
+      parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: X-Session-Id
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Remove Cart Item
+      tags:
+      - Headless Cart Resource
+  /api/v1/headless/catalog/products:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: search
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: List Products
+      tags:
+      - Headless Catalog Resource
+  /api/v1/headless/catalog/products/{productId}:
+    get:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Product
+      tags:
+      - Headless Catalog Resource
+  /api/v1/health:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+      summary: Health Check
+      tags:
+      - Health Resource
+  /api/v1/loyalty/enroll/{userId}:
+    post:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Enroll Member
+      tags:
+      - Loyalty Resource
+  /api/v1/loyalty/member/{userId}:
+    get:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Member
+      tags:
+      - Loyalty Resource
+  /api/v1/loyalty/program:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: Get Program
+      tags:
+      - Loyalty Resource
+  /api/v1/loyalty/redeem/{userId}:
+    post:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: X-Idempotency-Key
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemPointsRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Redeem Points
+      tags:
+      - Loyalty Resource
+  /api/v1/loyalty/transactions/{userId}:
+    get:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: Get Transaction History
+      tags:
+      - Loyalty Resource
+  /api/v1/media:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      - name: type
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: List Assets
+      tags:
+      - Media Resource
+  /api/v1/media/upload/negotiate:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUploadNegotiationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Negotiate Upload
+      tags:
+      - Media Resource
+  /api/v1/media/{assetId}:
+    get:
+      parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Asset
+      tags:
+      - Media Resource
+    delete:
+      parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Delete Asset
+      tags:
+      - Media Resource
+  /api/v1/media/{assetId}/complete:
+    post:
+      parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUploadCompleteRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Complete Upload
+      tags:
+      - Media Resource
+  /api/v1/media/{assetId}/download:
+    get:
+      parameters:
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: derivativeType
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Get Signed Download
+      tags:
+      - Media Resource
+  /api/v1/platform/audit:
+    get:
+      parameters:
+      - name: action
+        in: query
+        schema:
+          type: string
+      - name: actorId
+        in: query
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: endDate
+        in: query
+        schema:
+          type: string
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: startDate
+        in: query
+        schema:
+          type: string
+      - name: targetType
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Query Audit Logs
+      tags:
+      - Audit Log Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/audit/stats:
+    get:
+      parameters:
+      - name: days
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Audit Stats
+      tags:
+      - Audit Log Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/marketing-consents:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordConsentRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Record Consent
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/marketing-consents/customer/{customerId}:
+    get:
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Customer Consents
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/metrics:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Metrics
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/privacy-requests:
+    get:
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+      - name: type
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Privacy Requests
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/privacy-requests/delete:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitPrivacyRequestRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Submit Delete Request
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/privacy-requests/export:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitPrivacyRequestRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Submit Export Request
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/privacy-requests/{requestId}:
+    get:
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Privacy Request
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/compliance/privacy-requests/{requestId}/approve:
+    post:
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovePrivacyRequestRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Approve Privacy Request
+      tags:
+      - Compliance Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/feature-flags:
+    get:
+      parameters:
+      - name: stale_only
+        in: query
+        schema:
+          type: boolean
+      - name: tenant_id
+        in: query
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Flags
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+  /api/v1/platform/feature-flags/stale-report:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Stale Flag Report
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+  /api/v1/platform/feature-flags/{id}:
+    put:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeatureFlagRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Update Flag
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Flag
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+    delete:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Delete Flag
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+  /api/v1/platform/feature-flags/{id}/history:
+    get:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Flag History
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+  /api/v1/platform/feature-flags/{id}/invalidate:
+    post:
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvalidateFeatureFlagRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Invalidate Flag
+      tags:
+      - Feature Flag Resource
+      security:
+      - SecurityScheme:
+        - manage_feature_flags
+  /api/v1/platform/health:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get System Health
+      tags:
+      - Platform Admin Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/impersonate:
+    post:
+      parameters:
+      - name: User-Agent
+        in: header
+        schema:
+          type: string
+      - name: X-Forwarded-For
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImpersonationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Start Impersonation
+      tags:
+      - Impersonation Resource
+      security:
+      - SecurityScheme: []
+    delete:
+      parameters:
+      - name: User-Agent
+        in: header
+        schema:
+          type: string
+      - name: X-Forwarded-For
+        in: header
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: End Impersonation
+      tags:
+      - Impersonation Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/impersonate/current:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Current Impersonation
+      tags:
+      - Impersonation Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/stores:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Store Directory
+      tags:
+      - Platform Admin Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/stores/{storeId}:
+    get:
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Store Details
+      tags:
+      - Platform Admin Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/stores/{storeId}/reactivate:
+    post:
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Reactivate Store
+      tags:
+      - Platform Admin Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/platform/stores/{storeId}/suspend:
+    post:
+      parameters:
+      - name: storeId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Suspend Store
+      tags:
+      - Platform Admin Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/store-credit/balance/{userId}:
+    get:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Balance
+      tags:
+      - Store Credit Resource
+  /api/v1/store-credit/redeem/{userId}:
+    post:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: X-Idempotency-Key
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RedeemStoreCreditRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Redeem
+      tags:
+      - Store Credit Resource
+  /api/v1/store-credit/transactions/{userId}:
+    get:
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+      summary: List Transactions
+      tags:
+      - Store Credit Resource
+  /api/v1/vendor/portal/items:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Items
+      tags:
+      - Vendor Portal Resource
+      security:
+      - SecurityScheme:
+        - vendor
+  /api/v1/vendor/portal/payouts:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        schema:
+          type: integer
+          format: int32
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Payouts
+      tags:
+      - Vendor Portal Resource
+      security:
+      - SecurityScheme:
+        - vendor
+  /api/v1/vendor/portal/profile:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Profile
+      tags:
+      - Vendor Portal Resource
+      security:
+      - SecurityScheme:
+        - vendor
+  /api/webhooks/payments/health:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: Health Check
+      tags:
+      - Payment Webhook Resource
+  /api/webhooks/payments/stripe:
+    post:
+      parameters:
+      - name: Stripe-Event-Id
+        in: header
+        schema:
+          type: string
+      - name: Stripe-Signature
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: string
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Handle Stripe Webhook
+      tags:
+      - Payment Webhook Resource
+tags:
+- name: POS Offline
+  description: POS device management and offline transaction sync
+info:
+  title: Village Storefront API
+  version: 1.0.0
+  description: Multi-tenant SaaS ecommerce platform API
+servers:
+- url: http://localhost:0
+  description: Auto generated value
+- url: http://0.0.0.0:0
+  description: Auto generated value

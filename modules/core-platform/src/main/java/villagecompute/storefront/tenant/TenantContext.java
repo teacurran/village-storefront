@@ -25,6 +25,7 @@ import villagecompute.storefront.data.models.Tenant;
 public class TenantContext {
 
     private static final ThreadLocal<TenantInfo> CURRENT_TENANT = new ThreadLocal<>();
+    private static final ThreadLocal<FeatureFlagSnapshot> FEATURE_FLAGS = new ThreadLocal<>();
 
     /**
      * Set current tenant for this request thread. Called by {@link TenantResolutionFilter}.
@@ -38,6 +39,7 @@ public class TenantContext {
         Objects.requireNonNull(tenantInfo, "Tenant info cannot be null");
         Objects.requireNonNull(tenantInfo.tenantId(), "Tenant ID cannot be null");
         CURRENT_TENANT.set(tenantInfo);
+        FEATURE_FLAGS.set(FeatureFlagSnapshot.placeholder(tenantInfo.tenantId()));
     }
 
     /**
@@ -93,6 +95,42 @@ public class TenantContext {
     }
 
     /**
+     * Check if feature flag snapshot is available for current request.
+     *
+     * @return true if placeholder or hydrated snapshot exists
+     */
+    public static boolean hasFeatureFlagSnapshot() {
+        return FEATURE_FLAGS.get() != null;
+    }
+
+    /**
+     * Get current feature flag snapshot. Placeholder snapshot is returned until hydration occurs.
+     *
+     * @return snapshot representing current tenant feature flags
+     * @throws IllegalStateException
+     *             if no tenant context set
+     */
+    public static FeatureFlagSnapshot getFeatureFlagSnapshot() {
+        FeatureFlagSnapshot snapshot = FEATURE_FLAGS.get();
+        if (snapshot == null) {
+            throw new IllegalStateException("No feature flag snapshot available - TenantResolutionFilter not executed");
+        }
+        return snapshot;
+    }
+
+    /**
+     * Hydrate feature flag snapshot for current tenant. Called by downstream services when feature flags are resolved
+     * from database.
+     *
+     * @param snapshot
+     *            hydrated snapshot
+     */
+    public static void setFeatureFlagSnapshot(FeatureFlagSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot cannot be null");
+        FEATURE_FLAGS.set(snapshot);
+    }
+
+    /**
      * Check if tenant context is set (useful for background jobs).
      *
      * @return true if tenant context is available, false otherwise
@@ -107,5 +145,6 @@ public class TenantContext {
      */
     public static void clear() {
         CURRENT_TENANT.remove();
+        FEATURE_FLAGS.remove();
     }
 }

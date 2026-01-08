@@ -26,8 +26,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import villagecompute.storefront.data.models.CustomDomain;
 import villagecompute.storefront.data.models.Tenant;
+import villagecompute.storefront.testsupport.PostgresTenantTestResource;
 
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.TestProfile;
 
 /**
  * Comprehensive tests for tenant resolution filter. Covers subdomain resolution, custom domain resolution, edge cases,
@@ -44,6 +47,8 @@ import io.quarkus.test.junit.QuarkusTest;
  * <strong>Run with:</strong> {@code mvn test -Dtest=TenantFilterTest}
  */
 @QuarkusTest
+@QuarkusTestResource(PostgresTenantTestResource.class)
+@TestProfile(TenantPostgresRlsProfile.class)
 public class TenantFilterTest {
 
     @Inject
@@ -247,10 +252,15 @@ public class TenantFilterTest {
         assertTrue(TenantContext.hasContext());
         assertNotNull(TenantContext.getCurrentTenantId());
         assertEquals(testInfo.tenantId(), TenantContext.getCurrentTenantId());
+        assertTrue(TenantContext.hasFeatureFlagSnapshot(), "Feature flag placeholder should be set");
+        FeatureFlagSnapshot snapshot = TenantContext.getFeatureFlagSnapshot();
+        assertEquals(testInfo.tenantId(), snapshot.tenantId());
+        assertFalse(snapshot.hydrated(), "Snapshot should start as placeholder");
 
         // Clear context
         TenantContext.clear();
         assertFalse(TenantContext.hasContext());
+        assertFalse(TenantContext.hasFeatureFlagSnapshot());
     }
 
     /**
@@ -346,5 +356,172 @@ public class TenantFilterTest {
                 Arguments.of("invalid-.villagecompute.com", false, "Subdomain ending with hyphen"),
                 Arguments.of("test..villagecompute.com", false, "Double dot"),
                 Arguments.of(".villagecompute.com", false, "Empty subdomain"));
+    }
+
+    /**
+     * Test RLS enforcement prevents cross-tenant data access. Verifies that PostgreSQL Row Level Security policies
+     * correctly isolate tenant data at the database layer.
+     *
+     * <p>
+     * This test validates ADR-001 Section 3 (Row Level Security) by attempting to access another tenant's data when RLS
+     * is active. The query should return empty results, not throw an exception.
+     *
+     * <p>
+     * <strong>Note:</strong> This test relies on Quarkus Dev Services to start PostgreSQL automatically during the test
+     * lifecycle.
+     */
+    @Test
+    @Transactional
+    public void testRLSEnforcement_PreventsCrossTenantAccess() {
+        // Create second tenant with a user
+        Tenant tenant2 = new Tenant();
+        tenant2.subdomain = "othertenant";
+        tenant2.name = "Other Tenant";
+        tenant2.status = "active";
+        tenant2.settings = "{}";
+        tenant2.createdAt = OffsetDateTime.now();
+        tenant2.updatedAt = OffsetDateTime.now();
+        entityManager.persist(tenant2);
+        entityManager.flush();
+
+        villagecompute.storefront.data.models.User user2 = new villagecompute.storefront.data.models.User();
+        user2.tenant = tenant2;
+        user2.email = "user@othertenant.com";
+        user2.status = "active";
+        user2.firstName = "Other";
+        user2.lastName = "User";
+        user2.emailVerified = true;
+        user2.createdAt = OffsetDateTime.now();
+        user2.updatedAt = OffsetDateTime.now();
+        entityManager.persist(user2);
+        entityManager.flush();
+
+        // Set tenant context to active tenant (teststore)
+        TenantContext.setCurrentTenantId(activeTenantId);
+
+        // Execute raw SQL to set PostgreSQL session variable for RLS
+        entityManager.createNativeQuery("SELECT set_current_tenant_id(:tenantId)")
+                .setParameter("tenantId", activeTenantId).getSingleResult();
+
+        // Attempt to query users - should NOT see user from tenant2 due to RLS
+        long userCount = entityManager.createQuery("SELECT COUNT(u) FROM User u WHERE u.email = :email", Long.class)
+                .setParameter("email", "user@othertenant.com").getSingleResult();
+
+        assertEquals(0, userCount, "RLS should prevent cross-tenant user access");
+
+        // Verify we can see our own tenant's data (none created for active tenant in this test)
+        long ownUserCount = entityManager
+                .createQuery("SELECT COUNT(u) FROM User u WHERE u.tenant.id = :tenantId", Long.class)
+                .setParameter("tenantId", activeTenantId).getSingleResult();
+
+        assertEquals(0, ownUserCount, "Should have 0 users for active tenant");
+
+        // Clean up
+        entityManager.remove(user2);
+        entityManager.remove(tenant2);
+        TenantContext.clear();
+    }
+
+    /**
+     * Test RLS enforcement on products table. Validates that tenant isolation works correctly for catalog module
+     * tables.
+     *
+     * <p>
+     * <strong>Note:</strong> This test relies on Quarkus Dev Services to start PostgreSQL automatically during the test
+     * lifecycle.
+     */
+    @Test
+    @Transactional
+    public void testRLSEnforcement_ProductsIsolation() {
+        // Create product for active tenant
+        villagecompute.storefront.data.models.Product product1 = new villagecompute.storefront.data.models.Product();
+        product1.tenant = entityManager.find(Tenant.class, activeTenantId);
+        product1.sku = "TEST-SKU-001";
+        product1.name = "Test Product";
+        product1.slug = "test-product";
+        product1.type = "physical";
+        product1.status = "active";
+        product1.metadata = "{}";
+        product1.createdAt = OffsetDateTime.now();
+        product1.updatedAt = OffsetDateTime.now();
+        entityManager.persist(product1);
+
+        // Create second tenant with a product
+        Tenant tenant2 = new Tenant();
+        tenant2.subdomain = "othertenant";
+        tenant2.name = "Other Tenant";
+        tenant2.status = "active";
+        tenant2.settings = "{}";
+        tenant2.createdAt = OffsetDateTime.now();
+        tenant2.updatedAt = OffsetDateTime.now();
+        entityManager.persist(tenant2);
+
+        villagecompute.storefront.data.models.Product product2 = new villagecompute.storefront.data.models.Product();
+        product2.tenant = tenant2;
+        product2.sku = "TEST-SKU-002";
+        product2.name = "Other Tenant Product";
+        product2.slug = "other-product";
+        product2.type = "physical";
+        product2.status = "active";
+        product2.metadata = "{}";
+        product2.createdAt = OffsetDateTime.now();
+        product2.updatedAt = OffsetDateTime.now();
+        entityManager.persist(product2);
+        entityManager.flush();
+
+        // Set tenant context to active tenant
+        TenantContext.setCurrentTenantId(activeTenantId);
+        entityManager.createNativeQuery("SELECT set_current_tenant_id(:tenantId)")
+                .setParameter("tenantId", activeTenantId).getSingleResult();
+
+        // Query products - should only see product1, not product2
+        long productCount = entityManager.createQuery("SELECT COUNT(p) FROM Product p", Long.class).getSingleResult();
+        assertEquals(1, productCount, "RLS should only show current tenant's products");
+
+        // Verify the product we see is the correct one
+        villagecompute.storefront.data.models.Product foundProduct = entityManager
+                .createQuery("SELECT p FROM Product p WHERE p.sku = :sku",
+                        villagecompute.storefront.data.models.Product.class)
+                .setParameter("sku", "TEST-SKU-001").getSingleResult();
+        assertEquals(product1.id, foundProduct.id, "Should find product from current tenant");
+
+        // Attempt to access other tenant's product by SKU - should find nothing
+        long otherProductCount = entityManager
+                .createQuery("SELECT COUNT(p) FROM Product p WHERE p.sku = :sku", Long.class)
+                .setParameter("sku", "TEST-SKU-002").getSingleResult();
+        assertEquals(0, otherProductCount, "RLS should prevent access to other tenant's products");
+
+        // Clean up
+        entityManager.remove(product1);
+        entityManager.remove(product2);
+        entityManager.remove(tenant2);
+        TenantContext.clear();
+    }
+
+    /**
+     * Test that RLS helper functions work correctly.
+     *
+     * <p>
+     * <strong>Note:</strong> This test relies on Quarkus Dev Services to start PostgreSQL automatically during the test
+     * lifecycle.
+     */
+    @Test
+    @Transactional
+    public void testRLSHelperFunctions() {
+        // Set tenant context
+        entityManager.createNativeQuery("SELECT set_current_tenant_id(:tenantId)")
+                .setParameter("tenantId", activeTenantId).getSingleResult();
+
+        // Verify get_current_tenant_id returns the correct value
+        Object result = entityManager.createNativeQuery("SELECT get_current_tenant_id()").getSingleResult();
+        assertNotNull(result, "get_current_tenant_id should return a value");
+        assertEquals(activeTenantId.toString(), result.toString(), "Should return the tenant ID we set");
+
+        // Clear the session variable
+        entityManager.createNativeQuery("SELECT set_config('app.tenant_id', '', FALSE)").getSingleResult();
+
+        // Verify get_current_tenant_id returns NULL when not set
+        Object nullResult = entityManager.createNativeQuery("SELECT get_current_tenant_id()").getSingleResult();
+        assertTrue(nullResult == null, "get_current_tenant_id should return NULL when session variable not set");
     }
 }

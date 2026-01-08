@@ -24,10 +24,10 @@ public class PostgresTenantTestResource implements QuarkusTestResourceLifecycleM
         postgres.start();
 
         Map<String, String> config = new HashMap<>();
-        config.put("quarkus.datasource.db-kind", "postgresql");
-        config.put("quarkus.datasource.jdbc.url", postgres.getJdbcUrl());
-        config.put("quarkus.datasource.username", postgres.getUsername());
-        config.put("quarkus.datasource.password", postgres.getPassword());
+        config.put("test.db.kind", "postgresql");
+        config.put("test.jdbc.url", postgres.getJdbcUrl());
+        config.put("test.db.username", postgres.getUsername());
+        config.put("test.db.password", postgres.getPassword());
         config.put("quarkus.hibernate-orm.database.generation", "drop-and-create");
         config.put("quarkus.hibernate-orm.log.sql", "false");
         config.put("quarkus.datasource.jdbc.transaction-isolation", "read-committed");
