@@ -9,6 +9,7 @@
  *   node featureflag.cjs get <flag-id>
  *   node featureflag.cjs set <flag-id> --enabled=true|false [--reason="..."]
  *   node featureflag.cjs review <flag-id> --reason="..."
+ *   node featureflag.cjs invalidate <flag-id> --reason="..."
  *   node featureflag.cjs stale-report
  *   node featureflag.cjs history <flag-id>
  *
@@ -261,6 +262,21 @@ async function flagHistory(flagId) {
     });
 }
 
+async function invalidateFlagCache(flagId, options) {
+    if (!options.reason) {
+        console.error('Error: --reason is required for invalidate command');
+        process.exit(1);
+    }
+
+    const payload = {
+        reason: options.reason
+    };
+
+    const response = await apiRequest('POST', `/api/v1/platform/feature-flags/${flagId}/invalidate`, payload);
+    const flagKey = response.flagKey || flagId;
+    console.log(`Cache invalidated for flag ${flagKey}`);
+}
+
 function showHelp() {
     console.log(`
 Feature Flag CLI Tool
@@ -284,6 +300,9 @@ Usage:
 
   featureflag.cjs review <flag-id> --reason="<justification>"
     Mark flag as reviewed (updates lastReviewedAt)
+
+  featureflag.cjs invalidate <flag-id> --reason="<justification>"
+    Force cache invalidation if manual DB changes were made
 
   featureflag.cjs stale-report
     Generate report of stale flags
@@ -346,6 +365,13 @@ async function main() {
                     process.exit(1);
                 }
                 await flagHistory(options.positional[0]);
+                break;
+            case 'invalidate':
+                if (!options.positional || options.positional.length === 0) {
+                    console.error('Error: flag-id required');
+                    process.exit(1);
+                }
+                await invalidateFlagCache(options.positional[0], options);
                 break;
             case 'help':
             case undefined:

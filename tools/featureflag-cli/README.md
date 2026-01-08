@@ -136,6 +136,16 @@ node featureflag.cjs review <flag-id> --reason="<justification>"
 node featureflag.cjs review abc-123 --reason="Reviewed Q1 2026 - still needed for A/B test"
 ```
 
+### Force Cache Invalidation
+
+Flush the `FeatureToggle` cache if you updated a record manually (SQL import, hotfix, etc.):
+
+```bash
+node featureflag.cjs invalidate abc-123 --reason="Manual tenant override applied"
+```
+
+This calls `POST /api/v1/platform/feature-flags/<id>/invalidate`, records an audit entry, and busts the tenant/global caches immediately.
+
 ### Stale Flag Report
 
 Generate a comprehensive report of stale flags:

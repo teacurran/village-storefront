@@ -1,7 +1,9 @@
 package villagecompute.storefront.services.jobs;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
@@ -45,6 +47,7 @@ import io.quarkus.scheduler.Scheduled;
 public class StaleFlagDetectionJob {
 
     private static final Logger LOG = Logger.getLogger(StaleFlagDetectionJob.class.getName());
+    private static final List<String> RISK_LEVELS = List.of("LOW", "MEDIUM", "HIGH", "CRITICAL");
 
     @Inject
     EntityManager entityManager;
@@ -61,6 +64,7 @@ public class StaleFlagDetectionJob {
     private final AtomicLong enabledGauge = new AtomicLong();
     private final AtomicLong globalGauge = new AtomicLong();
     private final AtomicLong tenantOverrideGauge = new AtomicLong();
+    private final Map<String, AtomicInteger> riskLevelGauges = new HashMap<>();
 
     @PostConstruct
     void registerMeters() {
@@ -76,11 +80,29 @@ public class StaleFlagDetectionJob {
                 .register(meterRegistry);
         Gauge.builder("feature_flags_tenant_overrides", tenantOverrideGauge, AtomicLong::doubleValue)
                 .description("Tenant override feature flags").register(meterRegistry);
+        for (String risk : RISK_LEVELS) {
+            getOrCreateRiskGauge(risk, true);
+            getOrCreateRiskGauge(risk, false);
+        }
 
         expiredFlagsDetectedCounter = Counter.builder("feature_flags_expired_detection_total")
                 .description("Total expired flag detections by governance job").register(meterRegistry);
         reviewOverdueDetectedCounter = Counter.builder("feature_flags_review_overdue_detection_total")
                 .description("Total review overdue flag detections by governance job").register(meterRegistry);
+    }
+
+    private AtomicInteger getOrCreateRiskGauge(String riskLevel, boolean enabled) {
+        return riskLevelGauges.computeIfAbsent(riskGaugeKey(riskLevel, enabled), key -> {
+            AtomicInteger gauge = new AtomicInteger();
+            Gauge.builder("feature_flags_by_risk_level", gauge, AtomicInteger::get)
+                    .description("Feature flags grouped by risk level and enabled status").tag("risk_level", riskLevel)
+                    .tag("enabled", Boolean.toString(enabled)).register(meterRegistry);
+            return gauge;
+        });
+    }
+
+    private String riskGaugeKey(String riskLevel, boolean enabled) {
+        return riskLevel + ":" + enabled;
     }
 
     /**
@@ -151,6 +173,21 @@ public class StaleFlagDetectionJob {
         enabledGauge.set(enabledFlags);
         globalGauge.set(globalFlags);
         tenantOverrideGauge.set(tenantOverrides);
+
+        // Reset gauges before applying fresh counts
+        riskLevelGauges.values().forEach(g -> g.set(0));
+        List<Object[]> riskCounts = entityManager.createQuery(
+                "SELECT ff.riskLevel, ff.enabled, COUNT(ff) FROM FeatureFlag ff GROUP BY ff.riskLevel, ff.enabled",
+                Object[].class).getResultList();
+        for (Object[] row : riskCounts) {
+            String riskLevel = (String) row[0];
+            Boolean enabled = (Boolean) row[1];
+            Long count = (Long) row[2];
+            AtomicInteger gauge = getOrCreateRiskGauge(riskLevel, Boolean.TRUE.equals(enabled));
+            if (gauge != null) {
+                gauge.set(Math.toIntExact(count));
+            }
+        }
     }
 
     private boolean isReviewOverdue(FeatureFlag flag, OffsetDateTime now) {

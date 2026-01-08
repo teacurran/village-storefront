@@ -16,6 +16,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -24,6 +25,7 @@ import jakarta.ws.rs.core.Response;
 
 import villagecompute.storefront.data.models.FeatureFlag;
 import villagecompute.storefront.platformops.api.types.FeatureFlagDto;
+import villagecompute.storefront.platformops.api.types.InvalidateFeatureFlagRequest;
 import villagecompute.storefront.platformops.api.types.StaleFlagReport;
 import villagecompute.storefront.platformops.api.types.UpdateFeatureFlagRequest;
 import villagecompute.storefront.platformops.data.models.PlatformAdminRole;
@@ -45,6 +47,7 @@ import io.vertx.core.json.JsonObject;
  * <li>Updating flag state and governance fields</li>
  * <li>Detecting stale flags (expired or past review date)</li>
  * <li>Viewing flag change history</li>
+ * <li>Forcing cache invalidation after out-of-band updates</li>
  * </ul>
  *
  * <p>
@@ -282,6 +285,41 @@ public class FeatureFlagResource {
         LOG.log(Level.INFO, "Deleted feature flag {0}", flag.flagKey);
 
         return Response.noContent().build();
+    }
+
+    /**
+     * Manually invalidate feature flag cache entry (e.g., after direct DB changes).
+     *
+     * @param id
+     *            flag UUID
+     * @param request
+     *            optional reason for audit logging
+     * @return accepted response once cache invalidated
+     */
+    @POST
+    @Path("/{id}/invalidate")
+    @Transactional
+    public Response invalidateFlag(@PathParam("id") UUID id, InvalidateFeatureFlagRequest request) {
+        PlatformAdminPrincipal actor = requireFeatureFlagPermission();
+
+        FeatureFlag flag = entityManager.find(FeatureFlag.class, id);
+        if (flag == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity("{\"error\": \"Flag not found\"}").build();
+        }
+
+        invalidateFlagCache(flag);
+
+        String reason = (request != null && request.reason != null && !request.reason.isBlank()) ? request.reason
+                : "Manual cache invalidation";
+
+        JsonObject metadata = new JsonObject().put("manualInvalidate", true).put("flagKey", flag.flagKey);
+        recordAudit(actor, "invalidate_feature_flag_cache", flag, reason, metadata);
+
+        LOG.log(Level.INFO, "Manually invalidated cache for feature flag {0}", flag.flagKey);
+
+        Map<String, String> response = Map.of("status", "cache invalidated", "flagId", flag.id.toString(), "flagKey",
+                flag.flagKey);
+        return Response.accepted(response).build();
     }
 
     /**

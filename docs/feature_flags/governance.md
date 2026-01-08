@@ -349,8 +349,9 @@ UPDATE feature_flags
 SET enabled = false, updated_at = NOW()
 WHERE tenant_id = '<tenant-uuid>' AND flag_key = '<flag-key>';
 
-# Invalidate cache
-curl -X POST https://api.example.com/api/v1/platform/feature-flags/<flag-id>/invalidate
+# Invalidate cache immediately after manual change
+node tools/featureflag-cli/featureflag.cjs invalidate <flag-id> \
+  --reason="Tenant-specific rollback for <tenant-uuid>"
 ```
 
 ### Rollback Instructions Template
@@ -421,6 +422,10 @@ node tools/featureflag-cli/featureflag.cjs set <flag-id> \
 # Review flag
 node tools/featureflag-cli/featureflag.cjs review <flag-id> \
   --reason="Q1 review completed"
+
+# Force cache invalidation after manual DB update
+node tools/featureflag-cli/featureflag.cjs invalidate <flag-id> \
+  --reason="Manual tenant override applied"
 
 # View history
 node tools/featureflag-cli/featureflag.cjs history <flag-id>
