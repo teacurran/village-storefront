@@ -24,7 +24,7 @@ The GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push/PR 
 
 | Stage | What it checks | Commands |
 | --- | --- | --- |
-| **Validate Code Style & Specs** | Spotless formatting, OpenAPI linting, PlantUML diagram validation, npm helper health | `npm run lint`, `npm run openapi:lint`, `npm run diagrams:check` |
+| **Validate Code Style & Specs** | Spotless formatting, OpenAPI linting, PlantUML diagram validation, npm helper health | `npm run lint`, `npm run lint:openapi`, `npm run diagrams:check` |
 | **Test (matrix: JVM & Native)** | JVM tests with JaCoCo 80% line/branch coverage gate + native profile verification | `npm run test` (runs `./mvnw verify jacoco:report`), `./mvnw verify -Pnative` |
 | **Admin SPA (conditional)** | Future Vue admin lint/test when `modules/core-platform/src/main/webui/` exists | `npm run lint` / `npm test` inside SPA workspace |
 | **SonarCloud** | Static analysis + duplicate coverage verification with blocking quality gate | `./mvnw verify` + `sonar-maven-plugin` |
@@ -43,7 +43,7 @@ npm run test
 npm run test:native
 
 # Validate published specs and diagrams
-npm run openapi:lint
+npm run lint:openapi
 npm run diagrams:check
 
 # Regenerate diagram images after edits
@@ -194,7 +194,7 @@ npm test
 npm run test:native
 
 # Lint OpenAPI specification
-npm run openapi:lint
+npm run lint:openapi
 
 # Validate PlantUML diagrams
 npm run diagrams:check
@@ -311,12 +311,12 @@ Before pushing code, run the same checks that CI will execute:
 ./mvnw verify
 
 # Lint OpenAPI spec
-npm run openapi:lint
+npm run lint:openapi
 
 # Full local CI simulation (requires ~15 minutes)
 ./mvnw spotless:check && \
   npm run lint && \
-  npm run openapi:lint && \
+  npm run lint:openapi && \
   ./mvnw verify && \
   ./mvnw jacoco:check
 ```
@@ -485,9 +485,115 @@ The REST API follows an **OpenAPI spec-first** approach:
 
 - **Specification:** `api/v1/openapi.yaml`
 - **Interactive Docs:** `http://localhost:8080/q/swagger-ui` (dev mode)
-- **Linting:** `npm run openapi:lint` (uses Spectral)
+- **Linting:** `npm run lint:openapi` (uses Spectral)
 
 All API types are generated from the OpenAPI spec to ensure contract-first development.
+
+### OpenAPI Workflow
+
+The project uses a **spec-first** approach where the OpenAPI specification is the source of truth for all API contracts. This ensures consistency between documentation, client SDKs, and backend implementation.
+
+#### Editing the OpenAPI Specification
+
+1. **Edit the spec:** Modify `api/v1/openapi.yaml` to add or update endpoints, schemas, or parameters
+2. **Lint the spec:** Run `npm run lint:openapi` to validate your changes
+3. **Fix any errors:** Spectral will report issues with schema references, missing descriptions, or spec violations
+4. **Review changes:** The spec defines the contract - ensure all required fields, security schemes, and examples are documented
+
+#### OpenAPI Specification Structure
+
+The spec at `api/v1/openapi.yaml` includes:
+
+- **Versioning:** All endpoints use `/api/v1` prefix with URL-based versioning
+- **Security Schemes:**
+  - `bearerAuth`: JWT tokens for user sessions (access + refresh tokens)
+  - `apiKeyAuth`: Long-lived API keys for server-to-server integrations
+  - `oauthClientCredentials`: OAuth 2.0 client credentials flow for headless API access
+- **Shared Components:**
+  - `Money`: Currency amounts with ISO 4217 codes
+  - `Address`: Physical addresses for shipping/billing
+  - `PaginationMetadata`: Standardized pagination metadata
+  - `ProblemDetails`: RFC 7807 error responses
+- **API Tags:**
+  - `System`: Health checks and platform metadata
+  - `Authentication`: Login, token refresh, session management
+  - `Storefront`: Customer-facing catalog, cart, and checkout
+  - `Admin`: Store management for products, orders, settings
+  - `Vendor`: Consignor portal for tracking items and payouts
+  - `Headless`: High-throughput API for custom frontends
+  - `Platform`: Platform administration (tenant management)
+
+#### Linting & Validation
+
+```bash
+# Validate OpenAPI spec with Spectral
+npm run lint:openapi
+
+# Common issues caught by linting:
+# - Duplicate parameters in endpoint definitions
+# - Missing operation descriptions
+# - Invalid schema references (typos like CartDto vs Cart)
+# - Undefined security scopes
+# - Missing required fields in schemas
+```
+
+The CI pipeline enforces that `npm run lint:openapi` passes before merging PRs and runs a compatibility diff (`npm run openapi:diff`) against the base branch. This ensures:
+- No breaking changes without version bumps
+- All endpoints have complete documentation
+- Security schemes are properly defined
+- Schema references are valid
+- Breaking changes are surfaced early with a structured diff summary
+- A legacy alias `npm run openapi:lint` remains available for older scripts, but `lint:openapi` is preferred
+
+#### Quarkus Integration
+
+The Quarkus application is configured to serve and validate against the OpenAPI spec:
+
+```properties
+# modules/core-platform/src/main/resources/application.properties
+
+# Serve OpenAPI spec at /openapi endpoint
+quarkus.smallrye-openapi.path=/openapi
+
+# Point to spec-first definition
+quarkus.smallrye-openapi.store-schema-directory=api/v1
+
+# Enable Swagger UI in dev mode
+quarkus.swagger-ui.always-include=true
+quarkus.swagger-ui.path=/q/swagger-ui
+```
+
+**Access the spec:**
+- JSON format: `http://localhost:8080/openapi`
+- Swagger UI: `http://localhost:8080/q/swagger-ui`
+
+#### Custom OpenAPI Extensions
+
+Add custom `x-` extensions when defining or updating endpoints to document additional metadata:
+
+- `x-tenant-scope`: Indicates whether endpoint is single-tenant or cross-tenant
+- `x-feature-flags`: Lists feature flags that control endpoint availability
+- `x-rate-limit`: Documents rate limit policies per authentication method
+
+Example:
+```yaml
+/api/v1/admin/products:
+  get:
+    summary: List products
+    x-tenant-scope: single
+    x-feature-flags: [catalog.advanced_search]
+    x-rate-limit: 1000/min (authenticated)
+```
+
+#### Best Practices
+
+1. **Always lint before committing:** Run `npm run lint:openapi` to catch issues early
+2. **Use `$ref` for shared schemas:** Reuse components like `Money`, `Address`, and `PaginationMetadata`
+3. **Document all security requirements:** Each endpoint must declare authentication via `security:` block
+4. **Include examples:** Add realistic examples for request/response schemas
+5. **Version breaking changes:** Increment version (e.g., `/api/v2`) for non-backward-compatible changes
+6. **Add operation descriptions:** Every operation must have a `description:` field explaining its purpose
+7. **Define OAuth scopes:** All scopes referenced in security must be defined in the security scheme
 
 ## Testing
 
@@ -608,7 +714,7 @@ quarkus.dev-ui.enabled=false
    ```bash
    ./mvnw spotless:apply    # Format code
    ./mvnw verify            # Run tests
-   npm run openapi:lint     # Validate specs
+   npm run lint:openapi     # Validate specs
    ```
 4. **Commit with descriptive message:** `git commit -m "feat: add product search"`
 5. **Push and create PR:** All CI checks must pass before merge
@@ -618,7 +724,7 @@ quarkus.dev-ui.enabled=false
 - [ ] All tests pass (`./mvnw verify`)
 - [ ] Code coverage ≥80% (`./mvnw jacoco:check`)
 - [ ] Code formatted (`./mvnw spotless:check`)
-- [ ] OpenAPI spec valid (`npm run openapi:lint`)
+- [ ] OpenAPI spec valid (`npm run lint:openapi`)
 - [ ] No SonarCloud issues (checked in CI)
 - [ ] ADR created for architectural changes
 - [ ] Documentation updated (README, API docs, comments)

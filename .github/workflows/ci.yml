@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Capture job start time
         run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
@@ -55,7 +57,13 @@ jobs:
           npm run lint --silent | tee artifacts/lint/spotless.json
 
       - name: Lint OpenAPI specification
-        run: npm run openapi:lint
+        run: npm run lint:openapi
+
+      - name: Check OpenAPI diff vs base
+        if: github.event_name == 'pull_request'
+        env:
+          OPENAPI_DIFF_BASE_REF: origin/${{ github.base_ref }}
+        run: npm run openapi:diff
 
       - name: Validate PlantUML diagrams
         run: npm run diagrams:check
@@ -89,6 +97,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Capture job start time
         run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV

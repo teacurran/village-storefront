@@ -586,8 +586,6 @@ paths:
       parameters:
         - $ref: '#/components/parameters/GuestSessionId'
         - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -642,8 +640,6 @@ paths:
             format: uuid
           description: Cart item UUID
         - $ref: '#/components/parameters/GuestSessionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
@@ -1655,7 +1651,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartDto'
+                $ref: '#/components/schemas/Cart'
         '400':
           description: Missing X-Session-Id header
           content:
@@ -1757,7 +1753,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItemDto'
+                $ref: '#/components/schemas/CartItem'
         '400':
           description: Invalid request (missing session, invalid quantity, etc.)
           content:
@@ -1826,7 +1822,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItemDto'
+                $ref: '#/components/schemas/CartItem'
         '400':
           description: Invalid request (missing session, invalid quantity, etc.)
           content:
@@ -1981,6 +1977,9 @@ paths:
     put:
       operationId: updateConsignor
       summary: Update consignor
+      description: |
+        Updates an existing consignor's information including contact details, commission rules,
+        and payout preferences. All fields from the request body replace the existing values.
       tags: [Admin]
       requestBody:
         required: true
@@ -2022,6 +2021,9 @@ paths:
     get:
       operationId: listConsignmentItems
       summary: List consignment items for a consignor
+      description: |
+        Retrieves a paginated list of consignment items associated with a specific consignor.
+        Includes item details such as SKU, cost basis, received date, and current status.
       tags: [Admin]
       parameters:
         - $ref: '#/components/parameters/PageParam'
@@ -2044,6 +2046,9 @@ paths:
     post:
       operationId: createConsignmentItem
       summary: Create consignment item
+      description: |
+        Creates a new consignment item for the specified consignor. Associates the item with
+        a product variant and records cost basis, received date, and initial status.
       tags: [Admin]
       requestBody:
         required: true
@@ -2077,6 +2082,9 @@ paths:
     get:
       operationId: listPayoutBatches
       summary: List payout batches for a consignor
+      description: |
+        Retrieves a paginated list of payout batches for the specified consignor, including
+        batch totals, payout dates, and transaction details. Used for commission reconciliation.
       tags: [Admin]
       parameters:
         - $ref: '#/components/parameters/PageParam'
@@ -2477,23 +2485,28 @@ components:
         Keys are hashed in database (bcrypt). Store securely, never commit to version control.
 
     oauthClientCredentials:
-      type: http
-      scheme: basic
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /api/v1/oauth/token
+          scopes:
+            catalog:read: Read product catalog
+            cart:read: Read cart contents
+            cart:write: Modify cart (add/update/remove items)
+            orders:read: Read order history
+            orders:write: Create and update orders
       description: |
         OAuth 2.0 Client Credentials flow for headless API access.
 
         **Authentication:**
-        Use HTTP Basic Authentication with client_id as username and client_secret as password:
+        Obtain access token via POST to `/api/v1/oauth/token` with client credentials:
         ```
+        POST /api/v1/oauth/token
         Authorization: Basic base64(client_id:client_secret)
-        ```
+        Content-Type: application/x-www-form-urlencoded
 
-        **Scopes:**
-        - `catalog:read` - Read product catalog
-        - `cart:read` - Read cart contents
-        - `cart:write` - Modify cart (add/update/remove items)
-        - `orders:read` - Read order history
-        - `orders:write` - Create and update orders
+        grant_type=client_credentials&scope=catalog:read cart:read
+        ```
 
         **Rate Limits:**
         Default: 5000 requests/minute per client_id (configurable per OAuth client)
