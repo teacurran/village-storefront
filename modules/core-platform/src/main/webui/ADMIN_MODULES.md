@@ -24,4 +24,4 @@ The admin SPA now includes feature-complete modules for orders, inventory, repor
 - **Route:** `/admin/notifications` (`NOTIFICATIONS_VIEW`).
 - **Highlights:** Severity/search filters, unread handling, action buttons for mark-read and action links, SSE-driven list with telemetry and graceful fallback when history endpoint is unavailable.
 
-All modules share the `useI18n` helper for copy, PrimeVue for layout, and telemetry instrumentation (`@/telemetry`). Acceptance tests live in `src/main/webui/tests/admin/*` and cover dashboard loading, filters, and RBAC toggles.
+All modules share the `useI18n` helper for copy, PrimeVue for layout, and telemetry instrumentation (`@/telemetry`). Acceptance tests live in `modules/core-platform/src/main/webui/tests/admin/*` and cover dashboard loading, filters, and RBAC toggles.

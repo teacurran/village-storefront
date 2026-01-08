@@ -132,8 +132,8 @@ jobs:
         with:
           name: coverage-reports-jvm
           path: |
-            target/site/jacoco/
-            target/jacoco.exec
+            modules/core-platform/target/site/jacoco/
+            modules/core-platform/target/jacoco.exec
           retention-days: 30
 
       - name: Upload test results
@@ -141,17 +141,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-jvm
-          path: target/surefire-reports/
+          path: modules/core-platform/target/surefire-reports/
           retention-days: 30
 
       - name: Publish coverage summary
         if: matrix.runtime == 'jvm'
         run: |
-          if [ -f target/site/jacoco/jacoco.csv ]; then
+          if [ -f modules/core-platform/target/site/jacoco/jacoco.csv ]; then
             echo "## JVM Coverage Summary" >> $GITHUB_STEP_SUMMARY
             echo "| Package | Instruction % | Branch % | Line % |" >> $GITHUB_STEP_SUMMARY
             echo "|---------|---------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
-            tail -n +2 target/site/jacoco/jacoco.csv | while IFS=, read -r group package class inst_missed inst_covered branch_missed branch_covered line_missed line_covered rest; do
+            tail -n +2 modules/core-platform/target/site/jacoco/jacoco.csv | while IFS=, read -r group package class inst_missed inst_covered branch_missed branch_covered line_missed line_covered rest; do
               inst_total=$((inst_missed + inst_covered))
               branch_total=$((branch_missed + branch_covered))
               line_total=$((line_missed + line_covered))
@@ -180,7 +180,7 @@ jobs:
 
       - name: Run native verify
         if: matrix.runtime == 'native'
-        run: ./mvnw -B verify -Pnative -DskipITs=false
+        run: ./mvnw -B -pl modules/core-platform verify -Pnative -DskipITs=false
 
       - name: Upload native executable info
         if: matrix.runtime == 'native'
@@ -188,8 +188,8 @@ jobs:
         with:
           name: native-build-info
           path: |
-            target/*-runner
-            target/quarkus-artifact.properties
+            modules/core-platform/target/*-runner
+            modules/core-platform/target/quarkus-artifact.properties
           retention-days: 7
 
       - name: Record job duration
@@ -215,7 +215,7 @@ jobs:
       - name: Detect admin SPA workspace
         id: spa
         run: |
-          if [ -f "src/main/webui/package.json" ]; then
+          if [ -f "modules/core-platform/src/main/webui/package.json" ]; then
             echo "present=true" >> $GITHUB_OUTPUT
           else
             echo "present=false" >> $GITHUB_OUTPUT
@@ -228,21 +228,21 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: src/main/webui/package-lock.json
+          cache-dependency-path: modules/core-platform/src/main/webui/package-lock.json
 
       - name: Install SPA dependencies
         if: steps.spa.outputs.present == 'true'
-        working-directory: src/main/webui
+        working-directory: modules/core-platform/src/main/webui
         run: npm ci
 
       - name: Run SPA lint
         if: steps.spa.outputs.present == 'true'
-        working-directory: src/main/webui
+        working-directory: modules/core-platform/src/main/webui
         run: npm run lint
 
       - name: Run SPA tests
         if: steps.spa.outputs.present == 'true'
-        working-directory: src/main/webui
+        working-directory: modules/core-platform/src/main/webui
         run: npm test -- --runInBand
 
       - name: Record job duration
@@ -286,15 +286,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          ./mvnw -B verify -DskipITs=false
+          ./mvnw -B -pl modules/core-platform verify -DskipITs=false
           if [ -n "$SONAR_TOKEN" ]; then
-            ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            ./mvnw -B -pl modules/core-platform org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
               -Dsonar.projectKey=teacurran_village-storefront \
               -Dsonar.organization=appi \
               -Dsonar.host.url=https://sonarcloud.io \
               -Dsonar.qualitygate.wait=true \
-              -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-              -Dsonar.java.binaries=target/classes \
+              -Dsonar.coverage.jacoco.xmlReportPaths=modules/core-platform/target/site/jacoco/jacoco.xml \
+              -Dsonar.java.binaries=modules/core-platform/target/classes \
               -Dsonar.java.source=21
           else
             echo "SONAR_TOKEN not configured, skipping SonarCloud analysis"

@@ -6,7 +6,7 @@ A Vue.js module providing vendor-facing consignment management capabilities with
 
 ```bash
 # Navigate to SPA directory
-cd src/main/webui
+cd modules/core-platform/src/main/webui
 
 # Install dependencies
 npm install
@@ -59,7 +59,7 @@ Requires JWT with `vendor` role and `consignor_id` claim.
 
 ## Localization
 
-Translation keys in `src/main/webui/src/locales/`:
+Translation keys in `modules/core-platform/src/main/webui/src/locales/`:
 
 - `en.json` - English
 - `es.json` - Spanish (Español)

@@ -13,6 +13,13 @@
 
 const { execSync, spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+
+const MODULES = ['modules/core-platform'];
+
+function getModuleSelector() {
+  return MODULES.join(',');
+}
 
 // ANSI color codes for output
 const colors = {
@@ -40,6 +47,13 @@ function logError(message) {
 }
 
 /**
+ * Get project root directory
+ */
+function getProjectRoot() {
+  return path.resolve(__dirname, '..');
+}
+
+/**
  * Get the Maven wrapper command based on platform
  */
 function getMavenCommand() {
@@ -56,7 +70,7 @@ function runInstall() {
   try {
     execSync('node tools/install.cjs', {
       stdio: 'inherit',
-      cwd: path.resolve(__dirname, '..')
+      cwd: getProjectRoot()
     });
     logSuccess('Environment setup complete\n');
     return true;
@@ -64,6 +78,27 @@ function runInstall() {
     logError('Environment setup failed');
     return false;
   }
+}
+
+/**
+ * Find coverage report location
+ */
+function findCoverageReport() {
+  const projectRoot = getProjectRoot();
+
+  // Check for multi-module structure
+  const moduleReport = path.join(projectRoot, 'modules', 'core-platform', 'target', 'site', 'jacoco', 'index.html');
+  if (fs.existsSync(moduleReport)) {
+    return 'modules/core-platform/target/site/jacoco/index.html';
+  }
+
+  // Check root target directory
+  const rootReport = path.join(projectRoot, 'target', 'site', 'jacoco', 'index.html');
+  if (fs.existsSync(rootReport)) {
+    return 'target/site/jacoco/index.html';
+  }
+
+  return 'target/site/jacoco/index.html (will be generated)';
 }
 
 /**
@@ -81,7 +116,10 @@ function runTests() {
   const child = spawn(
     mvnCmd,
     [
+      '-pl', getModuleSelector(),
+      '-am',
       '-B',              // Batch mode (non-interactive)
+      '-T', '1C',        // Parallel builds (1 thread per CPU core)
       ...(isNative ? ['-Pnative'] : []),
       'verify',          // Run full verification lifecycle (includes JaCoCo check)
       'jacoco:report'    // Generate coverage report artifacts
@@ -89,7 +127,7 @@ function runTests() {
     {
       stdio: 'inherit',
       shell: isWindows,
-      cwd: path.resolve(__dirname, '..')
+      cwd: getProjectRoot()
     }
   );
 
@@ -102,7 +140,8 @@ function runTests() {
   child.on('exit', (code) => {
     if (code === 0) {
       logSuccess('\n=== Tests passed ===');
-      logInfo('Coverage report generated at: target/site/jacoco/index.html');
+      const reportPath = findCoverageReport();
+      logInfo(`Coverage report generated at: ${reportPath}`);
       process.exit(0);
     } else {
       logError(`\n=== Tests failed with exit code ${code} ===`);
@@ -143,4 +182,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { runTests };
+module.exports = { runTests, getProjectRoot };

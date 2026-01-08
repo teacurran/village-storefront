@@ -27,7 +27,7 @@ The Admin SPA provides a responsive, feature-rich interface for managing multi-t
 npm run spa:install
 
 # Or directly in SPA directory
-cd src/main/webui
+cd modules/core-platform/src/main/webui
 npm install
 ```
 
@@ -38,7 +38,7 @@ npm install
 npm run spa:dev
 
 # Or from SPA directory
-cd src/main/webui
+cd modules/core-platform/src/main/webui
 npm run dev
 ```
 
@@ -51,7 +51,7 @@ The dev server will start at `http://localhost:5173` with API proxying to the Qu
 npm run spa:build
 
 # Or from SPA directory
-cd src/main/webui
+cd modules/core-platform/src/main/webui
 npm run build
 ```
 
@@ -98,7 +98,7 @@ Run this after updating `api/v1/openapi.yaml` to regenerate type-safe API bindin
 ## Project Structure
 
 ```
-src/main/webui/
+modules/core-platform/src/main/webui/
 ├── .storybook/               # Storybook configuration
 ├── src/
 │   ├── api/                  # API client and types
@@ -422,7 +422,7 @@ npm run test:coverage
 
 The GitHub Actions workflow (`.github/workflows/ci.yml`) includes an `admin-spa` job that:
 
-1. Detects `src/main/webui/package.json` existence
+1. Detects `modules/core-platform/src/main/webui/package.json` existence
 2. Installs dependencies with npm ci
 3. Runs linting (`npm run lint`)
 4. Runs tests (`npm test -- --runInBand`)

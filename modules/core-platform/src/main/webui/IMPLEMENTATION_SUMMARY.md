@@ -22,7 +22,7 @@ Successfully scaffolded the Village Storefront Admin SPA with Vue 3, Vite, Prime
 
 ### 1. Running Dev Server
 
-**Location:** `src/main/webui/`
+**Location:** `modules/core-platform/src/main/webui/`
 
 **Commands:**
 ```bash
@@ -139,7 +139,7 @@ This will run `openapi-typescript-codegen` against `api/v1/openapi.yaml`.
 ## File Structure
 
 ```
-src/main/webui/
+modules/core-platform/src/main/webui/
 ├── .storybook/                    # Storybook configuration
 │   ├── main.ts
 │   └── preview.ts
@@ -200,23 +200,23 @@ src/main/webui/
 Added the following scripts to root `package.json` for CI/developer convenience:
 
 ```json
-"spa:install": "cd src/main/webui && npm install",
-"spa:dev": "cd src/main/webui && npm run dev",
-"spa:build": "cd src/main/webui && npm run build",
-"spa:preview": "cd src/main/webui && npm run preview",
-"spa:lint": "cd src/main/webui && npm run lint",
-"spa:test": "cd src/main/webui && npm run test",
-"spa:test:coverage": "cd src/main/webui && npm run test:coverage",
-"spa:storybook": "cd src/main/webui && npm run storybook",
-"spa:storybook:build": "cd src/main/webui && npm run storybook:build",
-"spa:generate:api": "cd src/main/webui && npm run generate:api"
+"spa:install": "cd modules/core-platform/src/main/webui && npm install",
+"spa:dev": "cd modules/core-platform/src/main/webui && npm run dev",
+"spa:build": "cd modules/core-platform/src/main/webui && npm run build",
+"spa:preview": "cd modules/core-platform/src/main/webui && npm run preview",
+"spa:lint": "cd modules/core-platform/src/main/webui && npm run lint",
+"spa:test": "cd modules/core-platform/src/main/webui && npm run test",
+"spa:test:coverage": "cd modules/core-platform/src/main/webui && npm run test:coverage",
+"spa:storybook": "cd modules/core-platform/src/main/webui && npm run storybook",
+"spa:storybook:build": "cd modules/core-platform/src/main/webui && npm run storybook:build",
+"spa:generate:api": "cd modules/core-platform/src/main/webui && npm run generate:api"
 ```
 
 ## CI Integration
 
 The existing `.github/workflows/ci.yml` already includes an `admin-spa` job that:
 
-1. Detects `src/main/webui/package.json`
+1. Detects `modules/core-platform/src/main/webui/package.json`
 2. Sets up Node.js 20 with npm cache
 3. Runs `npm ci` to install dependencies
 4. Executes `npm run lint`

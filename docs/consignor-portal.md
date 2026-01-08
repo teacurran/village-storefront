@@ -16,7 +16,7 @@ The Consignor Portal is a vendor-facing Vue.js module that allows consignors to 
 ### Module Structure
 
 ```
-src/main/webui/src/modules/consignor/
+modules/core-platform/src/main/webui/src/modules/consignor/
 ├── api.ts                    # API client wrapper
 ├── store.ts                  # Pinia state management
 ├── types.ts                  # TypeScript interfaces
@@ -69,8 +69,8 @@ Consignors can request payouts when balance exceeds $50 minimum:
 
 Supports English (en) and Spanish (es) with locale files:
 
-- `src/main/webui/src/locales/en.json`
-- `src/main/webui/src/locales/es.json`
+- `modules/core-platform/src/main/webui/src/locales/en.json`
+- `modules/core-platform/src/main/webui/src/locales/es.json`
 
 Use the `useI18n()` composable to access translations:
 
@@ -109,7 +109,7 @@ All components are tested for responsiveness and touch-friendly interactions.
 
 1. **Install dependencies:**
    ```bash
-   cd src/main/webui
+   cd modules/core-platform/src/main/webui
    npm install
    ```
 
@@ -120,7 +120,7 @@ All components are tested for responsiveness and touch-friendly interactions.
 
 3. **Access portal:**
    - Navigate to `http://localhost:5173/admin/consignor/dashboard`
-   - Mock vendor JWT in auth store (see `src/main/webui/src/stores/auth.ts`)
+   - Mock vendor JWT in auth store (see `modules/core-platform/src/main/webui/src/stores/auth.ts`)
 
 ### Testing
 
@@ -259,7 +259,7 @@ Events are forwarded to:
 
 ### Translations not working
 
-1. Verify locale files exist: `src/main/webui/src/locales/en.json`, `es.json`
+1. Verify locale files exist: `modules/core-platform/src/main/webui/src/locales/en.json`, `es.json`
 2. Check `useI18n()` composable is loaded
 3. Ensure translation keys match locale file structure
 

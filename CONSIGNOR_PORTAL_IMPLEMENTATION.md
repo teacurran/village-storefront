@@ -10,7 +10,7 @@
 
 ### ✅ Vue Module Structure
 
-Created complete module under `src/main/webui/src/modules/consignor/`:
+Created complete module under `modules/core-platform/src/main/webui/src/modules/consignor/`:
 
 - **API Layer** (`api.ts`, `types.ts`) - Backend integration with typed interfaces
 - **State Management** (`store.ts`) - Pinia store for consignor data
@@ -32,8 +32,8 @@ Implemented 5 core components:
 
 Created translation files:
 
-- `src/main/webui/src/locales/en.json` - English (primary)
-- `src/main/webui/src/locales/es.json` - Spanish (complete translation)
+- `modules/core-platform/src/main/webui/src/locales/en.json` - English (primary)
+- `modules/core-platform/src/main/webui/src/locales/es.json` - Spanish (complete translation)
 
 All UI text is translatable via `useI18n()` composable.
 
@@ -61,7 +61,7 @@ All UI text is translatable via `useI18n()` composable.
 
 ### ✅ Routing & Authentication Guards
 
-Updated `src/main/webui/src/router/index.ts`:
+Updated `modules/core-platform/src/main/webui/src/router/index.ts`:
 
 - Added `/admin/consignor/dashboard` route
 - Vendor role guard (`requiresVendorRole: true`)
@@ -95,7 +95,7 @@ All stories documented with controls for interactive preview.
 
 ### ✅ Telemetry & Analytics
 
-Extended `src/main/webui/src/telemetry/index.ts` with 3 new events:
+Extended `modules/core-platform/src/main/webui/src/telemetry/index.ts` with 3 new events:
 
 - `consignor:portal-loaded` - Dashboard mount
 - `consignor:payout-requested` - Payout submission
@@ -131,7 +131,7 @@ Created 3 documentation files:
 
 1. **docs/consignor-portal.md** - User guide with launch instructions
 2. **docs/consignor-portal-accessibility.md** - Accessibility checklist
-3. **src/main/webui/src/modules/consignor/README.md** - Module README
+3. **modules/core-platform/src/main/webui/src/modules/consignor/README.md** - Module README
 
 ---
 
@@ -140,34 +140,34 @@ Created 3 documentation files:
 ### Created Files (24 total)
 
 #### Module Core (4 files)
-- `src/main/webui/src/modules/consignor/api.ts`
-- `src/main/webui/src/modules/consignor/store.ts`
-- `src/main/webui/src/modules/consignor/types.ts`
-- `src/main/webui/src/modules/consignor/README.md`
+- `modules/core-platform/src/main/webui/src/modules/consignor/api.ts`
+- `modules/core-platform/src/main/webui/src/modules/consignor/store.ts`
+- `modules/core-platform/src/main/webui/src/modules/consignor/types.ts`
+- `modules/core-platform/src/main/webui/src/modules/consignor/README.md`
 
 #### Components (5 files)
-- `src/main/webui/src/modules/consignor/components/DashboardStatsCard.vue`
-- `src/main/webui/src/modules/consignor/components/BalanceChart.vue`
-- `src/main/webui/src/modules/consignor/components/ConsignmentItemsTable.vue`
-- `src/main/webui/src/modules/consignor/components/NotificationCenter.vue`
-- `src/main/webui/src/modules/consignor/components/PayoutRequestModal.vue`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/DashboardStatsCard.vue`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/BalanceChart.vue`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/ConsignmentItemsTable.vue`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/NotificationCenter.vue`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/PayoutRequestModal.vue`
 
 #### Views (1 file)
-- `src/main/webui/src/modules/consignor/views/ConsignorDashboard.vue`
+- `modules/core-platform/src/main/webui/src/modules/consignor/views/ConsignorDashboard.vue`
 
 #### Composables (1 file)
-- `src/main/webui/src/modules/consignor/composables/useI18n.ts`
+- `modules/core-platform/src/main/webui/src/modules/consignor/composables/useI18n.ts`
 
 #### Localization (2 files)
-- `src/main/webui/src/locales/en.json`
-- `src/main/webui/src/locales/es.json`
+- `modules/core-platform/src/main/webui/src/locales/en.json`
+- `modules/core-platform/src/main/webui/src/locales/es.json`
 
 #### Tests (1 file)
-- `src/main/webui/tests/admin/ConsignorPortal.spec.ts`
+- `modules/core-platform/src/main/webui/tests/admin/ConsignorPortal.spec.ts`
 
 #### Storybook (2 files)
-- `src/main/webui/src/modules/consignor/components/DashboardStatsCard.stories.ts`
-- `src/main/webui/src/modules/consignor/components/BalanceChart.stories.ts`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/DashboardStatsCard.stories.ts`
+- `modules/core-platform/src/main/webui/src/modules/consignor/components/BalanceChart.stories.ts`
 
 #### Documentation (3 files)
 - `docs/consignor-portal.md`
@@ -176,8 +176,8 @@ Created 3 documentation files:
 
 ### Modified Files (2 total)
 
-- `src/main/webui/src/router/index.ts` - Added consignor routes & vendor guard
-- `src/main/webui/src/telemetry/index.ts` - Added consignor event types
+- `modules/core-platform/src/main/webui/src/router/index.ts` - Added consignor routes & vendor guard
+- `modules/core-platform/src/main/webui/src/telemetry/index.ts` - Added consignor event types
 
 ---
 
@@ -189,7 +189,7 @@ TypeScript compilation passes with minor warnings (existing codebase issues, not
 
 **Verification:**
 ```bash
-cd src/main/webui
+cd modules/core-platform/src/main/webui
 npm run build
 ```
 
@@ -368,7 +368,7 @@ npm run build
 
 ### Code References
 - Backend: `src/main/java/villagecompute/storefront/api/vendor/VendorPortalResource.java`
-- Frontend: `src/main/webui/src/modules/consignor/`
+- Frontend: `modules/core-platform/src/main/webui/src/modules/consignor/`
 - OpenAPI: `api/v1/openapi.yaml` (vendor portal endpoints)
 
 ---

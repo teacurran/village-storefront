@@ -414,7 +414,7 @@ Tracks active and historical impersonation sessions.
 ## Frontend Module Structure
 
 ```
-src/main/webui/src/modules/platform/
+modules/core-platform/src/main/webui/src/modules/platform/
 ├── api.ts                        # API client helpers
 ├── store.ts                      # Pinia store with RBAC-aware actions
 ├── types.ts                      # TypeScript type definitions
@@ -450,7 +450,7 @@ src/main/webui/src/modules/platform/
 
 ```bash
 # Run Vitest tests
-cd src/main/webui
+cd modules/core-platform/src/main/webui
 npm run test
 
 # Run specific test suite

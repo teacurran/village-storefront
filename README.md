@@ -26,7 +26,7 @@ The GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push/PR 
 | --- | --- | --- |
 | **Validate Code Style & Specs** | Spotless formatting, OpenAPI linting, PlantUML diagram validation, npm helper health | `npm run lint`, `npm run openapi:lint`, `npm run diagrams:check` |
 | **Test (matrix: JVM & Native)** | JVM tests with JaCoCo 80% line/branch coverage gate + native profile verification | `npm run test` (runs `./mvnw verify jacoco:report`), `./mvnw verify -Pnative` |
-| **Admin SPA (conditional)** | Future Vue admin lint/test when `src/main/webui/` exists | `npm run lint` / `npm test` inside SPA workspace |
+| **Admin SPA (conditional)** | Future Vue admin lint/test when `modules/core-platform/src/main/webui/` exists | `npm run lint` / `npm test` inside SPA workspace |
 | **SonarCloud** | Static analysis + duplicate coverage verification with blocking quality gate | `./mvnw verify` + `sonar-maven-plugin` |
 | **Docker Build (opt-in)** | Pushes container images when `vars.DOCKER_ENABLED` is true | `docker buildx build` |
 
@@ -102,23 +102,57 @@ npm run diagrams:generate
 
 ## Build & Development Commands
 
+### Maven Multi-Module Structure
+
+The project uses a Maven parent-child module structure:
+
+- **Parent POM**: `pom.xml` (root directory) - manages dependencies and plugin configuration
+- **Module**: `modules/core-platform` - core platform code (tenant gateway, identity, feature flags)
+
+All Maven commands run from the root directory. Use `-pl modules/core-platform` to target the specific module, or omit it to build all modules.
+
+**Quickstart for local development:**
+
+```bash
+# Start local services (PostgreSQL, Mailpit, Jaeger)
+docker-compose up -d
+
+# Run database migrations
+cd migrations && mvn migration:up -Dmigration.env=development && cd ..
+
+# Start Quarkus dev mode with hot reload
+./mvnw -pl modules/core-platform quarkus:dev
+```
+
 ### Java/Maven Commands
 
 ```bash
-# Compile the project
+# Compile the project (all modules)
 ./mvnw compile
 
-# Run tests with coverage
+# Compile specific module
+./mvnw -pl modules/core-platform compile
+
+# Run tests with coverage (all modules)
 ./mvnw test
+
+# Run tests for specific module
+./mvnw -pl modules/core-platform test
 
 # Run tests and generate coverage report
 ./mvnw verify
 
+# Run verify for specific module
+./mvnw -pl modules/core-platform verify
+
 # Check code coverage threshold (80%)
 ./mvnw jacoco:check
 
-# Apply code formatting (Spotless)
+# Apply code formatting (Spotless) to all modules
 ./mvnw spotless:apply
+
+# Apply formatting to specific module
+./mvnw -pl modules/core-platform spotless:apply
 
 # Check code formatting (without fixing)
 ./mvnw spotless:check
@@ -127,16 +161,16 @@ npm run diagrams:generate
 ./mvnw package
 
 # Build native executable (requires GraalVM)
-./mvnw package -Pnative
+./mvnw -pl modules/core-platform package -Pnative
 
 # Build container image with native executable
-./mvnw package -Pnative -Dquarkus.container-image.build=true
+./mvnw -pl modules/core-platform package -Pnative -Dquarkus.container-image.build=true
 
 # Generate Kubernetes manifests
-./mvnw package -Dquarkus.kubernetes.deploy=true
+./mvnw -pl modules/core-platform package -Dquarkus.kubernetes.deploy=true
 
 # Start development server
-./mvnw quarkus:dev
+./mvnw -pl modules/core-platform quarkus:dev
 ```
 
 ### npm Commands
@@ -308,39 +342,42 @@ village-storefront/
 │   └── src/main/resources/
 │       ├── environments/
 │       └── scripts/
-├── src/
-│   ├── main/
-│   │   ├── java/villagecompute/storefront/
-│   │   │   ├── api/
-│   │   │   │   ├── rest/         # REST resources
-│   │   │   │   └── types/        # API DTOs
-│   │   │   ├── config/           # Configuration classes
-│   │   │   ├── data/
-│   │   │   │   ├── models/       # JPA entities
-│   │   │   │   └── repositories/ # Data access layer
-│   │   │   ├── exceptions/       # Custom exceptions
-│   │   │   ├── integration/      # External service integrations
-│   │   │   ├── jobs/             # Background jobs
-│   │   │   ├── services/         # Business logic
-│   │   │   ├── tenant/           # Multi-tenancy infrastructure
-│   │   │   └── util/             # Utilities
-│   │   ├── resources/
-│   │   │   ├── application.properties
-│   │   │   └── db/               # Database baseline schema
-│   │   └── webui/                # Vue.js admin SPA (future)
-│   └── test/
-│       └── java/villagecompute/storefront/
+├── modules/                       # Maven modules
+│   └── core-platform/             # Core platform module
+│       ├── pom.xml                # Module POM
+│       ├── src/
+│       │   ├── main/
+│       │   │   ├── java/villagecompute/storefront/
+│       │   │   │   ├── api/
+│       │   │   │   │   ├── rest/         # REST resources
+│       │   │   │   │   └── types/        # API DTOs
+│       │   │   │   ├── config/           # Configuration classes
+│       │   │   │   ├── data/
+│       │   │   │   │   ├── models/       # JPA entities
+│       │   │   │   │   └── repositories/ # Data access layer
+│       │   │   │   ├── exceptions/       # Custom exceptions
+│       │   │   │   ├── integration/      # External service integrations
+│       │   │   │   ├── jobs/             # Background jobs
+│       │   │   │   ├── services/         # Business logic
+│       │   │   │   ├── tenant/           # Multi-tenancy infrastructure
+│       │   │   │   └── util/             # Utilities
+│       │   │   ├── resources/
+│       │   │   │   ├── application.properties
+│       │   │   │   └── db/               # Database baseline schema
+│       │   │   └── webui/                # Vue.js admin SPA (future)
+│       │   └── test/
+│       │       └── java/villagecompute/storefront/
+│       └── target/                # Module build output
+│           ├── site/jacoco/       # Coverage reports
+│           └── surefire-reports/  # Test results
 ├── tools/                         # Node.js automation scripts
 │   ├── install.cjs
 │   ├── lint.cjs
 │   ├── run.cjs
 │   ├── test.cjs
 │   └── README.md
-├── target/                        # Maven build output
-│   ├── site/jacoco/              # Coverage reports
-│   └── surefire-reports/         # Test results
 ├── docker-compose.yml             # Local development services
-├── pom.xml                        # Maven project configuration
+├── pom.xml                        # Maven parent POM
 ├── package.json                   # npm scripts and dependencies
 ├── eclipse-formatter.xml          # Spotless/Eclipse formatter config
 └── README.md                      # This file

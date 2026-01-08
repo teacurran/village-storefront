@@ -586,7 +586,7 @@ if (!featureToggle.isEnabled("cart.recommendations")) {
 - [Architecture Overview](../architecture_overview.md)
 - [Operations: Observability](../operations/observability.md)
 - [CLI Tool README](../../tools/featureflag-cli/README.md)
-- [Platform Admin Console](../../src/main/webui/admin-spa/README.md)
+- [Platform Admin Console](../../modules/core-platform/src/main/webui/admin-spa/README.md)
 
 ### Support
 

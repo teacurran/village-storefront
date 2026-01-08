@@ -5,14 +5,22 @@
  * Environment setup and dependency installation for Village Storefront (Java/Maven/Quarkus)
  * This script ensures Maven dependencies are properly installed and the project is ready to run.
  *
- * Project type: Java Maven Quarkus
+ * Project type: Java Maven Quarkus (multi-module)
  * Build system: Maven
  * Runtime: Java 21
+ *
+ * IMPORTANT: This script is idempotent - it can be run multiple times safely.
  */
 
 const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+
+const MODULES = ['modules/core-platform'];
+
+function getModuleSelector() {
+  return MODULES.join(',');
+}
 
 // ANSI color codes for output
 const colors = {
@@ -44,20 +52,28 @@ function logWarning(message) {
 }
 
 /**
+ * Get project root directory
+ */
+function getProjectRoot() {
+  return path.resolve(__dirname, '..');
+}
+
+/**
  * Get the Maven wrapper command based on platform
  */
 function getMavenCommand() {
   const isWindows = process.platform === 'win32';
   const mvnWrapper = isWindows ? 'mvnw.cmd' : './mvnw';
-  const projectRoot = path.resolve(__dirname, '..');
-  const mvnPath = path.join(projectRoot, mvnWrapper);
+  const projectRoot = getProjectRoot();
+  const mvnPath = path.join(projectRoot, isWindows ? 'mvnw.cmd' : 'mvnw');
 
   // Check if Maven wrapper exists
   if (fs.existsSync(mvnPath)) {
-    return isWindows ? mvnWrapper : mvnWrapper;
+    return mvnWrapper;
   }
 
   // Fallback to system Maven
+  logWarning('Maven wrapper not found, using system Maven');
   return 'mvn';
 }
 
@@ -68,16 +84,22 @@ function checkJava() {
   logInfo('Checking Java installation...');
 
   try {
-    const output = execSync('java -version', {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    // Java version is printed to stderr
-    const version = output || execSync('java -version 2>&1', { encoding: 'utf8' });
+    // Try to get version from stdout first, then stderr
+    let version;
+    try {
+      version = execSync('java -version 2>&1', {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch (error) {
+      // If that fails, try without redirection
+      version = error.stdout || error.stderr || '';
+    }
 
     // Extract version number (e.g., "21.0.3" from various formats)
-    const versionMatch = version.match(/version "(\d+)\.?(\d+)?\.?(\d+)?/);
+    // Supports: "21.0.3", "openjdk version 21", etc.
+    const versionMatch = version.match(/version "?(\d+)\.?(\d+)?\.?(\d+)?/i) ||
+                         version.match(/openjdk (\d+)/i);
 
     if (versionMatch) {
       const majorVersion = parseInt(versionMatch[1]);
@@ -87,6 +109,7 @@ function checkJava() {
         return true;
       } else {
         logError(`Java 21 or higher is required (found: ${majorVersion})`);
+        logError('Please install Java 21+ from: https://adoptium.net/');
         return false;
       }
     }
@@ -108,17 +131,60 @@ function checkMaven() {
   logInfo(`Checking Maven availability (${mvnCmd})...`);
 
   try {
-    const output = execSync(`${mvnCmd} --version`, {
+    execSync(`${mvnCmd} --version`, {
       encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: getProjectRoot(),
+      shell: process.platform === 'win32'
     });
 
     logSuccess('Maven is available');
     return true;
   } catch (error) {
     logError('Maven is not available');
-    logError('Please install Maven from: https://maven.apache.org/download.cgi');
+    if (mvnCmd.includes('mvnw')) {
+      logError('Maven wrapper found but failed to execute');
+      logError('Try running: chmod +x mvnw (on Unix systems)');
+    } else {
+      logError('Please install Maven from: https://maven.apache.org/download.cgi');
+    }
     return false;
+  }
+}
+
+/**
+ * Check if dependencies need to be updated by comparing timestamps
+ */
+function needsDependencyUpdate() {
+  const projectRoot = getProjectRoot();
+  const pomFile = path.join(projectRoot, 'pom.xml');
+  const moduleEntries = MODULES.map((module) => ({
+    pomFile: path.join(projectRoot, module, 'pom.xml'),
+    targetDir: path.join(projectRoot, module, 'target')
+  }));
+  const targetDirs = [path.join(projectRoot, 'target'), ...moduleEntries.map((entry) => entry.targetDir)];
+
+  try {
+    const targetStats = targetDirs
+      .filter((dir) => fs.existsSync(dir))
+      .map((dir) => fs.statSync(dir).mtimeMs);
+
+    if (targetStats.length === 0) {
+      return true;
+    }
+
+    const latestTarget = Math.max(...targetStats);
+    const pomStats = [pomFile, ...moduleEntries.map((entry) => entry.pomFile)]
+      .filter((file) => fs.existsSync(file))
+      .map((file) => fs.statSync(file).mtimeMs);
+
+    if (pomStats.length === 0) {
+      return true;
+    }
+
+    return pomStats.some((mtime) => mtime > latestTarget);
+  } catch (error) {
+    return true;
   }
 }
 
@@ -127,17 +193,31 @@ function checkMaven() {
  */
 function installDependencies() {
   const mvnCmd = getMavenCommand();
+  const moduleSelector = getModuleSelector();
+
+  // Check if update is needed for performance
+  if (!needsDependencyUpdate()) {
+    logInfo('Dependencies are up to date (skipping)');
+    return true;
+  }
+
   logInfo('Installing/updating Maven dependencies...');
 
   try {
     // Run Maven dependency resolution
     // Using -B for batch mode (non-interactive)
-    // Using -q for quiet mode (less verbose output)
-    const result = spawnSync(mvnCmd, ['dependency:resolve', '-B'], {
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-      encoding: 'utf8'
-    });
+    // Using -T 1C for parallel builds (1 thread per CPU core)
+    const baseArgs = ['-pl', moduleSelector, '-am', '-B', '-T', '1C'];
+    const result = spawnSync(
+      mvnCmd,
+      [...baseArgs, 'dependency:resolve'],
+      {
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+        encoding: 'utf8',
+        cwd: getProjectRoot()
+      }
+    );
 
     if (result.status !== 0) {
       logError('Failed to resolve Maven dependencies');
@@ -145,11 +225,16 @@ function installDependencies() {
     }
 
     // Also resolve test dependencies
-    const testResult = spawnSync(mvnCmd, ['dependency:resolve', '-Dclassifier=tests', '-B'], {
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-      encoding: 'utf8'
-    });
+    const testResult = spawnSync(
+      mvnCmd,
+      [...baseArgs, 'dependency:resolve', '-Dclassifier=tests'],
+      {
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+        encoding: 'utf8',
+        cwd: getProjectRoot()
+      }
+    );
 
     if (testResult.status !== 0) {
       logWarning('Warning: Some test dependencies may not be resolved');
@@ -172,11 +257,16 @@ function compileProject() {
   logInfo('Compiling project...');
 
   try {
-    const result = spawnSync(mvnCmd, ['compile', '-B', '-q'], {
-      stdio: 'inherit',
-      shell: process.platform === 'win32',
-      encoding: 'utf8'
-    });
+    const result = spawnSync(
+      mvnCmd,
+      ['-pl', getModuleSelector(), '-am', '-B', '-T', '1C', 'compile'],
+      {
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+        encoding: 'utf8',
+        cwd: getProjectRoot()
+      }
+    );
 
     if (result.status !== 0) {
       logError('Compilation failed');
@@ -225,4 +315,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { getMavenCommand, checkJava, checkMaven };
+module.exports = { getMavenCommand, checkJava, checkMaven, getProjectRoot };
