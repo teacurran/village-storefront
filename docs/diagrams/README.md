@@ -14,6 +14,50 @@ All diagrams are authored in PlantUML and can be rendered to PNG format.
 
 ---
 
+## Data Model Diagram
+
+### datamodel_erd.mmd (Mermaid ERD)
+
+Comprehensive entity-relationship diagram capturing the multi-tenant data model with RLS annotations.
+
+**Rendering:**
+```bash
+# Using Mermaid CLI (mmdc)
+npm install -g @mermaid-js/mermaid-cli
+mmdc -i docs/diagrams/datamodel_erd.mmd -o docs/diagrams/datamodel_erd.png
+
+# Or using Docker
+docker run --rm -v "$PWD":/data minlag/mermaid-cli -i /data/docs/diagrams/datamodel_erd.mmd -o /data/docs/diagrams/datamodel_erd.png
+```
+
+**Output:** `docs/diagrams/datamodel_erd.png`
+
+**Contents:**
+- **Tenancy Module**: `tenants`, `custom_domains`
+- **Identity Module**: `store_users`, `customers`, `session_log`, `api_keys`
+- **Catalog Module**: `categories`, `products`, `variants`, `inventory_locations`, `inventory_levels`
+- **Cart/Order/Payment Module**: `carts`, `orders`, `order_line_items`, `payment_intents`, `refunds`, `shipments`, `return_authorizations`
+- **Consignment Module**: `consignors`, `consignment_items`, `consignor_payouts`
+- **Loyalty Module**: `loyalty_ledger_entries`
+- **Gift Cards & Store Credit Module**: `gift_cards`, `store_credits`
+- **Media Module**: `media_assets`
+- **Cross-Cutting Tables**: `feature_flags`, `audit_events`, `background_jobs`, `webhook_events`, `domain_events`, `platform_commands`, `rate_limit_buckets`
+
+**RLS Annotations:**
+- All tenant-scoped tables marked with `[RLS]` indicate Row-Level Security policy requirement
+- Tables marked with `[PARTITIONED]` use declarative partitioning (e.g., `session_log`, `audit_events`, `background_jobs`, `domain_events`)
+
+**Documentation:**
+- **Narrative Guide**: [`datamodel_tenancy_narrative.md`](./datamodel_tenancy_narrative.md) - Comprehensive explanation of tenancy columns, RLS policy templates, indexing strategy, partitioning, and archival
+- **Architecture Reference**: `docs/architecture_overview.md` Section 5 (Data Model)
+- **Tenancy ADR**: `docs/adr/ADR-001-tenancy.md`
+- **Quality Suite**: `docs/quality/tenant_isolation.md`
+
+**PlantUML Version:**
+A parallel PlantUML ERD is maintained at `datamodel_erd.puml` for teams preferring PlantUML tooling. Both diagrams represent the same schema with equivalent entity coverage.
+
+---
+
 ## C4 Architecture Diagrams
 
 ### system-context.puml (C4 Level 1)
@@ -136,7 +180,7 @@ docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/componen
 
 ## Rendering All Diagrams
 
-**Using Docker (Recommended):**
+**PlantUML Diagrams (Using Docker - Recommended):**
 ```bash
 # From repository root
 docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml \
@@ -144,13 +188,25 @@ docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml \
   docs/diagrams/container.puml \
   docs/diagrams/component.puml \
   docs/diagrams/component_overview.puml \
+  docs/diagrams/datamodel_erd.puml \
   -tpng
 ```
 
-**Using Local PlantUML:**
+**PlantUML Diagrams (Using Local PlantUML):**
 ```bash
 # Requires PlantUML JAR and Graphviz installed
 plantuml docs/diagrams/*.puml -tpng
+```
+
+**Mermaid ERD (Using Mermaid CLI):**
+```bash
+# Render Mermaid ERD
+mmdc -i docs/diagrams/datamodel_erd.mmd -o docs/diagrams/datamodel_erd.png
+
+# Or using Docker
+docker run --rm -v "$PWD":/data minlag/mermaid-cli \
+  -i /data/docs/diagrams/datamodel_erd.mmd \
+  -o /data/docs/diagrams/datamodel_erd.png
 ```
 
 **CI Integration:**
@@ -172,12 +228,15 @@ For detailed commentary on diagram intent, module responsibilities, and architec
 
 When to update diagrams:
 
-1. **System Context**: Adding new external integrations, personas, or removing deprecated services
-2. **Container**: Introducing new deployment containers (e.g., separate search service), changing container communication patterns
-3. **Component**: Adding new bounded-context modules, refactoring module boundaries, introducing new adapters
-4. **component_overview.puml**: (Legacy) Should not be updated; migrate changes to `component.puml` instead
+1. **Data Model ERD** (`datamodel_erd.mmd` & `datamodel_erd.puml`): Adding/removing tables, changing relationships, updating RLS annotations, modifying partition strategies
+2. **System Context**: Adding new external integrations, personas, or removing deprecated services
+3. **Container**: Introducing new deployment containers (e.g., separate search service), changing container communication patterns
+4. **Component**: Adding new bounded-context modules, refactoring module boundaries, introducing new adapters
+5. **component_overview.puml**: (Legacy) Should not be updated; migrate changes to `component.puml` instead
 
 **Review Process:**
 - Diagram updates require Architecture Review Board approval (bi-weekly sessions)
-- All diagram changes must be accompanied by updates to `c4-architecture-diagrams.md` commentary
-- Rendered PNG outputs should be committed alongside `.puml` source changes for documentation portability
+- C4 diagram changes must be accompanied by updates to `c4-architecture-diagrams.md` commentary
+- ERD changes must be accompanied by updates to `datamodel_tenancy_narrative.md` commentary
+- Rendered PNG outputs should be committed alongside `.puml`/`.mmd` source changes for documentation portability
+- ERD changes require review with Identity Team (session_log, RLS policies) and Reporting Team (partitioning, archival)
