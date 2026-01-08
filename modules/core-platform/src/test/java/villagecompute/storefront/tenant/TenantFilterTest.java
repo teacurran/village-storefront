@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -18,17 +19,16 @@ import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import villagecompute.storefront.data.models.CustomDomain;
 import villagecompute.storefront.data.models.Tenant;
-import villagecompute.storefront.testsupport.PostgresTenantTestResource;
-
-import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 
@@ -47,21 +47,38 @@ import io.quarkus.test.junit.TestProfile;
  * <strong>Run with:</strong> {@code mvn test -Dtest=TenantFilterTest}
  */
 @QuarkusTest
-@QuarkusTestResource(PostgresTenantTestResource.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestProfile(TenantPostgresRlsProfile.class)
 public class TenantFilterTest {
 
     @Inject
     EntityManager entityManager;
 
+    private static final List<String> RLS_TABLES = List.of("users", "products", "product_variants", "carts", "cart_items");
+
+    private static boolean rlsInstalled = false;
+
     private UUID activeTenantId;
     private UUID suspendedTenantId;
+
+    @BeforeAll
+    @Transactional
+    public void installRlsSupport() {
+        if (rlsInstalled) {
+            return;
+        }
+
+        installTenantFunctions();
+        enableRlsPolicies();
+        rlsInstalled = true;
+    }
 
     @BeforeEach
     @Transactional
     public void setupTestData() {
         // Clear ThreadLocal before each test
         TenantContext.clear();
+        clearDatabaseTenant();
 
         // Clean up any existing test data
         entityManager.createQuery("DELETE FROM ReportJob").executeUpdate();
@@ -134,6 +151,61 @@ public class TenantFilterTest {
         entityManager.persist(unverifiedDomain);
 
         entityManager.flush();
+    }
+
+    private void setDatabaseTenant(UUID tenantId) {
+        entityManager.createNativeQuery("SELECT set_current_tenant_id(:tenantId)").setParameter("tenantId", tenantId)
+                .getSingleResult();
+    }
+
+    private void clearDatabaseTenant() {
+        entityManager.createNativeQuery("SELECT set_config('app.tenant_id', '', FALSE)").getSingleResult();
+    }
+
+    private void installTenantFunctions() {
+        entityManager.createNativeQuery("""
+                CREATE OR REPLACE FUNCTION set_current_tenant_id(p_tenant_id UUID)
+                RETURNS VOID AS $$
+                BEGIN
+                    PERFORM set_config('app.tenant_id', p_tenant_id::TEXT, FALSE);
+                    PERFORM set_config('row_security', 'on', FALSE);
+                END;
+                $$ LANGUAGE plpgsql SECURITY DEFINER;
+                """).executeUpdate();
+
+        entityManager.createNativeQuery("""
+                CREATE OR REPLACE FUNCTION get_current_tenant_id()
+                RETURNS UUID AS $$
+                BEGIN
+                    RETURN NULLIF(current_setting('app.tenant_id', TRUE), '')::UUID;
+                EXCEPTION
+                    WHEN others THEN
+                        RETURN NULL;
+                END;
+                $$ LANGUAGE plpgsql STABLE;
+                """).executeUpdate();
+    }
+
+    private void enableRlsPolicies() {
+        for (String table : RLS_TABLES) {
+            String policyName = table + "_tenant_isolation_policy";
+            entityManager.createNativeQuery("ALTER TABLE " + table + " ENABLE ROW LEVEL SECURITY").executeUpdate();
+            entityManager.createNativeQuery("ALTER TABLE " + table + " FORCE ROW LEVEL SECURITY").executeUpdate();
+            entityManager.createNativeQuery("DROP POLICY IF EXISTS " + policyName + " ON " + table).executeUpdate();
+            entityManager.createNativeQuery(
+                    "CREATE POLICY " + policyName + " ON " + table + " USING (tenant_id = get_current_tenant_id())")
+                    .executeUpdate();
+
+            Object[] status = (Object[]) entityManager
+                    .createNativeQuery(
+                            "SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = :tableName")
+                    .setParameter("tableName", table).getSingleResult();
+            boolean rlsEnabled = Boolean.TRUE.equals(status[0]);
+            boolean rlsForced = Boolean.TRUE.equals(status[1]);
+            if (!rlsEnabled || !rlsForced) {
+                throw new IllegalStateException("Failed to enable RLS for table " + table);
+            }
+        }
     }
 
     @AfterEach
@@ -393,8 +465,10 @@ public class TenantFilterTest {
         user2.emailVerified = true;
         user2.createdAt = OffsetDateTime.now();
         user2.updatedAt = OffsetDateTime.now();
+        setDatabaseTenant(tenant2.id);
         entityManager.persist(user2);
         entityManager.flush();
+        clearDatabaseTenant();
 
         // Set tenant context to active tenant (teststore)
         TenantContext.setCurrentTenantId(activeTenantId);
@@ -417,7 +491,9 @@ public class TenantFilterTest {
         assertEquals(0, ownUserCount, "Should have 0 users for active tenant");
 
         // Clean up
+        setDatabaseTenant(tenant2.id);
         entityManager.remove(user2);
+        clearDatabaseTenant();
         entityManager.remove(tenant2);
         TenantContext.clear();
     }
@@ -444,6 +520,7 @@ public class TenantFilterTest {
         product1.metadata = "{}";
         product1.createdAt = OffsetDateTime.now();
         product1.updatedAt = OffsetDateTime.now();
+        setDatabaseTenant(activeTenantId);
         entityManager.persist(product1);
 
         // Create second tenant with a product
@@ -466,8 +543,10 @@ public class TenantFilterTest {
         product2.metadata = "{}";
         product2.createdAt = OffsetDateTime.now();
         product2.updatedAt = OffsetDateTime.now();
+        setDatabaseTenant(tenant2.id);
         entityManager.persist(product2);
         entityManager.flush();
+        clearDatabaseTenant();
 
         // Set tenant context to active tenant
         TenantContext.setCurrentTenantId(activeTenantId);
@@ -492,8 +571,11 @@ public class TenantFilterTest {
         assertEquals(0, otherProductCount, "RLS should prevent access to other tenant's products");
 
         // Clean up
+        setDatabaseTenant(activeTenantId);
         entityManager.remove(product1);
+        setDatabaseTenant(tenant2.id);
         entityManager.remove(product2);
+        clearDatabaseTenant();
         entityManager.remove(tenant2);
         TenantContext.clear();
     }

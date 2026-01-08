@@ -1,7 +1,10 @@
 package villagecompute.storefront.tenant;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import villagecompute.storefront.testsupport.PostgresTenantTestResource;
 
 import io.quarkus.test.junit.QuarkusTestProfile;
 
@@ -16,6 +19,12 @@ public class TenantPostgresRlsProfile implements QuarkusTestProfile {
         Map<String, String> config = new HashMap<>();
         config.put("tenant.rls.enabled", "true");
         config.put("tenant.cache.enabled", "true");
+        config.put("quarkus.datasource.db-kind", "postgresql");
         return config;
+    }
+
+    @Override
+    public List<TestResourceEntry> testResources() {
+        return List.of(new TestResourceEntry(PostgresTenantTestResource.class));
     }
 }

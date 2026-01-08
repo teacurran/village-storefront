@@ -15,10 +15,11 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.quarkus.cache.CacheManager;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * JAX-RS filter that resolves tenant context from HTTP Host header. Executes before authentication to populate tenant

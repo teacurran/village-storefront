@@ -28,6 +28,7 @@ CREATE OR REPLACE FUNCTION set_current_tenant_id(p_tenant_id UUID)
 RETURNS VOID AS $$
 BEGIN
     PERFORM set_config('app.tenant_id', p_tenant_id::TEXT, FALSE);
+    PERFORM set_config('row_security', 'on', FALSE);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
