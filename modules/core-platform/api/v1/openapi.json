@@ -648,14 +648,6 @@
           }
         }
       }
-    },
-    "securitySchemes" : {
-      "SecurityScheme" : {
-        "type" : "http",
-        "scheme" : "bearer",
-        "bearerFormat" : "JWT",
-        "description" : "Authentication"
-      }
     }
   },
   "paths" : {
@@ -1771,6 +1763,69 @@
         },
         "summary" : "Remove Cart Item",
         "tags" : [ "Cart Resource" ]
+      }
+    },
+    "/api/v1/catalog/products" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "category",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "collection",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "search",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Products",
+        "tags" : [ "Product Resource" ]
+      }
+    },
+    "/api/v1/catalog/products/{productId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "productId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Product",
+        "tags" : [ "Product Resource" ]
       }
     },
     "/api/v1/gift-cards/check-balance" : {
@@ -3341,10 +3396,10 @@
     "description" : "Multi-tenant SaaS ecommerce platform API"
   },
   "servers" : [ {
-    "url" : "http://localhost:8080",
+    "url" : "http://localhost:0",
     "description" : "Auto generated value"
   }, {
-    "url" : "http://0.0.0.0:8080",
+    "url" : "http://0.0.0.0:0",
     "description" : "Auto generated value"
   } ]
 }
