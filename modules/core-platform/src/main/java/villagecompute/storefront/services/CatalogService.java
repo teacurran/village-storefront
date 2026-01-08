@@ -201,6 +201,47 @@ public class CatalogService {
     }
 
     /**
+     * List active products with optional category and/or collection filters.
+     *
+     * @param categorySlug
+     *            optional category slug filter
+     * @param collectionSlug
+     *            optional collection slug filter
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @return catalog result including total items
+     */
+    public CatalogSearchResult listProducts(String categorySlug, String collectionSlug, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        boolean hasCategory = categorySlug != null && !categorySlug.isBlank();
+        boolean hasCollection = collectionSlug != null && !collectionSlug.isBlank();
+
+        LOG.debugf("Listing products with filters - tenantId=%s, category=%s, collection=%s, page=%d, size=%d",
+                tenantId, categorySlug, collectionSlug, page, size);
+
+        List<Product> products;
+        long total;
+
+        if (hasCategory && hasCollection) {
+            products = productRepository.findActiveByCategoryAndCollection(categorySlug, collectionSlug, page, size);
+            total = productRepository.countActiveByCategoryAndCollection(categorySlug, collectionSlug);
+        } else if (hasCategory) {
+            products = productRepository.findActiveByCategorySlug(categorySlug, page, size);
+            total = productRepository.countActiveByCategorySlug(categorySlug);
+        } else if (hasCollection) {
+            products = productRepository.findActiveByCollectionSlug(collectionSlug, page, size);
+            total = productRepository.countActiveByCollectionSlug(collectionSlug);
+        } else {
+            products = listActiveProducts(page, size);
+            total = countActiveProducts();
+        }
+
+        return new CatalogSearchResult(products, total);
+    }
+
+    /**
      * Search products by keyword and return total count for pagination purposes.
      *
      * @param searchTerm

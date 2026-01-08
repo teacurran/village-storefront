@@ -1,9 +1,13 @@
 package villagecompute.storefront.api.rest;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -18,10 +22,15 @@ import jakarta.ws.rs.core.Response.Status;
 
 import org.jboss.logging.Logger;
 
+import villagecompute.storefront.api.types.Money;
 import villagecompute.storefront.api.types.PaginationMetadata;
 import villagecompute.storefront.api.types.ProductDetail;
 import villagecompute.storefront.api.types.ProductSummary;
+import villagecompute.storefront.api.types.VariantMatrixEntry;
+import villagecompute.storefront.api.types.VariantMatrixResponse;
+import villagecompute.storefront.api.types.VariantOptionAxis;
 import villagecompute.storefront.data.models.Product;
+import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.services.CatalogCacheService;
 import villagecompute.storefront.services.CatalogService;
 import villagecompute.storefront.services.CatalogService.CatalogSearchResult;
@@ -30,6 +39,7 @@ import villagecompute.storefront.services.mappers.ProductMapper;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import io.vertx.core.json.JsonObject;
 
 /**
  * REST resource for public catalog browsing operations.
@@ -65,6 +75,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 public class ProductResource {
 
     private static final Logger LOG = Logger.getLogger(ProductResource.class);
+    private static final String FLAG_CATALOG_SEARCH = "catalog.search.enabled";
+    private static final String FLAG_VARIANT_MATRIX = "catalog.variant-matrix.enabled";
 
     @Inject
     CatalogService catalogService;
@@ -103,6 +115,7 @@ public class ProductResource {
             @QueryParam("pageSize") Integer pageSize) {
 
         UUID tenantId = TenantContext.getCurrentTenantId();
+        boolean searchProvided = search != null && !search.isBlank();
 
         // Validate pagination parameters
         int pageNumber = page != null && page > 0 ? page - 1 : 0; // Convert to 0-indexed
@@ -114,7 +127,13 @@ public class ProductResource {
         List<Product> products;
         long totalItems;
 
-        if (search != null && !search.isBlank()) {
+        if (searchProvided) {
+            if (!featureToggle.isEnabled(FLAG_CATALOG_SEARCH)) {
+                LOG.warnf("Catalog search disabled via feature flag - tenantId=%s", tenantId);
+                return Response.status(Status.FORBIDDEN).entity(createProblemDetails("Catalog Search Disabled",
+                        "Search is not enabled for this tenant. Contact support to enable catalog.search.enabled.",
+                        Status.FORBIDDEN)).build();
+            }
             // Search with caching
             CatalogSearchResult result = catalogCacheService.getSearchResult(tenantId, search, pageNumber, size,
                     () -> catalogService.searchProducts(search, pageNumber, size));
@@ -122,9 +141,9 @@ public class ProductResource {
             totalItems = result.totalItems();
             meterRegistry.counter("catalog.search", "tenant_id", tenantId.toString()).increment();
         } else {
-            // List active products (can add category/collection filtering later)
-            products = catalogService.listActiveProducts(pageNumber, size);
-            totalItems = catalogService.countActiveProducts();
+            CatalogSearchResult result = catalogService.listProducts(category, collection, pageNumber, size);
+            products = result.products();
+            totalItems = result.totalItems();
             meterRegistry.counter("catalog.list", "tenant_id", tenantId.toString()).increment();
         }
 
@@ -142,11 +161,8 @@ public class ProductResource {
         response.put("data", productDtos);
         response.put("pagination", pagination);
 
-        return Response.ok(response)
-                .header("X-RateLimit-Limit", "100")
-                .header("X-RateLimit-Remaining", "99")
-                .header("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() / 1000 + 60))
-                .build();
+        return Response.ok(response).header("X-RateLimit-Limit", "100").header("X-RateLimit-Remaining", "99")
+                .header("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() / 1000 + 60)).build();
     }
 
     /**
@@ -167,9 +183,8 @@ public class ProductResource {
 
         if (productOpt.isEmpty()) {
             LOG.warnf("Product not found - tenantId=%s, productId=%s", tenantId, productId);
-            return Response.status(Status.NOT_FOUND)
-                    .entity(createProblemDetails("Product Not Found", "Product not found: " + productId,
-                            Status.NOT_FOUND))
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
                     .build();
         }
 
@@ -178,11 +193,43 @@ public class ProductResource {
 
         meterRegistry.counter("catalog.get_product", "tenant_id", tenantId.toString()).increment();
 
-        return Response.ok(productDto)
-                .header("X-RateLimit-Limit", "100")
-                .header("X-RateLimit-Remaining", "99")
-                .header("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() / 1000 + 60))
-                .build();
+        return Response.ok(productDto).header("X-RateLimit-Limit", "100").header("X-RateLimit-Remaining", "99")
+                .header("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() / 1000 + 60)).build();
+    }
+
+    /**
+     * Get variant matrix for a product (option axes + variants).
+     */
+    @GET
+    @Path("/products/{productId}/variant-matrix")
+    public Response getVariantMatrix(@PathParam("productId") UUID productId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+
+        if (!featureToggle.isEnabled(FLAG_VARIANT_MATRIX)) {
+            LOG.warnf("Variant matrix disabled via feature flag - tenantId=%s", tenantId);
+            return Response.status(Status.FORBIDDEN)
+                    .entity(createProblemDetails("Variant Matrix Disabled",
+                            "Variant matrix endpoint is gated by catalog.variant-matrix.enabled.", Status.FORBIDDEN))
+                    .build();
+        }
+
+        LOG.infof("GET /catalog/products/%s/variant-matrix - tenantId=%s", productId, tenantId);
+
+        Optional<Product> productOpt = catalogService.getProduct(productId);
+        if (productOpt.isEmpty()) {
+            LOG.warnf("Product not found for variant matrix - tenantId=%s, productId=%s", tenantId, productId);
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                    .build();
+        }
+
+        List<ProductVariant> variants = catalogService.getProductVariants(productId);
+        VariantMatrixResponse matrix = buildVariantMatrixResponse(productId, variants);
+
+        meterRegistry.counter("catalog.variant_matrix", "tenant_id", tenantId.toString()).increment();
+
+        return Response.ok(matrix).header("X-RateLimit-Limit", "100").header("X-RateLimit-Remaining", "99")
+                .header("X-RateLimit-Reset", String.valueOf(System.currentTimeMillis() / 1000 + 60)).build();
     }
 
     /**
@@ -205,5 +252,56 @@ public class ProductResource {
             problem.put("detail", detail);
         }
         return problem;
+    }
+
+    /**
+     * Build variant matrix response from variant list.
+     */
+    private VariantMatrixResponse buildVariantMatrixResponse(UUID productId, List<ProductVariant> variants) {
+        VariantMatrixResponse response = new VariantMatrixResponse();
+        response.productId = productId;
+
+        Map<String, Set<String>> axisValues = new LinkedHashMap<>();
+
+        for (ProductVariant variant : variants) {
+            Map<String, String> options = parseVariantOptions(variant.attributes);
+            options.forEach((name, value) -> axisValues.computeIfAbsent(name, key -> new LinkedHashSet<>()).add(value));
+
+            VariantMatrixEntry entry = new VariantMatrixEntry();
+            entry.variantId = variant.id;
+            entry.sku = variant.sku;
+            entry.price = new Money(variant.price, "USD");
+            entry.available = !"archived".equalsIgnoreCase(variant.status)
+                    && !"deleted".equalsIgnoreCase(variant.status);
+            entry.options = options;
+            response.variants.add(entry);
+        }
+
+        axisValues.forEach((name, values) -> {
+            VariantOptionAxis axis = new VariantOptionAxis();
+            axis.name = name;
+            axis.values = new ArrayList<>(values);
+            response.optionAxes.add(axis);
+        });
+
+        return response;
+    }
+
+    private Map<String, String> parseVariantOptions(String attributesJson) {
+        Map<String, String> options = new LinkedHashMap<>();
+        if (attributesJson == null || attributesJson.isBlank()) {
+            return options;
+        }
+
+        try {
+            JsonObject json = new JsonObject(attributesJson);
+            for (String field : json.fieldNames()) {
+                Object value = json.getValue(field);
+                options.put(field, value != null ? value.toString() : null);
+            }
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to parse variant attributes JSON");
+        }
+        return options;
     }
 }

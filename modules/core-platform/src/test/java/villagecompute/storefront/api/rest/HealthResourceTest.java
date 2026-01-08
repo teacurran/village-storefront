@@ -25,6 +25,8 @@ class HealthResourceTest {
     @BeforeEach
     @Transactional
     void setupTenant() {
+        entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
@@ -34,6 +36,7 @@ class HealthResourceTest {
         entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM Collection").executeUpdate();
         entityManager.createQuery("DELETE FROM Category").executeUpdate();
         entityManager.createQuery("DELETE FROM CustomDomain").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();

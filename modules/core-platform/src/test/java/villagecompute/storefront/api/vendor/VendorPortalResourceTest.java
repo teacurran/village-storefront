@@ -47,6 +47,11 @@ class VendorPortalResourceTest {
     @BeforeEach
     @Transactional
     void setUp() {
+        entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
+        entityManager.createQuery("DELETE FROM Collection").executeUpdate();
+        entityManager.createQuery("DELETE FROM Category").executeUpdate();
+        entityManager.createQuery("DELETE FROM FeatureFlag").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
         entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();

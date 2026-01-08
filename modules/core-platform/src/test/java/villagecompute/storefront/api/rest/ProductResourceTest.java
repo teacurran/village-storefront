@@ -6,6 +6,7 @@ import static org.hamcrest.CoreMatchers.notNullValue;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -16,12 +17,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import villagecompute.storefront.data.models.Category;
+import villagecompute.storefront.data.models.Collection;
+import villagecompute.storefront.data.models.FeatureFlag;
 import villagecompute.storefront.data.models.Product;
+import villagecompute.storefront.data.models.ProductCategory;
+import villagecompute.storefront.data.models.ProductCollection;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
+import villagecompute.storefront.services.FeatureToggle;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
@@ -45,15 +53,27 @@ class ProductResourceTest {
     @Inject
     EntityManager entityManager;
 
+    @Inject
+    FeatureToggle featureToggle;
+
+    private static final List<String> CATALOG_FLAG_KEYS = List.of("catalog.search.enabled",
+            "catalog.variant-matrix.enabled");
+
     private String tenantSubdomain;
     private String otherTenantSubdomain;
     private UUID productId;
     private UUID otherTenantProductId;
+    private Tenant primaryTenant;
+    private Tenant secondaryTenant;
 
     @BeforeEach
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM FeatureFlag f WHERE f.flagKey IN :keys")
+                .setParameter("keys", CATALOG_FLAG_KEYS).executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
@@ -62,6 +82,8 @@ class ProductResourceTest {
         entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM Collection").executeUpdate();
+        entityManager.createQuery("DELETE FROM Category").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 
@@ -76,6 +98,7 @@ class ProductResourceTest {
         entityManager.persist(tenant);
         entityManager.flush();
         tenantSubdomain = tenant.subdomain;
+        primaryTenant = tenant;
 
         // Set tenant context for setup
         TenantContext.setCurrentTenant(new TenantInfo(tenant.id, tenant.subdomain, tenant.name, tenant.status));
@@ -98,12 +121,63 @@ class ProductResourceTest {
         variant.sku = "TEST-VARIANT-1";
         variant.name = "Test Variant 1";
         variant.price = new BigDecimal("49.99");
+        variant.attributes = "{\"color\":\"Red\",\"size\":\"Small\"}";
         variant.status = "active";
         variant.createdAt = OffsetDateTime.now();
         variant.updatedAt = OffsetDateTime.now();
         entityManager.persist(variant);
+
+        ProductVariant secondVariant = new ProductVariant();
+        secondVariant.tenant = tenant;
+        secondVariant.product = product;
+        secondVariant.sku = "TEST-VARIANT-1B";
+        secondVariant.name = "Test Variant 1B";
+        secondVariant.price = new BigDecimal("59.99");
+        secondVariant.attributes = "{\"color\":\"Blue\",\"size\":\"Medium\"}";
+        secondVariant.status = "active";
+        secondVariant.createdAt = OffsetDateTime.now();
+        secondVariant.updatedAt = OffsetDateTime.now();
+        entityManager.persist(secondVariant);
+
+        Category category = new Category();
+        category.tenant = tenant;
+        category.code = "APPAREL";
+        category.name = "Apparel";
+        category.slug = "apparel";
+        category.status = "active";
+        category.createdAt = OffsetDateTime.now();
+        category.updatedAt = OffsetDateTime.now();
+        entityManager.persist(category);
+
+        Collection collection = new Collection();
+        collection.tenant = tenant;
+        collection.code = "SUMMER";
+        collection.name = "Summer Collection";
+        collection.slug = "summer-collection";
+        collection.status = "active";
+        collection.collectionType = "manual";
+        collection.published = true;
+        collection.createdAt = OffsetDateTime.now();
+        collection.updatedAt = OffsetDateTime.now();
+        entityManager.persist(collection);
+
+        ProductCategory productCategory = new ProductCategory();
+        productCategory.id = new ProductCategory.ProductCategoryId(tenant.id, product.id, category.id);
+        productCategory.product = product;
+        productCategory.category = category;
+        entityManager.persist(productCategory);
+
+        ProductCollection productCollection = new ProductCollection();
+        productCollection.id = new ProductCollection.ProductCollectionId(tenant.id, product.id, collection.id);
+        productCollection.product = product;
+        productCollection.collection = collection;
+        entityManager.persist(productCollection);
+
         entityManager.flush();
         productId = product.id;
+
+        enableFeatureFlag(tenant, "catalog.search.enabled");
+        enableFeatureFlag(tenant, "catalog.variant-matrix.enabled");
 
         // Clear tenant context
         TenantContext.clear();
@@ -119,10 +193,11 @@ class ProductResourceTest {
         entityManager.persist(otherTenant);
         entityManager.flush();
         otherTenantSubdomain = otherTenant.subdomain;
+        secondaryTenant = otherTenant;
 
         // Set tenant context for other tenant setup
-        TenantContext
-                .setCurrentTenant(new TenantInfo(otherTenant.id, otherTenant.subdomain, otherTenant.name, otherTenant.status));
+        TenantContext.setCurrentTenant(
+                new TenantInfo(otherTenant.id, otherTenant.subdomain, otherTenant.name, otherTenant.status));
 
         // Create test product for tenant 2
         Product otherProduct = new Product();
@@ -142,12 +217,16 @@ class ProductResourceTest {
         otherVariant.sku = "TEST-VARIANT-2";
         otherVariant.name = "Test Variant 2";
         otherVariant.price = new BigDecimal("99.99");
+        otherVariant.attributes = "{\"material\":\"Leather\",\"size\":\"Large\"}";
         otherVariant.status = "active";
         otherVariant.createdAt = OffsetDateTime.now();
         otherVariant.updatedAt = OffsetDateTime.now();
         entityManager.persist(otherVariant);
         entityManager.flush();
         otherTenantProductId = otherProduct.id;
+
+        enableFeatureFlag(otherTenant, "catalog.search.enabled");
+        enableFeatureFlag(otherTenant, "catalog.variant-matrix.enabled");
 
         // Clear tenant context after setup
         TenantContext.clear();
@@ -160,6 +239,39 @@ class ProductResourceTest {
 
     private RequestSpecification request(String subdomain) {
         return given().header("Host", subdomain + ".villagecompute.com").contentType(ContentType.JSON);
+    }
+
+    private void enableFeatureFlag(Tenant tenant, String flagKey) {
+        FeatureFlag flag = new FeatureFlag();
+        OffsetDateTime now = OffsetDateTime.now();
+        flag.tenant = tenant;
+        flag.flagKey = flagKey;
+        flag.enabled = true;
+        flag.config = "{}";
+        flag.createdAt = now;
+        flag.updatedAt = now;
+        flag.owner = "catalog-tests@villagecompute.dev";
+        flag.riskLevel = "LOW";
+        flag.reviewCadenceDays = 90;
+        flag.lastReviewedAt = now;
+        flag.description = "Catalog API test flag";
+        flag.rollbackInstructions = "Set enabled=false";
+        entityManager.persist(flag);
+        entityManager.flush();
+        featureToggle.invalidate(tenant.id, flagKey);
+    }
+
+    private void disableFeatureFlag(Tenant tenant, String flagKey) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            FeatureFlag flag = entityManager
+                    .createQuery("SELECT f FROM FeatureFlag f WHERE f.tenant.id = :tenantId AND f.flagKey = :flagKey",
+                            FeatureFlag.class)
+                    .setParameter("tenantId", tenant.id).setParameter("flagKey", flagKey).getSingleResult();
+            flag.enabled = false;
+            flag.updatedAt = OffsetDateTime.now();
+            entityManager.merge(flag);
+        });
+        featureToggle.invalidate(tenant.id, flagKey);
     }
 
     // ========================================
@@ -176,9 +288,8 @@ class ProductResourceTest {
 
     @Test
     void listProducts_shouldRespectPaginationParameters() {
-        request(tenantSubdomain).queryParam("page", 1).queryParam("pageSize", 10).when()
-                .get("/api/v1/catalog/products").then().statusCode(200).body("pagination.page", equalTo(1))
-                .body("pagination.pageSize", equalTo(10));
+        request(tenantSubdomain).queryParam("page", 1).queryParam("pageSize", 10).when().get("/api/v1/catalog/products")
+                .then().statusCode(200).body("pagination.page", equalTo(1)).body("pagination.pageSize", equalTo(10));
     }
 
     @Test
@@ -188,10 +299,29 @@ class ProductResourceTest {
     }
 
     @Test
+    void listProducts_shouldFilterByCategorySlug() {
+        request(tenantSubdomain).queryParam("category", "apparel").when().get("/api/v1/catalog/products").then()
+                .statusCode(200).body("data.size()", equalTo(1)).body("data[0].name", equalTo("Test Product 1"));
+    }
+
+    @Test
+    void listProducts_shouldFilterByCollectionSlug() {
+        request(tenantSubdomain).queryParam("collection", "summer-collection").when().get("/api/v1/catalog/products")
+                .then().statusCode(200).body("data.size()", equalTo(1)).body("data[0].name", equalTo("Test Product 1"));
+    }
+
+    @Test
+    void listProducts_shouldReturn403WhenSearchFeatureDisabled() {
+        disableFeatureFlag(primaryTenant, "catalog.search.enabled");
+        request(tenantSubdomain).queryParam("search", "Test product").when().get("/api/v1/catalog/products").then()
+                .statusCode(403).body("title", equalTo("Catalog Search Disabled"));
+    }
+
+    @Test
     void listProducts_shouldIsolateTenants() {
         // Request from tenant 1 - should only see tenant 1 products
-        var response1 = request(tenantSubdomain).when().get("/api/v1/catalog/products").then().statusCode(200)
-                .extract().jsonPath();
+        var response1 = request(tenantSubdomain).when().get("/api/v1/catalog/products").then().statusCode(200).extract()
+                .jsonPath();
 
         var products1 = response1.getList("data");
         // Verify we get at least the product we created for tenant 1
@@ -228,25 +358,48 @@ class ProductResourceTest {
     @Test
     void getProduct_shouldReturn404ForOtherTenantProduct() {
         // Attempt to access tenant 2's product from tenant 1 context
-        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + otherTenantProductId).then()
-                .statusCode(404).body("title", equalTo("Product Not Found"));
+        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + otherTenantProductId).then().statusCode(404)
+                .body("title", equalTo("Product Not Found"));
     }
 
     @Test
     void getProduct_shouldEnforceTenantIsolation() {
         // Verify tenant 1 can access their own product
-        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + productId).then().statusCode(200)
-                .body("id", equalTo(productId.toString()));
+        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + productId).then().statusCode(200).body("id",
+                equalTo(productId.toString()));
 
         // Verify tenant 2 can access their own product
         request(otherTenantSubdomain).when().get("/api/v1/catalog/products/" + otherTenantProductId).then()
                 .statusCode(200).body("id", equalTo(otherTenantProductId.toString()));
 
         // Verify tenant 1 cannot access tenant 2's product
-        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + otherTenantProductId).then()
-                .statusCode(404);
+        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + otherTenantProductId).then().statusCode(404);
 
         // Verify tenant 2 cannot access tenant 1's product
         request(otherTenantSubdomain).when().get("/api/v1/catalog/products/" + productId).then().statusCode(404);
+    }
+
+    // ========================================
+    // GET /catalog/products/{productId}/variant-matrix Tests
+    // ========================================
+
+    @Test
+    void getVariantMatrix_shouldReturnMatrixWhenEnabled() {
+        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + productId + "/variant-matrix").then()
+                .statusCode(200).body("productId", equalTo(productId.toString())).body("variants.size()", equalTo(2))
+                .body("optionAxes.size()", equalTo(2));
+    }
+
+    @Test
+    void getVariantMatrix_shouldReturn403WhenFlagDisabled() {
+        disableFeatureFlag(primaryTenant, "catalog.variant-matrix.enabled");
+        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + productId + "/variant-matrix").then()
+                .statusCode(403).body("title", equalTo("Variant Matrix Disabled"));
+    }
+
+    @Test
+    void getVariantMatrix_shouldReturn404WhenProductMissing() {
+        request(tenantSubdomain).when().get("/api/v1/catalog/products/" + UUID.randomUUID() + "/variant-matrix").then()
+                .statusCode(404);
     }
 }

@@ -43,6 +43,45 @@ components:
           type: string
         approvalNotes:
           type: string
+    CategoryDto:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        parentId:
+          $ref: "#/components/schemas/UUID"
+        code:
+          type: string
+          pattern: \S
+          maxLength: 50
+        name:
+          type: string
+          pattern: \S
+          maxLength: 255
+        slug:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 5000
+        displayOrder:
+          type: integer
+          format: int32
+        status:
+          type: string
+          pattern: ^(draft|active|archived|deleted)$
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+      required:
+      - code
+      - name
+      - status
     CheckGiftCardBalanceRequest:
       type: object
       required:
@@ -51,6 +90,62 @@ components:
         code:
           type: string
           pattern: \S
+    CollectionDto:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        code:
+          type: string
+          pattern: \S
+          maxLength: 50
+        name:
+          type: string
+          pattern: \S
+          maxLength: 255
+        slug:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 5000
+        imageUrl:
+          type: string
+          maxLength: 500
+        displayOrder:
+          type: integer
+          format: int32
+        collectionType:
+          type: string
+          pattern: ^(manual|automatic)$
+        selectionRules:
+          type: string
+        published:
+          type: boolean
+        publishedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        status:
+          type: string
+          pattern: ^(draft|active|archived|deleted)$
+        seoTitle:
+          type: string
+          maxLength: 255
+        seoDescription:
+          type: string
+          maxLength: 1000
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+      required:
+      - code
+      - name
+      - collectionType
+      - status
     CompletePairingRequest:
       type: object
       properties:
@@ -490,6 +585,12 @@ components:
         metadata:
           type: object
           additionalProperties: {}
+  securitySchemes:
+    SecurityScheme:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authentication
 paths:
   /:
     get:
@@ -625,6 +726,155 @@ paths:
           description: Not Allowed
       security:
       - SecurityScheme: []
+  /api/v1/admin/catalog/categories:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: List Categories
+      tags:
+      - Catalog Admin Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Category
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/categories/{categoryId}:
+    put:
+      parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Update Category
+      tags:
+      - Catalog Admin Resource
+    get:
+      parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Category
+      tags:
+      - Catalog Admin Resource
+    delete:
+      parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Delete Category
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/collections:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: List Collections
+      tags:
+      - Catalog Admin Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Create Collection
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/collections/{collectionId}:
+    put:
+      parameters:
+      - name: collectionId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CollectionDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Update Collection
+      tags:
+      - Catalog Admin Resource
+    get:
+      parameters:
+      - name: collectionId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Collection
+      tags:
+      - Catalog Admin Resource
+    delete:
+      parameters:
+      - name: collectionId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Delete Collection
+      tags:
+      - Catalog Admin Resource
   /api/v1/admin/consignors:
     get:
       parameters:
@@ -1330,6 +1580,20 @@ paths:
         "200":
           description: OK
       summary: Get Product
+      tags:
+      - Product Resource
+  /api/v1/catalog/products/{productId}/variant-matrix:
+    get:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Variant Matrix
       tags:
       - Product Resource
   /api/v1/gift-cards/check-balance:
@@ -2444,7 +2708,7 @@ info:
   version: 1.0.0
   description: Multi-tenant SaaS ecommerce platform API
 servers:
-- url: http://localhost:0
+- url: http://localhost:8080
   description: Auto generated value
-- url: http://0.0.0.0:0
+- url: http://0.0.0.0:8080
   description: Auto generated value

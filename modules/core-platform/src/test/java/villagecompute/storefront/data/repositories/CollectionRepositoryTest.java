@@ -267,6 +267,7 @@ class CollectionRepositoryTest {
     }
 
     private void purgeCatalogTables() {
+        entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
         entityManager.createQuery("DELETE FROM Collection").executeUpdate();
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
@@ -285,6 +286,7 @@ class CollectionRepositoryTest {
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
         entityManager.createQuery("DELETE FROM Category").executeUpdate();
+        entityManager.createQuery("DELETE FROM FeatureFlag").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
     }

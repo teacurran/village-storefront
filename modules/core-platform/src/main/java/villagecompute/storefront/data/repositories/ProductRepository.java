@@ -35,6 +35,10 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     private static final String QUERY_FIND_BY_TENANT_AND_SKU = "tenant.id = :tenantId and sku = :sku";
     private static final String QUERY_FIND_BY_TENANT_AND_SLUG = "tenant.id = :tenantId and slug = :slug";
     private static final String QUERY_SEARCH_BY_NAME_OR_SKU = "tenant.id = :tenantId and status = :status and (lower(name) like :search or lower(sku) like :search)";
+    private static final String QUERY_ACTIVE_BY_CATEGORY_SLUG = "tenant.id = :tenantId and status = 'active' and id in (select pc.product.id from ProductCategory pc where pc.id.tenantId = :tenantId and pc.category.slug = :categorySlug)";
+    private static final String QUERY_ACTIVE_BY_COLLECTION_SLUG = "tenant.id = :tenantId and status = 'active' and id in (select pcl.product.id from ProductCollection pcl where pcl.id.tenantId = :tenantId and pcl.collection.slug = :collectionSlug)";
+    private static final String QUERY_ACTIVE_BY_CATEGORY_AND_COLLECTION = QUERY_ACTIVE_BY_CATEGORY_SLUG
+            + " and id in (select pcl.product.id from ProductCollection pcl where pcl.id.tenantId = :tenantId and pcl.collection.slug = :collectionSlug)";
 
     /**
      * Find all products for the current tenant.
@@ -138,6 +142,64 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     public long countActiveByCurrentTenant() {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return count(QUERY_FIND_BY_TENANT_AND_STATUS, Parameters.with("tenantId", tenantId).and("status", "active"));
+    }
+
+    /**
+     * Find products assigned to a category slug.
+     */
+    public List<Product> findActiveByCategorySlug(String categorySlug, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_ACTIVE_BY_CATEGORY_SLUG,
+                Parameters.with("tenantId", tenantId).and("categorySlug", categorySlug)).page(Page.of(page, size))
+                .list();
+    }
+
+    /**
+     * Count products within a category slug.
+     */
+    public long countActiveByCategorySlug(String categorySlug) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return count(QUERY_ACTIVE_BY_CATEGORY_SLUG,
+                Parameters.with("tenantId", tenantId).and("categorySlug", categorySlug));
+    }
+
+    /**
+     * Find products assigned to a collection slug.
+     */
+    public List<Product> findActiveByCollectionSlug(String collectionSlug, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_ACTIVE_BY_COLLECTION_SLUG,
+                Parameters.with("tenantId", tenantId).and("collectionSlug", collectionSlug)).page(Page.of(page, size))
+                .list();
+    }
+
+    /**
+     * Count products within a collection slug.
+     */
+    public long countActiveByCollectionSlug(String collectionSlug) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return count(QUERY_ACTIVE_BY_COLLECTION_SLUG,
+                Parameters.with("tenantId", tenantId).and("collectionSlug", collectionSlug));
+    }
+
+    /**
+     * Find products that belong to both a category and collection slug.
+     */
+    public List<Product> findActiveByCategoryAndCollection(String categorySlug, String collectionSlug, int page,
+            int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_ACTIVE_BY_CATEGORY_AND_COLLECTION, Parameters.with("tenantId", tenantId)
+                .and("categorySlug", categorySlug).and("collectionSlug", collectionSlug)).page(Page.of(page, size))
+                .list();
+    }
+
+    /**
+     * Count products matching both category and collection filter.
+     */
+    public long countActiveByCategoryAndCollection(String categorySlug, String collectionSlug) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return count(QUERY_ACTIVE_BY_CATEGORY_AND_COLLECTION, Parameters.with("tenantId", tenantId)
+                .and("categorySlug", categorySlug).and("collectionSlug", collectionSlug));
     }
 
     /**

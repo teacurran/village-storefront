@@ -125,6 +125,24 @@ tags:
       Restricted to platform administrators only. Not accessible to individual
       store owners.
 
+  - name: Catalog
+    description: |
+      Product catalog operations including products, variants, categories, and collections.
+      Supports both storefront (public/customer-facing) and admin scopes. All operations
+      are tenant-scoped and enforce RLS isolation.
+    externalDocs:
+      description: Catalog domain architecture
+      url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-4-blueprint
+
+  - name: Inventory
+    description: |
+      Multi-location inventory management including locations, transfers, adjustments,
+      and stock level tracking. Admin-only operations with tenant isolation and
+      audit logging for all stock movements.
+    externalDocs:
+      description: Inventory domain architecture
+      url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-4-blueprint
+
 security:
   - bearerAuth: []
   - apiKeyAuth: []
@@ -305,15 +323,18 @@ paths:
       operationId: listProducts
       summary: List products (catalog listing)
       description: |
-        **TODO:** Implement product catalog listing with filtering, sorting, and pagination.
-
         Returns paginated list of active products for the current tenant. Supports:
-        - Filtering by category, tags, price range, availability
+        - Filtering by category, collection, price range, availability
         - Sorting by name, price, created date, popularity
         - Search by product name, SKU, description
+        - Tenant-scoped results with automatic RLS enforcement
 
         **Authentication:** Optional (public catalog browsing, auth required for customer-specific pricing)
-      tags: [Storefront, Headless]
+
+        **Rate Limiting:** 100 req/min (anonymous), 1000 req/min (authenticated)
+
+        **Feature Flags:** Respects `catalog.search.enabled` and tenant-level kill switches
+      tags: [Catalog, Storefront, Headless]
       security:
         - {}  # Optional auth
         - bearerAuth: []
@@ -326,6 +347,11 @@ paths:
           schema:
             type: string
           description: Filter by category slug
+        - name: collection
+          in: query
+          schema:
+            type: string
+          description: Filter by collection slug
         - name: minPrice
           in: query
           schema:
@@ -353,6 +379,13 @@ paths:
       responses:
         '200':
           description: Product list successfully retrieved
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
           content:
             application/json:
               schema:
@@ -371,17 +404,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Feature flag disabled (catalog.search.enabled is false for tenant)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /catalog/products/{productId}:
     get:
       operationId: getProduct
       summary: Get product details
       description: |
-        **TODO:** Implement product detail retrieval.
-
         Returns full product details including variants, pricing, inventory, images.
-        Public endpoint (no auth required for browsing).
-      tags: [Storefront, Headless]
+        Public endpoint (no auth required for browsing). Tenant-scoped with RLS enforcement.
+
+        **Rate Limiting:** 100 req/min (anonymous), 1000 req/min (authenticated)
+      tags: [Catalog, Storefront, Headless]
       security:
         - {}  # Optional auth
         - bearerAuth: []
@@ -397,10 +436,330 @@ paths:
       responses:
         '200':
           description: Product details retrieved
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductDetail'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # ADMIN - CATALOG MANAGEMENT ENDPOINTS
+  # ============================================================================
+
+  /admin/catalog/categories:
+    get:
+      operationId: listCategories
+      summary: List categories
+      description: List all categories for the tenant, ordered by display order.
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+    post:
+      operationId: createCategory
+      summary: Create category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Duplicate category code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/categories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Category UUID
+    get:
+      operationId: getCategory
+      summary: Get category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Category retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateCategory
+      summary: Update category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteCategory
+      summary: Delete category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: Category deleted
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/collections:
+    get:
+      operationId: listCollections
+      summary: List collections
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Optional status filter
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Paginated collection list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Collection'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+    post:
+      operationId: createCollection
+      summary: Create collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Collection'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '409':
+          description: Duplicate collection code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/collections/{collectionId}:
+    parameters:
+      - name: collectionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCollection
+      summary: Get collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Collection retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateCollection
+      summary: Update collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Collection'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteCollection
+      summary: Delete collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: Collection deleted
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /catalog/products/{productId}/variant-matrix:
+    get:
+      operationId: getVariantMatrix
+      summary: Get product variant matrix
+      description: |
+        Returns the option axes and variant listings for a product. Used by
+        storefront configurators to build size/color pickers. Tenant-scoped with
+        feature flag enforcement.
+
+        **Feature Flags:** Requires `catalog.variant-matrix.enabled`
+        **Rate Limiting:** 100 req/min (anonymous), 1000 req/min (authenticated)
+      tags: [Catalog, Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      responses:
+        '200':
+          description: Variant matrix retrieved
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantMatrix'
+        '403':
+          description: Feature flag disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: Product not found
           content:
@@ -1509,7 +1868,7 @@ paths:
 
         **Authentication:** OAuth 2.0 Client Credentials flow via HTTP Basic Auth.
         Pass client_id:client_secret as Authorization header.
-      tags: [Headless]
+      tags: [Catalog, Headless]
       security:
         - oauthClientCredentials: [catalog:read]
       parameters:
@@ -1583,7 +1942,7 @@ paths:
         **Rate Limit:** 5000 requests/minute per client_id
 
         **Feature Flag:** `headless.api.enabled`
-      tags: [Headless]
+      tags: [Catalog, Headless]
       security:
         - oauthClientCredentials: [catalog:read]
       parameters:
@@ -2207,8 +2566,13 @@ paths:
     get:
       operationId: listInventoryLocations
       summary: List inventory locations
-      description: Returns all inventory locations for the current tenant.
-      tags: [Admin]
+      description: |
+        Returns all inventory locations for the current tenant. Includes warehouses,
+        stores, and other location types with stock tracking capability.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: List of inventory locations
@@ -2223,8 +2587,13 @@ paths:
     post:
       operationId: createInventoryLocation
       summary: Create inventory location
-      description: Creates a new inventory location (warehouse, store, etc.) for the current tenant.
-      tags: [Admin]
+      description: |
+        Creates a new inventory location (warehouse, store, etc.) for the current tenant.
+        Location code must be unique within the tenant.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       requestBody:
         required: true
         content:
@@ -2255,8 +2624,13 @@ paths:
     get:
       operationId: listInventoryTransfers
       summary: List inventory transfers
-      description: Returns all inventory transfers for the current tenant.
-      tags: [Admin]
+      description: |
+        Returns all inventory transfers for the current tenant, including pending,
+        in-transit, and completed transfers across all locations.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: List of transfers
@@ -2275,7 +2649,11 @@ paths:
         Creates a new inventory transfer from source to destination location.
         Validates stock availability, reserves inventory at source, and enqueues
         background job for barcode label generation.
-      tags: [Admin]
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+        **Background Jobs:** Enqueues barcode generation job
+      tags: [Inventory, Admin]
       requestBody:
         required: true
         content:
@@ -2314,8 +2692,13 @@ paths:
     get:
       operationId: getInventoryTransfer
       summary: Get transfer details
-      description: Retrieves a transfer by ID within the current tenant.
-      tags: [Admin]
+      description: |
+        Retrieves a transfer by ID within the current tenant, including all line items
+        and status information.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: Transfer retrieved
@@ -2344,8 +2727,12 @@ paths:
       summary: Mark transfer as received
       description: |
         Completes a transfer by marking it received, committing source reservations,
-        and adding inventory to destination location.
-      tags: [Admin]
+        and adding inventory to destination location. Idempotent operation.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+        **Audit Logging:** All transfers are logged for inventory audit trail
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: Transfer received successfully
@@ -2373,7 +2760,11 @@ paths:
       description: |
         Records a manual inventory adjustment with reason code for audit trail.
         Used for cycle counts, damages, returns, shrinkage, etc.
-      tags: [Admin]
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+        **Audit Logging:** All adjustments are logged with reason and user context
+      tags: [Inventory, Admin]
       requestBody:
         required: true
         content:
@@ -2997,6 +3388,136 @@ components:
           example:
             color: "Red"
             size: "Large"
+
+    VariantOptionAxis:
+      type: object
+      required: [name, values]
+      properties:
+        name:
+          type: string
+          description: Option name (e.g., color, size)
+        values:
+          type: array
+          items:
+            type: string
+          description: Distinct values for this option
+
+    VariantMatrixEntry:
+      type: object
+      required: [variantId, sku, options, price, available]
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        available:
+          type: boolean
+        options:
+          type: object
+          additionalProperties:
+            type: string
+
+    VariantMatrix:
+      type: object
+      required: [productId, optionAxes, variants]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        optionAxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantOptionAxis'
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantMatrixEntry'
+
+    Category:
+      type: object
+      required:
+        - code
+        - name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        code:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        displayOrder:
+          type: integer
+        status:
+          type: string
+          enum: [draft, active, archived, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Collection:
+      type: object
+      required:
+        - code
+        - name
+        - collectionType
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        displayOrder:
+          type: integer
+        collectionType:
+          type: string
+          enum: [manual, automatic]
+        selectionRules:
+          type: string
+          description: JSON rule payload
+        published:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, active, archived, deleted]
+        seoTitle:
+          type: string
+        seoDescription:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     Cart:
       type: object

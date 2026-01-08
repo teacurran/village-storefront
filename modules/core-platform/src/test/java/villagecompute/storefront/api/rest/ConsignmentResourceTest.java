@@ -52,12 +52,16 @@ class ConsignmentResourceTest {
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
+        entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
         entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM Collection").executeUpdate();
+        entityManager.createQuery("DELETE FROM Category").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 
         // Create test tenant
