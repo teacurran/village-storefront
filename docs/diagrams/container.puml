@@ -1,0 +1,181 @@
+@startuml container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+!theme plain
+scale max 1920 width
+
+' Rendering command:
+' docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/container.puml -tpng
+' Or with local PlantUML: plantuml docs/diagrams/container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Village Storefront - Container Diagram (C4 Level 2)
+
+' ============================================================================
+' PERSONAS (Abbreviated from System Context)
+' ============================================================================
+Person(merchant, "Merchant", "Manages store via admin")
+Person(staff, "Store Staff", "Processes orders/inventory via admin")
+Person(customer, "Customer", "Shops via storefront")
+Person(consignor, "Consignment Vendor", "Manages consignment items")
+Person(platformAdmin, "Platform Admin", "Operates SaaS platform")
+Person(headlessPartner, "Headless Partner", "API consumer")
+
+' ============================================================================
+' CORE SYSTEM BOUNDARY
+' ============================================================================
+System_Boundary(villageStorefront, "Village Storefront") {
+
+    ' PRESENTATION CONTAINERS
+    Container(storefrontApp, "Storefront Web App", "Qute Templates + Tailwind CSS + PrimeUI", "Customer-facing server-rendered views for product browsing, cart, checkout (all paths except /admin/*)")
+
+    Container(adminSPA, "Admin Dashboard", "Vue.js 3 + Vite + TypeScript + PrimeVue", "Merchant/staff SPA for product management, order processing, settings (/admin/* paths, bundled via Quinoa)")
+
+    Container(posSPA, "POS Interface", "Vue.js 3 + TypeScript", "In-store point-of-sale browser app with offline queue, hardware integrations (Stripe Terminal, receipt printers)")
+
+    Container(platformConsole, "Platform Console", "Vue.js 3 + TypeScript", "SaaS operator dashboard for tenant lifecycle, impersonation, system health monitoring")
+
+    Container(restAPI, "REST API", "Quarkus RESTEasy Reactive", "OpenAPI 3.0 spec-first REST endpoints for storefront, admin, headless partners (/api/v1/*)")
+
+    ' CORE APPLICATION CONTAINER
+    Container(quarkusApp, "Quarkus Application", "Java 21 + Quarkus 3.17+", "Modular monolith hosting tenant gateway, bounded-context modules (catalog, orders, consignment, loyalty), background schedulers, CDI-wired services")
+
+    ' DATA CONTAINERS
+    ContainerDb(postgresDB, "PostgreSQL Database", "PostgreSQL 17 + RLS policies", "Shared schema with tenant_id discriminator, partitioned session/audit tables, encrypted sensitive fields")
+
+    Container(caffeineCache, "In-Memory Cache", "Caffeine", "Pod-local caching for tenant metadata, product fragments, rate-limit counters, feature flags")
+
+    ' BACKGROUND PROCESSING CONTAINERS
+    Container(jobWorker, "Background Job Worker", "Quarkus Scheduler + DelayedJob", "Processes email dispatch, media transcoding coordination, payouts, report generation, certificate renewals (CRITICAL/HIGH/DEFAULT/LOW/BULK priorities)")
+
+    Container(mediaWorker, "Media Processing Worker", "FFmpeg + Thumbnailator", "Dedicated pod for CPU-intensive video transcoding, image resizing, WebP generation (triggered via job queue)")
+}
+
+' ============================================================================
+' EXTERNAL SYSTEMS (Abbreviated from System Context)
+' ============================================================================
+System_Ext(stripe, "Stripe API", "Payments & Connect")
+System_Ext(cloudflareR2, "Cloudflare R2", "Object storage")
+System_Ext(carriers, "Shipping Carriers", "USPS/UPS/FedEx")
+System_Ext(smtp, "SMTP Relay", "Transactional email")
+System_Ext(oauth, "OAuth Providers", "Social login")
+System_Ext(taxEngine, "Tax Calculation", "Avalara/TaxJar")
+System_Ext(addressValidation, "Address Validation", "USPS/SmartyStreets")
+
+' ============================================================================
+' RELATIONSHIPS: Personas → Containers
+' ============================================================================
+Rel(customer, storefrontApp, "Browses products, adds to cart, checks out", "HTTPS")
+Rel(merchant, adminSPA, "Manages products, processes orders, configures settings", "HTTPS/JWT")
+Rel(staff, adminSPA, "Processes orders, manages inventory", "HTTPS/JWT (scoped)")
+Rel(consignor, adminSPA, "Views sales, manages commission items via vendor portal", "HTTPS/JWT")
+Rel(platformAdmin, platformConsole, "Manages tenants, impersonates users, monitors health", "HTTPS/JWT + elevated")
+Rel(headlessPartner, restAPI, "Fetches catalog, creates orders, receives webhooks", "HTTPS/API Key")
+
+' ============================================================================
+' RELATIONSHIPS: Presentation Containers → Core Application
+' ============================================================================
+Rel(storefrontApp, quarkusApp, "Requests product data, processes checkout", "CDI/internal")
+Rel(adminSPA, restAPI, "CRUD operations for products, orders, settings", "HTTPS/JSON")
+Rel(posSPA, restAPI, "Submits in-store sales, syncs offline queue", "HTTPS/JSON")
+Rel(platformConsole, restAPI, "Tenant management, impersonation requests", "HTTPS/JSON")
+Rel(restAPI, quarkusApp, "Routes to service layer modules", "CDI/internal")
+
+' ============================================================================
+' RELATIONSHIPS: Core Application → Data & Processing
+' ============================================================================
+Rel(quarkusApp, postgresDB, "Reads/writes tenant-scoped data via Panache repositories", "JDBC/PostgreSQL wire protocol")
+Rel(quarkusApp, caffeineCache, "Caches tenant metadata, product fragments, feature flags", "In-process")
+Rel(quarkusApp, jobWorker, "Enqueues background jobs (email, payouts, reports)", "Database-backed queue")
+Rel(jobWorker, postgresDB, "Polls delayed_jobs table, updates status", "JDBC")
+Rel(jobWorker, mediaWorker, "Delegates media processing via job queue", "Job payload + R2 keys")
+Rel(mediaWorker, cloudflareR2, "Fetches originals, uploads processed variants", "S3 SDK")
+
+' ============================================================================
+' RELATIONSHIPS: Core Application → External Systems
+' ============================================================================
+Rel(quarkusApp, stripe, "Creates payment intents, manages Connect accounts, processes webhooks", "Stripe Java SDK")
+Rel(quarkusApp, cloudflareR2, "Uploads media, generates signed URLs", "AWS S3 SDK")
+Rel(quarkusApp, carriers, "Fetches shipping rates, generates labels", "HTTPS/REST")
+Rel(quarkusApp, oauth, "Authenticates via social providers", "OAuth 2.0")
+Rel(quarkusApp, taxEngine, "Calculates sales tax during checkout", "HTTPS/REST")
+Rel(quarkusApp, addressValidation, "Validates shipping addresses", "HTTPS/REST")
+Rel(jobWorker, smtp, "Sends transactional emails", "SMTP")
+
+' ============================================================================
+' REVERSE RELATIONSHIPS: External Systems → Containers
+' ============================================================================
+Rel_Back(stripe, restAPI, "Sends payment/dispute/payout webhooks", "HTTPS/POST")
+
+' ============================================================================
+' NOTES
+' ============================================================================
+note right of quarkusApp
+  **Deployment:**
+  - GraalVM native executable
+  - Kubernetes Deployment (2+ replicas)
+  - Horizontal pod autoscaling on CPU/memory
+  - Liveness/readiness probes via /health
+
+  **Module Boundaries:**
+  - Tenant Access Gateway (host resolution)
+  - Identity & Session Service
+  - Catalog & Inventory Module
+  - Orders & Checkout Orchestrator
+  - Payments Integration Layer
+  - Consignment Module
+  - Loyalty & Rewards Module
+  - Reporting Projections
+
+  **Observability:**
+  - OpenTelemetry traces to Jaeger
+  - Prometheus metrics scraping
+  - Structured JSON logging
+end note
+
+note right of postgresDB
+  **Schema Design:**
+  - Shared database tenancy
+  - All tables include tenant_id UUID FK
+  - Row-level security (RLS) policies
+  - Partitioned tables: sessions, audit_events
+  - pgcrypto for sensitive fields
+
+  **Deployment:**
+  - Kubernetes StatefulSet
+  - Persistent volume claims
+  - Automated backups (Velero/pgBackRest)
+  - Read replicas for reporting queries
+end note
+
+note right of caffeineCache
+  **Cache Strategy:**
+  - Pod-local (no distributed cache)
+  - Tenant-aware keys (tenant:123:product:456)
+  - TTL-based expiration
+  - Feature flag propagation via CDI events
+  - Rate limit sliding windows
+end note
+
+note right of jobWorker
+  **Job Processing Model:**
+  - Database-backed DelayedJob pattern
+  - Priority queues (CRITICAL → BULK)
+  - Exponential backoff retry policy
+  - Dead letter queue for failures
+  - Separate pod deployment for isolation
+  - Cron-like schedules via @Scheduled
+end note
+
+note right of mediaWorker
+  **Media Pipeline:**
+  - CPU-intensive workloads
+  - Separate pod with higher CPU limits
+  - FFmpeg for video transcoding
+  - Thumbnailator for image processing
+  - Writes variants back to R2
+  - Updates media_assets table with URLs
+end note
+
+@enduml

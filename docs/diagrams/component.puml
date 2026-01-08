@@ -1,0 +1,317 @@
+@startuml component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+!theme plain
+scale max 1920 width
+
+' Rendering command:
+' docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/component.puml -tpng
+' Or with local PlantUML: plantuml docs/diagrams/component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Village Storefront - Component Diagram (C4 Level 3)\nQuarkus Application Internal Architecture
+
+' ============================================================================
+' EXTERNAL ACTORS (Abbreviated)
+' ============================================================================
+Person(customer, "Customer", "Storefront user")
+Person(merchant, "Merchant", "Admin user")
+Person(staff, "Store Staff", "Works orders/inventory via admin")
+Person(platformAdmin, "Platform Admin", "SaaS operator using platform console")
+Person(headlessPartner, "Partner", "API consumer")
+
+' ============================================================================
+' CONTAINER BOUNDARY: Quarkus Application
+' ============================================================================
+Container_Boundary(quarkusApp, "Quarkus Application") {
+
+    ' PRESENTATION LAYER COMPONENTS
+    Component(quteEngine, "Qute Rendering Engine", "Qute", "Server-side template rendering for storefront pages with tenant branding tokens, PrimeUI hydration")
+    Component(restResources, "REST API Resources", "RESTEasy Reactive", "OpenAPI-documented endpoints (/api/v1/*) for admin, headless, webhooks")
+    Component(vueAssets, "Admin SPA Assets", "Static Files", "Compiled Vue.js bundles served under /admin/* via Quinoa")
+
+    ' TENANT ACCESS GATEWAY (Cross-Cutting)
+    Component(tenantFilter, "Tenant Resolution Filter", "JAX-RS Filter", "Extracts Host header, resolves subdomain/custom domain to Tenant, populates TenantContext")
+    Component(tenantContext, "TenantContext", "ThreadLocal Holder", "Request-scoped tenant_id propagation to all layers")
+    Component(featureFlagHydration, "Feature Flag Service", "CDI Bean", "Loads tenant-specific feature flags from DB + cache, evaluates toggles")
+
+    ' IDENTITY & SESSION COMPONENTS
+    Component(authService, "Authentication Service", "CDI Service", "JWT issuance/validation, refresh token rotation, OAuth client coordination")
+    Component(sessionLogger, "Session Logger", "CDI Service", "Writes login/logout/impersonation events to session_log table for compliance")
+    Component(impersonationController, "Impersonation Controller", "CDI Service", "Platform admin impersonation workflows with audit trail")
+
+    ' CATALOG & INVENTORY COMPONENTS
+    Component(catalogService, "Catalog Service", "CDI Service", "Product/variant CRUD, category hierarchies, collections, search event publishing")
+    Component(inventoryService, "Inventory Service", "CDI Service", "Multi-location stock tracking, adjustments, transfers, low-stock alerts")
+    Component(searchIndexer, "Search Indexer", "Event Listener", "Consumes product change events, updates search projections (future Elasticsearch)")
+
+    ' CONSIGNMENT COMPONENTS
+    Component(vendorService, "Vendor Service", "CDI Service", "Consignor onboarding, portal access, commission schedule management")
+    Component(commissionCalculator, "Commission Calculator", "CDI Service", "Calculates splits per order line item based on vendor rules")
+    Component(payoutOrchestrator, "Payout Orchestrator", "CDI Service", "Batches vendor payouts via Stripe Connect, records ledger entries")
+
+    ' CHECKOUT & ORDER COMPONENTS
+    Component(cartService, "Cart Service", "CDI Service", "Persistent cart management, line item validation, promo code application")
+    Component(checkoutOrchestrator, "Checkout Orchestrator", "CDI Service", "Coordinates address validation, shipping, tax, payment, order creation")
+    Component(orderService, "Order Service", "CDI Service", "Order lifecycle management, fulfillment status, tracking updates")
+    Component(shipmentService, "Shipment Service", "CDI Service", "Carrier rate fetching, label generation, tracking webhook ingestion")
+    Component(returnService, "Return Service", "CDI Service", "RMA creation, restocking, refund coordination")
+
+    ' PAYMENT INTEGRATION COMPONENTS
+    Component(paymentService, "Payment Service", "CDI Service", "Abstracts PaymentProvider interface, orchestrates intents, captures, refunds")
+    Component(stripeAdapter, "Stripe Adapter", "CDI Service", "Implements PaymentProvider + MarketplaceProvider via Stripe SDK")
+    Component(webhookProcessor, "Webhook Processor", "REST Resource", "Validates Stripe signatures, dispatches to domain event handlers")
+    Component(ledgerService, "Ledger Service", "CDI Service", "Double-entry accounting for payments, refunds, payouts, store credit")
+
+    ' LOYALTY & REWARDS COMPONENTS
+    Component(loyaltyService, "Loyalty Service", "CDI Service", "Points accumulation, tier upgrades, expiration rules")
+    Component(rewardRedemption, "Reward Redemption Engine", "CDI Service", "Applies loyalty discounts during checkout, validates balances")
+
+    ' POS & OFFLINE COMPONENTS
+    Component(posAPI, "POS API", "REST Resource", "Browser-based POS endpoints, hardware integration bridges (Stripe Terminal)")
+    Component(offlineQueue, "Offline Queue Reconciler", "Scheduled Job", "Syncs queued sales from disconnected POS sessions")
+
+    ' MEDIA PIPELINE COMPONENTS
+    Component(mediaUploadController, "Media Upload Controller", "REST Resource", "Pre-signed upload URL generation, enforces size/type limits")
+    Component(mediaPipeline, "Media Pipeline Coordinator", "CDI Service", "Enqueues FFmpeg jobs, tracks processing status, updates media_assets")
+
+    ' REPORTING & ANALYTICS COMPONENTS
+    Component(reportingProjections, "Reporting Projections", "Event Listener", "Builds read-optimized aggregates (sales, inventory, commissions)")
+    Component(dashboardAPI, "Dashboard Metrics API", "REST Resource", "Exposes time-series data for admin widgets, exports CSV/PDF")
+
+    ' PLATFORM ADMIN COMPONENTS
+    Component(tenantLifecycleService, "Tenant Lifecycle Service", "CDI Service", "Store provisioning, plan changes, suspension, deletion")
+    Component(platformMetrics, "Platform Metrics Aggregator", "Scheduled Job", "Cross-tenant health metrics, rate limit tracking")
+
+    ' INTEGRATION ADAPTER LAYER
+    Component(carrierAdapters, "Carrier Adapters", "CDI Services", "Unified interface for USPS/UPS/FedEx APIs with retry/fallback")
+    Component(addressValidator, "Address Validator", "CDI Service", "Normalizes addresses via USPS/SmartyStreets")
+    Component(taxAdapter, "Tax Service Adapter", "CDI Service", "Calculates sales tax via Avalara/TaxJar")
+    Component(emailAdapter, "Email Adapter", "CDI Service", "Quarkus Mailer wrapper with domain filtering, template rendering")
+
+    ' INFRASTRUCTURE PRIMITIVES
+    Component(jobScheduler, "Background Job Scheduler", "Quarkus Scheduler", "Polls delayed_jobs table, invokes handlers with priority queues")
+    Component(cacheManager, "Cache Manager", "Caffeine", "Tenant-aware cache key management, TTL policies, invalidation events")
+    Component(eventBus, "Domain Event Bus", "CDI Events", "In-process publish/subscribe for cross-module notifications")
+}
+
+' ============================================================================
+' EXTERNAL CONTAINERS
+' ============================================================================
+ContainerDb_Ext(postgresDB, "PostgreSQL", "Persistent data")
+Container_Ext(jobWorker, "Job Worker Pod", "Background processing")
+Container_Ext(mediaWorker, "Media Worker Pod", "FFmpeg processing")
+System_Ext(stripe, "Stripe API", "Payments")
+System_Ext(cloudflareR2, "Cloudflare R2", "Object storage")
+System_Ext(carriers, "Carriers", "Shipping")
+System_Ext(smtp, "SMTP", "Email")
+
+' ============================================================================
+' RELATIONSHIPS: External Actors → Presentation Components
+' ============================================================================
+Rel(customer, quteEngine, "Requests storefront pages", "HTTP")
+Rel(merchant, restResources, "Admin API calls", "HTTPS/JWT")
+Rel(staff, restResources, "Scoped admin API calls (orders/inventory)", "HTTPS/JWT")
+Rel(platformAdmin, restResources, "Platform console API calls", "HTTPS/JWT + elevated")
+Rel(headlessPartner, restResources, "Headless API calls", "HTTPS/API Key")
+
+' ============================================================================
+' RELATIONSHIPS: Presentation → Tenant Gateway
+' ============================================================================
+Rel(quteEngine, tenantFilter, "All requests pass through filter", "Filter chain")
+Rel(restResources, tenantFilter, "All requests pass through filter", "Filter chain")
+Rel(tenantFilter, tenantContext, "Sets current tenant for request", "ThreadLocal")
+Rel(tenantContext, featureFlagHydration, "Loads tenant flags", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Tenant Gateway → Services
+' ============================================================================
+Rel(tenantFilter, authService, "Validates JWT claims", "CDI")
+Rel(authService, sessionLogger, "Logs auth events", "CDI")
+Rel(authService, impersonationController, "Impersonation flows", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Presentation → Domain Services
+' ============================================================================
+Rel(quteEngine, catalogService, "Fetches products for storefront", "CDI")
+Rel(quteEngine, cartService, "Manages shopping cart", "CDI")
+Rel(quteEngine, checkoutOrchestrator, "Processes checkout", "CDI")
+Rel(restResources, catalogService, "Admin product CRUD", "CDI")
+Rel(restResources, orderService, "Admin order management", "CDI")
+Rel(restResources, vendorService, "Consignment vendor portal", "CDI")
+Rel(posAPI, orderService, "POS sales submission", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Catalog Domain
+' ============================================================================
+Rel(catalogService, inventoryService, "Stock checks, reservations", "CDI")
+Rel(catalogService, searchIndexer, "Publishes product change events", "CDI Events")
+Rel(searchIndexer, eventBus, "Subscribes to product events", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Checkout Orchestration
+' ============================================================================
+Rel(checkoutOrchestrator, cartService, "Validates cart contents", "CDI")
+Rel(checkoutOrchestrator, inventoryService, "Reserves stock", "CDI")
+Rel(checkoutOrchestrator, addressValidator, "Validates shipping address", "CDI")
+Rel(checkoutOrchestrator, shipmentService, "Fetches shipping rates", "CDI")
+Rel(checkoutOrchestrator, taxAdapter, "Calculates sales tax", "CDI")
+Rel(checkoutOrchestrator, paymentService, "Processes payment", "CDI")
+Rel(checkoutOrchestrator, orderService, "Creates order record", "CDI")
+Rel(checkoutOrchestrator, loyaltyService, "Applies loyalty discounts", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Payment Integration
+' ============================================================================
+Rel(paymentService, stripeAdapter, "Delegates to Stripe provider", "CDI")
+Rel(stripeAdapter, stripe, "Payment intents, Connect APIs", "Stripe SDK")
+Rel(webhookProcessor, stripeAdapter, "Routes payment webhooks", "CDI")
+Rel(paymentService, ledgerService, "Records financial transactions", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Consignment Flows
+' ============================================================================
+Rel(vendorService, commissionCalculator, "Calculates vendor splits", "CDI")
+Rel(orderService, commissionCalculator, "Commission on completed orders", "CDI")
+Rel(payoutOrchestrator, commissionCalculator, "Batch payout amounts", "CDI")
+Rel(payoutOrchestrator, stripeAdapter, "Stripe Connect transfers", "CDI")
+Rel(payoutOrchestrator, ledgerService, "Records payout ledger entries", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Media Pipeline
+' ============================================================================
+Rel(mediaUploadController, mediaPipeline, "Enqueues processing job", "CDI")
+Rel(mediaPipeline, jobScheduler, "Submits to delayed_jobs", "CDI")
+Rel(jobWorker, mediaPipeline, "Invokes processing handler", "CDI")
+Rel(mediaPipeline, mediaWorker, "Delegates FFmpeg work", "Job queue")
+Rel(mediaWorker, cloudflareR2, "Fetches/uploads media", "S3 SDK")
+
+' ============================================================================
+' RELATIONSHIPS: Reporting & Analytics
+' ============================================================================
+Rel(orderService, reportingProjections, "Publishes order events", "CDI Events")
+Rel(paymentService, reportingProjections, "Publishes payment events", "CDI Events")
+Rel(vendorService, reportingProjections, "Publishes commission events", "CDI Events")
+Rel(dashboardAPI, reportingProjections, "Queries aggregates", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Platform Admin
+' ============================================================================
+Rel(restResources, tenantLifecycleService, "Tenant provisioning/management", "CDI")
+Rel(tenantLifecycleService, impersonationController, "Admin impersonation", "CDI")
+Rel(platformMetrics, tenantLifecycleService, "Cross-tenant health checks", "CDI")
+
+' ============================================================================
+' RELATIONSHIPS: Background Processing
+' ============================================================================
+Rel(jobScheduler, orderService, "Scheduled order updates", "CDI")
+Rel(jobScheduler, emailAdapter, "Email dispatch jobs", "CDI")
+Rel(jobScheduler, offlineQueue, "POS sync jobs", "CDI")
+Rel(emailAdapter, smtp, "Sends transactional email", "SMTP")
+
+' ============================================================================
+' RELATIONSHIPS: Integration Adapters
+' ============================================================================
+Rel(shipmentService, carrierAdapters, "Carrier API calls", "CDI")
+Rel(carrierAdapters, carriers, "USPS/UPS/FedEx APIs", "HTTPS/REST")
+Rel(addressValidator, carriers, "USPS address validation", "HTTPS/REST")
+Rel(taxAdapter, carriers, "Tax calculation API", "HTTPS/REST")
+
+' ============================================================================
+' RELATIONSHIPS: Infrastructure Primitives → Database
+' ============================================================================
+Rel(catalogService, postgresDB, "Product/inventory CRUD", "Panache/JDBC")
+Rel(orderService, postgresDB, "Order CRUD", "Panache/JDBC")
+Rel(vendorService, postgresDB, "Vendor CRUD", "Panache/JDBC")
+Rel(authService, postgresDB, "User/session CRUD", "Panache/JDBC")
+Rel(tenantLifecycleService, postgresDB, "Tenant CRUD", "Panache/JDBC")
+Rel(ledgerService, postgresDB, "Ledger entries", "Panache/JDBC")
+Rel(reportingProjections, postgresDB, "Aggregate writes", "Panache/JDBC")
+Rel(jobScheduler, postgresDB, "delayed_jobs polling", "JDBC")
+
+' ============================================================================
+' RELATIONSHIPS: Caching
+' ============================================================================
+Rel(catalogService, cacheManager, "Caches products", "Caffeine")
+Rel(tenantFilter, cacheManager, "Caches tenant metadata", "Caffeine")
+Rel(featureFlagHydration, cacheManager, "Caches flags", "Caffeine")
+
+' ============================================================================
+' NOTES
+' ============================================================================
+note right of tenantFilter
+  **Multi-Tenancy Enforcement:**
+  - Extracts Host header
+  - Resolves subdomain or custom domain
+  - Populates TenantContext ThreadLocal
+  - All downstream queries auto-filtered by tenant_id
+
+  **Documentation:**
+  - docs/adr/ADR-001-tenancy.md
+end note
+
+note right of checkoutOrchestrator
+  **Checkout Flow:**
+  1. Validate cart + inventory
+  2. Validate shipping address
+  3. Fetch shipping rates
+  4. Calculate sales tax
+  5. Apply loyalty discounts
+  6. Create payment intent
+  7. Reserve inventory
+  8. Create order + shipment records
+  9. Send confirmation email (async)
+
+  **Transactional Boundaries:**
+  - Single database transaction
+  - Rollback on any step failure
+  - Idempotency via cart token
+end note
+
+note right of stripeAdapter
+  **Stripe Integration:**
+  - Implements PaymentProvider interface
+  - Connect for marketplace payouts
+  - Webhook signature validation
+  - Idempotency keys for retries
+  - Handles payment intents, refunds, disputes
+
+  **Consignment:**
+  - Platform account for SaaS fees
+  - Connected accounts per merchant
+  - Application fee splits for consignors
+end note
+
+note right of mediaPipeline
+  **Media Processing:**
+  - Async job queue pattern
+  - Pre-signed upload URLs
+  - FFmpeg for video transcoding
+  - Thumbnailator for image resizing
+  - Generates WebP variants
+  - Stores in Cloudflare R2
+  - Updates media_assets table with URLs
+end note
+
+note right of reportingProjections
+  **Event-Driven Reporting:**
+  - Listens to domain events via CDI
+  - Builds read-optimized aggregates
+  - Time-series data for dashboards
+  - Supports CSV/PDF export
+  - Separate from transactional tables
+  - Eventually consistent
+end note
+
+note right of jobScheduler
+  **Background Job Model:**
+  - Database-backed DelayedJob pattern
+  - Priority queues (CRITICAL → BULK)
+  - Exponential backoff retries
+  - Dead letter queue
+  - Cron-like schedules via @Scheduled
+  - Separate worker pod deployment
+end note
+
+@enduml

@@ -1,0 +1,119 @@
+@startuml system-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+!theme plain
+scale max 1920 width
+
+' Rendering command:
+' docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/system-context.puml -tpng
+' Or with local PlantUML: plantuml docs/diagrams/system-context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Village Storefront - System Context Diagram (C4 Level 1)
+
+' ============================================================================
+' PERSONAS (Primary Actors)
+' ============================================================================
+Person(merchant, "Merchant", "Store owner managing products, orders, settings")
+Person(staff, "Store Staff", "Employee processing orders, managing inventory")
+Person(customer, "Customer", "Shopper browsing and purchasing products")
+Person(consignor, "Consignment Vendor", "Third-party seller listing items for commission")
+Person(platformAdmin, "Platform Admin", "SaaS operator managing tenants, system health")
+Person(headlessPartner, "Headless Partner", "External system integrating via API")
+Person(auditor, "Auditor", "Compliance/security reviewer accessing audit logs")
+Person(posClerk, "POS Clerk", "In-store staff using point-of-sale interface")
+
+' ============================================================================
+' CORE SYSTEM
+' ============================================================================
+System(villageStorefront, "Village Storefront", "Multi-tenant SaaS ecommerce platform enabling merchants to operate online stores with consignment management, payment processing, and dual-frontend architecture (Qute storefront + Vue.js admin)")
+
+' ============================================================================
+' EXTERNAL SYSTEMS (Integration Edges)
+' ============================================================================
+System_Ext(stripe, "Stripe API", "Payment processing, refunds, disputes, Connect payouts")
+System_Ext(cloudflareR2, "Cloudflare R2", "Object storage for product images, digital downloads, media variants")
+System_Ext(carriers, "Shipping Carriers", "USPS, UPS, FedEx APIs for rate calculation and label generation")
+System_Ext(dnsSSL, "DNS & SSL Automation", "cert-manager for ACME certificates, Cloudflare DNS for custom domains")
+System_Ext(ffmpeg, "FFmpeg Worker", "Media processing for video transcoding, thumbnail generation")
+System_Ext(oauth, "OAuth Providers", "Google, Facebook, Apple for social login")
+System_Ext(taxEngine, "Tax Calculation Service", "Avalara/TaxJar for sales tax rates and nexus")
+System_Ext(addressValidation, "Address Validation", "USPS/SmartyStreets for shipping address verification")
+System_Ext(smtp, "Transactional Email", "SMTP relay (Mailpit dev, SendGrid prod) for order confirmations, notifications")
+System_Ext(analytics, "Analytics Destination", "Google Analytics, Mixpanel for storefront telemetry")
+
+' ============================================================================
+' RELATIONSHIPS: Personas → Core System
+' ============================================================================
+Rel(merchant, villageStorefront, "Manages store via Admin Dashboard (Vue.js SPA)", "HTTPS/JWT")
+Rel(staff, villageStorefront, "Processes orders, updates inventory via Admin Dashboard", "HTTPS/JWT")
+Rel(customer, villageStorefront, "Browses products, places orders via Storefront (Qute)", "HTTPS")
+Rel(consignor, villageStorefront, "Submits consignment items, views sales via Vendor Portal", "HTTPS/JWT")
+Rel(platformAdmin, villageStorefront, "Manages tenants, impersonates users, monitors system via Platform Console", "HTTPS/JWT + elevated permissions")
+Rel(headlessPartner, villageStorefront, "Integrates via REST API for catalog, orders, webhooks", "HTTPS/API Key")
+Rel(auditor, villageStorefront, "Reviews audit logs, session history, impersonation events", "HTTPS/JWT + read-only")
+Rel(posClerk, villageStorefront, "Processes in-store sales via POS interface (offline-capable)", "HTTPS/JWT + hardware bridge")
+
+' ============================================================================
+' RELATIONSHIPS: Core System → External Systems
+' ============================================================================
+Rel(villageStorefront, stripe, "Processes payments, manages Connect accounts, handles webhooks", "HTTPS/REST + webhooks")
+Rel(villageStorefront, cloudflareR2, "Stores/retrieves media assets with signed URLs", "S3 SDK")
+Rel(villageStorefront, carriers, "Fetches shipping rates, generates labels", "HTTPS/REST")
+Rel(villageStorefront, dnsSSL, "Automates certificate renewal, validates custom domains", "cert-manager API")
+Rel(villageStorefront, ffmpeg, "Enqueues media processing jobs for transcoding", "Job queue + S3 keys")
+Rel(villageStorefront, oauth, "Authenticates users via social providers", "OAuth 2.0")
+Rel(villageStorefront, taxEngine, "Calculates sales tax for checkout", "HTTPS/REST")
+Rel(villageStorefront, addressValidation, "Validates shipping addresses during checkout", "HTTPS/REST")
+Rel(villageStorefront, smtp, "Sends transactional emails (order confirmations, password resets)", "SMTP")
+Rel(villageStorefront, analytics, "Pushes storefront telemetry events", "JavaScript SDK")
+
+' ============================================================================
+' REVERSE RELATIONSHIPS: External Systems → Core System
+' ============================================================================
+Rel_Back(stripe, villageStorefront, "Sends webhooks for payment events, disputes, payouts", "HTTPS/webhooks")
+Rel_Back(smtp, villageStorefront, "Delivers email status updates (bounces, complaints)", "SMTP callbacks")
+
+' ============================================================================
+' NOTES
+' ============================================================================
+note right of villageStorefront
+  **Core Architecture:**
+  - Layered modular monolith on Quarkus + Java 21
+  - PostgreSQL 17 with tenant_id scoped queries
+  - GraalVM native compilation for <100ms cold start
+  - Multi-tenant via subdomain/custom domain resolution
+
+  **Deployment:**
+  - Kubernetes (k3s) cluster
+  - Observability: OpenTelemetry, Prometheus, Jaeger
+
+  **Documentation Anchors:**
+  - docs/architecture_overview.md#section-3-layered-architecture
+  - docs/architecture_overview.md#section-4-tenant-isolation
+  - docs/adr/ADR-001-tenancy.md
+end note
+
+note right of stripe
+  **Stripe Connect Integration:**
+  - Platform account for SaaS
+  - Connected accounts per merchant
+  - Commission-based payouts for consignors
+end note
+
+note right of dnsSSL
+  **Custom Domain Support:**
+  - Merchants can map custom domains
+  - Automated ACME certificate issuance
+  - DNS validation via Cloudflare API
+end note
+
+note right of ffmpeg
+  **Media Pipeline:**
+  - Asynchronous processing for video/images
+  - Generates thumbnails, WebP variants
+  - Offloads compute from main application
+end note
+
+@enduml
