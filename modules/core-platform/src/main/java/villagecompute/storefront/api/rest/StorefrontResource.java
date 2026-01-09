@@ -1,18 +1,35 @@
 package villagecompute.storefront.api.rest;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Year;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.UriInfo;
 
 import org.jboss.logging.Logger;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.data.models.Category;
 import villagecompute.storefront.data.models.Product;
@@ -45,12 +62,17 @@ import io.quarkus.qute.TemplateInstance;
 public class StorefrontResource {
 
     private static final Logger LOG = Logger.getLogger(StorefrontResource.class);
+    private static final String THEME_RESOURCE_PREFIX = "templates/storefront/_generated/";
+    private static final String THEME_INDEX_RESOURCE = THEME_RESOURCE_PREFIX + "theme-index.json";
 
     @Inject
     CatalogService catalogService;
 
     @Inject
     LocalizationService localizationService;
+
+    @Inject
+    ObjectMapper objectMapper;
 
     /**
      * CheckedTemplate for type-safe Qute template references. Templates are located in src/main/resources/templates/
@@ -59,6 +81,8 @@ public class StorefrontResource {
             requireTypeSafeExpressions = false)
     public static class Templates {
         public static native TemplateInstance index();
+
+        public static native TemplateInstance catalog();
     }
 
     /**
@@ -140,9 +164,163 @@ public class StorefrontResource {
      * @return theme tokens map
      */
     private Map<String, String> buildThemeTokens(TenantInfo tenantInfo) {
-        // TODO: Load from tenant_theme table
-        // For now, return empty map to use defaults from tailwind.config.js
-        return new HashMap<>();
+        Map<String, String> tokens = new HashMap<>();
+
+        if (tenantInfo == null || objectMapper == null) {
+            return tokens;
+        }
+
+        try {
+            JsonNode indexNode = readJsonResource(THEME_INDEX_RESOURCE);
+            if (indexNode == null || indexNode.size() == 0) {
+                return tokens;
+            }
+
+            JsonNode themeEntry = indexNode.path(tenantInfo.subdomain());
+            if (themeEntry.isMissingNode()) {
+                themeEntry = indexNode.path("default");
+            }
+            if (themeEntry.isMissingNode()) {
+                themeEntry = indexNode.elements().hasNext() ? indexNode.elements().next() : null;
+            }
+            if (themeEntry == null || themeEntry.isMissingNode()) {
+                return tokens;
+            }
+
+            String jsonFile = themeEntry.path("jsonFile").asText();
+            if (!hasText(jsonFile)) {
+                return tokens;
+            }
+
+            JsonNode themeNode = readJsonResource(THEME_RESOURCE_PREFIX + jsonFile);
+            if (themeNode == null) {
+                return tokens;
+            }
+
+            populateTokenMap(tokens, "primary", themeNode.path("primaryColors"));
+            populateTokenMap(tokens, "secondary", themeNode.path("secondaryColors"));
+        } catch (IOException e) {
+            LOG.warn("Failed to hydrate theme tokens from generated files", e);
+        }
+
+        return tokens;
+    }
+
+    private Map<String, String> buildCategoryLookup(List<Category> categories) {
+        if (categories == null || categories.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return categories.stream().filter(category -> hasText(category.slug) && hasText(category.name))
+                .collect(Collectors.toMap(category -> category.slug, category -> category.name,
+                        (existing, ignored) -> existing));
+    }
+
+    private Set<String> buildSelectedCategorySlugs(String categorySlug, UriInfo uriInfo) {
+        Set<String> selected = new HashSet<>();
+        if (hasText(categorySlug) && !"all".equalsIgnoreCase(categorySlug)) {
+            selected.add(categorySlug);
+        }
+        if (uriInfo != null) {
+            MultivaluedMap<String, String> params = uriInfo.getQueryParameters();
+            if (params != null) {
+                List<String> categoryParams = params.get("category");
+                if (categoryParams != null) {
+                    categoryParams.stream().filter(this::hasText).forEach(selected::add);
+                }
+            }
+        }
+        return selected;
+    }
+
+    private List<Map<String, Object>> buildCategoryFilterOptions(List<Category> categories,
+            Set<String> selectedCategorySlugs) {
+        if (categories == null || categories.isEmpty()) {
+            return List.of();
+        }
+
+        return categories.stream().filter(category -> hasText(category.slug)).map(category -> {
+            Map<String, Object> option = new HashMap<>();
+            option.put("name", category.name);
+            option.put("slug", category.slug);
+            option.put("selected", selectedCategorySlugs.contains(category.slug));
+            option.put("count", null);
+            return option;
+        }).collect(Collectors.toList());
+    }
+
+    private String resolveCategoryName(String categorySlug, Map<String, String> categoryLookup,
+            Map<String, String> messages) {
+        if (!hasText(categorySlug) || "all".equalsIgnoreCase(categorySlug)) {
+            return messages.getOrDefault("all_products", "All Products");
+        }
+        return categoryLookup.getOrDefault(categorySlug, categorySlug);
+    }
+
+    private void addFiltersFromParam(MultivaluedMap<String, String> params, String paramKey,
+            Map<String, String> labelLookup, List<Map<String, Object>> activeFilters, Set<String> seen) {
+        List<String> values = params.get(paramKey);
+        if (values == null) {
+            return;
+        }
+        values.stream().filter(this::hasText).forEach(value -> {
+            String label = labelLookup != null ? labelLookup.getOrDefault(value, value) : value;
+            addActiveFilter(activeFilters, seen, paramKey, value, label);
+        });
+    }
+
+    private void addBooleanFilter(List<Map<String, Object>> activeFilters, Set<String> seen, String key,
+            MultivaluedMap<String, String> params, String label) {
+        String value = params.getFirst(key);
+        if (isTruthy(value)) {
+            addActiveFilter(activeFilters, seen, key, "true", label);
+        }
+    }
+
+    private void addPriceFilterPill(List<Map<String, Object>> activeFilters, Set<String> seen, String key, String value,
+            String labelPrefix) {
+        if (!hasText(value)) {
+            return;
+        }
+        String label = String.format("%s: $%s", labelPrefix, value);
+        addActiveFilter(activeFilters, seen, key, value, label);
+    }
+
+    private void addActiveFilter(List<Map<String, Object>> activeFilters, Set<String> seen, String key, String value,
+            String label) {
+        String dedupeKey = key + ":" + value;
+        if (seen.contains(dedupeKey)) {
+            return;
+        }
+        seen.add(dedupeKey);
+
+        Map<String, Object> filter = new HashMap<>();
+        filter.put("key", key);
+        filter.put("value", value);
+        filter.put("label", label);
+        activeFilters.add(filter);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String urlEncode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private Integer parseInteger(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isTruthy(String value) {
+        return "true".equalsIgnoreCase(value) || "1".equals(value);
     }
 
     /**
@@ -243,5 +421,292 @@ public class StorefrontResource {
     private String getCategoryName(Product product) {
         // TODO: Load category relationships and return primary category name
         return null;
+    }
+
+    /**
+     * Catalog browsing route - renders product grid with filters and pagination.
+     *
+     * @param categorySlug
+     *            optional category slug for filtering
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @param sortBy
+     *            sort order
+     * @param uriInfo
+     *            URI info for query params
+     * @return rendered HTML
+     */
+    @GET
+    @Path("/category/{slug}")
+    @Timed(
+            value = "storefront.catalog.render",
+            description = "Catalog page render time")
+    public String catalog(@PathParam("slug") String categorySlug, @QueryParam("page") @DefaultValue("0") int page,
+            @QueryParam("size") @DefaultValue("12") int size,
+            @QueryParam("sort") @DefaultValue("relevance") String sortBy, @Context UriInfo uriInfo) {
+
+        long startTime = System.currentTimeMillis();
+        TenantInfo tenantInfo = TenantContext.getCurrentTenant();
+
+        LOG.infof("Rendering catalog - tenantId=%s, category=%s, page=%d, size=%d, sort=%s", tenantInfo.tenantId(),
+                categorySlug, page, size, sortBy);
+
+        String locale = "en"; // TODO: derive from tenant or Accept-Language header
+        Map<String, String> messages = localizationService.loadMessages(locale);
+
+        // Fetch products with pagination
+        CatalogService.CatalogSearchResult searchResult = catalogService.listProducts(categorySlug, null, page, size);
+        List<Product> products = searchResult.products();
+        long totalProducts = searchResult.totalItems();
+
+        // Fetch available categories for the filter panel
+        List<Category> filterCategories = catalogService.getRootCategories();
+        Map<String, String> categoryLookup = buildCategoryLookup(filterCategories);
+        Set<String> selectedCategorySlugs = buildSelectedCategorySlugs(categorySlug, uriInfo);
+
+        // Calculate pagination
+        int totalPages = (int) Math.ceil((double) totalProducts / size);
+        int totalPagesDisplay = Math.max(totalPages, 1);
+        int currentPageDisplay = Math.min(page + 1, totalPagesDisplay);
+
+        // Build category breadcrumbs and info
+        String categoryName = resolveCategoryName(categorySlug, categoryLookup, messages);
+        String categoryDescription = null; // TODO: Load from category entity
+        List<Map<String, Object>> breadcrumbs = buildBreadcrumbs(categorySlug, categoryName);
+
+        // Build filter data
+        Map<String, Object> filters = buildFilterData(uriInfo, filterCategories, selectedCategorySlugs);
+
+        // Build active filters from query params
+        List<Map<String, Object>> activeFilters = buildActiveFilters(uriInfo, messages, categoryLookup);
+
+        // Build page numbers for pagination
+        List<Integer> pageNumbers = buildPageNumbers(page, totalPages);
+
+        // Build query param strings for pagination links
+        String sortParam = (sortBy != null && !sortBy.isBlank() && !"relevance".equals(sortBy))
+                ? "&sort=" + urlEncode(sortBy)
+                : "";
+        String filterParams = buildFilterParamString(uriInfo);
+
+        Map<String, String> themeTokens = buildThemeTokens(tenantInfo);
+
+        long renderTime = System.currentTimeMillis() - startTime;
+        LOG.infof("Catalog rendered in %d ms - tenantId=%s, products=%d", renderTime, tenantInfo.tenantId(),
+                products.size());
+
+        return Templates.catalog().data("tenantName", tenantInfo.name()).data("tenantSubdomain", tenantInfo.subdomain())
+                .data("msg", messages).data("themeTokens", themeTokens).data("categoryName", categoryName)
+                .data("categoryDescription", categoryDescription).data("breadcrumbs", breadcrumbs)
+                .data("products", mapProductsToDisplayData(products)).data("totalProducts", totalProducts)
+                .data("currentPage", page).data("currentPageDisplay", currentPageDisplay).data("totalPages", totalPages)
+                .data("totalPagesDisplay", totalPagesDisplay).data("pageNumbers", pageNumbers)
+                .data("sortBy", sortBy).data("sortParam", sortParam).data("filterParams", filterParams)
+                .data("filters", filters).data("activeFilters", activeFilters).data("locale", locale)
+                .data("currentYear", Year.now().getValue()).data("pageTitle", categoryName)
+                .data("seoDescription", categoryDescription).render();
+    }
+
+    /**
+     * Build breadcrumb navigation for catalog page.
+     *
+     * @param categorySlug
+     *            category slug
+     * @return breadcrumb list
+     */
+    private List<Map<String, Object>> buildBreadcrumbs(String categorySlug, String categoryDisplayName) {
+        List<Map<String, Object>> breadcrumbs = new ArrayList<>();
+
+        // For now, just add the current category
+        // TODO: Build full category hierarchy from database
+        if (categorySlug != null && !"all".equalsIgnoreCase(categorySlug)) {
+            Map<String, Object> crumb = new HashMap<>();
+            crumb.put("name", categoryDisplayName != null ? categoryDisplayName : categorySlug);
+            crumb.put("url", "/category/" + categorySlug);
+            crumb.put("isLast", true);
+            breadcrumbs.add(crumb);
+        }
+
+        return breadcrumbs;
+    }
+
+    /**
+     * Build filter data structure for filter panel.
+     *
+     * @param uriInfo
+     *            URI info for current query params
+     * @return filter data map
+     */
+    private Map<String, Object> buildFilterData(UriInfo uriInfo, List<Category> categories,
+            Set<String> selectedCategorySlugs) {
+        Map<String, Object> filters = new HashMap<>();
+        MultivaluedMap<String, String> queryParams = uriInfo != null ? uriInfo.getQueryParameters() : null;
+        String selectedPriceMin = queryParams != null ? queryParams.getFirst("price_min") : null;
+        String selectedPriceMax = queryParams != null ? queryParams.getFirst("price_max") : null;
+
+        // TODO: Load actual filter options from database/aggregations
+        // For now, return minimal structure
+
+        // Price range filter (stubbed)
+        Map<String, Object> priceRange = new HashMap<>();
+        priceRange.put("min", 0);
+        priceRange.put("max", 1000);
+        priceRange.put("selectedMin", parseInteger(selectedPriceMin));
+        priceRange.put("selectedMax", parseInteger(selectedPriceMax));
+        priceRange.put("quickRanges", List.of());
+        filters.put("priceRange", priceRange);
+
+        // Availability filter
+        Map<String, Object> availability = new HashMap<>();
+        availability.put("inStock", isTruthy(queryParams != null ? queryParams.getFirst("in_stock") : null));
+        availability.put("onSale", isTruthy(queryParams != null ? queryParams.getFirst("on_sale") : null));
+        filters.put("availability", availability);
+
+        filters.put("categories", buildCategoryFilterOptions(categories, selectedCategorySlugs));
+        filters.put("brands", List.of());
+        filters.put("tags", List.of());
+
+        return filters;
+    }
+
+    /**
+     * Build list of active filters from query parameters.
+     *
+     * @param uriInfo
+     *            URI info
+     * @return list of active filter objects
+     */
+    private List<Map<String, Object>> buildActiveFilters(UriInfo uriInfo, Map<String, String> messages,
+            Map<String, String> categoryLookup) {
+        List<Map<String, Object>> activeFilters = new ArrayList<>();
+        if (uriInfo == null) {
+            return activeFilters;
+        }
+
+        MultivaluedMap<String, String> params = uriInfo.getQueryParameters();
+        if (params == null || params.isEmpty()) {
+            return activeFilters;
+        }
+
+        Set<String> seen = new HashSet<>();
+        addFiltersFromParam(params, "category", categoryLookup, activeFilters, seen);
+        addFiltersFromParam(params, "brand", null, activeFilters, seen);
+        addFiltersFromParam(params, "tag", null, activeFilters, seen);
+
+        addBooleanFilter(activeFilters, seen, "in_stock", params, messages.getOrDefault("in_stock_only", "In Stock"));
+        addBooleanFilter(activeFilters, seen, "on_sale", params, messages.getOrDefault("on_sale_only", "On Sale"));
+
+        addPriceFilterPill(activeFilters, seen, "price_min", params.getFirst("price_min"),
+                messages.getOrDefault("price_min", "Min"));
+        addPriceFilterPill(activeFilters, seen, "price_max", params.getFirst("price_max"),
+                messages.getOrDefault("price_max", "Max"));
+
+        List<String> quickRanges = params.get("price_range");
+        if (quickRanges != null) {
+            quickRanges.stream().filter(this::hasText).forEach(value -> {
+                String label = messages.getOrDefault("filter_price", "Price Range") + ": " + value;
+                addActiveFilter(activeFilters, seen, "price_range", value, label);
+            });
+        }
+
+        return activeFilters;
+    }
+
+    /**
+     * Build page numbers for pagination UI.
+     *
+     * @param currentPage
+     *            current page (0-indexed)
+     * @param totalPages
+     *            total number of pages
+     * @return list of page numbers (or -1 for ellipsis)
+     */
+    private List<Integer> buildPageNumbers(int currentPage, int totalPages) {
+        List<Integer> pages = new ArrayList<>();
+
+        if (totalPages <= 7) {
+            // Show all pages
+            for (int i = 0; i < totalPages; i++) {
+                pages.add(i);
+            }
+        } else {
+            // Show first, last, current, and nearby pages with ellipsis
+            pages.add(0); // First page
+
+            if (currentPage > 3) {
+                pages.add(-1); // Ellipsis
+            }
+
+            // Show 2 pages before and after current
+            for (int i = Math.max(1, currentPage - 2); i <= Math.min(totalPages - 2, currentPage + 2); i++) {
+                pages.add(i);
+            }
+
+            if (currentPage < totalPages - 4) {
+                pages.add(-1); // Ellipsis
+            }
+
+            pages.add(totalPages - 1); // Last page
+        }
+
+        return pages;
+    }
+
+    /**
+     * Build filter parameter string for pagination links.
+     *
+     * @param uriInfo
+     *            URI info
+     * @return filter param string (e.g., "&category=foo&brand=bar")
+     */
+    private String buildFilterParamString(UriInfo uriInfo) {
+        if (uriInfo == null) {
+            return "";
+        }
+        MultivaluedMap<String, String> params = uriInfo.getQueryParameters();
+        if (params == null || params.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        params.forEach((key, values) -> {
+            if ("page".equals(key) || "sort".equals(key) || values == null) {
+                return;
+            }
+            for (String value : values) {
+                if (!hasText(value)) {
+                    continue;
+                }
+                builder.append("&").append(key).append("=").append(urlEncode(value));
+            }
+        });
+
+        return builder.toString();
+    }
+
+    private JsonNode readJsonResource(String resourcePath) throws IOException {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try (InputStream stream = classLoader.getResourceAsStream(resourcePath)) {
+            if (stream == null) {
+                LOG.debugf("Theme resource not found: %s", resourcePath);
+                return null;
+            }
+            return objectMapper.readTree(stream);
+        }
+    }
+
+    private void populateTokenMap(Map<String, String> tokens, String prefix, JsonNode paletteNode) {
+        if (paletteNode == null || paletteNode.isMissingNode()) {
+            return;
+        }
+
+        paletteNode.fieldNames().forEachRemaining(key -> {
+            String value = paletteNode.path(key).asText();
+            if (hasText(value)) {
+                tokens.put(prefix + key, value);
+            }
+        });
     }
 }

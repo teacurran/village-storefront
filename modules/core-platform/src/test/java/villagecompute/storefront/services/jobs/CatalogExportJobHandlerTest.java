@@ -20,13 +20,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.opencsv.CSVReader;
+
 import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.repositories.ProductRepository;
 import villagecompute.storefront.reporting.StubReportStorageClient;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-
-import com.opencsv.CSVReader;
 
 /**
  * Unit tests for CatalogExportJobHandler.

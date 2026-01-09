@@ -15,6 +15,7 @@
 module.exports = {
   content: [
     './src/main/resources/templates/**/*.{html,qute}',
+    './modules/core-platform/src/main/resources/templates/**/*.{html,qute}',
   ],
   theme: {
     extend: {
