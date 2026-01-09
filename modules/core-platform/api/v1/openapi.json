@@ -91,6 +91,17 @@
           }
         }
       },
+      "ApplyPromotionRequest" : {
+        "type" : "object",
+        "required" : [ "promoCode" ],
+        "properties" : {
+          "promoCode" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 50
+          }
+        }
+      },
       "ApprovePrivacyRequestRequest" : {
         "type" : "object",
         "properties" : {
@@ -2227,7 +2238,12 @@
     },
     "/api/v1/admin/orders" : {
       "get" : {
+        "summary" : "List all tenant orders (Admin)",
+        "description" : "Returns a paginated list of all orders for the current tenant with advanced filtering,\nsearching, and sorting capabilities. Admin-only endpoint.\n\n**Authentication:** Requires admin role.\n**Filtering:** Filter by order status (pending_payment, processing, shipped, delivered, cancelled, refunded).\n**Search:** Search by order number or customer email.\n**Sorting:** Sort by order number, customer email, status, total amount, or created date.\n",
+        "tags" : [ "Admin" ],
         "parameters" : [ {
+          "description" : "Page number (1-indexed)",
+          "example" : 1,
           "name" : "page",
           "in" : "query",
           "schema" : {
@@ -2235,6 +2251,8 @@
             "format" : "int32"
           }
         }, {
+          "description" : "Items per page (max 100)",
+          "example" : 20,
           "name" : "pageSize",
           "in" : "query",
           "schema" : {
@@ -2242,24 +2260,32 @@
             "format" : "int32"
           }
         }, {
+          "description" : "Search by order number or customer email",
+          "example" : "ORD-2026-00042",
           "name" : "search",
           "in" : "query",
           "schema" : {
             "type" : "string"
           }
         }, {
+          "description" : "Field to sort by",
+          "example" : "createdAt",
           "name" : "sortBy",
           "in" : "query",
           "schema" : {
             "type" : "string"
           }
         }, {
+          "description" : "Sort direction (asc or desc)",
+          "example" : "desc",
           "name" : "sortOrder",
           "in" : "query",
           "schema" : {
             "type" : "string"
           }
         }, {
+          "description" : "Filter by order status",
+          "example" : "processing",
           "name" : "status",
           "in" : "query",
           "schema" : {
@@ -2268,19 +2294,40 @@
         } ],
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Orders retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderListResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid filter or sort parameters",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Admin List Orders",
-        "tags" : [ "Order Resource" ]
+        }
       }
     },
     "/api/v1/admin/orders/{orderId}" : {
       "patch" : {
+        "summary" : "Update order (Admin)",
+        "description" : "Updates order status, admin notes, or tags. Partial update - only provided fields are modified.\n\n**Authentication:** Requires admin role.\n**Status Transitions:** Some status changes may be restricted (see OrderService for state machine rules).\n**Optimistic Locking:** Returns HTTP 409 if order was modified concurrently.\n\nUse dedicated endpoints for cancellation (/cancel) and refunds (/refund).\n",
+        "tags" : [ "Admin" ],
         "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
           "name" : "orderId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
@@ -2297,36 +2344,90 @@
         },
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Order updated successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (invalid status, illegal state transition)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Optimistic lock exception (order was modified concurrently)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Admin Update Order",
-        "tags" : [ "Order Resource" ]
+        }
       },
       "get" : {
+        "summary" : "Get order details (Admin)",
+        "description" : "Returns complete order details including all fields visible to admins\n(notes, tags, internal metadata).\n\n**Authentication:** Requires admin role.\n**Tenant isolation:** Returns 404 if order belongs to different tenant.\n",
+        "tags" : [ "Admin" ],
         "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
           "name" : "orderId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
         } ],
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Order retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Admin Get Order",
-        "tags" : [ "Order Resource" ]
+        }
       }
     },
     "/api/v1/admin/orders/{orderId}/cancel" : {
       "post" : {
+        "summary" : "Cancel order (Admin)",
+        "description" : "Cancels an order with a required reason. Optionally triggers refund if payment was captured.\n\n**Authentication:** Requires admin role.\n**State Machine:** Only certain order statuses can be cancelled (see OrderService rules).\n**Inventory:** Cancelled orders should restore inventory (future enhancement).\n",
+        "tags" : [ "Admin" ],
         "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
           "name" : "orderId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
@@ -2344,26 +2445,52 @@
         },
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Order cancelled successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
           },
           "400" : {
-            "description" : "Bad Request"
+            "description" : "Invalid request (missing reason, illegal state for cancellation)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Admin Cancel Order",
-        "tags" : [ "Order Resource" ]
+        }
       }
     },
     "/api/v1/admin/orders/{orderId}/refund" : {
       "post" : {
+        "summary" : "Refund order (Admin)",
+        "description" : "Issues a refund for an order via the payment provider (Stripe). Supports partial or full refunds.\n\n**Authentication:** Requires admin role.\n**Idempotent:** Requires X-Idempotency-Key header to prevent duplicate refunds.\n**Payment Provider:** Integrates with Stripe Refunds API.\n**Status:** Currently returns placeholder response (full implementation pending in I3.T3).\n",
+        "tags" : [ "Admin" ],
         "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
           "name" : "orderId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
         }, {
+          "description" : "Idempotency key (UUID v4) for safe retries",
+          "required" : true,
           "name" : "X-Idempotency-Key",
           "in" : "header",
           "schema" : {
@@ -2382,15 +2509,35 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "201" : {
+            "description" : "Refund initiated successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RefundResponse"
+                }
+              }
+            }
           },
           "400" : {
-            "description" : "Bad Request"
+            "description" : "Invalid request (missing idempotency key, invalid refund amount)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Admin Refund Order",
-        "tags" : [ "Order Resource" ]
+        }
       }
     },
     "/api/v1/admin/reports/aggregates/consignment-payouts" : {
@@ -2836,6 +2983,94 @@
         }
       }
     },
+    "/api/v1/cart/promotions" : {
+      "delete" : {
+        "summary" : "Remove promotion from cart",
+        "description" : "Removes the applied discount code from the cart and recalculates totals.\n\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie.\n",
+        "operationId" : "removePromotion",
+        "tags" : [ "Storefront" ],
+        "responses" : {
+          "200" : {
+            "description" : "Promotion removed successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartDto"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      },
+      "post" : {
+        "summary" : "Apply promotion code to cart",
+        "description" : "Applies a discount code to the current cart. Validates the promotion code against\nexpiry dates, usage limits, and minimum order requirements.\n\n**Validation:**\n- Promotion must be active and not expired\n- Usage limits (global and per-customer) enforced\n- Minimum order amount validated (if configured)\n- Only one promotion per cart (replaces existing)\n\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie.\n",
+        "operationId" : "applyPromotion",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApplyPromotionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Promotion applied successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid promotion code (expired, usage limit exceeded, minimum not met)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart or promotion not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/totals" : {
+      "get" : {
+        "summary" : "Get cart totals",
+        "description" : "Returns a breakdown of cart pricing including subtotal, applied discounts,\nestimated tax (if configured), and grand total.\n\n**Note:** Tax and shipping are not calculated until checkout.\nThis endpoint provides subtotal and discount only.\n\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie.\n",
+        "operationId" : "getCartTotals",
+        "tags" : [ "Storefront" ],
+        "responses" : {
+          "200" : {
+            "description" : "Cart totals retrieved successfully",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/products" : {
       "get" : {
         "parameters" : [ {
@@ -2974,6 +3209,92 @@
           },
           "503" : {
             "description" : "Service unavailable (checkout feature disabled)",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/checkout/shipping-rates" : {
+      "post" : {
+        "summary" : "Get shipping rate quotes",
+        "description" : "Returns available shipping options (Standard, Express, Overnight) with calculated\nrates based on cart weight, dimensions, and destination address.\n\n**Use Case:** Call this during checkout step 2 (after address validation) to display shipping options.\n**Provider:** Uses configured shipping provider (Shippo, EasyPost, etc.).\n**Authentication:** Optional - supports both guest and authenticated sessions.\n\n**Note:** Rates are estimates and may change at order creation time.\n",
+        "operationId" : "getShippingRates",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Shipping rates calculated successfully",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (missing cart ID, invalid address)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/checkout/validate-address" : {
+      "post" : {
+        "summary" : "Validate shipping address",
+        "description" : "Validates a shipping address using USPS or Lob API. Returns normalized address\nif valid, or validation errors if invalid.\n\n**Use Case:** Call this during checkout step 1 to verify address before proceeding.\n**Feature Flag:** Respects `checkout.address-validation.enabled` flag.\n**Authentication:** Optional - supports both guest and authenticated sessions.\n",
+        "operationId" : "validateAddress",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Address validation completed (may contain errors)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request format",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
             "content" : {
               "application/json" : { }
             }
@@ -3539,7 +3860,12 @@
     },
     "/api/v1/orders" : {
       "get" : {
+        "summary" : "List customer orders",
+        "description" : "Returns a paginated list of orders for the authenticated customer.\nResults are sorted by creation date (newest first).\n\n**Authentication:** Required - returns orders for the authenticated user only.\n**Pagination:** Default page size is 20, maximum is 100.\n",
+        "tags" : [ "Storefront" ],
         "parameters" : [ {
+          "description" : "Page number (1-indexed)",
+          "example" : 1,
           "name" : "page",
           "in" : "query",
           "schema" : {
@@ -3547,6 +3873,8 @@
             "format" : "int32"
           }
         }, {
+          "description" : "Items per page (max 100)",
+          "example" : 20,
           "name" : "pageSize",
           "in" : "query",
           "schema" : {
@@ -3554,6 +3882,8 @@
             "format" : "int32"
           }
         }, {
+          "description" : "Filter by order status",
+          "example" : "shipped",
           "name" : "status",
           "in" : "query",
           "schema" : {
@@ -3562,30 +3892,68 @@
         } ],
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Orders retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderListResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid status filter",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "List Orders",
-        "tags" : [ "Order Resource" ]
+        }
       }
     },
     "/api/v1/orders/{orderId}" : {
       "get" : {
+        "summary" : "Get order details",
+        "description" : "Returns complete order details including line items, payment status, shipping address,\nand fulfillment tracking information.\n\n**Authentication:** Required - customers can only access their own orders.\n**Admin users:** Can access all orders within their tenant.\n",
+        "tags" : [ "Storefront" ],
         "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
           "name" : "orderId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
         } ],
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Order retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Order not found or belongs to different tenant",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Get Order",
-        "tags" : [ "Order Resource" ]
+        }
       }
     },
     "/api/v1/platform/audit" : {
@@ -5041,11 +5409,14 @@
     }
   },
   "tags" : [ {
+    "name" : "Admin",
+    "description" : "Store administration operations"
+  }, {
     "name" : "POS Offline",
     "description" : "POS device management and offline transaction sync"
   }, {
     "name" : "Storefront",
-    "description" : "Customer-facing checkout operations"
+    "description" : "Customer-facing order operations"
   } ],
   "info" : {
     "title" : "Village Storefront API",
@@ -5053,10 +5424,10 @@
     "description" : "Multi-tenant SaaS ecommerce platform API"
   },
   "servers" : [ {
-    "url" : "http://localhost:0",
+    "url" : "http://localhost:8080",
     "description" : "Auto generated value"
   }, {
-    "url" : "http://0.0.0.0:0",
+    "url" : "http://0.0.0.0:8080",
     "description" : "Auto generated value"
   } ]
 }

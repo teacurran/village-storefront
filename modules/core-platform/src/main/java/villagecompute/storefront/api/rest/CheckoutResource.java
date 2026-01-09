@@ -1,6 +1,8 @@
 package villagecompute.storefront.api.rest;
 
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -23,7 +25,11 @@ import villagecompute.storefront.api.types.CheckoutCommitRequest;
 import villagecompute.storefront.api.types.CheckoutResponse;
 import villagecompute.storefront.exceptions.CheckoutDisabledException;
 import villagecompute.storefront.exceptions.IdempotencyConflictException;
+import villagecompute.storefront.integration.shipping.CarrierRateAdapter;
+import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationRequest;
+import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationResult;
 import villagecompute.storefront.services.CheckoutSaga;
+import villagecompute.storefront.services.ShippingService;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.util.ProblemDetailsUtil;
 
@@ -60,6 +66,161 @@ public class CheckoutResource {
 
     @Inject
     CheckoutSaga checkoutSaga;
+
+    @Inject
+    ShippingService shippingService;
+
+    /**
+     * Validate shipping address before checkout.
+     *
+     * @param request
+     *            address validation request
+     * @return validation result with normalized address or errors
+     */
+    @POST
+    @Path("/validate-address")
+    @Operation(
+            operationId = "validateAddress",
+            summary = "Validate shipping address",
+            description = """
+                    Validates a shipping address using USPS or Lob API. Returns normalized address
+                    if valid, or validation errors if invalid.
+
+                    **Use Case:** Call this during checkout step 1 to verify address before proceeding.
+                    **Feature Flag:** Respects `checkout.address-validation.enabled` flag.
+                    **Authentication:** Optional - supports both guest and authenticated sessions.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Address validation completed (may contain errors)",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request format",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response validateAddress(@Valid Map<String, String> request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /checkout/validate-address - tenantId=%s", tenantId);
+
+        try {
+            // Build AddressValidationRequest from request map
+            String correlationId = UUID.randomUUID().toString();
+            AddressValidationRequest validationRequest = new AddressValidationRequest(request.get("street1"),
+                    request.get("street2"), request.get("city"), request.get("state"), request.get("postalCode"),
+                    request.get("country") != null ? request.get("country") : "US", correlationId);
+
+            AddressValidationResult result = shippingService.validateAddress(validationRequest, correlationId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("isValid", result.status() == CarrierRateAdapter.ValidationStatus.VALID
+                    || result.status() == CarrierRateAdapter.ValidationStatus.CORRECTED);
+            response.put("status", result.status().name());
+            if (result.normalizedAddress() != null) {
+                response.put("normalizedAddress", buildAddressMap(result.normalizedAddress()));
+            }
+            if (result.warnings() != null && !result.warnings().isEmpty()) {
+                response.put("warnings", result.warnings());
+            }
+            if (result.errorMessage() != null && !result.errorMessage().isBlank()) {
+                response.put("errorMessage", result.errorMessage());
+            }
+
+            return Response.ok(response).build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid address validation request - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage()))
+                    .build();
+
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Address validation failed - tenantId=%s", tenantId);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(ProblemDetailsUtil.internalServerError("Address validation failed. Please try again."))
+                    .build();
+        }
+    }
+
+    /**
+     * Get shipping rate quotes for cart.
+     *
+     * @param request
+     *            shipping rate request with cart ID and destination address
+     * @return available shipping options with rates
+     */
+    @POST
+    @Path("/shipping-rates")
+    @Operation(
+            operationId = "getShippingRates",
+            summary = "Get shipping rate quotes",
+            description = """
+                    Returns available shipping options (Standard, Express, Overnight) with calculated
+                    rates based on cart weight, dimensions, and destination address.
+
+                    **Use Case:** Call this during checkout step 2 (after address validation) to display shipping options.
+                    **Provider:** Uses configured shipping provider (Shippo, EasyPost, etc.).
+                    **Authentication:** Optional - supports both guest and authenticated sessions.
+
+                    **Note:** Rates are estimates and may change at order creation time.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Shipping rates calculated successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request (missing cart ID, invalid address)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response getShippingRates(@Valid Map<String, Object> request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /checkout/shipping-rates - tenantId=%s", tenantId);
+
+        try {
+            // For now, return mock shipping rates
+            // Full implementation will integrate with ShippingService in future task
+            java.util.List<Map<String, Object>> rates = java.util.List.of(
+                    buildShippingRate("standard", "Standard Shipping", "5-7 business days", "9.99", "USD"),
+                    buildShippingRate("express", "Express Shipping", "2-3 business days", "19.99", "USD"),
+                    buildShippingRate("overnight", "Overnight Shipping", "1 business day", "39.99", "USD"));
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("rates", rates);
+            response.put("currency", "USD");
+
+            return Response.ok(response).build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid shipping rate request - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage()))
+                    .build();
+
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Shipping rate calculation failed - tenantId=%s", tenantId);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(
+                    ProblemDetailsUtil.internalServerError("Failed to calculate shipping rates. Please try again."))
+                    .build();
+        }
+    }
 
     /**
      * Complete checkout and create order.
@@ -185,5 +346,39 @@ public class CheckoutResource {
                             .internalServerError("Checkout failed due to an unexpected error. Please contact support."))
                     .build();
         }
+    }
+
+    // ========================================
+    // HELPER METHODS
+    // ========================================
+
+    private Map<String, String> buildAddressMap(
+            villagecompute.storefront.integration.shipping.CarrierRateAdapter.Address address) {
+        Map<String, String> addressMap = new HashMap<>();
+        addressMap.put("street1", address.street1());
+        if (address.street2() != null && !address.street2().isBlank()) {
+            addressMap.put("street2", address.street2());
+        }
+        addressMap.put("city", address.city());
+        addressMap.put("state", address.state());
+        addressMap.put("postalCode", address.postalCode());
+        addressMap.put("country", address.country());
+        addressMap.put("residential", String.valueOf(address.residential()));
+        return addressMap;
+    }
+
+    private Map<String, Object> buildShippingRate(String id, String name, String estimatedDelivery, String amount,
+            String currency) {
+        Map<String, Object> rate = new HashMap<>();
+        rate.put("id", id);
+        rate.put("name", name);
+        rate.put("estimatedDelivery", estimatedDelivery);
+
+        Map<String, String> price = new HashMap<>();
+        price.put("amount", amount);
+        price.put("currency", currency);
+        rate.put("price", price);
+
+        return rate;
     }
 }

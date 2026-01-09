@@ -25,6 +25,13 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -36,6 +43,7 @@ import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.services.OrderService;
 import villagecompute.storefront.tenant.TenantContext;
+import villagecompute.storefront.util.ProblemDetailsUtil;
 
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
@@ -67,6 +75,9 @@ import io.quarkus.panache.common.Sort;
  */
 @Path("/api/v1")
 @Produces(MediaType.APPLICATION_JSON)
+@Tag(
+        name = "Storefront",
+        description = "Customer-facing order operations")
 public class OrderResource {
 
     private static final Logger LOG = Logger.getLogger(OrderResource.class);
@@ -90,15 +101,43 @@ public class OrderResource {
      */
     @GET
     @Path("/orders/{orderId}")
-    public Response getOrder(@PathParam("orderId") UUID orderId) {
+    @Operation(
+            summary = "Get order details",
+            description = """
+                    Returns complete order details including line items, payment status, shipping address,
+                    and fulfillment tracking information.
+
+                    **Authentication:** Required - customers can only access their own orders.
+                    **Admin users:** Can access all orders within their tenant.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Order retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/OrderDetail"))),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Order not found or belongs to different tenant",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response getOrder(@Parameter(
+            description = "Order UUID",
+            required = true) @PathParam("orderId") UUID orderId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("GET /orders/%s - tenantId=%s", orderId, tenantId);
 
         try {
             Order order = Order.findById(orderId);
             if (order == null || !order.tenant.id.equals(tenantId)) {
-                return Response.status(Status.NOT_FOUND)
-                        .entity(createProblemDetails("Not Found", "Order not found", Status.NOT_FOUND)).build();
+                return Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound("Order not found")).build();
             }
 
             // TODO: Add authorization check - customers can only see their own orders
@@ -110,8 +149,9 @@ public class OrderResource {
 
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed to retrieve order - tenantId=%s, orderId=%s", tenantId, orderId);
-            return Response.status(Status.INTERNAL_SERVER_ERROR).entity(createProblemDetails("Internal Server Error",
-                    "Failed to retrieve order. Please contact support.", Status.INTERNAL_SERVER_ERROR)).build();
+            return Response.status(Status.INTERNAL_SERVER_ERROR)
+                    .entity(ProblemDetailsUtil.internalServerError("Failed to retrieve order. Please contact support."))
+                    .build();
         }
     }
 
@@ -128,8 +168,42 @@ public class OrderResource {
      */
     @GET
     @Path("/orders")
-    public Response listOrders(@QueryParam("page") Integer page, @QueryParam("pageSize") Integer pageSize,
-            @QueryParam("status") String status) {
+    @Operation(
+            summary = "List customer orders",
+            description = """
+                    Returns a paginated list of orders for the authenticated customer.
+                    Results are sorted by creation date (newest first).
+
+                    **Authentication:** Required - returns orders for the authenticated user only.
+                    **Pagination:** Default page size is 20, maximum is 100.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Orders retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/OrderListResponse"))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid status filter",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response listOrders(@Parameter(
+            description = "Page number (1-indexed)",
+            example = "1") @QueryParam("page") Integer page,
+            @Parameter(
+                    description = "Items per page (max 100)",
+                    example = "20") @QueryParam("pageSize") Integer pageSize,
+            @Parameter(
+                    description = "Filter by order status",
+                    example = "shipped") @QueryParam("status") String status) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         int pageNumber = page != null && page > 0 ? page : 1;
         int size = pageSize != null && pageSize > 0 && pageSize <= 100 ? pageSize : 20;
@@ -164,9 +238,8 @@ public class OrderResource {
 
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed to list orders - tenantId=%s", tenantId);
-            return Response.status(Status.INTERNAL_SERVER_ERROR)
-                    .entity(createProblemDetails("Internal Server Error",
-                            "Failed to retrieve orders. Please contact support.", Status.INTERNAL_SERVER_ERROR))
+            return Response.status(Status.INTERNAL_SERVER_ERROR).entity(
+                    ProblemDetailsUtil.internalServerError("Failed to retrieve orders. Please contact support."))
                     .build();
         }
     }
@@ -194,9 +267,56 @@ public class OrderResource {
      */
     @GET
     @Path("/admin/orders")
-    public Response adminListOrders(@QueryParam("page") Integer page, @QueryParam("pageSize") Integer pageSize,
-            @QueryParam("status") String status, @QueryParam("search") String search,
-            @QueryParam("sortBy") String sortBy, @QueryParam("sortOrder") String sortOrder) {
+    @Tag(
+            name = "Admin",
+            description = "Store administration operations")
+    @Operation(
+            summary = "List all tenant orders (Admin)",
+            description = """
+                    Returns a paginated list of all orders for the current tenant with advanced filtering,
+                    searching, and sorting capabilities. Admin-only endpoint.
+
+                    **Authentication:** Requires admin role.
+                    **Filtering:** Filter by order status (pending_payment, processing, shipped, delivered, cancelled, refunded).
+                    **Search:** Search by order number or customer email.
+                    **Sorting:** Sort by order number, customer email, status, total amount, or created date.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Orders retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/OrderListResponse"))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid filter or sort parameters",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response adminListOrders(@Parameter(
+            description = "Page number (1-indexed)",
+            example = "1") @QueryParam("page") Integer page,
+            @Parameter(
+                    description = "Items per page (max 100)",
+                    example = "20") @QueryParam("pageSize") Integer pageSize,
+            @Parameter(
+                    description = "Filter by order status",
+                    example = "processing") @QueryParam("status") String status,
+            @Parameter(
+                    description = "Search by order number or customer email",
+                    example = "ORD-2026-00042") @QueryParam("search") String search,
+            @Parameter(
+                    description = "Field to sort by",
+                    example = "createdAt") @QueryParam("sortBy") String sortBy,
+            @Parameter(
+                    description = "Sort direction (asc or desc)",
+                    example = "desc") @QueryParam("sortOrder") String sortOrder) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         int pageNumber = page != null && page > 0 ? page : 1;
         int size = pageSize != null && pageSize > 0 && pageSize <= 100 ? pageSize : 20;
@@ -215,9 +335,8 @@ public class OrderResource {
                 try {
                     statusFilter = Order.OrderStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException e) {
-                    return Response.status(Status.BAD_REQUEST).entity(
-                            createProblemDetails("Bad Request", "Invalid status filter: " + status, Status.BAD_REQUEST))
-                            .build();
+                    return Response.status(Status.BAD_REQUEST)
+                            .entity(ProblemDetailsUtil.badRequest("Invalid status filter: " + status)).build();
                 }
                 queryBuilder.append(" AND status = ?").append(paramsList.size() + 1);
                 paramsList.add(statusFilter);
@@ -254,9 +373,8 @@ public class OrderResource {
 
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed to list admin orders - tenantId=%s", tenantId);
-            return Response.status(Status.INTERNAL_SERVER_ERROR)
-                    .entity(createProblemDetails("Internal Server Error",
-                            "Failed to retrieve orders. Please contact support.", Status.INTERNAL_SERVER_ERROR))
+            return Response.status(Status.INTERNAL_SERVER_ERROR).entity(
+                    ProblemDetailsUtil.internalServerError("Failed to retrieve orders. Please contact support."))
                     .build();
         }
     }
@@ -270,7 +388,39 @@ public class OrderResource {
      */
     @GET
     @Path("/admin/orders/{orderId}")
-    public Response adminGetOrder(@PathParam("orderId") UUID orderId) {
+    @Tag(
+            name = "Admin",
+            description = "Store administration operations")
+    @Operation(
+            summary = "Get order details (Admin)",
+            description = """
+                    Returns complete order details including all fields visible to admins
+                    (notes, tags, internal metadata).
+
+                    **Authentication:** Requires admin role.
+                    **Tenant isolation:** Returns 404 if order belongs to different tenant.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Order retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/OrderDetail"))),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Order not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response adminGetOrder(@Parameter(
+            description = "Order UUID",
+            required = true) @PathParam("orderId") UUID orderId) {
         // Delegate to storefront endpoint with admin privileges
         return getOrder(orderId);
     }
@@ -288,15 +438,58 @@ public class OrderResource {
     @Path("/admin/orders/{orderId}")
     @Consumes(MediaType.APPLICATION_JSON)
     @Transactional
-    public Response adminUpdateOrder(@PathParam("orderId") UUID orderId, @Valid UpdateOrderRequest request) {
+    @Tag(
+            name = "Admin",
+            description = "Store administration operations")
+    @Operation(
+            summary = "Update order (Admin)",
+            description = """
+                    Updates order status, admin notes, or tags. Partial update - only provided fields are modified.
+
+                    **Authentication:** Requires admin role.
+                    **Status Transitions:** Some status changes may be restricted (see OrderService for state machine rules).
+                    **Optimistic Locking:** Returns HTTP 409 if order was modified concurrently.
+
+                    Use dedicated endpoints for cancellation (/cancel) and refunds (/refund).
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Order updated successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/OrderDetail"))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request (invalid status, illegal state transition)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Order not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "409",
+                            description = "Optimistic lock exception (order was modified concurrently)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response adminUpdateOrder(@Parameter(
+            description = "Order UUID",
+            required = true) @PathParam("orderId") UUID orderId, @Valid UpdateOrderRequest request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("PATCH /admin/orders/%s - tenantId=%s", orderId, tenantId);
 
         try {
             Order order = Order.findById(orderId);
             if (order == null || !order.tenant.id.equals(tenantId)) {
-                return Response.status(Status.NOT_FOUND)
-                        .entity(createProblemDetails("Not Found", "Order not found", Status.NOT_FOUND)).build();
+                return Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound("Order not found")).build();
             }
 
             boolean metadataUpdated = false;
@@ -306,8 +499,9 @@ public class OrderResource {
                 try {
                     newStatus = Order.OrderStatus.valueOf(request.getStatus().trim().toUpperCase(Locale.ROOT));
                 } catch (IllegalArgumentException e) {
-                    return Response.status(Status.BAD_REQUEST).entity(createProblemDetails("Bad Request",
-                            "Invalid order status: " + request.getStatus(), Status.BAD_REQUEST)).build();
+                    return Response.status(Status.BAD_REQUEST)
+                            .entity(ProblemDetailsUtil.badRequest("Invalid order status: " + request.getStatus()))
+                            .build();
                 }
                 orderService.updateOrderStatus(orderId, newStatus);
             }
@@ -342,24 +536,24 @@ public class OrderResource {
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid order update - tenantId=%s, orderId=%s, error=%s", tenantId, orderId, e.getMessage());
-            return Response.status(Status.BAD_REQUEST)
-                    .entity(createProblemDetails("Bad Request", e.getMessage(), Status.BAD_REQUEST)).build();
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
 
         } catch (IllegalStateException e) {
             LOG.warnf("Invalid order state transition - tenantId=%s, orderId=%s, error=%s", tenantId, orderId,
                     e.getMessage());
-            return Response.status(Status.BAD_REQUEST)
-                    .entity(createProblemDetails("Bad Request", e.getMessage(), Status.BAD_REQUEST)).build();
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
 
         } catch (OptimisticLockException e) {
             LOG.warnf("Optimistic lock exception - tenantId=%s, orderId=%s", tenantId, orderId);
-            return Response.status(Status.CONFLICT).entity(createProblemDetails("Conflict",
-                    "Order was modified concurrently. Please refresh and try again.", Status.CONFLICT)).build();
+            return Response.status(Status.CONFLICT).entity(
+                    ProblemDetailsUtil.conflict("Order was modified concurrently. Please refresh and try again."))
+                    .build();
 
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed to update order - tenantId=%s, orderId=%s", tenantId, orderId);
-            return Response.status(Status.INTERNAL_SERVER_ERROR).entity(createProblemDetails("Internal Server Error",
-                    "Failed to update order. Please contact support.", Status.INTERNAL_SERVER_ERROR)).build();
+            return Response.status(Status.INTERNAL_SERVER_ERROR)
+                    .entity(ProblemDetailsUtil.internalServerError("Failed to update order. Please contact support."))
+                    .build();
         }
     }
 
@@ -376,15 +570,54 @@ public class OrderResource {
     @Path("/admin/orders/{orderId}/cancel")
     @Consumes(MediaType.APPLICATION_JSON)
     @Transactional
-    public Response adminCancelOrder(@PathParam("orderId") UUID orderId, Map<String, Object> request) {
+    @Tag(
+            name = "Admin",
+            description = "Store administration operations")
+    @Operation(
+            summary = "Cancel order (Admin)",
+            description = """
+                    Cancels an order with a required reason. Optionally triggers refund if payment was captured.
+
+                    **Authentication:** Requires admin role.
+                    **State Machine:** Only certain order statuses can be cancelled (see OrderService rules).
+                    **Inventory:** Cancelled orders should restore inventory (future enhancement).
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Order cancelled successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/OrderDetail"))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request (missing reason, illegal state for cancellation)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Order not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response adminCancelOrder(@Parameter(
+            description = "Order UUID",
+            required = true) @PathParam("orderId") UUID orderId,
+            @Parameter(
+                    description = "Cancellation request with reason field",
+                    required = true) Map<String, Object> request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/orders/%s/cancel - tenantId=%s", orderId, tenantId);
 
         String reason = (String) request.get("reason");
         if (reason == null || reason.isBlank()) {
             return Response.status(Status.BAD_REQUEST)
-                    .entity(createProblemDetails("Bad Request", "Cancellation reason is required", Status.BAD_REQUEST))
-                    .build();
+                    .entity(ProblemDetailsUtil.badRequest("Cancellation reason is required")).build();
         }
 
         try {
@@ -401,18 +634,17 @@ public class OrderResource {
         } catch (IllegalArgumentException e) {
             LOG.warnf("Order not found for cancellation - tenantId=%s, orderId=%s, error=%s", tenantId, orderId,
                     e.getMessage());
-            return Response.status(Status.NOT_FOUND)
-                    .entity(createProblemDetails("Not Found", e.getMessage(), Status.NOT_FOUND)).build();
+            return Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())).build();
 
         } catch (IllegalStateException e) {
             LOG.warnf("Cannot cancel order - tenantId=%s, orderId=%s, error=%s", tenantId, orderId, e.getMessage());
-            return Response.status(Status.BAD_REQUEST)
-                    .entity(createProblemDetails("Bad Request", e.getMessage(), Status.BAD_REQUEST)).build();
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
 
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed to cancel order - tenantId=%s, orderId=%s", tenantId, orderId);
-            return Response.status(Status.INTERNAL_SERVER_ERROR).entity(createProblemDetails("Internal Server Error",
-                    "Failed to cancel order. Please contact support.", Status.INTERNAL_SERVER_ERROR)).build();
+            return Response.status(Status.INTERNAL_SERVER_ERROR)
+                    .entity(ProblemDetailsUtil.internalServerError("Failed to cancel order. Please contact support."))
+                    .build();
         }
     }
 
@@ -430,16 +662,58 @@ public class OrderResource {
     @POST
     @Path("/admin/orders/{orderId}/refund")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response adminRefundOrder(@PathParam("orderId") UUID orderId,
-            @HeaderParam("X-Idempotency-Key") String idempotencyKey, Map<String, Object> request) {
+    @Tag(
+            name = "Admin",
+            description = "Store administration operations")
+    @Operation(
+            summary = "Refund order (Admin)",
+            description = """
+                    Issues a refund for an order via the payment provider (Stripe). Supports partial or full refunds.
+
+                    **Authentication:** Requires admin role.
+                    **Idempotent:** Requires X-Idempotency-Key header to prevent duplicate refunds.
+                    **Payment Provider:** Integrates with Stripe Refunds API.
+                    **Status:** Currently returns placeholder response (full implementation pending in I3.T3).
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "201",
+                    description = "Refund initiated successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    ref = "#/components/schemas/RefundResponse"))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request (missing idempotency key, invalid refund amount)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Order not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response adminRefundOrder(@Parameter(
+            description = "Order UUID",
+            required = true) @PathParam("orderId") UUID orderId,
+            @Parameter(
+                    description = "Idempotency key (UUID v4) for safe retries",
+                    required = true) @HeaderParam("X-Idempotency-Key") String idempotencyKey,
+            @Parameter(
+                    description = "Refund request with amount, reason, and restock flag",
+                    required = true) Map<String, Object> request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/orders/%s/refund - tenantId=%s, idempotencyKey=%s", orderId, tenantId, idempotencyKey);
 
         // Validate idempotency key
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            return Response.status(Status.BAD_REQUEST).entity(
-                    createProblemDetails("Bad Request", "X-Idempotency-Key header is required", Status.BAD_REQUEST))
-                    .build();
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(ProblemDetailsUtil.badRequest("X-Idempotency-Key header is required")).build();
         }
 
         // TODO: Implement refund logic via payment service
@@ -579,20 +853,6 @@ public class OrderResource {
         pagination.put("hasNext", page < totalPages);
         pagination.put("hasPrev", page > 1);
         return pagination;
-    }
-
-    /**
-     * Create RFC 7807 Problem Details error response.
-     */
-    private Map<String, Object> createProblemDetails(String title, String detail, Status status) {
-        Map<String, Object> problem = new HashMap<>();
-        problem.put("type", "about:blank");
-        problem.put("title", title);
-        problem.put("status", status.getStatusCode());
-        if (detail != null && !detail.isBlank()) {
-            problem.put("detail", detail);
-        }
-        return problem;
     }
 
     private String resolveAdminSortField(String requestedField) {

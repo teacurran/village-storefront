@@ -34,11 +34,13 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import villagecompute.storefront.api.types.AddToCartRequest;
+import villagecompute.storefront.api.types.ApplyPromotionRequest;
 import villagecompute.storefront.api.types.CartDto;
 import villagecompute.storefront.api.types.CartItemDto;
 import villagecompute.storefront.api.types.UpdateCartItemRequest;
 import villagecompute.storefront.data.models.Cart;
 import villagecompute.storefront.data.models.CartItem;
+import villagecompute.storefront.data.models.Promotion;
 import villagecompute.storefront.services.CartService;
 import villagecompute.storefront.services.mappers.CartMapper;
 import villagecompute.storefront.tenant.TenantContext;
@@ -360,6 +362,193 @@ public class CartResource {
             return respond(session,
                     Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())));
         }
+    }
+
+    /**
+     * Apply promotion code to cart.
+     *
+     * @param request
+     *            apply promotion request with promo code
+     * @return updated cart DTO with applied discount
+     */
+    @POST
+    @Path("/promotions")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(
+            operationId = "applyPromotion",
+            summary = "Apply promotion code to cart",
+            description = """
+                    Applies a discount code to the current cart. Validates the promotion code against
+                    expiry dates, usage limits, and minimum order requirements.
+
+                    **Validation:**
+                    - Promotion must be active and not expired
+                    - Usage limits (global and per-customer) enforced
+                    - Minimum order amount validated (if configured)
+                    - Only one promotion per cart (replaces existing)
+
+                    **Guest Session:** Provide X-Session-Id or use the vs_session cookie.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Promotion applied successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = CartDto.class))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid promotion code (expired, usage limit exceeded, minimum not met)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart or promotion not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response applyPromotion(@Valid ApplyPromotionRequest request) {
+        SessionContext session = resolveSessionContext();
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /cart/promotions - tenantId=%s, sessionId=%s, promoCode=%s", tenantId, session.sessionId(),
+                request.getPromoCode());
+
+        try {
+            Cart cart = cartService.getOrCreateCartForSession(session.sessionId());
+
+            Promotion promotion = cartService.applyPromotion(cart.id, request.getPromoCode());
+
+            // Reload cart to get updated totals
+            cart = Cart.findById(cart.id);
+            CartDto dto = cartMapper.toDto(cart);
+            return respond(session, Response.ok(dto));
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid promotion code - tenantId=%s, promoCode=%s, error=%s", tenantId, request.getPromoCode(),
+                    e.getMessage());
+            Status status = isResourceMissing(e) ? Status.NOT_FOUND : Status.BAD_REQUEST;
+            Map<String, Object> problemDetails = status == Status.NOT_FOUND
+                    ? ProblemDetailsUtil.notFound(e.getMessage())
+                    : ProblemDetailsUtil.badRequest(e.getMessage());
+            return respond(session, Response.status(status).entity(problemDetails));
+        }
+    }
+
+    /**
+     * Remove promotion code from cart.
+     *
+     * @return updated cart DTO without discount
+     */
+    @DELETE
+    @Path("/promotions")
+    @Operation(
+            operationId = "removePromotion",
+            summary = "Remove promotion from cart",
+            description = """
+                    Removes the applied discount code from the cart and recalculates totals.
+
+                    **Guest Session:** Provide X-Session-Id or use the vs_session cookie.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Promotion removed successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = CartDto.class))),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response removePromotion() {
+        SessionContext session = resolveSessionContext();
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("DELETE /cart/promotions - tenantId=%s, sessionId=%s", tenantId, session.sessionId());
+
+        Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
+        if (cartOptional.isEmpty()) {
+            return respond(session, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
+        }
+
+        Cart cart = cartOptional.get();
+        cartService.removePromotion(cart.id);
+
+        // Reload cart to get updated totals
+        cart = Cart.findById(cart.id);
+        CartDto dto = cartMapper.toDto(cart);
+        return respond(session, Response.ok(dto));
+    }
+
+    /**
+     * Get cart totals breakdown.
+     *
+     * @return cart totals including subtotal, discount, tax, and total
+     */
+    @GET
+    @Path("/totals")
+    @Operation(
+            operationId = "getCartTotals",
+            summary = "Get cart totals",
+            description = """
+                    Returns a breakdown of cart pricing including subtotal, applied discounts,
+                    estimated tax (if configured), and grand total.
+
+                    **Note:** Tax and shipping are not calculated until checkout.
+                    This endpoint provides subtotal and discount only.
+
+                    **Guest Session:** Provide X-Session-Id or use the vs_session cookie.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Cart totals retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response getCartTotals() {
+        SessionContext session = resolveSessionContext();
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("GET /cart/totals - tenantId=%s, sessionId=%s", tenantId, session.sessionId());
+
+        Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
+        if (cartOptional.isEmpty()) {
+            return respond(session, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
+        }
+
+        Cart cart = cartOptional.get();
+
+        // Calculate totals using CartService
+        java.math.BigDecimal subtotal = cartService.calculateCartSubtotal(cart.id);
+        java.math.BigDecimal total = cartService.calculateCartTotal(cart.id);
+        java.math.BigDecimal discount = subtotal.subtract(total);
+        long itemCount = cartService.getCartItemCount(cart.id);
+
+        // Default currency is USD - could be made tenant-specific in future
+        String currency = "USD";
+
+        Map<String, Object> totals = new java.util.HashMap<>();
+        totals.put("subtotal", buildMoney(subtotal, currency));
+        totals.put("discount", buildMoney(discount, currency));
+        totals.put("total", buildMoney(total, currency));
+        totals.put("currency", currency);
+        totals.put("itemCount", itemCount);
+
+        return respond(session, Response.ok(totals));
+    }
+
+    private Map<String, String> buildMoney(java.math.BigDecimal amount, String currency) {
+        Map<String, String> money = new java.util.HashMap<>();
+        money.put("amount", amount != null ? amount.toPlainString() : "0.00");
+        money.put("currency", currency != null ? currency : "USD");
+        return money;
     }
 
     private SessionContext resolveSessionContext() {
