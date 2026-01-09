@@ -716,6 +716,105 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /admin/catalog/import:
+    post:
+      operationId: importCatalog
+      summary: Enqueue catalog import job
+      description: |
+        Enqueues a background job to import product catalog data from a CSV file.
+        The job processes asynchronously and returns immediately with a job ID.
+
+        **Feature Flags:** Requires `catalog.import-export.enabled`
+        **Rate Limiting:** 10 req/hour (to prevent abuse)
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogImportRequest'
+      responses:
+        '202':
+          description: Import job enqueued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+              example:
+                jobId: "550e8400-e29b-41d4-a716-446655440000"
+                status: "enqueued"
+                message: "Catalog import job enqueued successfully"
+        '400':
+          description: Invalid request (missing fileLocation or invalid options)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Feature disabled for tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Service temporarily unavailable (job queue full)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/export:
+    post:
+      operationId: exportCatalog
+      summary: Enqueue catalog export job
+      description: |
+        Enqueues a background job to export product catalog data to CSV format.
+        The job processes asynchronously and returns immediately with a job ID.
+        Download URL will be provided via webhook or job status polling.
+
+        **Feature Flags:** Requires `catalog.import-export.enabled`
+        **Rate Limiting:** 10 req/hour
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogExportRequest'
+      responses:
+        '202':
+          description: Export job enqueued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+              example:
+                jobId: "660e8400-e29b-41d4-a716-446655440001"
+                status: "enqueued"
+                message: "Catalog export job enqueued successfully"
+        '400':
+          description: Invalid request (invalid filters or format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Feature disabled for tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Service temporarily unavailable (job queue full)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /catalog/products/{productId}/variant-matrix:
     get:
       operationId: getVariantMatrix
@@ -4315,6 +4414,72 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    CatalogImportRequest:
+      type: object
+      required:
+        - fileLocation
+      properties:
+        fileLocation:
+          type: string
+          description: S3 path or URL to the CSV file containing catalog data
+          example: "s3://tenant-uploads/catalog-import-2026-01-09.csv"
+        requestedBy:
+          type: string
+          description: Username or email of the person requesting the import
+          default: "admin"
+          example: "admin@storename.com"
+        options:
+          type: object
+          additionalProperties:
+            type: string
+          description: Import options (e.g., skipValidation, updateExisting)
+          example:
+            updateExisting: "true"
+            skipValidation: "false"
+
+    CatalogExportRequest:
+      type: object
+      properties:
+        requestedBy:
+          type: string
+          description: Username or email of the person requesting the export
+          default: "admin"
+          example: "admin@storename.com"
+        format:
+          type: string
+          description: Export format
+          enum: [csv, json]
+          default: "csv"
+        filters:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional filters (e.g., categoryCode, status)
+          example:
+            status: "active"
+            categoryCode: "electronics"
+
+    JobResponse:
+      type: object
+      required:
+        - jobId
+        - status
+        - message
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Background job UUID for tracking
+        status:
+          type: string
+          description: Job status
+          enum: [enqueued, processing, completed, failed]
+          example: "enqueued"
+        message:
+          type: string
+          description: Human-readable status message
+          example: "Catalog import job enqueued successfully"
 
     Cart:
       type: object
