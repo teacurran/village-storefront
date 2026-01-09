@@ -13,8 +13,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * Data Transfer Object for Product.
  *
  * <p>
- * Represents a product in the catalog with full metadata including SEO, visibility windows, categories, and collections.
- * Used in API requests and responses.
+ * Represents a product in the catalog with full metadata including SEO, visibility windows, categories, and
+ * collections. Used in API requests and responses.
  *
  * <p>
  * References:

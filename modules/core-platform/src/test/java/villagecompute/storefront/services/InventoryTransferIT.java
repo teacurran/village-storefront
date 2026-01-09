@@ -3,11 +3,14 @@ package villagecompute.storefront.services;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -17,7 +20,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import villagecompute.storefront.data.models.AdjustmentReason;
+import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.InventoryAdjustment;
 import villagecompute.storefront.data.models.InventoryLevel;
 import villagecompute.storefront.data.models.InventoryLocation;
@@ -417,5 +424,221 @@ class InventoryTransferIT {
         List<InventoryAdjustment> cycleCountAdjustments = adjustmentRepository
                 .findByReason(AdjustmentReason.CYCLE_COUNT);
         assertEquals(1, cycleCountAdjustments.size());
+    }
+
+    @Test
+    @Transactional
+    void concurrentAdjustments_shouldHandleOptimisticLocking() throws InterruptedException, ExecutionException {
+        // Setup: Create inventory level with quantity 100
+        inventoryService.setInventoryLevel(variantId, warehouse1.code, 100);
+
+        // Execute: Two threads adjust simultaneously
+        CompletableFuture<Void> future1 = CompletableFuture.runAsync(() -> {
+            try {
+                TenantContext.setCurrentTenant(
+                        new TenantInfo(tenant1Id, "transfertest1", "Transfer Test Tenant 1", "active"));
+                inventoryService.adjustInventory(variantId, warehouse1.code, 10);
+            } finally {
+                TenantContext.clear();
+            }
+        });
+
+        CompletableFuture<Void> future2 = CompletableFuture.runAsync(() -> {
+            try {
+                TenantContext.setCurrentTenant(
+                        new TenantInfo(tenant1Id, "transfertest1", "Transfer Test Tenant 1", "active"));
+                inventoryService.adjustInventory(variantId, warehouse1.code, 20);
+            } finally {
+                TenantContext.clear();
+            }
+        });
+
+        // Wait for both to complete
+        CompletableFuture.allOf(future1, future2).join();
+
+        // Verify: Final quantity should be 130 (100 + 10 + 20)
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code)
+                .orElseThrow();
+        assertEquals(130, level.quantity, "Both adjustments should be applied");
+    }
+
+    @Test
+    @Transactional
+    void recordAdjustment_shouldAllowNegativeQuantity() {
+        // Setup: Create inventory level with quantity 10
+        inventoryService.setInventoryLevel(variantId, warehouse1.code, 10);
+
+        // Adjust by -20 (should result in negative quantity)
+        InventoryAdjustment adjustment = transferService.recordAdjustment(variantId, warehouse1.id, -20,
+                AdjustmentReason.DAMAGE, "test-user", "Excessive damage adjustment");
+
+        // Verify adjustment succeeded
+        assertNotNull(adjustment.id);
+        assertEquals(-20, adjustment.quantityChange);
+        assertEquals(10, adjustment.quantityBefore);
+        assertEquals(-10, adjustment.quantityAfter);
+
+        // Verify final quantity is negative
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code)
+                .orElseThrow();
+        assertEquals(-10, level.quantity, "Negative quantities should be allowed");
+    }
+
+    @Test
+    @Transactional
+    void receiveTransfer_shouldRejectAlreadyReceived() {
+        // Arrange - create and receive transfer
+        InventoryTransfer transfer = new InventoryTransfer();
+        transfer.sourceLocation = warehouse1;
+        transfer.destinationLocation = warehouse2;
+
+        InventoryTransferLine line = new InventoryTransferLine();
+        line.variant = ProductVariant.findById(variantId);
+        line.quantity = 20;
+        transfer.addLine(line);
+
+        InventoryTransfer created = transferService.createTransfer(transfer);
+        transferService.receiveTransfer(created.id);
+
+        // Act & Assert - attempt to receive again should fail
+        assertThrows(IllegalStateException.class, () -> transferService.receiveTransfer(created.id),
+                "Should reject receiving already-received transfer");
+    }
+
+    @Test
+    @Transactional
+    void recordAdjustment_shouldPublishDomainEvent() throws Exception {
+        // Act - record adjustment
+        InventoryAdjustment adjustment = transferService.recordAdjustment(variantId, warehouse1.id, -5,
+                AdjustmentReason.DAMAGE, "test-user", "Test adjustment for event validation");
+
+        entityManager.flush();
+
+        // Query domain events
+        List<DomainEvent> events = entityManager.createQuery(
+                "SELECT e FROM DomainEvent e WHERE e.aggregateType = :aggregateType AND e.eventType = :eventType",
+                DomainEvent.class).setParameter("aggregateType", "INVENTORY_LEVEL")
+                .setParameter("eventType", "INVENTORY_ADJUSTED").getResultList();
+
+        // Verify event exists
+        assertTrue(!events.isEmpty(), "Event should be published");
+        DomainEvent event = events.get(0);
+
+        // Verify event fields
+        assertEquals("INVENTORY_LEVEL", event.aggregateType);
+        assertEquals("INVENTORY_ADJUSTED", event.eventType);
+        assertNotNull(event.payload, "Payload should not be null");
+
+        // Parse and verify payload
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode payload = mapper.readTree(event.payload);
+        assertEquals(variantId.toString(), payload.get("variantId").asText());
+        assertEquals(-5, payload.get("quantityChange").asInt());
+        assertEquals("DAMAGE", payload.get("reason").asText());
+        assertEquals("test-user", payload.get("adjustedBy").asText());
+        assertEquals(adjustment.id.toString(), payload.get("adjustmentId").asText());
+    }
+
+    @Test
+    @Transactional
+    void createTransfer_shouldPublishTransferInitiatedEvent() throws Exception {
+        // Act - create transfer
+        InventoryTransfer transfer = new InventoryTransfer();
+        transfer.sourceLocation = warehouse1;
+        transfer.destinationLocation = warehouse2;
+
+        InventoryTransferLine line = new InventoryTransferLine();
+        line.variant = ProductVariant.findById(variantId);
+        line.quantity = 25;
+        transfer.addLine(line);
+
+        InventoryTransfer created = transferService.createTransfer(transfer);
+        entityManager.flush();
+
+        // Query domain events
+        List<DomainEvent> events = entityManager.createQuery(
+                "SELECT e FROM DomainEvent e WHERE e.aggregateType = :aggregateType AND e.eventType = :eventType",
+                DomainEvent.class).setParameter("aggregateType", "INVENTORY_TRANSFER")
+                .setParameter("eventType", "TRANSFER_INITIATED").getResultList();
+
+        // Verify event exists
+        assertTrue(!events.isEmpty(), "TRANSFER_INITIATED event should be published");
+        DomainEvent event = events.get(0);
+
+        // Verify event fields
+        assertEquals("INVENTORY_TRANSFER", event.aggregateType);
+        assertEquals(created.id, event.aggregateId);
+        assertEquals("TRANSFER_INITIATED", event.eventType);
+
+        // Parse and verify payload
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode payload = mapper.readTree(event.payload);
+        assertEquals(created.id.toString(), payload.get("transferId").asText());
+        assertEquals(warehouse1.code, payload.get("sourceLocation").asText());
+        assertEquals(warehouse2.code, payload.get("destinationLocation").asText());
+    }
+
+    @Test
+    @Transactional
+    void receiveTransfer_shouldPublishTransferReceivedEvent() throws Exception {
+        // Arrange - create transfer
+        InventoryTransfer transfer = new InventoryTransfer();
+        transfer.sourceLocation = warehouse1;
+        transfer.destinationLocation = warehouse2;
+
+        InventoryTransferLine line = new InventoryTransferLine();
+        line.variant = ProductVariant.findById(variantId);
+        line.quantity = 15;
+        transfer.addLine(line);
+
+        InventoryTransfer created = transferService.createTransfer(transfer);
+
+        // Act - receive transfer
+        transferService.receiveTransfer(created.id);
+        entityManager.flush();
+
+        // Query domain events
+        List<DomainEvent> events = entityManager.createQuery(
+                "SELECT e FROM DomainEvent e WHERE e.aggregateType = :aggregateType AND e.eventType = :eventType",
+                DomainEvent.class).setParameter("aggregateType", "INVENTORY_TRANSFER")
+                .setParameter("eventType", "TRANSFER_RECEIVED").getResultList();
+
+        // Verify event exists
+        assertTrue(!events.isEmpty(), "TRANSFER_RECEIVED event should be published");
+        DomainEvent event = events.get(0);
+
+        // Verify event fields
+        assertEquals("INVENTORY_TRANSFER", event.aggregateType);
+        assertEquals(created.id, event.aggregateId);
+        assertEquals("TRANSFER_RECEIVED", event.eventType);
+    }
+
+    @Test
+    @Transactional
+    void recordAdjustment_shouldWorkWithAllReasonCodes() {
+        // Test all adjustment reason codes
+        transferService.recordAdjustment(variantId, warehouse1.id, 10, AdjustmentReason.CYCLE_COUNT, "admin",
+                "Cycle count");
+        transferService.recordAdjustment(variantId, warehouse1.id, -5, AdjustmentReason.DAMAGE, "admin",
+                "Damaged goods");
+        transferService.recordAdjustment(variantId, warehouse1.id, 3, AdjustmentReason.RETURN, "admin",
+                "Customer return");
+        transferService.recordAdjustment(variantId, warehouse1.id, -2, AdjustmentReason.SHRINKAGE, "admin",
+                "Shrinkage");
+        transferService.recordAdjustment(variantId, warehouse1.id, 7, AdjustmentReason.FOUND, "admin",
+                "Found inventory");
+        transferService.recordAdjustment(variantId, warehouse1.id, 1, AdjustmentReason.OTHER, "admin", "Other reason");
+
+        // Verify all adjustments persisted
+        List<InventoryAdjustment> adjustments = adjustmentRepository.findByLocation(warehouse1.id);
+        assertEquals(6, adjustments.size(), "All reason codes should be accepted");
+
+        // Verify each reason code was used
+        assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.CYCLE_COUNT).size());
+        assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.DAMAGE).size());
+        assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.RETURN).size());
+        assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.SHRINKAGE).size());
+        assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.FOUND).size());
+        assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.OTHER).size());
     }
 }

@@ -8,7 +8,6 @@ import static org.hamcrest.Matchers.hasSize;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,8 +34,8 @@ import io.restassured.specification.RequestSpecification;
  * Integration tests for {@link InventoryAdminResource}.
  *
  * <p>
- * Tests cover HTTP contract compliance, tenant isolation, and inventory admin API functionality.
- * Verifies that inventory locations, transfers, and adjustments are properly tenant-scoped.
+ * Tests cover HTTP contract compliance, tenant isolation, and inventory admin API functionality. Verifies that
+ * inventory locations, transfers, and adjustments are properly tenant-scoped.
  *
  * <p>
  * References:
@@ -258,8 +257,8 @@ class InventoryAdminResourceTest {
 
     @Test
     void listTransfers_shouldReturnTransfers() {
-        request(tenantSubdomain).when().get("/api/v1/admin/inventory/transfers").then().statusCode(200)
-                .body("$", notNullValue());
+        request(tenantSubdomain).when().get("/api/v1/admin/inventory/transfers").then().statusCode(200).body("$",
+                notNullValue());
     }
 
     @Test
@@ -283,10 +282,9 @@ class InventoryAdminResourceTest {
         request.put("adjustedBy", "admin@test.com");
         request.put("notes", "Annual inventory count");
 
-        request(tenantSubdomain).body(request).when().post("/api/v1/admin/inventory/adjustments").then()
-                .statusCode(201).body("variantId", equalTo(variantId.toString()))
-                .body("locationId", equalTo(locationId.toString())).body("quantityChange", equalTo(10))
-                .body("reason", equalTo("CYCLE_COUNT")).body("id", notNullValue());
+        request(tenantSubdomain).body(request).when().post("/api/v1/admin/inventory/adjustments").then().statusCode(201)
+                .body("variantId", equalTo(variantId.toString())).body("locationId", equalTo(locationId.toString()))
+                .body("quantityChange", equalTo(10)).body("reason", equalTo("CYCLE_COUNT")).body("id", notNullValue());
     }
 
     @Test

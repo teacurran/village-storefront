@@ -40,8 +40,7 @@ public class ProductVariantDto {
 
     public String optionValues; // JSON string: {"color": "Red", "size": "Large"}
 
-    @NotNull
-    public BigDecimal price;
+    @NotNull public BigDecimal price;
 
     public BigDecimal compareAtPrice;
 

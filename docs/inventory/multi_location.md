@@ -459,22 +459,181 @@ Structured logs include:
 
 ## Testing
 
-Integration tests cover:
+### Integration Test Coverage
 
-1. **Transfer Creation:** Validates reservation, barcode job enqueue
-2. **Transfer Receive:** Validates inventory updates at both locations
-3. **Insufficient Stock:** Rejects transfers exceeding available quantity
-4. **Tenant Isolation:** Prevents cross-tenant transfers
-5. **Adjustment Audit:** Verifies before/after quantities and reason codes
-6. **Optimistic Locking:** Handles concurrent inventory modifications
+The multi-location inventory system has comprehensive integration test coverage across two test suites:
 
-**Test File:** `src/test/java/villagecompute/storefront/services/InventoryTransferIT.java`
+#### 1. InventoryTransferIT (Service Layer Tests)
+
+Tests end-to-end workflows including transfers, adjustments, and domain event publishing.
+
+**Coverage:**
+
+1. **Transfer Creation:**
+   - Validates inventory reservation at source location
+   - Verifies barcode job enqueue with job ID returned
+   - Enforces source ≠ destination validation
+   - Rejects transfers exceeding available stock (`quantity - reserved`)
+   - Rejects inactive locations
+   - Publishes `TRANSFER_INITIATED` domain event with JSON payload
+
+2. **Transfer Receipt:**
+   - Commits reservation at source (reduces `quantity` and `reserved`)
+   - Adds inventory at destination location
+   - Updates transfer status to `RECEIVED`
+   - Publishes `TRANSFER_RECEIVED` domain event
+   - Rejects already-received transfers (HTTP 409 Conflict)
+
+3. **Manual Adjustments:**
+   - Creates audit log with before/after quantities
+   - Supports all reason codes: `CYCLE_COUNT`, `DAMAGE`, `RETURN`, `SHRINKAGE`, `FOUND`, `OTHER`
+   - Allows negative inventory quantities (logs WARNING)
+   - Publishes `INVENTORY_ADJUSTED` domain event with complete payload
+
+4. **Domain Events:**
+   - Verifies events persisted to `domain_events` table
+   - Validates JSON payload structure contains all required fields:
+     - Adjustment: `variantId`, `locationId`, `quantityChange`, `quantityBefore`, `quantityAfter`, `reason`, `adjustedBy`, `adjustmentId`
+     - Transfer Initiated: `transferId`, `sourceLocation`, `destinationLocation`, `lineItems`
+     - Transfer Received: `transferId`, `sourceLocation`, `destinationLocation`, `receivedQuantities`
+   - Verifies metadata includes tenant ID
+
+5. **Concurrency Safety:**
+   - Tests optimistic locking via `@Version` field
+   - Simulates concurrent adjustments using `CompletableFuture`
+   - Verifies all adjustments applied without data loss
+   - Confirms retry logic handles `OptimisticLockException`
+
+6. **Tenant Isolation:**
+   - Prevents cross-tenant transfers (different tenant locations)
+   - Rejects variants from other tenants
+   - Enforces tenant matching on all operations
+
+**Test File:** `modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryTransferIT.java`
 
 **Run Tests:**
 
 ```bash
 ./mvnw test -Dtest=InventoryTransferIT
 ```
+
+#### 2. InventoryLevelRepositoryRLSTest (Repository Layer Tests)
+
+Tests Row-Level Security (RLS) enforcement at the repository query level to ensure complete tenant data isolation.
+
+**Coverage:**
+
+1. **findByVariant() Isolation:**
+   - Tenant A sees only its own inventory levels
+   - Tenant A queries for Tenant B's variant return empty results
+   - Tenant B sees only its own inventory levels
+   - Verifies tenant_id filtering at query level
+
+2. **findByVariantAndLocation() Isolation:**
+   - Tenant A can query its own variant+location combinations
+   - Cross-tenant queries return empty Optional
+   - Tenant context switching correctly filters results
+
+3. **findByLocation() Isolation:**
+   - Location-based queries scoped to current tenant
+   - Tenant A cannot query Tenant B's location code
+   - Empty results for cross-tenant location queries
+
+4. **getTotalAvailableQuantity() Isolation:**
+   - Aggregation respects tenant boundaries
+   - Cross-tenant variant queries return 0
+   - Multi-location aggregation works within tenant
+
+5. **Multi-Location Aggregation:**
+   - Verifies totals sum across multiple locations for same tenant
+   - Confirms other tenants unaffected by new location creation
+
+**Test Profile:** Uses `@TestProfile(TenantPostgresRlsProfile.class)` to enable:
+- PostgreSQL via Testcontainers (real database)
+- RLS policy enforcement
+- Multi-tenant seeding and context switching
+
+**Test File:** `modules/core-platform/src/test/java/villagecompute/storefront/data/repositories/InventoryLevelRepositoryRLSTest.java`
+
+**Run Tests:**
+
+```bash
+./mvnw test -Dtest=InventoryLevelRepositoryRLSTest
+```
+
+### Test Execution Requirements
+
+All inventory tests run against **real PostgreSQL** (not H2 or in-memory DB) via Quarkus Dev Services (Testcontainers). This ensures:
+
+- RLS policies enforced as in production
+- JSONB column support for domain events
+- Optimistic locking behavior matches production
+- Tenant isolation verified with actual row-level filtering
+
+**Dependencies:**
+- Docker running (for Testcontainers)
+- PostgreSQL 16.3-alpine image pulled
+- Sufficient memory for concurrent test execution
+
+### Concurrency Safety
+
+The inventory system uses **optimistic locking** to prevent lost updates during concurrent modifications:
+
+**Mechanism:**
+- `@Version` field on `InventoryLevel` entity
+- Hibernate increments version on each update
+- Concurrent updates trigger `OptimisticLockException`
+- Service layer retries failed operations
+
+**Tested Scenarios:**
+- Two threads adjusting same inventory level simultaneously
+- Both adjustments applied (130 = 100 + 10 + 20)
+- No data loss or inconsistency
+- Version conflicts detected and resolved
+
+**Example:**
+```java
+@Version
+public Long version;  // Incremented automatically by JPA
+```
+
+### Domain Event Publishing
+
+All inventory operations publish **domain events** to the `domain_events` table for audit and reporting:
+
+**Event Types:**
+- `INVENTORY_ADJUSTED` (aggregate: `INVENTORY_LEVEL`)
+- `TRANSFER_INITIATED` (aggregate: `INVENTORY_TRANSFER`)
+- `TRANSFER_RECEIVED` (aggregate: `INVENTORY_TRANSFER`)
+
+**Payload Structure (JSON):**
+```json
+{
+  "variantId": "550e8400-...",
+  "locationId": "7c9e6679-...",
+  "quantityChange": -5,
+  "quantityBefore": 100,
+  "quantityAfter": 95,
+  "reason": "DAMAGE",
+  "adjustedBy": "admin@store.com",
+  "adjustmentId": "9b1deb4d-..."
+}
+```
+
+**Metadata:**
+```json
+{
+  "tenantId": "3c9e6679-...",
+  "timestamp": "2026-01-03T12:00:00Z",
+  "correlationId": "req-12345"
+}
+```
+
+**Tests Verify:**
+- Events persisted atomically with inventory changes
+- JSON payload contains all required fields
+- Metadata enriched with tenant and timestamp
+- Events queryable for reporting/analytics
 
 ---
 
@@ -501,6 +660,79 @@ Integration tests cover:
 5. **Transfer Approval Workflow:**
    - Require manager approval for high-value transfers
    - Email notifications on status changes
+
+---
+
+## Testing
+
+### Test Coverage
+
+The inventory system includes comprehensive test coverage across multiple test classes:
+
+**Integration Tests (`InventoryTransferIT`):**
+- ✅ Transfer creation with inventory reservation
+- ✅ Transfer receipt with inventory movement
+- ✅ Validation: Same source/destination rejection
+- ✅ Validation: Insufficient stock rejection
+- ✅ Validation: Inactive location rejection
+- ✅ Validation: Cross-tenant variant rejection
+- ✅ Tenant isolation (cross-tenant transfer prevention)
+- ✅ Manual adjustments with all reason codes (CYCLE_COUNT, DAMAGE, RETURN, SHRINKAGE, FOUND, OTHER)
+- ✅ Adjustment audit trail verification
+- ✅ Concurrent adjustments with optimistic locking
+- ✅ Negative quantity handling with warning logs
+- ✅ Transfer status transitions (reject already-received transfers)
+- ✅ Domain event publishing (INVENTORY_ADJUSTED, TRANSFER_INITIATED, TRANSFER_RECEIVED)
+- ✅ Event payload structure validation
+
+**Repository-Level Tests (`InventoryLevelRepositoryRLSTest`):**
+- ✅ Tenant isolation via `findByVariant()`
+- ✅ Tenant isolation via `findByVariantAndLocation()`
+- ✅ Tenant isolation via `findByLocation()`
+- ✅ Tenant isolation via `getTotalAvailableQuantity()`
+- ✅ Multi-location aggregation with tenant scoping
+
+### Running Tests
+
+**Prerequisites:**
+- Docker installed and running (for Testcontainers PostgreSQL)
+- Java 21+
+- Maven 3.8+
+
+**Run all inventory tests:**
+```bash
+./mvnw test -Dtest=InventoryTransferIT
+./mvnw test -Dtest=InventoryLevelRepositoryRLSTest
+```
+
+**Run specific test:**
+```bash
+./mvnw test -Dtest=InventoryTransferIT#createTransfer_shouldReserveInventoryAtSource
+```
+
+**Run with coverage report:**
+```bash
+./mvnw test jacoco:report
+```
+
+### Concurrency Safety
+
+The system uses JPA `@Version` field on `InventoryLevel` entity for optimistic locking:
+- Concurrent updates to the same inventory level are serialized
+- Lost update prevention via `OptimisticLockException`
+- Automatic retry logic in service layer
+
+### Domain Events
+
+All inventory operations emit domain events for downstream processing:
+
+| Event Type | Aggregate Type | Trigger | Payload Includes |
+|-----------|----------------|---------|------------------|
+| `INVENTORY_ADJUSTED` | `INVENTORY_LEVEL` | Manual adjustment | variant ID, location, qty before/after, change, reason, user, notes |
+| `TRANSFER_INITIATED` | `INVENTORY_TRANSFER` | Transfer created | transfer ID, source/dest, line items, initiator, expected arrival |
+| `TRANSFER_RECEIVED` | `INVENTORY_TRANSFER` | Transfer completed | transfer ID, source/dest, received quantities, timestamp |
+
+Events are persisted to `domain_events` table with JSON payload and tenant metadata.
 
 ---
 
