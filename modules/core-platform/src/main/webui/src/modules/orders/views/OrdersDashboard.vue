@@ -12,8 +12,8 @@
         <button
           v-if="authStore.hasRole('ORDERS_EXPORT')"
           class="btn-secondary"
-          @click="handleExport"
           :aria-label="t('orders.actions.export')"
+          @click="handleExport"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -25,7 +25,7 @@
           </svg>
           {{ t('common.export') }}
         </button>
-        <button class="btn-secondary" @click="handleRefresh" :aria-label="t('common.refresh')">
+        <button class="btn-secondary" :aria-label="t('common.refresh')" @click="handleRefresh">
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -105,7 +105,7 @@
           />
         </div>
         <div class="filter-controls">
-          <select v-model="statusFilter" @change="handleFilterChange" class="filter-select">
+          <select v-model="statusFilter" class="filter-select" @change="handleFilterChange">
             <option value="">{{ t('orders.filters.allStatuses') }}</option>
             <option value="PENDING">{{ t('orders.status.pending') }}</option>
             <option value="CONFIRMED">{{ t('orders.status.confirmed') }}</option>
@@ -115,7 +115,7 @@
             <option value="CANCELLED">{{ t('orders.status.cancelled') }}</option>
             <option value="REFUNDED">{{ t('orders.status.refunded') }}</option>
           </select>
-          <button v-if="hasActiveFilters" @click="handleClearFilters" class="btn-text">
+          <button v-if="hasActiveFilters" class="btn-text" @click="handleClearFilters">
             {{ t('orders.filters.clear') }}
           </button>
         </div>
@@ -129,12 +129,12 @@
         <div class="bulk-action-buttons">
           <button
             v-if="authStore.hasRole('ORDERS_EDIT')"
-            @click="showBulkUpdateModal = true"
             class="btn-secondary"
+            @click="showBulkUpdateModal = true"
           >
             {{ t('orders.bulkActions.updateStatus') }}
           </button>
-          <button @click="ordersStore.clearSelection()" class="btn-text">
+          <button class="btn-text" @click="ordersStore.clearSelection()">
             {{ t('common.cancel') }}
           </button>
         </div>
@@ -153,7 +153,7 @@
 
         <!-- Pagination -->
         <div v-if="ordersStore.pagination.hasMore" class="pagination-controls">
-          <button @click="handleLoadMore" class="btn-secondary">
+          <button class="btn-secondary" @click="handleLoadMore">
             {{ t('common.loadMore') }}
           </button>
         </div>

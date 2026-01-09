@@ -11,36 +11,31 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PaginatedResponse, Money } from '@/api/types'
+import { apiClient } from '@/api/client'
+import type { ProductSummary, ProductDetail, PaginationMetadata } from '@/api/generated'
+import type { Money } from '@/api/types'
 
 export interface Product {
   id: string
   name: string
   slug: string
+  sku?: string
   description?: string
-  price: Money
+  price?: Money
   compareAtPrice?: Money
-  images: ProductImage[]
-  variants: ProductVariant[]
-  status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED'
+  primaryImage?: {
+    id: string
+    url: string
+    thumbnailUrl: string
+    alt?: string
+  }
+  status: 'active' | 'draft' | 'archived'
+  trackInventory: boolean
+  totalInventory?: number
+  lowStockThreshold?: number
+  variantCount?: number
   createdAt: string
   updatedAt: string
-}
-
-export interface ProductImage {
-  id: string
-  url: string
-  alt?: string
-  sortOrder: number
-}
-
-export interface ProductVariant {
-  id: string
-  sku: string
-  name: string
-  price: Money
-  inventoryQuantity: number
-  options: Record<string, string>
 }
 
 export interface Category {
@@ -58,134 +53,230 @@ interface CacheEntry<T> {
   ttl: number
 }
 
+export interface CatalogFilters {
+  search?: string
+  category?: string
+  status?: string
+  tags?: string[]
+}
+
+interface PaginationState {
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
 export const useCatalogStore = defineStore('catalog', () => {
   // State - Server State
-  const products = ref<Map<string, Product>>(new Map())
-  const categories = ref<Map<string, Category>>(new Map())
-  const productCache = ref<Map<string, CacheEntry<Product>>>(new Map())
+  const products = ref<Product[]>([])
+  const categories = ref<Category[]>([])
+  const productCache = ref<Map<string, CacheEntry<ProductDetail>>>(new Map())
 
   // State - UI State
   const selectedProducts = ref<Set<string>>(new Set())
-  const filters = ref({
-    search: '',
-    status: 'ACTIVE' as Product['status'] | 'ALL',
-    category: null as string | null,
-    sort: 'updatedAt:desc',
+  const currentFilters = ref<CatalogFilters>({})
+  const pagination = ref<PaginationState>({
+    page: 1,
+    pageSize: 20,
+    totalItems: 0,
+    totalPages: 0,
   })
-  const currentPage = ref(1)
-  const pageSize = ref(20)
-  const totalProducts = ref(0)
+
+  const sortField = ref<string>('updatedAt')
+  const sortOrder = ref<'asc' | 'desc'>('desc')
 
   // Computed
-  const filteredProducts = computed(() => {
-    let result = Array.from(products.value.values())
-
-    // Apply search filter
-    if (filters.value.search) {
-      const search = filters.value.search.toLowerCase()
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(search) ||
-          p.description?.toLowerCase().includes(search)
-      )
-    }
-
-    // Apply status filter
-    if (filters.value.status !== 'ALL') {
-      result = result.filter((p) => p.status === filters.value.status)
-    }
-
-    // Apply category filter
-    if (filters.value.category) {
-      // This would need to check product-category relationships
-      // Stub for now
-    }
-
-    return result
+  const selectedProductCount = computed(() => selectedProducts.value.size)
+  const hasSelection = computed(() => selectedProducts.value.size > 0)
+  const hasFilters = computed(() => {
+    return Object.values(currentFilters.value).some((v) => v !== undefined && v !== '')
   })
 
-  const selectedProductCount = computed(() => selectedProducts.value.size)
-
-  const hasSelection = computed(() => selectedProducts.value.size > 0)
-
   // Actions - Data Loading
-  async function loadProducts(page = 1): Promise<void> {
-    // Mock implementation - replace with actual API call
-    // const cacheKey = `products:${page}:${pageSize.value}:${JSON.stringify(filters.value)}`
-    // Check cache first...
+  async function fetchProducts(): Promise<void> {
+    try {
+      const params = new URLSearchParams()
+      params.append('page', String(pagination.value.page))
+      params.append('size', String(pagination.value.pageSize))
 
-    const mockProducts: Product[] = [
-      {
-        id: '1',
-        name: 'Sample Product',
-        slug: 'sample-product',
-        description: 'A sample product for testing',
-        price: { amount: 29.99, currency: 'USD' },
-        images: [],
-        variants: [],
-        status: 'ACTIVE',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ]
+      if (currentFilters.value.search) {
+        params.append('q', currentFilters.value.search)
+      }
+      if (currentFilters.value.category) {
+        params.append('categoryId', currentFilters.value.category)
+      }
+      if (currentFilters.value.status) {
+        params.append('status', currentFilters.value.status)
+      }
+      if (sortField.value) {
+        params.append('sort', `${sortField.value},${sortOrder.value}`)
+      }
 
-    // Update products map
-    mockProducts.forEach((product) => {
-      products.value.set(product.id, product)
-    })
+      // Call admin catalog API endpoint
+      const response = await apiClient.get<{
+        items: ProductSummary[]
+        pagination?: PaginationMetadata
+      }>(`/admin/catalog/products?${params.toString()}`)
 
-    currentPage.value = page
-    totalProducts.value = mockProducts.length
+      // Transform ProductSummary to Product format
+      products.value = (response.items || []).map((item) => ({
+        id: item.id || '',
+        name: item.name || '',
+        slug: item.slug || '',
+        sku: item.sku,
+        description: item.description,
+        price: item.price,
+        compareAtPrice: item.compareAtPrice,
+        primaryImage: item.primaryImage,
+        status: (item.status?.toLowerCase() || 'draft') as Product['status'],
+        trackInventory: item.trackInventory || false,
+        totalInventory: item.totalInventory,
+        lowStockThreshold: item.lowStockThreshold,
+        variantCount: item.variantCount,
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || new Date().toISOString(),
+      }))
+
+      const fallbackPagination: PaginationMetadata = {
+        page: pagination.value.page,
+        pageSize: pagination.value.pageSize,
+        totalItems: response.items?.length ?? pagination.value.totalItems,
+        totalPages: pagination.value.totalPages,
+      }
+
+      const paginationMeta = response.pagination ?? fallbackPagination
+
+      pagination.value = {
+        page: paginationMeta.page || 1,
+        pageSize: paginationMeta.pageSize || 20,
+        totalItems: paginationMeta.totalItems || 0,
+        totalPages: paginationMeta.totalPages || 0,
+      }
+    } catch (error) {
+      console.error('Failed to fetch products:', error)
+      // Fallback to empty state on error
+      products.value = []
+      pagination.value = {
+        page: 1,
+        pageSize: 20,
+        totalItems: 0,
+        totalPages: 0,
+      }
+      throw error
+    }
   }
 
-  async function loadProduct(id: string): Promise<Product | null> {
+  async function fetchCategories(): Promise<void> {
+    try {
+      const response = await apiClient.get<Category[]>('/admin/catalog/categories')
+      categories.value = response || []
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
+      categories.value = []
+      throw error
+    }
+  }
+
+  async function fetchProductById(id: string): Promise<ProductDetail | null> {
     // Check cache first
     const cached = productCache.value.get(id)
     if (cached && Date.now() - cached.timestamp < cached.ttl) {
       return cached.data
     }
 
-    // Mock implementation - replace with actual API call
-    // const response = await apiClient.get<Product>(`/products/${id}`)
+    try {
+      const product = await apiClient.get<ProductDetail>(`/admin/catalog/products/${id}`)
 
-    const product = products.value.get(id) || null
-
-    // Update cache
-    if (product) {
+      // Update cache with 5-minute TTL
       productCache.value.set(id, {
         data: product,
         timestamp: Date.now(),
-        ttl: 60000, // 1 minute
+        ttl: 300000, // 5 minutes
       })
-    }
 
-    return product
+      return product
+    } catch (error) {
+      console.error(`Failed to fetch product ${id}:`, error)
+      return null
+    }
   }
 
-  async function loadCategories(): Promise<void> {
-    // Mock implementation - replace with actual API call
-    const mockCategories: Category[] = [
-      {
-        id: '1',
-        name: 'Clothing',
-        slug: 'clothing',
-        sortOrder: 1,
-      },
-      {
-        id: '2',
-        name: 'Accessories',
-        slug: 'accessories',
-        sortOrder: 2,
-      },
-    ]
+  async function createProduct(data: Partial<ProductDetail>): Promise<ProductDetail> {
+    try {
+      const product = await apiClient.post<ProductDetail>('/admin/catalog/products', data)
+      // Invalidate list cache and reload
+      await fetchProducts()
+      return product
+    } catch (error) {
+      console.error('Failed to create product:', error)
+      throw error
+    }
+  }
 
-    categories.value.clear()
-    mockCategories.forEach((category) => {
-      categories.value.set(category.id, category)
-    })
+  async function updateProduct(id: string, data: Partial<ProductDetail>): Promise<ProductDetail> {
+    try {
+      const product = await apiClient.put<ProductDetail>(`/admin/catalog/products/${id}`, data)
+
+      // Update cache
+      productCache.value.set(id, {
+        data: product,
+        timestamp: Date.now(),
+        ttl: 300000,
+      })
+
+      // Invalidate list cache and reload
+      await fetchProducts()
+      return product
+    } catch (error) {
+      console.error(`Failed to update product ${id}:`, error)
+      throw error
+    }
+  }
+
+  async function deleteProduct(id: string): Promise<void> {
+    try {
+      await apiClient.delete(`/admin/catalog/products/${id}`)
+
+      // Remove from cache
+      productCache.value.delete(id)
+
+      // Remove from local state
+      products.value = products.value.filter((p) => p.id !== id)
+
+      // Update counts
+      pagination.value.totalItems = Math.max(0, pagination.value.totalItems - 1)
+    } catch (error) {
+      console.error(`Failed to delete product ${id}:`, error)
+      throw error
+    }
   }
 
   // Actions - UI State
+  function setFilters(filters: CatalogFilters): void {
+    currentFilters.value = { ...filters }
+    pagination.value.page = 1 // Reset to first page
+  }
+
+  function clearFilters(): void {
+    currentFilters.value = {}
+    pagination.value.page = 1
+  }
+
+  function setPage(page: number): void {
+    pagination.value.page = page
+  }
+
+  function setPageSize(size: number): void {
+    pagination.value.pageSize = size
+    pagination.value.page = 1
+  }
+
+  function setSort(field: string, order: 'asc' | 'desc'): void {
+    sortField.value = field
+    sortOrder.value = order
+  }
+
   function selectProduct(id: string): void {
     selectedProducts.value.add(id)
   }
@@ -203,19 +294,13 @@ export const useCatalogStore = defineStore('catalog', () => {
   }
 
   function selectAllProducts(): void {
-    filteredProducts.value.forEach((product) => {
+    products.value.forEach((product) => {
       selectedProducts.value.add(product.id)
     })
   }
 
   function clearSelection(): void {
     selectedProducts.value.clear()
-  }
-
-  function setFilters(newFilters: Partial<typeof filters.value>): void {
-    filters.value = { ...filters.value, ...newFilters }
-    // Trigger reload
-    loadProducts(1)
   }
 
   function clearCache(): void {
@@ -227,26 +312,33 @@ export const useCatalogStore = defineStore('catalog', () => {
     products,
     categories,
     selectedProducts,
-    filters,
-    currentPage,
-    pageSize,
-    totalProducts,
+    currentFilters,
+    pagination,
+    sortField,
+    sortOrder,
 
     // Computed
-    filteredProducts,
     selectedProductCount,
     hasSelection,
+    hasFilters,
 
     // Actions
-    loadProducts,
-    loadProduct,
-    loadCategories,
+    fetchProducts,
+    fetchCategories,
+    fetchProductById,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+    setFilters,
+    clearFilters,
+    setPage,
+    setPageSize,
+    setSort,
     selectProduct,
     deselectProduct,
     toggleProduct,
     selectAllProducts,
     clearSelection,
-    setFilters,
     clearCache,
   }
 })

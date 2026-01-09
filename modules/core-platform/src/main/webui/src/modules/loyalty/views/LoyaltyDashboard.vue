@@ -22,7 +22,7 @@
     />
 
     <div v-else class="space-y-6">
-      <section class="program-card" v-if="loyaltyStore.program">
+      <section v-if="loyaltyStore.program" class="program-card">
         <div>
           <p class="eyebrow">{{ t('loyalty.program.pointsPerDollar') }}</p>
           <h2>{{ loyaltyStore.program.pointsPerDollar }}</h2>
@@ -64,7 +64,7 @@
             :placeholder="t('loyalty.members.lookupPlaceholder')"
             class="w-80"
           />
-          <Button :label="t('loyalty.members.lookup')" @click="handleLookup" :disabled="!lookupId" />
+          <Button :label="t('loyalty.members.lookup')" :disabled="!lookupId" @click="handleLookup" />
         </div>
 
         <div v-if="loyaltyStore.member" class="member-card">

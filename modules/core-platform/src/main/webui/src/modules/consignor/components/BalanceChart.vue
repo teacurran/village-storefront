@@ -30,8 +30,8 @@
     <div v-if="nextPayoutEligible" class="balance-chart-cta">
       <button
         class="btn-primary w-full"
-        @click="emit('request-payout')"
         :aria-label="t('consignor.balance.requestPayoutAriaLabel')"
+        @click="emit('request-payout')"
       >
         {{ t('consignor.balance.requestPayout') }}
       </button>

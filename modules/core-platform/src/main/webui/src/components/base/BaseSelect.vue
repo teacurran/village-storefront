@@ -5,18 +5,18 @@
       <span v-if="required" class="text-error-500">*</span>
     </label>
     <Dropdown
-      :inputId="selectId"
-      :modelValue="modelValue"
+      :input-id="selectId"
+      :model-value="modelValue"
       :options="normalizedOptions"
-      optionLabel="label"
-      optionValue="value"
+      option-label="label"
+      option-value="value"
       :placeholder="placeholder"
       :disabled="disabled"
       :class="selectClasses"
-      :showClear="!required"
+      :show-clear="!required"
       :aria-required="required || undefined"
       :pt="dropdownParts"
-      @update:modelValue="handleUpdate"
+      @update:model-value="handleUpdate"
     />
     <p v-if="error" class="mt-1 text-sm text-error-600">{{ error }}</p>
     <p v-else-if="hint" class="mt-1 text-sm text-neutral-500">{{ hint }}</p>

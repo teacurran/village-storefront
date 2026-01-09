@@ -13,8 +13,8 @@
         <option value="CANCELLED">{{ t('orders.status.cancelled') }}</option>
       </select>
       <div class="modal-actions">
-        <button @click="$emit('close')" class="btn-secondary">{{ t('common.cancel') }}</button>
-        <button @click="handleConfirm" class="btn-primary">{{ t('common.confirm') }}</button>
+        <button class="btn-secondary" @click="$emit('close')">{{ t('common.cancel') }}</button>
+        <button class="btn-primary" @click="handleConfirm">{{ t('common.confirm') }}</button>
       </div>
     </div>
   </div>

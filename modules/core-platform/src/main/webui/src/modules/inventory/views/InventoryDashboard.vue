@@ -29,12 +29,12 @@
     <div v-else>
       <div class="filters-card">
         <Dropdown
+          v-model="selectedLocationId"
           class="w-64"
           :options="locationOptions"
           option-label="name"
           option-value="id"
           :placeholder="t('inventory.filters.location')"
-          v-model="selectedLocationId"
           show-clear
         />
         <span class="divider" />

@@ -21,10 +21,10 @@
 
     <div class="filters-card">
       <Dropdown
+        v-model="selectedSeverity"
         :options="severityOptions"
         option-label="label"
         option-value="value"
-        v-model="selectedSeverity"
         class="w-48"
       />
       <InputText

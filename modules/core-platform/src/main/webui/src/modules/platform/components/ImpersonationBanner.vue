@@ -14,7 +14,7 @@
         </span>
       </div>
       <div class="banner-actions">
-        <button class="end-impersonation-btn" @click="handleEndImpersonation" :disabled="loading">
+        <button class="end-impersonation-btn" :disabled="loading" @click="handleEndImpersonation">
           <i class="pi pi-times"></i>
           End Impersonation
         </button>

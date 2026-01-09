@@ -18,7 +18,7 @@
     <div v-if="hasError" class="error-message">
       <i class="pi pi-exclamation-triangle"></i>
       <span>{{ errorMessage }}</span>
-      <button @click="retrySync" class="retry-btn">Retry</button>
+      <button class="retry-btn" @click="retrySync">Retry</button>
     </div>
   </div>
 </template>

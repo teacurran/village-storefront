@@ -36,8 +36,26 @@ const router = createRouter({
         {
           path: 'catalog',
           name: 'catalog',
-          component: () => import('@/views/CatalogView.vue'),
+          redirect: '/catalog/products',
           meta: { title: 'Catalog' },
+        },
+        {
+          path: 'catalog/products',
+          name: 'catalog-products',
+          component: () => import('@/views/Products/ProductList.vue'),
+          meta: { title: 'Products' },
+        },
+        {
+          path: 'catalog/products/new',
+          name: 'catalog-products-new',
+          component: () => import('@/views/Products/ProductEditor.vue'),
+          meta: { title: 'New Product' },
+        },
+        {
+          path: 'catalog/products/:id',
+          name: 'catalog-products-edit',
+          component: () => import('@/views/Products/ProductEditor.vue'),
+          meta: { title: 'Edit Product' },
         },
         {
           path: 'pos',

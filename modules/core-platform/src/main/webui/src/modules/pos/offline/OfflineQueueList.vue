@@ -3,11 +3,11 @@
     <div class="queue-header">
       <h3>Offline Transaction Queue</h3>
       <div class="queue-actions">
-        <button @click="refreshQueue" class="btn-secondary" :disabled="isRefreshing">
+        <button class="btn-secondary" :disabled="isRefreshing" @click="refreshQueue">
           <i class="pi pi-refresh" :class="{ 'pi-spin': isRefreshing }"></i>
           Refresh
         </button>
-        <button @click="exportQueue" class="btn-secondary">
+        <button class="btn-secondary" @click="exportQueue">
           <i class="pi pi-download"></i>
           Export
         </button>

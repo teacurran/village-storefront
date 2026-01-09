@@ -71,7 +71,7 @@
             <td>
               <div class="actor-cell">
                 <span class="actor-email">{{ entry.actorEmail || 'system' }}</span>
-                <span class="actor-id" v-if="entry.actorId">{{ entry.actorId }}</span>
+                <span v-if="entry.actorId" class="actor-id">{{ entry.actorId }}</span>
               </div>
             </td>
             <td>{{ entry.action }}</td>
@@ -87,7 +87,7 @@
       </div>
     </div>
 
-    <footer class="pagination" v-if="auditLogs.length > 0">
+    <footer v-if="auditLogs.length > 0" class="pagination">
       <button class="pagination-btn" :disabled="auditPagination.page === 0" @click="loadPreviousPage">
         <i class="pi pi-chevron-left" /> Previous
       </button>

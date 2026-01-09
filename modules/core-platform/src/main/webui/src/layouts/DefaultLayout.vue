@@ -107,10 +107,10 @@ const authStore = useAuthStore()
 const tenantStore = useTenantStore()
 
 const navigation = [
-  { name: 'dashboard', label: 'Dashboard', to: '/', icon: '📊' },
-  { name: 'catalog', label: 'Catalog', to: '/catalog', icon: '📦' },
-  { name: 'pos', label: 'Point of Sale', to: '/pos', icon: '🛒' },
-  { name: 'settings', label: 'Settings', to: '/settings', icon: '⚙️' },
+  { name: 'dashboard', label: 'Dashboard', to: { name: 'dashboard' }, icon: '📊' },
+  { name: 'catalog', label: 'Catalog', to: { name: 'catalog-products' }, icon: '📦' },
+  { name: 'pos', label: 'Point of Sale', to: { name: 'pos' }, icon: '🛒' },
+  { name: 'settings', label: 'Settings', to: { name: 'settings' }, icon: '⚙️' },
 ]
 
 const userInitials = computed(() => {

@@ -1,8 +1,8 @@
 <template>
   <div v-if="isOpen" class="modal-overlay" @click.self="emit('close')">
     <div
-      class="modal-content"
       ref="modalRef"
+      class="modal-content"
       role="dialog"
       aria-labelledby="modal-title"
       aria-modal="true"
@@ -13,8 +13,8 @@
         </h2>
         <button
           class="modal-close-btn"
-          @click="emit('close')"
           :aria-label="t('common.close')"
+          @click="emit('close')"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -27,7 +27,7 @@
         </button>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="modal-body">
+      <form class="modal-body" @submit.prevent="handleSubmit">
         <div class="form-group">
           <label for="amount" class="form-label">
             {{ t('consignor.payout.amount') }}

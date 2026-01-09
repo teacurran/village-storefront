@@ -16,11 +16,11 @@
     <div class="filters-card">
       <label>
         {{ t('reporting.filters.startDate') }}
-        <input type="date" v-model="startDate" />
+        <input v-model="startDate" type="date" />
       </label>
       <label>
         {{ t('reporting.filters.endDate') }}
-        <input type="date" v-model="endDate" />
+        <input v-model="endDate" type="date" />
       </label>
       <Button class="p-button-text" :label="t('common.refresh')" @click="handleRefresh" />
     </div>

@@ -35,11 +35,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Actions
-  async function login(email: string, password: string): Promise<void> {
+  async function login(email: string, _password: string): Promise<void> {
     // Mock implementation - replace with actual API call
     // const response = await apiClient.post<{ tokens: AuthTokens; user: UserProfile }>(
     //   '/auth/login',
-    //   { email, password }
+    //   { email, _password }
     // )
 
     // Stub for initial scaffold

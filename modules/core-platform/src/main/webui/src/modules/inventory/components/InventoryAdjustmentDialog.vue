@@ -3,8 +3,8 @@
     <div class="dialog-body">
       <label class="field-label" for="quantity">{{ t('inventory.adjustDialog.quantity') }}</label>
       <InputNumber
-        input-id="quantity"
         v-model.number="quantity"
+        input-id="quantity"
         :min="-100"
         :max="100"
         mode="decimal"
@@ -14,8 +14,8 @@
 
       <label class="field-label" for="reason">{{ t('inventory.adjustDialog.reason') }}</label>
       <Dropdown
-        input-id="reason"
         v-model="reason"
+        input-id="reason"
         :options="reasonOptions"
         option-label="label"
         option-value="value"

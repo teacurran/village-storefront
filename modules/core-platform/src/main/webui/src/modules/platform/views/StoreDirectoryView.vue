@@ -15,7 +15,7 @@
           class="search-input"
           @input="handleSearchChange"
         />
-        <select v-model="statusFilter" @change="handleFilterChange" class="status-filter">
+        <select v-model="statusFilter" class="status-filter" @change="handleFilterChange">
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
@@ -67,25 +67,25 @@
             <td>
               <div class="action-buttons">
                 <button
-                  @click="viewStoreDetails(store.id)"
                   class="btn-secondary"
                   title="View Details"
+                  @click="viewStoreDetails(store.id)"
                 >
                   <i class="pi pi-eye"></i>
                 </button>
                 <button
                   v-if="store.status === 'active'"
-                  @click="showSuspendDialog(store)"
                   class="btn-danger"
                   title="Suspend Store"
+                  @click="showSuspendDialog(store)"
                 >
                   <i class="pi pi-ban"></i>
                 </button>
                 <button
                   v-if="store.status === 'suspended'"
-                  @click="handleReactivate(store.id)"
                   class="btn-success"
                   title="Reactivate Store"
+                  @click="handleReactivate(store.id)"
                 >
                   <i class="pi pi-check"></i>
                 </button>
@@ -103,9 +103,9 @@
 
     <div v-if="!loading && stores.length > 0" class="pagination">
       <button
-        @click="loadPreviousPage"
         :disabled="storePagination.page === 0"
         class="pagination-btn"
+        @click="loadPreviousPage"
       >
         <i class="pi pi-chevron-left"></i> Previous
       </button>
@@ -113,7 +113,7 @@
         Page {{ storePagination.page + 1 }} of {{ totalPages }}
         ({{ storePagination.total }} total stores)
       </span>
-      <button @click="loadNextPage" :disabled="!hasNextPage" class="pagination-btn">
+      <button :disabled="!hasNextPage" class="pagination-btn" @click="loadNextPage">
         Next <i class="pi pi-chevron-right"></i>
       </button>
     </div>
@@ -130,11 +130,11 @@
           rows="4"
         ></textarea>
         <div class="modal-actions">
-          <button @click="closeSuspendDialog" class="btn-secondary">Cancel</button>
+          <button class="btn-secondary" @click="closeSuspendDialog">Cancel</button>
           <button
-            @click="handleSuspend"
             :disabled="suspendReason.trim().length < 10"
             class="btn-danger"
+            @click="handleSuspend"
           >
             Suspend Store
           </button>

@@ -46,8 +46,8 @@
         <button
           v-if="!notification.read"
           class="notification-mark-read"
-          @click="handleMarkAsRead(notification.id)"
           :aria-label="t('consignor.notifications.markAsRead')"
+          @click="handleMarkAsRead(notification.id)"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path

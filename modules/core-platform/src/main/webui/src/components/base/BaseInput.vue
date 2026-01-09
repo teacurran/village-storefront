@@ -6,14 +6,14 @@
     </label>
     <div class="relative">
       <InputText
-        :inputId="inputId"
+        :input-id="inputId"
         :type="type"
-        :modelValue="modelValue"
+        :model-value="modelValue"
         :placeholder="placeholder"
         :disabled="disabled"
         :required="required"
         :class="inputClasses"
-        @update:modelValue="handleInput"
+        @update:model-value="handleInput"
         @blur="emit('blur', $event)"
         @focus="emit('focus', $event)"
       />
