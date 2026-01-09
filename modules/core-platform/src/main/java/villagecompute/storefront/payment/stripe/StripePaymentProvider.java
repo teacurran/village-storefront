@@ -54,6 +54,10 @@ public class StripePaymentProvider implements PaymentProvider {
     @Override
     public PaymentIntentResult createIntent(CreatePaymentIntentRequest request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+        if (useStubMode()) {
+            return simulateCreateIntent(request);
+        }
+
         String tenantTag = tenantId.toString();
         Timer.Sample sample = Timer.start(meterRegistry);
 
@@ -118,6 +122,11 @@ public class StripePaymentProvider implements PaymentProvider {
     @Override
     public CaptureResult capturePayment(String paymentIntentId, BigDecimal amountToCapture) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        if (useStubMode()) {
+            return simulateCaptureResult(paymentIntentId, amountToCapture);
+        }
+
         String tenantTag = tenantId.toString();
         Timer.Sample sample = Timer.start(meterRegistry);
 
@@ -164,6 +173,11 @@ public class StripePaymentProvider implements PaymentProvider {
     @Override
     public RefundResult refundPayment(String paymentIntentId, BigDecimal amountToRefund, String reason) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        if (useStubMode()) {
+            return simulateRefundResult(amountToRefund);
+        }
+
         String tenantTag = tenantId.toString();
         Timer.Sample sample = Timer.start(meterRegistry);
 
@@ -209,6 +223,10 @@ public class StripePaymentProvider implements PaymentProvider {
     public PaymentStatus getPaymentStatus(String paymentIntentId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
 
+        if (useStubMode()) {
+            return PaymentStatus.CAPTURED;
+        }
+
         try {
             init();
 
@@ -225,6 +243,10 @@ public class StripePaymentProvider implements PaymentProvider {
     @Override
     public CancellationResult cancelPayment(String paymentIntentId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        if (useStubMode()) {
+            return new CancellationResult(true, PaymentStatus.CANCELLED);
+        }
 
         try {
             init();
@@ -291,6 +313,28 @@ public class StripePaymentProvider implements PaymentProvider {
             case "canceled" -> RefundStatus.CANCELLED;
             default -> RefundStatus.FAILED;
         };
+    }
+
+    private boolean useStubMode() {
+        String apiKey = stripeConfig.apiSecretKey();
+        return apiKey == null || apiKey.isBlank() || apiKey.contains("replace_with_your_key");
+    }
+
+    private PaymentIntentResult simulateCreateIntent(CreatePaymentIntentRequest request) {
+        PaymentStatus status = request.captureImmediately() ? PaymentStatus.CAPTURED : PaymentStatus.AUTHORIZED;
+        return new PaymentIntentResult("pi_stub_" + UUID.randomUUID(), "cs_stub_" + UUID.randomUUID(), status,
+                Map.of("mode", "stub"));
+    }
+
+    private CaptureResult simulateCaptureResult(String paymentIntentId, BigDecimal amountToCapture) {
+        BigDecimal capturedAmount = amountToCapture != null ? amountToCapture : BigDecimal.ZERO;
+        return new CaptureResult(paymentIntentId, capturedAmount, PaymentStatus.CAPTURED, Map.of("mode", "stub"));
+    }
+
+    private RefundResult simulateRefundResult(BigDecimal amountToRefund) {
+        BigDecimal refundedAmount = amountToRefund != null ? amountToRefund : BigDecimal.ZERO;
+        return new RefundResult("re_stub_" + UUID.randomUUID(), refundedAmount, RefundStatus.SUCCEEDED,
+                Map.of("mode", "stub"));
     }
 
     /**

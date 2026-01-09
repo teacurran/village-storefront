@@ -90,6 +90,36 @@ components:
         code:
           type: string
           pattern: \S
+    CheckoutCommitRequest:
+      type: object
+      required:
+      - cartId
+      - customerEmail
+      - shippingAddress
+      - billingAddress
+      - paymentMethodId
+      properties:
+        cartId:
+          type: string
+          pattern: \S
+        customerEmail:
+          type: string
+          pattern: \S
+        shippingAddress:
+          type: string
+          pattern: \S
+        billingAddress:
+          type: string
+          pattern: \S
+        shippingAmount:
+          type: number
+        taxAmount:
+          type: number
+        currency:
+          type: string
+        paymentMethodId:
+          type: string
+          pattern: \S
     CollectionDto:
       type: object
       properties:
@@ -545,6 +575,17 @@ components:
           $ref: "#/components/schemas/OffsetDateTime"
         reason:
           type: string
+    UpdateOrderRequest:
+      type: object
+      properties:
+        status:
+          type: string
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
     UpsertLoyaltyProgramRequest:
       type: object
       required:
@@ -1316,6 +1357,120 @@ paths:
       security:
       - SecurityScheme:
         - admin
+  /api/v1/admin/orders:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: search
+        in: query
+        schema:
+          type: string
+      - name: sortBy
+        in: query
+        schema:
+          type: string
+      - name: sortOrder
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: Admin List Orders
+      tags:
+      - Order Resource
+  /api/v1/admin/orders/{orderId}:
+    patch:
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOrderRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Admin Update Order
+      tags:
+      - Order Resource
+    get:
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Admin Get Order
+      tags:
+      - Order Resource
+  /api/v1/admin/orders/{orderId}/cancel:
+    post:
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Admin Cancel Order
+      tags:
+      - Order Resource
+  /api/v1/admin/orders/{orderId}/refund:
+    post:
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: X-Idempotency-Key
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Admin Refund Order
+      tags:
+      - Order Resource
   /api/v1/admin/reports/aggregates/consignment-payouts:
     get:
       parameters:
@@ -1626,6 +1781,25 @@ paths:
       summary: Get Variant Matrix
       tags:
       - Product Resource
+  /api/v1/checkout/commit:
+    post:
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutCommitRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Commit Checkout
+      tags:
+      - Checkout Resource
   /api/v1/gift-cards/check-balance:
     post:
       requestBody:
@@ -2008,6 +2182,43 @@ paths:
       summary: Get Signed Download
       tags:
       - Media Resource
+  /api/v1/orders:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: List Orders
+      tags:
+      - Order Resource
+  /api/v1/orders/{orderId}:
+    get:
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Order
+      tags:
+      - Order Resource
   /api/v1/platform/audit:
     get:
       parameters:
