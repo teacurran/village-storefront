@@ -8,6 +8,8 @@ This runbook provides operational procedures for managing the Village Storefront
 - Architecture: `docs/architecture/04_Operational_Architecture.md` (Section 3.6, 3.7)
 - Task: I3.T6 - Background Job Framework Enhancements
 - Code: `src/main/java/villagecompute/storefront/services/jobs/config/`
+- **POS Offline Flow Diagram:** [pos-offline.mmd](../diagrams/pos-offline.mmd) ([PNG](../diagrams/pos-offline.png)) - Detailed sequence for offline transaction sync
+- **Media Processing Flow Diagram:** [media-flow.mmd](../diagrams/media-flow.mmd) ([PNG](../diagrams/media-flow.png)) - Background media processing workflow
 
 ---
 

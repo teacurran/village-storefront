@@ -3,7 +3,7 @@
 **Task:** I4.T5
 **Last Updated:** 2026-01-03
 **Owner:** Platform Operations / Media Domain Squad
-**Related Docs:** [Media Pipeline Spec](../media/pipeline.md) | [Sequence Diagram](../diagrams/sequence_media_pipeline.mmd) | [Architecture §3.6](../../.codemachine/artifacts/architecture/04_Operational_Architecture.md#3-6-background-processing)
+**Related Docs:** [Media Pipeline Spec](../media/pipeline.md) | [Sequence Diagram](../diagrams/media-flow.mmd) ([PNG](../diagrams/media-flow.png)) | [Architecture §3.6](../../.codemachine/artifacts/architecture/04_Operational_Architecture.md#3-6-background-processing)
 
 ---
 
@@ -42,7 +42,7 @@ The Media Processing Pipeline handles upload negotiation, image resizing, video 
 - **Retry Policy**: 3 attempts with exponential backoff (1s, 2s, 4s)
 - **Observability**: Prometheus metrics, structured JSON logs with tenant context
 
-**Visual Reference:** See [sequence_media_pipeline.mmd](../diagrams/sequence_media_pipeline.mmd) for detailed flow.
+**Visual Reference:** See [media-flow.mmd](../diagrams/media-flow.mmd) ([PNG](../diagrams/media-flow.png)) for detailed flow.
 
 ---
 
@@ -843,7 +843,7 @@ ORDER BY hour;
 
 - **Architecture:** [04_Operational_Architecture.md §3.6](../../.codemachine/artifacts/architecture/04_Operational_Architecture.md#3-6-background-processing)
 - **Pipeline Spec:** [Media Pipeline](../media/pipeline.md)
-- **Sequence Diagram:** [sequence_media_pipeline.mmd](../diagrams/sequence_media_pipeline.mmd)
+- **Sequence Diagram:** [media-flow.mmd](../diagrams/media-flow.mmd) ([PNG](../diagrams/media-flow.png))
 - **Foundation:** [01_Blueprint_Foundation.md §3.0 Rulebook](../../.codemachine/artifacts/architecture/01_Blueprint_Foundation.md#section-3-rulebook)
 - **KPI Reference:** [04_Operational_Architecture.md §3.12](../../.codemachine/artifacts/architecture/04_Operational_Architecture.md#3-12-kpi-telemetry)
 - **Job Framework:** `src/main/java/villagecompute/storefront/services/jobs/config/`

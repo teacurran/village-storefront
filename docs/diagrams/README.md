@@ -14,6 +14,83 @@ All diagrams are authored in PlantUML and can be rendered to PNG format.
 
 ---
 
+## Sequence Diagrams
+
+### media-flow.mmd (Mermaid Sequence Diagram)
+
+Complete end-to-end media processing pipeline covering upload negotiation, client upload to R2, background processing, and signed download URL generation.
+
+**Task Reference:** I4.T5
+
+**Rendering:**
+```bash
+# Using Mermaid CLI (mmdc)
+mmdc -i docs/diagrams/media-flow.mmd -o docs/diagrams/media-flow.png
+
+# Or using Docker
+docker run --rm -v "$PWD":/data minlag/mermaid-cli \
+  -i /data/docs/diagrams/media-flow.mmd \
+  -o /data/docs/diagrams/media-flow.png
+```
+
+**Output:** `docs/diagrams/media-flow.png`
+
+**Contents:**
+- **Phase 1**: Upload Negotiation (presigned R2 URL generation, quota validation)
+- **Phase 2**: Direct Client Upload (bypasses API server)
+- **Phase 3**: Processing Job Enqueue (priority queue integration)
+- **Phase 4**: Background Processing (FFmpeg HLS transcoding, Thumbnailator image derivatives)
+- **Phase 5**: Derivative Upload to R2 (tenant-scoped storage keys)
+- **Phase 6**: Status Update & Quota Tracking
+- **Phase 6b**: Admin/Storefront Notifications (SSE - future implementation)
+- **Phase 7**: Signed Download URL Generation (24h expiry, download attempt limits)
+- **Error Scenarios**: FFmpeg/Thumbnailator failures, R2 outages, quota exceeded
+- **Kill Switch**: Feature flags for emergency disable
+
+**Documentation:**
+- **Operational Runbook**: [`../operations/media_runbook.md`](../operations/media_runbook.md) - Failure scenarios, scaling procedures, capacity planning
+- **Architecture Reference**: `docs/architecture/04_Operational_Architecture.md` (Section 3.2.9, 3.6)
+
+---
+
+### pos-offline.mmd (Mermaid Sequence Diagram)
+
+Complete POS offline operations flow from device pairing through encrypted transaction capture, queue sync, server-side replay, and audit logging.
+
+**Task Reference:** I3.T6
+
+**Rendering:**
+```bash
+# Using Mermaid CLI (mmdc)
+mmdc -i docs/diagrams/pos-offline.mmd -o docs/diagrams/pos-offline.png
+
+# Or using Docker
+docker run --rm -v "$PWD":/data minlag/mermaid-cli \
+  -i /data/docs/diagrams/pos-offline.mmd \
+  -o /data/docs/diagrams/pos-offline.png
+```
+
+**Output:** `docs/diagrams/pos-offline.png`
+
+**Contents:**
+- **Phase 1**: Device Pairing (one-time setup, AES-256 key generation, Stripe Terminal token issuance)
+- **Phase 2**: Offline Detection & Activation (Service Worker monitoring)
+- **Phase 3**: Offline Transaction Capture (AES-256-GCM encryption, IndexedDB storage)
+- **Phase 4**: Staff Queue Management (transaction visibility, status tracking)
+- **Phase 5**: Network Restoration & Sync Trigger (batch upload to server)
+- **Phase 6**: Server-side Queue & Background Job (idempotency key validation)
+- **Phase 7**: Background Decryption & Replay (checkout orchestration, Stripe payment capture)
+- **Phase 8**: Client Notification & Cleanup (SSE updates, auto-cleanup)
+- **Phase 9**: Staff Export for Support (encrypted queue export for troubleshooting)
+- **Error Scenarios**: Encryption key rotation, queue capacity exceeded, device not paired, payment failures
+- **Kill Switch**: Feature flags for emergency disable (`pos.offline.enabled`, `pos.offline_sync.enabled`)
+
+**Documentation:**
+- **Operational Runbook**: [`../operations/job_runbook.md`](../operations/job_runbook.md) - Background job monitoring and troubleshooting
+- **Architecture Reference**: `docs/architecture/04_Operational_Architecture.md` (Section 3.2.9, 3.6, 3.19.10)
+
+---
+
 ## Data Model Diagram
 
 ### datamodel_erd.mmd (Mermaid ERD)
@@ -198,15 +275,25 @@ docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml \
 plantuml docs/diagrams/*.puml -tpng
 ```
 
-**Mermaid ERD (Using Mermaid CLI):**
+**Mermaid Diagrams (Using Mermaid CLI):**
 ```bash
-# Render Mermaid ERD
+# Render all Mermaid diagrams (ERD + sequence diagrams)
 mmdc -i docs/diagrams/datamodel_erd.mmd -o docs/diagrams/datamodel_erd.png
+mmdc -i docs/diagrams/media-flow.mmd -o docs/diagrams/media-flow.png
+mmdc -i docs/diagrams/pos-offline.mmd -o docs/diagrams/pos-offline.png
 
 # Or using Docker
 docker run --rm -v "$PWD":/data minlag/mermaid-cli \
   -i /data/docs/diagrams/datamodel_erd.mmd \
   -o /data/docs/diagrams/datamodel_erd.png
+
+docker run --rm -v "$PWD":/data minlag/mermaid-cli \
+  -i /data/docs/diagrams/media-flow.mmd \
+  -o /data/docs/diagrams/media-flow.png
+
+docker run --rm -v "$PWD":/data minlag/mermaid-cli \
+  -i /data/docs/diagrams/pos-offline.mmd \
+  -o /data/docs/diagrams/pos-offline.png
 ```
 
 **CI Integration:**
@@ -228,15 +315,18 @@ For detailed commentary on diagram intent, module responsibilities, and architec
 
 When to update diagrams:
 
-1. **Data Model ERD** (`datamodel_erd.mmd` & `datamodel_erd.puml`): Adding/removing tables, changing relationships, updating RLS annotations, modifying partition strategies
-2. **System Context**: Adding new external integrations, personas, or removing deprecated services
-3. **Container**: Introducing new deployment containers (e.g., separate search service), changing container communication patterns
-4. **Component**: Adding new bounded-context modules, refactoring module boundaries, introducing new adapters
-5. **component_overview.puml**: (Legacy) Should not be updated; migrate changes to `component.puml` instead
+1. **Sequence Diagrams** (`media-flow.mmd`, `pos-offline.mmd`): Changes to operational flows, new phases, error scenarios, retry policies, feature flags, or monitoring metrics
+2. **Data Model ERD** (`datamodel_erd.mmd` & `datamodel_erd.puml`): Adding/removing tables, changing relationships, updating RLS annotations, modifying partition strategies
+3. **System Context**: Adding new external integrations, personas, or removing deprecated services
+4. **Container**: Introducing new deployment containers (e.g., separate search service), changing container communication patterns
+5. **Component**: Adding new bounded-context modules, refactoring module boundaries, introducing new adapters
+6. **component_overview.puml**: (Legacy) Should not be updated; migrate changes to `component.puml` instead
 
 **Review Process:**
 - Diagram updates require Architecture Review Board approval (bi-weekly sessions)
+- Sequence diagram changes must be cross-referenced with operational runbooks and architecture docs
 - C4 diagram changes must be accompanied by updates to `c4-architecture-diagrams.md` commentary
 - ERD changes must be accompanied by updates to `datamodel_tenancy_narrative.md` commentary
 - Rendered PNG outputs should be committed alongside `.puml`/`.mmd` source changes for documentation portability
 - ERD changes require review with Identity Team (session_log, RLS policies) and Reporting Team (partitioning, archival)
+- Sequence diagram changes require review with Media/POS leads and Operations team
