@@ -109,9 +109,15 @@ echo "This script will initialize your local development environment."
 echo ""
 echo "What will be set up:"
 echo "  • Docker Compose services (PostgreSQL, MinIO, Mailhog)"
+echo "  • Shipping carrier mocks (USPS, UPS, FedEx)"
 echo "  • Database schema via Flyway migrations"
 echo "  • Sample catalog data (2 tenants, products, inventory)"
+echo "  • Sample consignment data (consignors, payout ledgers)"
 echo "  • MinIO bucket for media storage"
+echo ""
+echo "Optional services (use --profile flag):"
+echo "  • Stripe CLI webhook forwarder: docker compose --profile payments up"
+echo "  • Observability stack: docker compose --profile observability up"
 echo ""
 
 # ==============================================================================
@@ -188,9 +194,14 @@ if docker compose ps | grep -q "Up"; then
   print_warning "Some services are already running"
   print_info "Run 'docker compose down' to restart all services"
 else
-  print_info "Starting services: postgres, minio, mailhog..."
-  docker compose up -d
-  print_success "Services started"
+  print_info "Starting core services: postgres, minio, mailhog..."
+  print_info "Starting shipping mocks: usps-mock, ups-mock, fedex-mock..."
+  docker compose up -d postgres minio mailhog usps-mock ups-mock fedex-mock
+  print_success "Core services started"
+  print_info ""
+  print_info "Note: Stripe CLI (webhook forwarder) is not started by default."
+  print_info "To enable: docker compose --profile payments up -d"
+  print_info "Requires: stripe login"
 fi
 
 # ==============================================================================
@@ -239,30 +250,60 @@ fi
 # ==============================================================================
 
 if [ "$SKIP_SEED" = false ]; then
-  print_header "Step 6: Seeding Sample Catalog Data"
+  print_header "Step 6: Seeding Sample Data"
 
   if ! command -v psql > /dev/null 2>&1; then
     print_warning "psql not available, skipping seed data"
   else
-    SEED_SCRIPT="$PROJECT_ROOT/tools/scripts/sample_catalog_loader.sql"
+    # Load catalog seed data
+    CATALOG_SEED="$PROJECT_ROOT/tools/scripts/sample_catalog_loader.sql"
 
-    if [ -f "$SEED_SCRIPT" ]; then
-      print_info "Loading sample catalog from: $SEED_SCRIPT"
+    if [ -f "$CATALOG_SEED" ]; then
+      print_info "Loading sample catalog from: $CATALOG_SEED"
 
-      PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -f "$SEED_SCRIPT" || {
-        print_warning "Seed script failed (may be due to RLS policies or missing tables)"
-        print_info "Run migrations first, then manually load: psql -f $SEED_SCRIPT"
+      PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -f "$CATALOG_SEED" || {
+        print_warning "Catalog seed script failed (may be due to RLS policies or missing tables)"
+        print_info "Run migrations first, then manually load: psql -f $CATALOG_SEED"
       }
 
       print_success "Sample catalog data loaded"
-      print_info "Test tenant: techgadgets (ID: a0000000-0000-0000-0000-000000000001)"
-      print_info "Default staff logins (password: changeme123!):"
-      print_info "  • owner@techgadgets.local (Store Owner)"
-      print_info "  • staff@techgadgets.local (Staff)"
-      print_info "  • owner@artisancrafts.local (Store Owner)"
     else
-      print_warning "Seed script not found at: $SEED_SCRIPT"
+      print_warning "Catalog seed script not found at: $CATALOG_SEED"
     fi
+
+    # Load consignment seed data
+    CONSIGNMENT_SEED="$PROJECT_ROOT/tools/scripts/sample_consignment_loader.sql"
+
+    if [ -f "$CONSIGNMENT_SEED" ]; then
+      print_info "Loading sample consignment data from: $CONSIGNMENT_SEED"
+
+      PGPASSWORD="${DB_PASSWORD}" psql -h localhost -p "${DB_PORT}" -U "${DB_USER}" -d "${DB_NAME}" -f "$CONSIGNMENT_SEED" || {
+        print_warning "Consignment seed script failed"
+        print_info "This may be normal if consignment tables don't exist yet"
+        print_info "Manually load after migrations: psql -f $CONSIGNMENT_SEED"
+      }
+
+      print_success "Sample consignment data loaded"
+    else
+      print_warning "Consignment seed script not found at: $CONSIGNMENT_SEED"
+    fi
+
+    # Summary
+    echo ""
+    print_success "Sample data loading complete!"
+    print_info ""
+    print_info "Test tenants & credentials:"
+    print_info "  Tenant 1: techgadgets (ID: a0000000-0000-0000-0000-000000000001)"
+    print_info "  Tenant 2: artisancrafts (ID: a0000000-0000-0000-0000-000000000002)"
+    print_info ""
+    print_info "Staff logins (password: changeme123!):"
+    print_info "  • owner@techgadgets.local (Store Owner)"
+    print_info "  • staff@techgadgets.local (Staff)"
+    print_info "  • owner@artisancrafts.local (Store Owner)"
+    print_info ""
+    print_info "Consignors (for checkout/payout QA):"
+    print_info "  • Vintage Audio Collector - 0 balance"
+    print_info "  • Mobile Accessories Hub - \$342.75 available for payout"
   fi
 else
   print_warning "Skipping seed data (--skip-seed flag)"
@@ -313,6 +354,11 @@ echo "  • PostgreSQL:      ${DB_URL}"
 echo "  • MinIO Console:   http://localhost:${MINIO_CONSOLE_PORT} (${R2_ACCESS_KEY} / ${R2_SECRET_KEY})"
 echo "  • Mailhog UI:      http://localhost:${MAILHOG_UI_PORT}"
 echo ""
+echo -e "${GREEN}Mock Services (For QA Testing):${NC}"
+echo "  • USPS Mock API:   http://localhost:${USPS_MOCK_PORT:-9100} (health: /health)"
+echo "  • UPS Mock API:    http://localhost:${UPS_MOCK_PORT:-9101} (health: /health)"
+echo "  • FedEx Mock API:  http://localhost:${FEDEX_MOCK_PORT:-9102} (health: /health)"
+echo ""
 echo -e "${GREEN}Next Steps:${NC}"
 echo "  1. Start Quarkus dev mode:"
 echo "     ${BLUE}npm run dev${NC}"
@@ -324,10 +370,18 @@ echo "  3. View API docs:"
 echo "     ${BLUE}http://localhost:8080/q/swagger-ui${NC}"
 echo ""
 echo -e "${GREEN}Useful Commands:${NC}"
-echo "  • View service logs:    ${BLUE}docker compose logs -f${NC}"
-echo "  • Stop services:        ${BLUE}docker compose down${NC}"
-echo "  • Restart services:     ${BLUE}docker compose restart${NC}"
-echo "  • Connect to database:  ${BLUE}psql -h localhost -U ${DB_USER} -d ${DB_NAME}${NC}"
+echo "  • View service logs:           ${BLUE}docker compose logs -f${NC}"
+echo "  • View specific service logs:  ${BLUE}docker compose logs -f usps-mock${NC}"
+echo "  • Stop services:               ${BLUE}docker compose down${NC}"
+echo "  • Restart services:            ${BLUE}docker compose restart${NC}"
+echo "  • Connect to database:         ${BLUE}psql -h localhost -U ${DB_USER} -d ${DB_NAME}${NC}"
+echo ""
+echo -e "${GREEN}Optional Services:${NC}"
+echo "  • Enable Stripe CLI webhook forwarder:"
+echo "    ${BLUE}stripe login${NC}  # Required first-time setup"
+echo "    ${BLUE}docker compose --profile payments up -d${NC}"
+echo "  • Enable observability (Jaeger tracing):"
+echo "    ${BLUE}docker compose --profile observability up -d${NC}"
 echo ""
 echo -e "${GREEN}FFmpeg Status:${NC}"
 if command -v ffmpeg > /dev/null 2>&1; then

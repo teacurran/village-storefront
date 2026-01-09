@@ -95,9 +95,11 @@ The fastest way to get started is using the bootstrap script:
    - Validate prerequisites (Docker, psql, FFmpeg)
    - Create `.env` from `.env.example` if needed
    - Start Docker Compose services (PostgreSQL, MinIO, Mailhog)
+   - Start shipping carrier mocks (USPS, UPS, FedEx)
    - Wait for PostgreSQL to be ready
    - Run Flyway database migrations
    - Seed sample catalog + staff data (2 tenants, admin/staff logins, products, inventory)
+   - Seed sample consignment data (consignors, payout ledgers for QA testing)
    - Create MinIO bucket for media storage
 
 3. **Start the development server:**
@@ -135,7 +137,11 @@ If you prefer manual control:
 
 4. **Load sample data (optional, creates tenants + staff accounts):**
    ```bash
+   # Load catalog data (products, inventory, staff accounts)
    psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
+
+   # Load consignment data (consignors, payout ledgers for QA)
+   psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_consignment_loader.sql
    ```
 
 5. **Install dependencies and start development server:**
@@ -380,13 +386,20 @@ After running `./scripts/dev/bootstrap.sh` or `docker compose up`, these service
 | **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin | S3-compatible storage web UI |
 | **MinIO API** | http://localhost:9000 | minioadmin / minioadmin | S3 API endpoint |
 | **Mailhog UI** | http://localhost:8025 | - | Email testing interface |
+| **USPS Mock** | http://localhost:9100 | - | USPS Web Tools API simulator |
+| **UPS Mock** | http://localhost:9101 | - | UPS API simulator |
+| **FedEx Mock** | http://localhost:9102 | - | FedEx API simulator |
+| **Stripe CLI** | (webhook forwarder) | - | Stripe webhook tunnel (requires `--profile payments` + `stripe login`) |
 | **Jaeger UI** | http://localhost:16686 | - | Tracing (requires `--profile observability`) |
 
 **Common operations:**
 
 ```bash
 # View service logs
-docker compose logs -f [postgres|minio|mailhog]
+docker compose logs -f [postgres|minio|mailhog|usps-mock|ups-mock|fedex-mock]
+
+# View all mock service logs
+docker compose logs -f usps-mock ups-mock fedex-mock
 
 # Stop all services
 docker compose down
@@ -399,7 +412,72 @@ psql -h localhost -U appuser -d storefront_dev
 
 # Check service status
 docker compose ps
+
+# Health check for mock services
+curl http://localhost:9100/health  # USPS
+curl http://localhost:9101/health  # UPS
+curl http://localhost:9102/health  # FedEx
 ```
+
+#### Payment & Shipping Mock Services
+
+The development environment includes mock services for payment and shipping integrations to enable comprehensive QA testing without external API dependencies.
+
+**Shipping Carrier Mocks:**
+
+All shipping mocks start automatically with `docker compose up` and provide realistic API responses for:
+
+- **USPS Mock** (port 9100): Simulates USPS Web Tools API
+  - Rate calculation (`/ShippingAPI.dll?API=RateV4`)
+  - Address validation (`/ShippingAPI.dll?API=Verify`)
+  - Package tracking (`/ShippingAPI.dll?API=TrackV2`)
+
+- **UPS Mock** (port 9101): Simulates UPS JSON API
+  - Rating (`/api/rating/v1/Rate`)
+  - Tracking (`/api/track/v1/details/{trackingNumber}`)
+  - Address validation (`/api/addressvalidation/v1/1`)
+
+- **FedEx Mock** (port 9102): Simulates FedEx JSON API
+  - Rate quotes (`/rate/v1/rates/quotes`)
+  - Tracking (`/track/v1/trackingnumbers`)
+  - Address validation (`/country/v1/postal/validate`)
+
+**Stripe CLI Webhook Forwarder:**
+
+The Stripe CLI enables webhook testing in local development. It requires one-time authentication:
+
+```bash
+# First-time setup: Authenticate with Stripe
+stripe login
+
+# Start the webhook forwarder (forwards events to localhost:8080)
+docker compose --profile payments up -d stripe-cli
+
+# View webhook events
+docker compose logs -f stripe-cli
+
+# Stop webhook forwarder
+docker compose --profile payments down
+```
+
+The Stripe CLI forwards webhook events from Stripe test mode to `http://localhost:8080/api/webhooks/stripe`, allowing you to test payment flows end-to-end with real Stripe test events.
+
+**QA Test Data:**
+
+The bootstrap script seeds consignment data for testing checkout/payment/payout flows:
+
+- **3 Consignors** across 2 tenants
+- **Payout Ledgers** with historical transactions
+- **Mobile Accessories Hub** has $342.75 available balance (ready for payout testing)
+- **Mixed Catalog** demonstrating consignment + store-owned products
+
+Test scenarios:
+1. Place order with consignment item → verify SALE ledger entry
+2. Simulate settlement job → verify pending→available balance transfer
+3. Process payout for consignor with available balance
+4. Test Stripe webhooks for payment attribution
+5. Test shipping rate calculation with carrier mocks
+6. Test refund of consignment item → verify REFUND ledger entry
 
 ## Code Quality & CI/CD
 
