@@ -31,7 +31,6 @@ import villagecompute.storefront.data.models.CustomDomain;
 import villagecompute.storefront.data.models.Tenant;
 
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.TestProfile;
 
 /**
  * Comprehensive tests for tenant resolution filter. Covers subdomain resolution, custom domain resolution, edge cases,
@@ -49,7 +48,6 @@ import io.quarkus.test.junit.TestProfile;
  */
 @QuarkusTest
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@TestProfile(TenantPostgresRlsProfile.class)
 public class TenantFilterTest {
 
     @Inject
