@@ -1,0 +1,61 @@
+{#if quantity || availability}
+<div class="flex items-center gap-2 text-sm">
+    {#if availability == 'in_stock'}
+    <span class="inline-flex items-center gap-1.5 text-success-700">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+        </svg>
+        {msg.in_stock}
+    </span>
+    {#if quantity && quantity > 0}
+        {#if threshold != null}
+            {#if quantity <= threshold}
+            <span class="text-warning-700 font-medium">
+                · {msg.only_x_left count=quantity}
+            </span>
+            {/if}
+        {#else}
+            {#if quantity <= 10}
+            <span class="text-warning-700 font-medium">
+                · {msg.only_x_left count=quantity}
+            </span>
+            {/if}
+        {/if}
+    {/if}
+    {#else if availability == 'out_of_stock'}
+    <span class="inline-flex items-center gap-1.5 text-error-700">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+        </svg>
+        {msg.out_of_stock}
+    </span>
+    {#else if availability == 'preorder'}
+    <span class="inline-flex items-center gap-1.5 text-info-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        {msg.preorder}
+    </span>
+    {#else if availability == 'coming_soon'}
+    <span class="text-neutral-600">{msg.coming_soon}</span>
+    {/if}
+    {#if consignmentNote}
+    <span class="text-neutral-600" aria-label="{msg.consignment_item}">
+        · {consignmentNote}
+    </span>
+    {/if}
+</div>
+<span class="sr-only">
+    {#if quantity && quantity > 0}
+        {#if threshold != null}
+            {#if quantity <= threshold}
+            {msg.low_stock_sr count=quantity}
+            {/if}
+        {#else}
+            {#if quantity <= 10}
+            {msg.low_stock_sr count=quantity}
+            {/if}
+        {/if}
+    {/if}
+</span>
+{/if}

@@ -1,0 +1,81 @@
+<div class="flex gap-4 py-4 border-b border-neutral-200" data-cart-item="{item.id}">
+    <!-- Product Image -->
+    <div class="flex-shrink-0 w-24 h-24 bg-neutral-100 rounded-lg overflow-hidden">
+        {#if item.imageUrl}
+        <img src="{item.imageUrl}" alt="{item.name}" class="w-full h-full object-cover" loading="lazy">
+        {#else}
+        <div class="w-full h-full flex items-center justify-center text-3xl text-neutral-400">📦</div>
+        {/if}
+    </div>
+
+    <!-- Product Info -->
+    <div class="flex-1 flex flex-col justify-between">
+        <div>
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="font-semibold text-neutral-900">
+                        <a href="/product/{item.slug}" class="hover:text-primary-600 transition-colors">
+                            {item.name}
+                        </a>
+                    </h3>
+                    {#if item.variantTitle && item.variantTitle != 'Default'}
+                    <p class="text-sm text-neutral-600 mt-1">{item.variantTitle}</p>
+                    {/if}
+                    {#if item.isDigital}
+                    <span class="inline-flex items-center gap-1 mt-1 text-xs text-info-700">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+                        </svg>
+                        {msg.digital_download}
+                    </span>
+                    {/if}
+                </div>
+                <button type="button"
+                        class="text-neutral-400 hover:text-error-600 transition-colors ml-4"
+                        data-remove-item="{item.id}"
+                        aria-label="{msg.remove_item}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Quantity & Price -->
+        <div class="flex justify-between items-center mt-3">
+            <div class="flex items-center border border-neutral-300 rounded-lg">
+                <button type="button"
+                        class="px-3 py-1.5 hover:bg-neutral-50 transition-colors"
+                        data-decrease-qty="{item.id}"
+                        aria-label="{msg.decrease_quantity}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                    </svg>
+                </button>
+                <input type="number"
+                       value="{item.quantity}"
+                       min="1"
+                       max="{item.maxQuantity ?: 99}"
+                       class="w-14 text-center border-x border-neutral-300 py-1.5 focus:outline-none"
+                       data-quantity-input="{item.id}"
+                       aria-label="{msg.quantity}">
+                <button type="button"
+                        class="px-3 py-1.5 hover:bg-neutral-50 transition-colors"
+                        data-increase-qty="{item.id}"
+                        aria-label="{msg.increase_quantity}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="text-right">
+                {#if item.compareAtPrice && item.compareAtPrice != item.price}
+                <p class="text-sm text-neutral-500 line-through">{item.compareAtPrice}</p>
+                <p class="font-bold text-error-600">{item.price}</p>
+                {#else}
+                <p class="font-bold text-neutral-900">{item.price}</p>
+                {/if}
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,310 @@
+{#include base.html}
+
+{#head}
+<meta name="description" content="{product.description ?: msg.product_meta_description}">
+{#if product.imageUrl}
+<meta property="og:image" content="{product.imageUrl}">
+{/if}
+{/head}
+
+{#content}
+<!-- Breadcrumbs -->
+{#if breadcrumbs && breadcrumbs.size > 0}
+<nav aria-label="Breadcrumb" class="bg-white border-b border-neutral-200">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <ol class="flex items-center space-x-2 text-sm">
+            <li>
+                <a href="/" class="text-neutral-500 hover:text-neutral-700">{msg.home}</a>
+            </li>
+            {#for crumb in breadcrumbs}
+            <li class="flex items-center">
+                <svg class="w-4 h-4 text-neutral-400 mx-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                </svg>
+                {#if crumb.isLast}
+                <span class="text-neutral-900 font-medium" aria-current="page">{crumb.name}</span>
+                {#else}
+                <a href="{crumb.url}" class="text-neutral-500 hover:text-neutral-700">{crumb.name}</a>
+                {/if}
+            </li>
+            {/for}
+        </ol>
+    </div>
+</nav>
+{/if}
+
+<!-- Product Detail -->
+<div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <!-- Product Images -->
+        <div class="space-y-4">
+            <div class="aspect-w-1 aspect-h-1 bg-neutral-100 rounded-lg overflow-hidden">
+                {#if product.imageUrl}
+                <img src="{product.imageUrl}"
+                     alt="{product.name}"
+                     class="w-full h-full object-cover object-center"
+                     id="product-main-image">
+                {#else}
+                <div class="w-full h-full flex items-center justify-center">
+                    <span class="text-9xl text-neutral-300">📦</span>
+                </div>
+                {/if}
+            </div>
+
+            {#if product.galleryImages && product.galleryImages.size > 1}
+            <div class="grid grid-cols-4 gap-4">
+                {#for image in product.galleryImages}
+                <button type="button"
+                        class="aspect-w-1 aspect-h-1 bg-neutral-100 rounded-lg overflow-hidden border-2 border-transparent hover:border-primary-600 transition-colors"
+                        data-gallery-thumb
+                        data-image-url="{image.url}">
+                    <img src="{image.url}" alt="{image.alt ?: product.name}" class="w-full h-full object-cover">
+                </button>
+                {/for}
+            </div>
+            {/if}
+        </div>
+
+        <!-- Product Info -->
+        <div class="flex flex-col">
+            {#if product.brand}
+            <p class="text-sm text-neutral-600 uppercase tracking-wide mb-2">{product.brand}</p>
+            {/if}
+
+            <h1 class="text-3xl lg:text-4xl font-bold text-neutral-900 mb-4">{product.name}</h1>
+
+            <!-- Reviews -->
+            {#if product.averageRating}
+            <div class="flex items-center gap-2 mb-4">
+                <div class="flex items-center text-warning-500">
+                    {#for i in 1..5}
+                    {#if i <= product.averageRating}
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                        <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                    </svg>
+                    {#else}
+                    <svg class="w-5 h-5 fill-current text-neutral-300" viewBox="0 0 20 20">
+                        <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                    </svg>
+                    {/if}
+                    {/for}
+                </div>
+                <span class="text-sm text-neutral-600">
+                    {product.averageRating} ({product.reviewCount} {msg.reviews})
+                </span>
+            </div>
+            {/if}
+
+            <!-- Price -->
+            <div class="mb-6">
+                {#include components/price-stack.html price=product.price compareAtPrice=product.compareAtPrice savingsPercent=product.savingsPercent size='3xl' smallSize='base' /}
+            </div>
+
+            <!-- Description -->
+            {#if product.description}
+            <div class="prose prose-sm text-neutral-700 mb-6">
+                <p>{product.description}</p>
+            </div>
+            {/if}
+
+            <!-- Inventory Notice -->
+            <div class="mb-6">
+                {#include components/inventory-notice.html availability=product.availability quantity=product.quantity threshold=10 consignmentNote=product.consignmentNote /}
+            </div>
+
+            <!-- Variant Selector -->
+            {#if product.variantOptions && product.variantOptions.size > 0}
+            <div class="mb-6">
+                {#include components/variant-selector.html variantOptions=product.variantOptions /}
+            </div>
+            {/if}
+
+            <!-- Add to Cart -->
+            <div class="space-y-3 mb-6">
+                <button type="button"
+                        class="w-full bg-primary-600 text-white font-medium py-4 px-6 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-add-to-cart="{product.defaultVariantId ?: product.id}"
+                        data-add-to-cart-label="{msg.add_to_cart}"
+                        data-add-to-cart-success="{msg.success_added_to_cart}"
+                        data-add-to-cart-error="{msg.cart_error}"
+                        {#if product.availability != 'in_stock'}disabled{/if}>
+                    {#if product.availability == 'in_stock'}
+                    {msg.add_to_cart}
+                    {#else if product.availability == 'preorder'}
+                    {msg.preorder_now}
+                    {#else}
+                    {msg.out_of_stock}
+                    {/if}
+                </button>
+                {#if product.availability == 'in_stock'}
+                <button type="button"
+                        class="w-full border-2 border-primary-600 text-primary-600 font-medium py-4 px-6 rounded-lg hover:bg-primary-50 transition-colors"
+                        data-buy-now="{product.defaultVariantId ?: product.id}"
+                        data-buy-now-label="{msg.buy_now}"
+                        data-buy-now-error="{msg.cart_error}">
+                    {msg.buy_now}
+                </button>
+                {/if}
+            </div>
+
+            <!-- Product Features -->
+            {#if product.features && product.features.size > 0}
+            <div class="border-t border-neutral-200 pt-6 mb-6">
+                <h3 class="text-sm font-semibold text-neutral-900 uppercase tracking-wide mb-3">{msg.key_features}</h3>
+                <ul class="space-y-2">
+                    {#for feature in product.features}
+                    <li class="flex items-start gap-2 text-sm text-neutral-700">
+                        <svg class="w-5 h-5 text-success-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>{feature}</span>
+                    </li>
+                    {/for}
+                </ul>
+            </div>
+            {/if}
+
+            <!-- Product Meta -->
+            <div class="border-t border-neutral-200 pt-6 space-y-2 text-sm text-neutral-600">
+                {#if product.sku}
+                <div class="flex justify-between">
+                    <span>{msg.sku}:</span>
+                    <span class="font-medium text-neutral-900">{product.sku}</span>
+                </div>
+                {/if}
+                {#if product.categoryName}
+                <div class="flex justify-between">
+                    <span>{msg.category}:</span>
+                    <a href="/category/{product.categorySlug}" class="font-medium text-primary-600 hover:text-primary-700">
+                        {product.categoryName}
+                    </a>
+                </div>
+                {/if}
+            </div>
+        </div>
+    </div>
+
+    <!-- Related Products -->
+    {#if relatedProducts && relatedProducts.size > 0}
+    <section class="mt-16 border-t border-neutral-200 pt-16">
+        <h2 class="text-2xl font-bold text-neutral-900 mb-8">{msg.you_may_also_like}</h2>
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {#for product in relatedProducts}
+            {#include components/product-card.html product=product /}
+            {/for}
+        </div>
+    </section>
+    {/if}
+</div>
+
+{/content}
+
+{#scripts}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gallery image switching
+    const mainImage = document.getElementById('product-main-image');
+    const thumbs = document.querySelectorAll('[data-gallery-thumb]');
+
+    thumbs.forEach(thumb => {
+        thumb.addEventListener('click', function() {
+            const newImageUrl = this.dataset.imageUrl;
+            if (mainImage && newImageUrl) {
+                mainImage.src = newImageUrl;
+            }
+
+            thumbs.forEach(t => t.classList.remove('border-primary-600'));
+            this.classList.add('border-primary-600');
+        });
+    });
+
+    const addToCartBtn = document.querySelector('[data-add-to-cart]');
+    const buyNowBtn = document.querySelector('[data-buy-now]');
+
+    // Variant selection
+    const variantButtons = document.querySelectorAll('[data-variant-option]');
+    variantButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const optionName = this.dataset.variantOption;
+            const optionValue = this.dataset.variantValue;
+
+            // Update URL with selected variant
+            const url = new URL(window.location);
+            url.searchParams.set(optionName.toLowerCase(), optionValue.toLowerCase());
+            window.history.pushState({}, '', url);
+
+            const variantId = this.dataset.variantId;
+            if (variantId && addToCartBtn) {
+                addToCartBtn.dataset.addToCart = variantId;
+            }
+            if (variantId && buyNowBtn) {
+                buyNowBtn.dataset.buyNow = variantId;
+            }
+        });
+    });
+
+    async function addVariantToCart(variantId) {
+        const response = await fetch('/api/v1/cart/items', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ variantId, quantity: 1 })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(errorText || 'Unable to add to cart');
+        }
+
+        return response.json().catch(() => null);
+    }
+
+    // Add to cart
+    if (addToCartBtn) {
+        addToCartBtn.addEventListener('click', async function() {
+            const variantId = this.dataset.addToCart;
+            if (!variantId) {
+                return;
+            }
+            const originalLabel = this.dataset.addToCartLabel || this.textContent;
+            const successLabel = this.dataset.addToCartSuccess || originalLabel;
+            const errorLabel = this.dataset.addToCartError || originalLabel;
+            this.disabled = true;
+            try {
+                await addVariantToCart(variantId);
+                this.textContent = successLabel;
+            } catch (error) {
+                console.error(error);
+                alert(errorLabel);
+            } finally {
+                setTimeout(() => {
+                    this.disabled = false;
+                    this.textContent = originalLabel;
+                }, 1200);
+            }
+        });
+    }
+
+    // Buy now
+    if (buyNowBtn) {
+        buyNowBtn.addEventListener('click', async function() {
+            const variantId = this.dataset.buyNow;
+            if (!variantId) {
+                return;
+            }
+            const errorLabel = this.dataset.buyNowError || addToCartBtn?.dataset.addToCartError || 'Unable to add to cart';
+            try {
+                await addVariantToCart(variantId);
+                window.location.href = '/checkout';
+            } catch (error) {
+                console.error(error);
+                alert(errorLabel);
+            }
+        });
+    }
+});
+</script>
+{/scripts}
+
+{/include}

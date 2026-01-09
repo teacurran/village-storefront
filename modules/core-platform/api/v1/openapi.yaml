@@ -741,6 +741,11 @@ components:
 paths:
   /:
     get:
+      parameters:
+      - name: lang
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: OK
@@ -749,6 +754,23 @@ paths:
               schema:
                 type: string
       summary: Index
+      tags:
+      - Storefront Resource
+  /account:
+    get:
+      parameters:
+      - name: lang
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema:
+                type: string
+      summary: Account
       tags:
       - Storefront Resource
   /api/pos/devices:
@@ -3225,12 +3247,33 @@ paths:
       summary: Handle Stripe Webhook
       tags:
       - Payment Webhook Resource
+  /cart:
+    get:
+      parameters:
+      - name: lang
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema:
+                type: string
+      summary: Cart
+      tags:
+      - Storefront Resource
   /category/{slug}:
     get:
       parameters:
       - name: slug
         in: path
         required: true
+        schema:
+          type: string
+      - name: lang
+        in: query
         schema:
           type: string
       - name: page
@@ -3258,6 +3301,45 @@ paths:
               schema:
                 type: string
       summary: Catalog
+      tags:
+      - Storefront Resource
+  /checkout:
+    get:
+      parameters:
+      - name: lang
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema:
+                type: string
+      summary: Checkout
+      tags:
+      - Storefront Resource
+  /product/{slug}:
+    get:
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: lang
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            text/html:
+              schema:
+                type: string
+      summary: Product
       tags:
       - Storefront Resource
 tags:

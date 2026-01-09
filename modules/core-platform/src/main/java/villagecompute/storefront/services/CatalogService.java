@@ -185,6 +185,24 @@ public class CatalogService {
     }
 
     /**
+     * Get product by slug.
+     *
+     * @param slug
+     *            product slug
+     * @return product if found
+     */
+    public Optional<Product> getProductBySlug(String slug) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Fetching product by slug - tenantId=%s, slug=%s", tenantId, slug);
+
+        if (slug == null || slug.isBlank()) {
+            return Optional.empty();
+        }
+
+        return productRepository.findBySlug(slug);
+    }
+
+    /**
      * List active products with pagination.
      *
      * @param page

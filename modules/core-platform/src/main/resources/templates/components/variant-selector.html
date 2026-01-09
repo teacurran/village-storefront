@@ -1,0 +1,98 @@
+{#if variantOptions && variantOptions.size > 0}
+<div class="space-y-4">
+    {#for option in variantOptions}
+    <div class="variant-option-group" data-option-name="{option.name}">
+        <label class="block text-sm font-medium text-neutral-900 mb-2">
+            {option.name}
+            {#if option.selectedValue}
+            <span class="text-neutral-600 font-normal">: {option.selectedValue}</span>
+            {/if}
+        </label>
+
+        {#if option.displayType == 'color'}
+        <!-- Color swatches -->
+        <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="{option.name}">
+            {#for value in option.values}
+            <button type="button"
+                    class="relative w-10 h-10 rounded-full border-2 {#if value.selected}border-primary-600 ring-2 ring-primary-200{#else}border-neutral-300 hover:border-neutral-400{/if} transition-all"
+                    style="background-color: {value.colorCode ?: '#e5e7eb'}"
+                    data-variant-option="{option.name}"
+                    data-variant-value="{value.name}"
+                    {#if value.variantId}data-variant-id="{value.variantId}"{/if}
+                    {#if !value.available}disabled{/if}
+                    role="radio"
+                    aria-checked="{value.selected}"
+                    aria-label="{value.name}">
+                {#if !value.available}
+                <span class="absolute inset-0 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6"/>
+                    </svg>
+                </span>
+                {/if}
+                {#if value.selected}
+                <span class="absolute -top-1 -right-1 w-4 h-4 bg-primary-600 rounded-full flex items-center justify-center">
+                    <svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                </span>
+                {/if}
+            </button>
+            {/for}
+        </div>
+
+        {#else if option.displayType == 'image'}
+        <!-- Image tiles -->
+        <div class="grid grid-cols-4 gap-2" role="radiogroup" aria-label="{option.name}">
+            {#for value in option.values}
+            <button type="button"
+                    class="relative aspect-square rounded-lg border-2 {#if value.selected}border-primary-600 ring-2 ring-primary-200{#else}border-neutral-300 hover:border-neutral-400{/if} overflow-hidden transition-all {#if !value.available}opacity-50{/if}"
+                    data-variant-option="{option.name}"
+                    data-variant-value="{value.name}"
+                    {#if value.variantId}data-variant-id="{value.variantId}"{/if}
+                    {#if !value.available}disabled{/if}
+                    role="radio"
+                    aria-checked="{value.selected}"
+                    aria-label="{value.name}">
+                {#if value.imageUrl}
+                <img src="{value.imageUrl}" alt="{value.name}" class="w-full h-full object-cover">
+                {#else}
+                <div class="w-full h-full bg-neutral-100 flex items-center justify-center text-xs text-neutral-600 p-1 text-center">
+                    {value.name}
+                </div>
+                {/if}
+                {#if !value.available}
+                <div class="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6"/>
+                    </svg>
+                </div>
+                {/if}
+            </button>
+            {/for}
+        </div>
+
+        {#else}
+        <!-- Button group (default for size, etc.) -->
+        <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="{option.name}">
+            {#for value in option.values}
+            <button type="button"
+                    class="px-4 py-2 rounded-lg border-2 {#if value.selected}border-primary-600 bg-primary-50 text-primary-900 font-medium{#else}border-neutral-300 bg-white text-neutral-900 hover:border-neutral-400{/if} transition-all {#if !value.available}opacity-50 cursor-not-allowed{/if}"
+                    data-variant-option="{option.name}"
+                    data-variant-value="{value.name}"
+                    {#if value.variantId}data-variant-id="{value.variantId}"{/if}
+                    {#if !value.available}disabled{/if}
+                    role="radio"
+                    aria-checked="{value.selected}">
+                {value.name}
+                {#if !value.available}
+                <span class="sr-only">({msg.unavailable})</span>
+                {/if}
+            </button>
+            {/for}
+        </div>
+        {/if}
+    </div>
+    {/for}
+</div>
+{/if}

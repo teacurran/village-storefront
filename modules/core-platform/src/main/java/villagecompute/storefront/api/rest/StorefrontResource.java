@@ -2,6 +2,9 @@ package villagecompute.storefront.api.rest;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Year;
@@ -9,9 +12,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
@@ -22,8 +28,10 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 
 import org.jboss.logging.Logger;
@@ -33,7 +41,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.data.models.Category;
 import villagecompute.storefront.data.models.Product;
+import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.services.CatalogService;
+import villagecompute.storefront.services.FeatureToggle;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 import villagecompute.storefront.util.LocalizationService;
@@ -64,12 +74,18 @@ public class StorefrontResource {
     private static final Logger LOG = Logger.getLogger(StorefrontResource.class);
     private static final String THEME_RESOURCE_PREFIX = "templates/storefront/_generated/";
     private static final String THEME_INDEX_RESOURCE = THEME_RESOURCE_PREFIX + "theme-index.json";
+    private static final UUID SAMPLE_CART_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static final UUID SAMPLE_VARIANT_PRIMARY = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final UUID SAMPLE_VARIANT_SECONDARY = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     @Inject
     CatalogService catalogService;
 
     @Inject
     LocalizationService localizationService;
+
+    @Inject
+    FeatureToggle featureToggle;
 
     @Inject
     ObjectMapper objectMapper;
@@ -83,18 +99,88 @@ public class StorefrontResource {
         public static native TemplateInstance index();
 
         public static native TemplateInstance catalog();
+
+        public static native TemplateInstance product();
+
+        public static native TemplateInstance cart();
+
+        public static native TemplateInstance checkout();
+
+        public static native TemplateInstance account();
+    }
+
+    /**
+     * Parse locale from Accept-Language header. Falls back to "en" if header is missing or unsupported.
+     *
+     * @param headers
+     *            HTTP headers
+     * @return locale string (e.g., "en", "es")
+     */
+    private String parseLocaleFromHeaders(HttpHeaders headers) {
+        if (headers == null) {
+            return "en";
+        }
+
+        String acceptLanguage = headers.getHeaderString(HttpHeaders.ACCEPT_LANGUAGE);
+        if (acceptLanguage == null || acceptLanguage.isBlank()) {
+            return "en";
+        }
+
+        // Simple parsing: take first language tag before comma and semicolon
+        // Example: "en-US,en;q=0.9,es;q=0.8" -> "en"
+        String firstLang = acceptLanguage.split(",")[0].split(";")[0].trim().toLowerCase();
+
+        // Extract language code (before hyphen)
+        String langCode = firstLang.split("-")[0];
+
+        // Support only en and es for now
+        if ("es".equals(langCode)) {
+            return "es";
+        }
+
+        return "en"; // Default fallback
+    }
+
+    /**
+     * Resolve locale using lang query parameter when present, otherwise falling back to Accept-Language header.
+     */
+    private String resolveLocale(String langParam, HttpHeaders headers) {
+        if (hasText(langParam)) {
+            return "es".equalsIgnoreCase(langParam) ? "es" : "en";
+        }
+        return parseLocaleFromHeaders(headers);
+    }
+
+    private List<Map<String, Object>> buildLanguageOptions(String locale, UriInfo uriInfo) {
+        List<Map<String, Object>> options = new ArrayList<>();
+        options.add(buildLanguageOption("EN", "en", locale, uriInfo));
+        options.add(buildLanguageOption("ES", "es", locale, uriInfo));
+        return options;
+    }
+
+    private Map<String, Object> buildLanguageOption(String label, String value, String locale, UriInfo uriInfo) {
+        UriBuilder builder = uriInfo != null ? uriInfo.getRequestUriBuilder() : UriBuilder.fromPath("/");
+        URI target = builder.clone().replaceQueryParam("lang", value).build();
+        Map<String, Object> option = new HashMap<>();
+        option.put("label", label);
+        option.put("value", value);
+        option.put("active", value.equalsIgnoreCase(locale));
+        option.put("url", target.toString());
+        return option;
     }
 
     /**
      * Homepage route - renders hero, categories, and featured products.
      *
+     * @param headers
+     *            HTTP headers for locale detection
      * @return rendered HTML
      */
     @GET
     @Timed(
             value = "storefront.homepage.render",
             description = "Homepage render time")
-    public String index() {
+    public String index(@QueryParam("lang") String lang, @Context HttpHeaders headers, @Context UriInfo uriInfo) {
         long startTime = System.currentTimeMillis();
 
         TenantInfo tenantInfo = TenantContext.getCurrentTenant();
@@ -115,8 +201,12 @@ public class StorefrontResource {
         // Build theme tokens (stubbed for now - will come from tenant_theme table later)
         Map<String, String> themeTokens = buildThemeTokens(tenantInfo);
 
-        String locale = "en"; // TODO: derive from tenant or Accept-Language header
+        String locale = resolveLocale(lang, headers);
         Map<String, String> messages = localizationService.loadMessages(locale);
+        List<Map<String, Object>> languageOptions = buildLanguageOptions(locale, uriInfo);
+        Map<String, Object> cartContext = buildSampleCartContext();
+        List<Map<String, Object>> cartItems = getCartItems(cartContext);
+        int cartCount = extractCartCount(cartContext);
 
         long renderTime = System.currentTimeMillis() - startTime;
         LOG.infof("Homepage rendered in %d ms - tenantId=%s", renderTime, tenantInfo.tenantId());
@@ -129,7 +219,8 @@ public class StorefrontResource {
                 .data("seoTitle", null).data("seoDescription", null).data("canonicalUrl", null).data("msg", messages)
                 .data("rootCategories", rootCategoryDisplay).data("collections", List.of())
                 .data("featuredProducts", mapProductsToDisplayData(featuredProducts)).data("heroData", heroData)
-                .data("themeTokens", themeTokens).data("cartItemCount", 0) // TODO: Load from session/cart service
+                .data("themeTokens", themeTokens).data("languageOptions", languageOptions).data("cartItems", cartItems)
+                .data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00")).data("cartItemCount", cartCount)
                 .data("locale", locale).data("currentYear", Year.now().getValue()).data("pageTitle", "Home").render();
     }
 
@@ -365,6 +456,11 @@ public class StorefrontResource {
         return categories.stream().map(this::mapCategoryToDisplayData).collect(Collectors.toList());
     }
 
+    private List<Map<String, Object>> loadRootCategoryDisplay() {
+        List<Category> rootCategories = catalogService.getRootCategories();
+        return mapCategoriesToDisplayData(rootCategories);
+    }
+
     private Map<String, Object> mapCategoryToDisplayData(Category category) {
         Map<String, Object> data = new HashMap<>();
         data.put("name", category.name);
@@ -445,7 +541,8 @@ public class StorefrontResource {
             description = "Catalog page render time")
     public String catalog(@PathParam("slug") String categorySlug, @QueryParam("page") @DefaultValue("0") int page,
             @QueryParam("size") @DefaultValue("12") int size,
-            @QueryParam("sort") @DefaultValue("relevance") String sortBy, @Context UriInfo uriInfo) {
+            @QueryParam("sort") @DefaultValue("relevance") String sortBy, @QueryParam("lang") String lang,
+            @Context UriInfo uriInfo, @Context HttpHeaders headers) {
 
         long startTime = System.currentTimeMillis();
         TenantInfo tenantInfo = TenantContext.getCurrentTenant();
@@ -453,8 +550,12 @@ public class StorefrontResource {
         LOG.infof("Rendering catalog - tenantId=%s, category=%s, page=%d, size=%d, sort=%s", tenantInfo.tenantId(),
                 categorySlug, page, size, sortBy);
 
-        String locale = "en"; // TODO: derive from tenant or Accept-Language header
+        String locale = resolveLocale(lang, headers);
         Map<String, String> messages = localizationService.loadMessages(locale);
+        List<Map<String, Object>> languageOptions = buildLanguageOptions(locale, uriInfo);
+        Map<String, Object> cartContext = buildSampleCartContext();
+        List<Map<String, Object>> cartItems = getCartItems(cartContext);
+        int cartCount = extractCartCount(cartContext);
 
         // Fetch products with pagination
         CatalogService.CatalogSearchResult searchResult = catalogService.listProducts(categorySlug, null, page, size);
@@ -463,6 +564,7 @@ public class StorefrontResource {
 
         // Fetch available categories for the filter panel
         List<Category> filterCategories = catalogService.getRootCategories();
+        List<Map<String, Object>> rootCategoryDisplay = mapCategoriesToDisplayData(filterCategories);
         Map<String, String> categoryLookup = buildCategoryLookup(filterCategories);
         Set<String> selectedCategorySlugs = buildSelectedCategorySlugs(categorySlug, uriInfo);
 
@@ -504,8 +606,11 @@ public class StorefrontResource {
                 .data("currentPage", page).data("currentPageDisplay", currentPageDisplay).data("totalPages", totalPages)
                 .data("totalPagesDisplay", totalPagesDisplay).data("pageNumbers", pageNumbers).data("sortBy", sortBy)
                 .data("sortParam", sortParam).data("filterParams", filterParams).data("filters", filters)
-                .data("activeFilters", activeFilters).data("locale", locale).data("currentYear", Year.now().getValue())
-                .data("pageTitle", categoryName).data("seoDescription", categoryDescription).render();
+                .data("activeFilters", activeFilters).data("rootCategories", rootCategoryDisplay)
+                .data("languageOptions", languageOptions).data("cartItems", cartItems)
+                .data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00")).data("cartItemCount", cartCount)
+                .data("locale", locale).data("currentYear", Year.now().getValue()).data("pageTitle", categoryName)
+                .data("seoDescription", categoryDescription).render();
     }
 
     /**
@@ -707,5 +812,458 @@ public class StorefrontResource {
                 tokens.put(prefix + key, value);
             }
         });
+    }
+
+    /**
+     * Product detail route - renders product with variants, images, and reviews.
+     *
+     * @param productSlug
+     *            product slug
+     * @param headers
+     *            HTTP headers for locale detection
+     * @return rendered HTML
+     */
+    @GET
+    @Path("/product/{slug}")
+    @Timed(
+            value = "storefront.product.render",
+            description = "Product page render time")
+    public String product(@PathParam("slug") String productSlug, @QueryParam("lang") String lang,
+            @Context HttpHeaders headers, @Context UriInfo uriInfo) {
+        TenantInfo tenantInfo = TenantContext.getCurrentTenant();
+        String locale = resolveLocale(lang, headers);
+        Map<String, String> messages = localizationService.loadMessages(locale);
+        Map<String, String> themeTokens = buildThemeTokens(tenantInfo);
+        List<Map<String, Object>> languageOptions = buildLanguageOptions(locale, uriInfo);
+        Map<String, Object> cartContext = buildSampleCartContext();
+        List<Map<String, Object>> cartItems = getCartItems(cartContext);
+        int cartCount = extractCartCount(cartContext);
+        List<Map<String, Object>> rootCategoryDisplay = loadRootCategoryDisplay();
+
+        Map<String, Object> productData;
+        List<ProductVariant> variants = List.of();
+        Optional<Product> productOptional = catalogService.getProductBySlug(productSlug);
+        if (productOptional.isPresent()) {
+            Product product = productOptional.get();
+            variants = catalogService.getProductVariants(product.id);
+            productData = mapProductDetailData(product, variants);
+        } else {
+            productData = buildSampleProductDetail(productSlug);
+        }
+
+        List<Map<String, Object>> breadcrumbs = buildProductPageBreadcrumbs(productData);
+        List<Product> relatedDomainProducts = catalogService.listActiveProducts(0, 4);
+        List<Map<String, Object>> relatedProducts = mapProductsToDisplayData(relatedDomainProducts);
+        if (relatedProducts.isEmpty()) {
+            relatedProducts = buildSampleRelatedProducts();
+        }
+
+        return Templates.product().data("tenantName", tenantInfo.name()).data("tenantSubdomain", tenantInfo.subdomain())
+                .data("msg", messages).data("themeTokens", themeTokens).data("product", productData)
+                .data("breadcrumbs", breadcrumbs).data("relatedProducts", relatedProducts)
+                .data("rootCategories", rootCategoryDisplay).data("languageOptions", languageOptions)
+                .data("cartItems", cartItems).data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
+                .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
+                .data("pageTitle", productData.get("name")).data("seoDescription",
+                        productData.getOrDefault("seoDescription", messages.get("product_meta_description")))
+                .render();
+    }
+
+    /**
+     * Shopping cart route.
+     *
+     * @param headers
+     *            HTTP headers for locale detection
+     * @return rendered HTML
+     */
+    @GET
+    @Path("/cart")
+    @Timed(
+            value = "storefront.cart.render",
+            description = "Cart page render time")
+    public String cart(@QueryParam("lang") String lang, @Context HttpHeaders headers, @Context UriInfo uriInfo) {
+        TenantInfo tenantInfo = TenantContext.getCurrentTenant();
+        String locale = resolveLocale(lang, headers);
+        Map<String, String> messages = localizationService.loadMessages(locale);
+        Map<String, String> themeTokens = buildThemeTokens(tenantInfo);
+        Map<String, Object> cartContext = buildSampleCartContext();
+        List<Map<String, Object>> cartItems = getCartItems(cartContext);
+        int cartCount = extractCartCount(cartContext);
+        List<Map<String, Object>> languageOptions = buildLanguageOptions(locale, uriInfo);
+        List<Map<String, Object>> rootCategoryDisplay = loadRootCategoryDisplay();
+
+        // TODO: Load cart from session/service
+        return Templates.cart().data("tenantName", tenantInfo.name()).data("tenantSubdomain", tenantInfo.subdomain())
+                .data("msg", messages).data("themeTokens", themeTokens).data("cartItems", cartItems)
+                .data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
+                .data("cartTax",
+                        getCartField(cartContext, "tax",
+                                messages.getOrDefault("calculated_at_checkout", "Calculated at checkout")))
+                .data("cartTotal", getCartField(cartContext, "total", "$0.00"))
+                .data("cartShipping",
+                        getCartField(cartContext, "shipping",
+                                messages.getOrDefault("calculated_at_checkout", "Calculated at checkout")))
+                .data("languageOptions", languageOptions).data("rootCategories", rootCategoryDisplay)
+                .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
+                .data("pageTitle", "Shopping Cart").render();
+    }
+
+    /**
+     * Checkout route.
+     *
+     * @param headers
+     *            HTTP headers for locale detection
+     * @return rendered HTML
+     */
+    @GET
+    @Path("/checkout")
+    @Timed(
+            value = "storefront.checkout.render",
+            description = "Checkout page render time")
+    public String checkout(@QueryParam("lang") String lang, @Context HttpHeaders headers, @Context UriInfo uriInfo) {
+        TenantInfo tenantInfo = TenantContext.getCurrentTenant();
+        String locale = resolveLocale(lang, headers);
+        Map<String, String> messages = localizationService.loadMessages(locale);
+        Map<String, String> themeTokens = buildThemeTokens(tenantInfo);
+        Map<String, Object> cartContext = buildSampleCartContext();
+        List<Map<String, Object>> cartItems = getCartItems(cartContext);
+        int cartCount = extractCartCount(cartContext);
+        List<Map<String, Object>> languageOptions = buildLanguageOptions(locale, uriInfo);
+        List<Map<String, Object>> rootCategoryDisplay = loadRootCategoryDisplay();
+
+        // TODO: Load cart and shipping options from service
+        return Templates.checkout().data("tenantName", tenantInfo.name())
+                .data("tenantSubdomain", tenantInfo.subdomain()).data("msg", messages).data("themeTokens", themeTokens)
+                .data("cartItems", cartItems).data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
+                .data("cartTax",
+                        getCartField(cartContext, "tax",
+                                messages.getOrDefault("calculated_next", "Calculated in next step")))
+                .data("cartTotal", getCartField(cartContext, "total", "$0.00"))
+                .data("selectedShippingRate",
+                        getCartField(cartContext, "shipping",
+                                messages.getOrDefault("calculated_next", "Calculated in next step")))
+                .data("shippingRates", List.of())
+                .data("cartId", getCartField(cartContext, "cartId", SAMPLE_CART_ID.toString()))
+                .data("languageOptions", languageOptions).data("rootCategories", rootCategoryDisplay)
+                .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
+                .data("pageTitle", "Checkout").render();
+    }
+
+    /**
+     * Account dashboard route.
+     *
+     * @param headers
+     *            HTTP headers for locale detection
+     * @return rendered HTML
+     */
+    @GET
+    @Path("/account")
+    @Timed(
+            value = "storefront.account.render",
+            description = "Account page render time")
+    public String account(@QueryParam("lang") String lang, @Context HttpHeaders headers, @Context UriInfo uriInfo) {
+        TenantInfo tenantInfo = TenantContext.getCurrentTenant();
+        String locale = resolveLocale(lang, headers);
+        Map<String, String> messages = localizationService.loadMessages(locale);
+        Map<String, String> themeTokens = buildThemeTokens(tenantInfo);
+        Map<String, Object> cartContext = buildSampleCartContext();
+        List<Map<String, Object>> cartItems = getCartItems(cartContext);
+        int cartCount = extractCartCount(cartContext);
+        List<Map<String, Object>> languageOptions = buildLanguageOptions(locale, uriInfo);
+        List<Map<String, Object>> rootCategoryDisplay = loadRootCategoryDisplay();
+        List<Map<String, Object>> recentOrders = buildSampleRecentOrders();
+        Map<String, Object> defaultAddress = buildSampleDefaultAddress();
+        boolean loyaltyEnabled = featureToggle.isEnabled("storefront.account.loyalty-panel");
+        Map<String, Object> loyaltyTier = loyaltyEnabled
+                ? Map.of("name", "Gold", "icon", "🌟", "gradient", "from-amber-500 to-rose-500")
+                : null;
+        Integer loyaltyPoints = loyaltyEnabled ? 1240 : null;
+        Integer loyaltyPointsToNext = loyaltyEnabled ? 260 : null;
+        Integer loyaltyProgress = loyaltyEnabled ? 72 : null;
+
+        // TODO: Load customer data, orders, loyalty info from service
+        return Templates.account().data("tenantName", tenantInfo.name()).data("tenantSubdomain", tenantInfo.subdomain())
+                .data("msg", messages).data("themeTokens", themeTokens).data("customerName", "Avery Lee")
+                .data("customerEmail", "avery@example.com").data("customerFirstName", "Avery")
+                .data("recentOrders", recentOrders).data("defaultAddress", defaultAddress)
+                .data("loyaltyTier", loyaltyTier).data("loyaltyPoints", loyaltyPoints)
+                .data("loyaltyPointsToNext", loyaltyPointsToNext).data("loyaltyProgressPercent", loyaltyProgress)
+                .data("languageOptions", languageOptions).data("rootCategories", rootCategoryDisplay)
+                .data("cartItems", cartItems).data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
+                .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
+                .data("pageTitle", "My Account").render();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> getCartItems(Map<String, Object> cartContext) {
+        Object items = cartContext.get("items");
+        if (items instanceof List<?>) {
+            return (List<Map<String, Object>>) items;
+        }
+        return List.of();
+    }
+
+    private int extractCartCount(Map<String, Object> cartContext) {
+        Object count = cartContext.get("count");
+        if (count instanceof Number number) {
+            return number.intValue();
+        }
+        List<Map<String, Object>> items = getCartItems(cartContext);
+        return items.size();
+    }
+
+    private String getCartField(Map<String, Object> cartContext, String key, String defaultValue) {
+        Object value = cartContext.get(key);
+        return value != null ? value.toString() : defaultValue;
+    }
+
+    private Map<String, Object> buildSampleCartContext() {
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(buildSampleCartItem("8af1fd2a-4dc7-4f3d-8da1-aa1234560001", "artisan-tote", "Artisan Tote",
+                "Camel / Large", "$58.00", "$72.00", 1, false, SAMPLE_VARIANT_PRIMARY.toString()));
+        items.add(buildSampleCartItem("8af1fd2a-4dc7-4f3d-8da1-aa1234560002", "consignor-mug", "Consignor Mug Set",
+                "Matte Black", "$24.00", null, 2, true, SAMPLE_VARIANT_SECONDARY.toString()));
+
+        Map<String, Object> context = new HashMap<>();
+        context.put("items", items);
+        context.put("subtotal", "$106.00");
+        context.put("tax", "$9.54");
+        context.put("shipping", "Calculated at checkout");
+        context.put("total", "$115.54");
+        context.put("count", items.size());
+        context.put("cartId", SAMPLE_CART_ID.toString());
+        return context;
+    }
+
+    private Map<String, Object> buildSampleCartItem(String id, String slug, String name, String variantTitle,
+            String price, String compareAtPrice, int quantity, boolean digital, String variantId) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("id", id);
+        item.put("slug", slug);
+        item.put("name", name);
+        item.put("variantTitle", variantTitle);
+        item.put("price", price);
+        item.put("compareAtPrice", compareAtPrice);
+        item.put("quantity", quantity);
+        item.put("maxQuantity", 5);
+        item.put("isDigital", digital);
+        item.put("imageUrl", "https://placehold.co/300x300?text=" + urlEncode(name));
+        item.put("variantId", variantId);
+        return item;
+    }
+
+    private Map<String, Object> mapProductDetailData(Product product, List<ProductVariant> variants) {
+        Map<String, Object> detail = buildSampleProductDetail(product.slug);
+        detail.put("id", product.id);
+        detail.put("slug", product.slug);
+        detail.put("name", product.name);
+        if (hasText(product.description)) {
+            detail.put("description", product.description);
+        }
+        if (hasText(product.seoDescription)) {
+            detail.put("seoDescription", product.seoDescription);
+        }
+        if (hasText(product.seoTitle)) {
+            detail.put("seoTitle", product.seoTitle);
+        }
+        detail.put("categoryName", getCategoryName(product));
+
+        if (!variants.isEmpty()) {
+            ProductVariant primaryVariant = variants.get(0);
+            if (primaryVariant.id != null) {
+                detail.put("defaultVariantId", primaryVariant.id.toString());
+            }
+            if (primaryVariant.price != null) {
+                detail.put("price", formatMoney(primaryVariant.price));
+            }
+            if (primaryVariant.compareAtPrice != null && primaryVariant.price != null
+                    && primaryVariant.compareAtPrice.compareTo(primaryVariant.price) > 0) {
+                detail.put("compareAtPrice", formatMoney(primaryVariant.compareAtPrice));
+            }
+        }
+
+        detail.putIfAbsent("galleryImages", buildSampleProductImages(product.name));
+        detail.putIfAbsent("variantOptions", buildSampleVariantOptions());
+        return detail;
+    }
+
+    private Map<String, Object> buildSampleProductDetail(String productSlug) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", SAMPLE_VARIANT_PRIMARY.toString());
+        data.put("slug", productSlug);
+        data.put("name", "Artisan Leather Tote");
+        data.put("description", "Handcrafted tote with premium leather, lined interior, and modular straps.");
+        data.put("price", "$58.00");
+        data.put("compareAtPrice", "$72.00");
+        data.put("availability", "in_stock");
+        data.put("quantity", 8);
+        data.put("averageRating", 4.8);
+        data.put("reviewCount", 128);
+        data.put("galleryImages", buildSampleProductImages("Artisan Leather Tote"));
+        data.put("features",
+                List.of("Full-grain leather shell", "Interior laptop sleeve", "Removable crossbody strap"));
+        data.put("variantOptions", buildSampleVariantOptions());
+        data.put("categoryName", "Featured");
+        data.put("categorySlug", "featured");
+        data.put("defaultVariantId", SAMPLE_VARIANT_PRIMARY.toString());
+        data.put("consignmentNote", "Consignment exclusive release.");
+        return data;
+    }
+
+    private List<Map<String, Object>> buildSampleProductImages(String productName) {
+        List<Map<String, Object>> images = new ArrayList<>();
+        images.add(createImage("https://placehold.co/960x960?text=" + urlEncode(productName), productName));
+        images.add(createImage("https://placehold.co/960x960?text=Detail+View", productName + " detail"));
+        return images;
+    }
+
+    private Map<String, Object> createImage(String url, String alt) {
+        Map<String, Object> image = new HashMap<>();
+        image.put("url", url);
+        image.put("alt", alt);
+        return image;
+    }
+
+    private List<Map<String, Object>> buildSampleVariantOptions() {
+        List<Map<String, Object>> options = new ArrayList<>();
+
+        Map<String, Object> colorOption = new LinkedHashMap<>();
+        colorOption.put("name", "Color");
+        colorOption.put("displayType", "color");
+        colorOption.put("selectedValue", "Camel");
+        colorOption.put("values",
+                List.of(buildVariantValue("Camel", "#d6a977", true, SAMPLE_VARIANT_PRIMARY.toString()),
+                        buildVariantValue("Midnight", "#111827", false, SAMPLE_VARIANT_SECONDARY.toString()),
+                        buildVariantValue("Slate", "#6b7280", false, null)));
+        options.add(colorOption);
+
+        Map<String, Object> sizeOption = new LinkedHashMap<>();
+        sizeOption.put("name", "Size");
+        sizeOption.put("displayType", "button");
+        sizeOption.put("selectedValue", "Large");
+        sizeOption.put("values",
+                List.of(buildVariantValue("Small", null, false, null), buildVariantValue("Medium", null, false, null),
+                        buildVariantValue("Large", null, true, SAMPLE_VARIANT_PRIMARY.toString())));
+        options.add(sizeOption);
+        return options;
+    }
+
+    private Map<String, Object> buildVariantValue(String name, String colorCode, boolean selected, String variantId) {
+        Map<String, Object> value = new HashMap<>();
+        value.put("name", name);
+        value.put("colorCode", colorCode);
+        value.put("selected", selected);
+        value.put("available", variantId != null);
+        value.put("variantId", variantId);
+        return value;
+    }
+
+    private List<Map<String, Object>> buildProductPageBreadcrumbs(Map<String, Object> productData) {
+        List<Map<String, Object>> breadcrumbs = new ArrayList<>();
+        Object categoryName = productData.get("categoryName");
+        Object categorySlug = productData.get("categorySlug");
+        if (categoryName != null && categorySlug != null) {
+            Map<String, Object> categoryCrumb = new HashMap<>();
+            categoryCrumb.put("name", categoryName);
+            categoryCrumb.put("url", "/category/" + categorySlug);
+            categoryCrumb.put("isLast", false);
+            breadcrumbs.add(categoryCrumb);
+        }
+
+        Map<String, Object> productCrumb = new HashMap<>();
+        productCrumb.put("name", productData.get("name"));
+        productCrumb.put("url", null);
+        productCrumb.put("isLast", true);
+        breadcrumbs.add(productCrumb);
+        return breadcrumbs;
+    }
+
+    private List<Map<String, Object>> buildSampleRelatedProducts() {
+        Map<String, Object> tote = new HashMap<>();
+        tote.put("id", SAMPLE_VARIANT_PRIMARY.toString());
+        tote.put("slug", "artisan-tote");
+        tote.put("name", "Artisan Tote");
+        tote.put("imageUrl", "https://placehold.co/600x600?text=Tote");
+        tote.put("price", "$58.00");
+        tote.put("compareAtPrice", "$72.00");
+        tote.put("categoryName", "Bags");
+        tote.put("averageRating", 5);
+        tote.put("reviewCount", 128);
+        tote.put("onSale", true);
+        tote.put("isNew", false);
+        tote.put("inStock", true);
+        tote.put("hasVariants", true);
+
+        Map<String, Object> scarf = new HashMap<>();
+        scarf.put("id", SAMPLE_VARIANT_SECONDARY.toString());
+        scarf.put("slug", "alpaca-scarf");
+        scarf.put("name", "Alpaca Scarf");
+        scarf.put("imageUrl", "https://placehold.co/600x600?text=Scarf");
+        scarf.put("price", "$34.00");
+        scarf.put("compareAtPrice", null);
+        scarf.put("categoryName", "Accessories");
+        scarf.put("averageRating", 4);
+        scarf.put("reviewCount", 54);
+        scarf.put("onSale", false);
+        scarf.put("isNew", true);
+        scarf.put("inStock", true);
+        scarf.put("hasVariants", false);
+
+        Map<String, Object> candles = new HashMap<>();
+        candles.put("id", UUID.randomUUID().toString());
+        candles.put("slug", "soy-candle-duo");
+        candles.put("name", "Soy Candle Duo");
+        candles.put("imageUrl", "https://placehold.co/600x600?text=Candles");
+        candles.put("price", "$28.00");
+        candles.put("compareAtPrice", "$32.00");
+        candles.put("categoryName", "Home");
+        candles.put("averageRating", 0);
+        candles.put("reviewCount", 0);
+        candles.put("onSale", true);
+        candles.put("isNew", false);
+        candles.put("inStock", true);
+        candles.put("hasVariants", false);
+
+        return List.of(tote, scarf, candles);
+    }
+
+    private List<Map<String, Object>> buildSampleRecentOrders() {
+        Map<String, Object> orderOne = new HashMap<>();
+        orderOne.put("id", "1001");
+        orderOne.put("number", "1001");
+        orderOne.put("date", "Jan 09, 2026");
+        orderOne.put("itemCount", 3);
+        orderOne.put("total", "$178.90");
+        orderOne.put("status", "Shipped");
+        orderOne.put("statusColor", "emerald");
+
+        Map<String, Object> orderTwo = new HashMap<>();
+        orderTwo.put("id", "1000");
+        orderTwo.put("number", "1000");
+        orderTwo.put("date", "Dec 28, 2025");
+        orderTwo.put("itemCount", 1);
+        orderTwo.put("total", "$42.00");
+        orderTwo.put("status", "Processing");
+        orderTwo.put("statusColor", "amber");
+
+        return List.of(orderOne, orderTwo);
+    }
+
+    private Map<String, Object> buildSampleDefaultAddress() {
+        Map<String, Object> address = new HashMap<>();
+        address.put("name", "Avery Lee");
+        address.put("address1", "500 Village Drive");
+        address.put("address2", "Suite 210");
+        address.put("city", "Portland");
+        address.put("state", "OR");
+        address.put("postalCode", "97204");
+        return address;
+    }
+
+    private String formatMoney(BigDecimal amount) {
+        if (amount == null) {
+            return "$0.00";
+        }
+        return "$" + amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 }
