@@ -869,6 +869,378 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
 
   # ============================================================================
+  # SHIPPING ENDPOINTS
+  # ============================================================================
+
+  /shipping/rates:
+    post:
+      operationId: getShippingRates
+      summary: Get shipping rates from carriers
+      description: |
+        Fetches real-time shipping rates from configured carriers (USPS, UPS, FedEx).
+        Results are cached for 15 minutes to meet performance targets per Architecture §3.0.
+
+        If carrier APIs are unavailable, returns fallback table rates with `fallbackUsed: true`.
+
+        **Correlation Tracking:** Pass `X-Correlation-ID` header for distributed tracing.
+      tags: [Shipping]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional correlation ID for request tracing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingRateRequest'
+      responses:
+        '200':
+          description: Shipping rates retrieved successfully
+          headers:
+            X-Correlation-ID:
+              description: Correlation ID for tracing
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingRateResponse'
+        '400':
+          description: Invalid request (missing required fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Failed to fetch rates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/validate-address:
+    post:
+      operationId: validateShippingAddress
+      summary: Validate and normalize shipping address
+      description: |
+        Validates a shipping address using carrier validation APIs (USPS, UPS, FedEx).
+        Returns normalized/corrected address with validation status.
+
+        Falls back to returning original address if all carriers are unavailable.
+      tags: [Shipping]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressValidationRequest'
+      responses:
+        '200':
+          description: Address validated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/labels:
+    post:
+      operationId: createShippingLabel
+      summary: Create shipping label for an order
+      description: |
+        Creates a shipping label for a confirmed order using the specified carrier.
+        Returns tracking number and label URL (PDF or image).
+
+        **Requires authentication:** Admin or API key with shipping permissions.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabelCreateRequest'
+      responses:
+        '201':
+          description: Shipping label created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabelResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Label creation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/labels/{labelId}:
+    get:
+      operationId: getShippingLabel
+      summary: Get shipping label details
+      description: |
+        Retrieves shipping label details including tracking number and label URL.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: labelId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Shipping label ID
+      responses:
+        '200':
+          description: Label details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabelResponse'
+        '404':
+          description: Label not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/profiles:
+    get:
+      operationId: listShippingProfiles
+      summary: List shipping profiles
+      description: |
+        Lists shipping profiles for the current tenant including origin addresses and enabled carriers.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Profiles retrieved successfully
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShippingProfile'
+    post:
+      operationId: createShippingProfile
+      summary: Create shipping profile
+      description: |
+        Creates a new shipping profile containing carrier credentials and default origin address.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingProfileRequest'
+      responses:
+        '201':
+          description: Profile created
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/profiles/{profileId}:
+    get:
+      operationId: getShippingProfile
+      summary: Get shipping profile
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Profile retrieved
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateShippingProfile
+      summary: Update shipping profile
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteShippingProfile
+      summary: Delete shipping profile
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Profile deleted
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/profiles/{profileId}/default:
+    post:
+      operationId: setDefaultShippingProfile
+      summary: Mark profile as default
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Default profile updated
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
   # ORDER ENDPOINTS - STOREFRONT
   # ============================================================================
 
@@ -5619,3 +5991,344 @@ components:
         - `conflict`: Resource conflict (409)
         - `rate-limit-exceeded`: Too many requests (429)
         - `internal-error`: Unexpected server error (500)
+
+    # Shipping Schemas (Task I3.T4)
+
+    ShippingRateRequest:
+      type: object
+      required:
+        - origin
+        - destination
+        - packageInfo
+        - serviceLevels
+      properties:
+        origin:
+          $ref: '#/components/schemas/ShippingAddress'
+        destination:
+          $ref: '#/components/schemas/ShippingAddress'
+        packageInfo:
+          $ref: '#/components/schemas/PackageInfo'
+        serviceLevels:
+          type: array
+          items:
+            type: string
+            enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
+          description: Service levels to fetch rates for
+          example: [GROUND, PRIORITY]
+
+    ShippingAddress:
+      type: object
+      required:
+        - street1
+        - city
+        - state
+        - postalCode
+        - country
+      properties:
+        street1:
+          type: string
+          maxLength: 100
+          example: "123 Main St"
+        street2:
+          type: string
+          maxLength: 100
+          example: "Apt 4B"
+        city:
+          type: string
+          maxLength: 50
+          example: "San Francisco"
+        state:
+          type: string
+          maxLength: 2
+          example: "CA"
+        postalCode:
+          type: string
+          maxLength: 10
+          example: "94102"
+        country:
+          type: string
+          maxLength: 2
+          example: "US"
+        residential:
+          type: boolean
+          default: false
+          description: Whether this is a residential address
+
+    PackageInfo:
+      type: object
+      required:
+        - weightOz
+      properties:
+        weightOz:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 16.5
+          description: Package weight in ounces
+        lengthIn:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 10
+        widthIn:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 8
+        heightIn:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 6
+        declaredValue:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 100.00
+          description: Declared value for insurance
+        description:
+          type: string
+          maxLength: 200
+          example: "Books and magazines"
+
+    ShippingRateResponse:
+      type: object
+      required:
+        - rates
+        - fallbackUsed
+      properties:
+        rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShippingRate'
+        fallbackUsed:
+          type: boolean
+          description: True if fallback table rates were used (carriers unavailable)
+        fallbackReason:
+          type: string
+          description: Reason for fallback (if applicable)
+          example: "Carriers unavailable, using fallback rates"
+
+    ShippingRate:
+      type: object
+      required:
+        - carrierCode
+        - serviceLevel
+        - serviceName
+        - cost
+        - currency
+      properties:
+        carrierCode:
+          type: string
+          example: "USPS"
+        serviceLevel:
+          type: string
+          enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
+          example: "PRIORITY"
+        serviceName:
+          type: string
+          example: "USPS Priority Mail"
+        cost:
+          type: number
+          format: decimal
+          example: 7.50
+        currency:
+          type: string
+          maxLength: 3
+          example: "USD"
+        estimatedDays:
+          type: integer
+          minimum: 0
+          example: 3
+        estimatedDelivery:
+          type: string
+          format: date-time
+          example: "2026-01-11T17:00:00Z"
+
+    ShippingProfileRequest:
+      type: object
+      required:
+        - name
+        - enabledCarriers
+        - originAddress
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "Default Fulfillment"
+        isDefault:
+          type: boolean
+          description: Set to true to make this the default profile
+        enabledCarriers:
+          type: array
+          description: Carrier codes enabled for rate shopping
+          items:
+            type: string
+            example: "USPS"
+        originAddress:
+          $ref: '#/components/schemas/Address'
+        carrierCredentials:
+          type: object
+          description: Carrier-specific credentials/settings
+          additionalProperties: true
+          default: {}
+        metadata:
+          type: object
+          description: Additional profile configuration metadata
+          additionalProperties: true
+          default: {}
+        active:
+          type: boolean
+          default: true
+
+    ShippingProfile:
+      type: object
+      required:
+        - id
+        - name
+        - enabledCarriers
+        - originAddress
+        - isDefault
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        isDefault:
+          type: boolean
+        active:
+          type: boolean
+        enabledCarriers:
+          type: array
+          items:
+            type: string
+        originAddress:
+          $ref: '#/components/schemas/Address'
+        carrierCredentials:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AddressValidationRequest:
+      type: object
+      required:
+        - street1
+        - city
+        - state
+        - postalCode
+        - country
+      properties:
+        street1:
+          type: string
+          maxLength: 100
+        street2:
+          type: string
+          maxLength: 100
+        city:
+          type: string
+          maxLength: 50
+        state:
+          type: string
+          maxLength: 2
+        postalCode:
+          type: string
+          maxLength: 10
+        country:
+          type: string
+          maxLength: 2
+
+    AddressValidationResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [VALID, CORRECTED, INVALID, PROVIDER_UNAVAILABLE]
+          example: "VALID"
+        normalizedAddress:
+          $ref: '#/components/schemas/ShippingAddress'
+        warnings:
+          type: array
+          items:
+            type: string
+          example: ["Secondary address not verified"]
+        errorMessage:
+          type: string
+          example: "All carriers unavailable"
+
+    LabelCreateRequest:
+      type: object
+      required:
+        - orderId
+        - carrierCode
+        - serviceLevel
+        - origin
+        - destination
+        - packageInfo
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        carrierCode:
+          type: string
+          enum: [USPS, UPS, FEDEX]
+          example: "USPS"
+        serviceLevel:
+          type: string
+          enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
+          example: "PRIORITY"
+        origin:
+          $ref: '#/components/schemas/ShippingAddress'
+        destination:
+          $ref: '#/components/schemas/ShippingAddress'
+        packageInfo:
+          $ref: '#/components/schemas/PackageInfo'
+        returnAddress:
+          type: string
+          maxLength: 500
+          description: Return address (optional)
+
+    LabelResponse:
+      type: object
+      required:
+        - labelId
+        - trackingNumber
+        - labelUrl
+        - cost
+        - currency
+      properties:
+        labelId:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+          example: "9400100000000000000000"
+        labelUrl:
+          type: string
+          format: uri
+          example: "https://cdn.usps.com/labels/9400100000000000000000.pdf"
+        cost:
+          type: number
+          format: decimal
+          example: 7.50
+        currency:
+          type: string
+          maxLength: 3
+          example: "USD"
+        estimatedDelivery:
+          type: string
+          format: date-time
+          example: "2026-01-11T17:00:00Z"

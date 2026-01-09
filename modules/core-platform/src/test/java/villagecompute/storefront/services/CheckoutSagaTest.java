@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -30,6 +32,9 @@ import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.User;
+import villagecompute.storefront.integration.shipping.CarrierRateAdapter.Address;
+import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationResult;
+import villagecompute.storefront.integration.shipping.CarrierRateAdapter.ValidationStatus;
 import villagecompute.storefront.services.CheckoutSaga.CheckoutRequest;
 import villagecompute.storefront.services.CheckoutSaga.CheckoutResult;
 import villagecompute.storefront.tenant.TenantContext;
@@ -58,6 +63,9 @@ class CheckoutSagaTest {
 
     @InjectMock
     FeatureToggle featureToggle;
+
+    @InjectMock
+    ShippingService shippingService;
 
     private UUID tenantId;
     private UUID userId;
@@ -124,6 +132,10 @@ class CheckoutSagaTest {
         variantId = variant.id;
 
         when(featureToggle.isCheckoutEnabled()).thenReturn(true);
+        Address normalized = new Address("123 Checkout", null, "Checkout City", "CA", "94102", "US", true);
+        AddressValidationResult validationResult = new AddressValidationResult(ValidationStatus.VALID, normalized,
+                List.of(), null, Map.of());
+        when(shippingService.validateAddress(any(), anyString())).thenReturn(validationResult);
     }
 
     @AfterEach

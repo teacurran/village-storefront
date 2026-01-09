@@ -16,6 +16,55 @@
           }
         }
       },
+      "AddressDTO" : {
+        "type" : "object",
+        "properties" : {
+          "street1" : {
+            "type" : "string"
+          },
+          "street2" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "postalCode" : {
+            "type" : "string"
+          },
+          "country" : {
+            "type" : "string"
+          },
+          "residential" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "AddressValidationRequestDTO" : {
+        "type" : "object",
+        "properties" : {
+          "street1" : {
+            "type" : "string"
+          },
+          "street2" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "postalCode" : {
+            "type" : "string"
+          },
+          "country" : {
+            "type" : "string"
+          }
+        }
+      },
       "AdjustPointsRequest" : {
         "type" : "object",
         "required" : [ "points", "reason" ],
@@ -453,6 +502,32 @@
           }
         }
       },
+      "LabelRequestDTO" : {
+        "type" : "object",
+        "properties" : {
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "carrierCode" : {
+            "type" : "string"
+          },
+          "serviceLevel" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "destination" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "packageInfo" : {
+            "$ref" : "#/components/schemas/PackageDTO"
+          },
+          "returnAddress" : {
+            "type" : "string"
+          }
+        }
+      },
       "LoyaltyTierConfigRequest" : {
         "type" : "object",
         "required" : [ "name" ],
@@ -561,6 +636,49 @@
         "format" : "date-time",
         "examples" : [ "2022-03-10T12:15:50-04:00" ]
       },
+      "PackageDTO" : {
+        "type" : "object",
+        "properties" : {
+          "weightOz" : {
+            "type" : "number"
+          },
+          "lengthIn" : {
+            "type" : "number"
+          },
+          "widthIn" : {
+            "type" : "number"
+          },
+          "heightIn" : {
+            "type" : "number"
+          },
+          "declaredValue" : {
+            "type" : "number"
+          },
+          "description" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RateRequestDTO" : {
+        "type" : "object",
+        "properties" : {
+          "origin" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "destination" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "packageInfo" : {
+            "$ref" : "#/components/schemas/PackageDTO"
+          },
+          "serviceLevels" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
       "RecordConsentRequest" : {
         "type" : "object",
         "properties" : {
@@ -653,6 +771,42 @@
           },
           "offlineSyncedAt" : {
             "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "ShippingProfileRequest" : {
+        "type" : "object",
+        "required" : [ "name", "enabledCarriers", "originAddress" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "isDefault" : {
+            "type" : "boolean"
+          },
+          "enabledCarriers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "pattern" : "\\S"
+            },
+            "minItems" : 1
+          },
+          "originAddress" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "carrierCredentials" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "metadata" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "active" : {
+            "type" : "boolean"
           }
         }
       },
@@ -3852,6 +4006,259 @@
         "security" : [ {
           "SecurityScheme" : [ ]
         } ]
+      }
+    },
+    "/api/v1/shipping/labels" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LabelRequestDTO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Create Label",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/shipping/labels/{labelId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "labelId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Label",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/shipping/profiles" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Profiles",
+        "tags" : [ "Shipping Profile Resource" ]
+      },
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ShippingProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Create Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      }
+    },
+    "/api/v1/shipping/profiles/{profileId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ShippingProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Update Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      }
+    },
+    "/api/v1/shipping/profiles/{profileId}/default" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Set Default",
+        "tags" : [ "Shipping Profile Resource" ]
+      }
+    },
+    "/api/v1/shipping/rates" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RateRequestDTO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Rates",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/shipping/validate-address" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AddressValidationRequestDTO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Validate Address",
+        "tags" : [ "Shipping Resource" ]
       }
     },
     "/api/v1/store-credit/balance/{userId}" : {
