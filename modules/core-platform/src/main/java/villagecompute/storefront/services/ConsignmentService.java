@@ -19,6 +19,8 @@ import org.jboss.logging.Logger;
 
 import villagecompute.storefront.data.models.ConsignmentItem;
 import villagecompute.storefront.data.models.Consignor;
+import villagecompute.storefront.data.models.Order;
+import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.PayoutBatch;
 import villagecompute.storefront.data.models.PayoutLineItem;
 import villagecompute.storefront.data.models.Product;
@@ -27,6 +29,8 @@ import villagecompute.storefront.data.repositories.ConsignorRepository;
 import villagecompute.storefront.data.repositories.PayoutBatchRepository;
 import villagecompute.storefront.data.repositories.PayoutLineItemRepository;
 import villagecompute.storefront.data.repositories.ProductRepository;
+import villagecompute.storefront.services.events.ConsignmentItemReceivedPayload;
+import villagecompute.storefront.services.events.ConsignmentPayoutDuePayload;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.Gauge;
@@ -70,6 +74,12 @@ public class ConsignmentService {
 
     @Inject
     MeterRegistry meterRegistry;
+
+    @Inject
+    DomainEventPublisher eventPublisher;
+
+    @Inject
+    PayoutLedgerService payoutLedgerService;
 
     private final ConcurrentMap<UUID, AtomicReference<BigDecimal>> pendingPayoutGauges = new ConcurrentHashMap<>();
 
@@ -238,6 +248,9 @@ public class ConsignmentService {
         LOG.infof("Consignment item created successfully - tenantId=%s, itemId=%s", tenantId, item.id);
         meterRegistry.counter("consignment.item.created", "tenant_id", tenantId.toString()).increment();
 
+        // Publish ConsignmentItemReceived event
+        publishConsignmentItemReceivedEvent(item);
+
         return item;
     }
 
@@ -300,6 +313,65 @@ public class ConsignmentService {
         consignmentItemRepository.persistAndFlush(item);
 
         LOG.infof("Consignment item marked as sold - tenantId=%s, itemId=%s", tenantId, itemId);
+    }
+
+    /**
+     * Handle a paid order by attributing consignment sales to the correct consignors and creating ledger entries.
+     *
+     * @param order
+     *            paid order
+     */
+    @Transactional
+    public void handleOrderPaid(Order order) {
+        if (order == null) {
+            return;
+        }
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Processing consignment payouts for paid order - tenantId=%s, orderId=%s", tenantId, order.id);
+
+        List<OrderLineItem> lineItems = OrderLineItem.list("order.id = ?1 and tenant.id = ?2", order.id,
+                order.tenant.id);
+        for (OrderLineItem lineItem : lineItems) {
+            if (lineItem.vendorId == null) {
+                continue;
+            }
+            processConsignmentSale(order, lineItem);
+        }
+    }
+
+    /**
+     * Handle an order refund by reversing previously recorded consignment payouts.
+     *
+     * @param order
+     *            refunded order
+     * @param refundAmount
+     *            amount refunded to the buyer
+     * @param reason
+     *            refund reason for auditing
+     */
+    @Transactional
+    public void handleOrderRefund(Order order, BigDecimal refundAmount, String reason) {
+        if (order == null || refundAmount == null || refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        BigDecimal remainingRefund = refundAmount;
+        LOG.infof("Reversing consignment payouts for refund - tenantId=%s, orderId=%s, refundAmount=%s, reason=%s",
+                tenantId, order.id, refundAmount, reason);
+
+        List<OrderLineItem> lineItems = OrderLineItem.list("order.id = ?1 and tenant.id = ?2", order.id,
+                order.tenant.id);
+        for (OrderLineItem lineItem : lineItems) {
+            if (lineItem.vendorId == null || remainingRefund.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            remainingRefund = reverseConsignmentSale(order, lineItem, remainingRefund, reason);
+        }
+
+        if (remainingRefund.compareTo(BigDecimal.ZERO) > 0) {
+            LOG.warnf("Refund amount exceeded consignor attribution - tenantId=%s, orderId=%s, leftover=%s", tenantId,
+                    order.id, remainingRefund);
+        }
     }
 
     /**
@@ -488,6 +560,146 @@ public class ConsignmentService {
                     .register(meterRegistry);
             return reference;
         });
+    }
+
+    /**
+     * Emit payout due event for a consignor with available balance.
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @param availableBalance
+     *            available balance amount
+     * @param periodStart
+     *            payout period start date
+     * @param periodEnd
+     *            payout period end date
+     * @param triggeredBy
+     *            source of the trigger (e.g., "SETTLEMENT_JOB", "MANUAL")
+     */
+    @Transactional
+    public void emitPayoutDueEvent(UUID consignorId, BigDecimal availableBalance, LocalDate periodStart,
+            LocalDate periodEnd, String triggeredBy) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Emitting payout due event - tenantId=%s, consignorId=%s, availableBalance=%s", tenantId, consignorId,
+                availableBalance);
+
+        Consignor consignor = consignorRepository.findByIdAndTenant(consignorId)
+                .orElseThrow(() -> new IllegalArgumentException("Consignor not found: " + consignorId));
+
+        ConsignmentPayoutDuePayload payload = new ConsignmentPayoutDuePayload(consignorId, consignor.name,
+                availableBalance, "USD", periodStart, periodEnd, triggeredBy);
+
+        eventPublisher.publish("CONSIGNMENT", consignorId, "CONSIGNMENT_PAYOUT_DUE", payload);
+
+        LOG.infof("Payout due event emitted - tenantId=%s, consignorId=%s", tenantId, consignorId);
+    }
+
+    // ========================================
+    // Event Publishing Helper Methods
+    // ========================================
+
+    private void processConsignmentSale(Order order, OrderLineItem lineItem) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        Consignor consignor = consignorRepository.findByIdAndTenant(lineItem.vendorId)
+                .orElseGet(() -> consignorRepository.findById(lineItem.vendorId));
+        if (consignor == null) {
+            LOG.warnf("Consignor not found for order line - tenantId=%s, orderId=%s, lineItemId=%s, vendorId=%s",
+                    tenantId, order.id, lineItem.id, lineItem.vendorId);
+            return;
+        }
+
+        BigDecimal commissionPercent = resolveCommissionPercent(lineItem, lineItem.productId);
+        PayoutCalculation calculation = calculatePayout(lineItem.subtotal, commissionPercent);
+
+        payoutLedgerService.recordSale(consignor.id, calculation.netPayout(), order.id,
+                String.format("Order %s - %s x%d", order.orderNumber, lineItem.productName, lineItem.quantity));
+
+        markInventoryAsSold(lineItem.productId, lineItem.quantity);
+    }
+
+    private BigDecimal reverseConsignmentSale(Order order, OrderLineItem lineItem, BigDecimal remainingRefund,
+            String reason) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        Consignor consignor = consignorRepository.findByIdAndTenant(lineItem.vendorId)
+                .orElseGet(() -> consignorRepository.findById(lineItem.vendorId));
+        if (consignor == null) {
+            LOG.warnf("Consignor not found for refund reversal - tenantId=%s, orderId=%s, lineItemId=%s, vendorId=%s",
+                    tenantId, order.id, lineItem.id, lineItem.vendorId);
+            return remainingRefund;
+        }
+
+        if (lineItem.subtotal == null || lineItem.subtotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return remainingRefund;
+        }
+
+        BigDecimal commissionPercent = resolveCommissionPercent(lineItem, lineItem.productId);
+        PayoutCalculation calculation = calculatePayout(lineItem.subtotal, commissionPercent);
+
+        BigDecimal refundablePortion = remainingRefund.min(lineItem.subtotal);
+        BigDecimal ratio = refundablePortion.divide(lineItem.subtotal, 4, RoundingMode.HALF_UP);
+        BigDecimal netToReverse = calculation.netPayout().multiply(ratio).setScale(4, RoundingMode.HALF_UP);
+
+        if (netToReverse.compareTo(BigDecimal.ZERO) > 0) {
+            payoutLedgerService.recordRefund(consignor.id, netToReverse, order.id,
+                    String.format("Order %s refund (%s) - %s", order.orderNumber, reason, lineItem.productName));
+        }
+
+        if (refundablePortion.compareTo(lineItem.subtotal) >= 0) {
+            markInventoryAsReturned(lineItem.productId, lineItem.quantity);
+        }
+
+        return remainingRefund.subtract(refundablePortion);
+    }
+
+    private BigDecimal resolveCommissionPercent(OrderLineItem lineItem, UUID productId) {
+        if (lineItem.commissionRate != null) {
+            return lineItem.commissionRate.multiply(new BigDecimal("100")).setScale(2, RoundingMode.HALF_UP);
+        }
+        return consignmentItemRepository.findActiveItemByProduct(productId).map(item -> item.commissionRate)
+                .orElseGet(() -> consignmentItemRepository.findSoldItemsByProduct(productId, 1).stream().findFirst()
+                        .map(item -> item.commissionRate).orElse(BigDecimal.ZERO));
+    }
+
+    private void markInventoryAsSold(UUID productId, int quantity) {
+        if (productId == null || quantity <= 0) {
+            return;
+        }
+        List<ConsignmentItem> items = consignmentItemRepository.findActiveItemsByProduct(productId, quantity);
+        OffsetDateTime now = OffsetDateTime.now();
+        for (ConsignmentItem item : items) {
+            item.status = "sold";
+            item.soldAt = now;
+            item.updatedAt = now;
+            consignmentItemRepository.persist(item);
+        }
+        if (items.size() < quantity) {
+            LOG.warnf("Requested more consignment items than available - productId=%s, requested=%d, updated=%d",
+                    productId, quantity, items.size());
+        }
+    }
+
+    private void markInventoryAsReturned(UUID productId, int quantity) {
+        if (productId == null || quantity <= 0) {
+            return;
+        }
+        List<ConsignmentItem> items = consignmentItemRepository.findSoldItemsByProduct(productId, quantity);
+        OffsetDateTime now = OffsetDateTime.now();
+        for (ConsignmentItem item : items) {
+            item.status = "returned";
+            item.soldAt = null;
+            item.updatedAt = now;
+            consignmentItemRepository.persist(item);
+        }
+    }
+
+    private void publishConsignmentItemReceivedEvent(ConsignmentItem item) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Publishing ConsignmentItemReceived event - tenantId=%s, itemId=%s", tenantId, item.id);
+
+        ConsignmentItemReceivedPayload payload = new ConsignmentItemReceivedPayload(item.id, item.consignor.id,
+                item.consignor.name, item.product.id, item.product.name, item.commissionRate, item.status, "SYSTEM");
+
+        eventPublisher.publish("CONSIGNMENT_ITEM", item.id, "CONSIGNMENT_ITEM_RECEIVED", payload);
     }
 
     /**

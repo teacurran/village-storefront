@@ -23,8 +23,12 @@ import org.junit.jupiter.api.Test;
 
 import villagecompute.storefront.data.models.ConsignmentItem;
 import villagecompute.storefront.data.models.Consignor;
+import villagecompute.storefront.data.models.Order;
+import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.PayoutBatch;
+import villagecompute.storefront.data.models.PayoutLedger;
 import villagecompute.storefront.data.models.Product;
+import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.services.ConsignmentService.PayoutCalculation;
 import villagecompute.storefront.tenant.TenantContext;
@@ -51,6 +55,9 @@ class ConsignmentServiceTest {
     ConsignmentService consignmentService;
 
     @Inject
+    PayoutLedgerService payoutLedgerService;
+
+    @Inject
     EntityManager entityManager;
 
     private UUID tenantId;
@@ -60,8 +67,12 @@ class ConsignmentServiceTest {
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM OrderLineItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Order").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLedgerEntry").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLedger").executeUpdate();
         entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
@@ -99,7 +110,10 @@ class ConsignmentServiceTest {
     }
 
     @AfterEach
+    @Transactional
     void tearDown() {
+        entityManager.createQuery("DELETE FROM OrderLineItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Order").executeUpdate();
         TenantContext.clear();
     }
 
@@ -178,6 +192,54 @@ class ConsignmentServiceTest {
         List<Consignor> active = consignmentService.listActiveConsignors(0, 10);
 
         assertEquals(2, active.size());
+    }
+
+    @Test
+    @Transactional
+    void handleOrderPaid_shouldRecordLedgerEntryAndMarkInventorySold() {
+        Consignor consignor = createTestConsignor("Vendor");
+        Product product = createTestProduct("Vintage Lamp");
+        ConsignmentItem item = consignmentService.createConsignmentItem(consignor.id, product.id,
+                new BigDecimal("15.00"));
+        Order order = createConsignmentOrder(consignor, product, new BigDecimal("100.00"), 1);
+
+        consignmentService.handleOrderPaid(order);
+
+        PayoutLedger ledger = payoutLedgerService.getLedgerByConsignor(consignor.id).orElseThrow();
+        assertEquals(new BigDecimal("85.0000"), ledger.pendingBalance.setScale(4));
+        ConsignmentItem refreshedItem = ConsignmentItem.findById(item.id);
+        assertEquals("sold", refreshedItem.status);
+    }
+
+    @Test
+    @Transactional
+    void handleOrderRefund_shouldReverseLedgerAndMarkInventoryReturned() {
+        Consignor consignor = createTestConsignor("Vendor Refund");
+        Product partialProduct = createTestProduct("Vintage Camera");
+        ConsignmentItem partialItem = consignmentService.createConsignmentItem(consignor.id, partialProduct.id,
+                new BigDecimal("15.00"));
+        Order partialOrder = createConsignmentOrder(consignor, partialProduct, new BigDecimal("200.00"), 1);
+
+        consignmentService.handleOrderPaid(partialOrder);
+        consignmentService.handleOrderRefund(partialOrder, new BigDecimal("100.00"), "partial");
+
+        PayoutLedger ledger = payoutLedgerService.getLedgerByConsignor(consignor.id).orElseThrow();
+        assertEquals(new BigDecimal("85.0000"), ledger.pendingBalance.setScale(4));
+        ConsignmentItem partialRef = ConsignmentItem.findById(partialItem.id);
+        assertEquals("sold", partialRef.status);
+
+        Product fullProduct = createTestProduct("Vintage Camera 2");
+        ConsignmentItem fullItem = consignmentService.createConsignmentItem(consignor.id, fullProduct.id,
+                new BigDecimal("15.00"));
+        Order fullOrder = createConsignmentOrder(consignor, fullProduct, new BigDecimal("150.00"), 1);
+
+        consignmentService.handleOrderPaid(fullOrder);
+        consignmentService.handleOrderRefund(fullOrder, new BigDecimal("150.00"), "full");
+
+        PayoutLedger updatedLedger = payoutLedgerService.getLedgerByConsignor(consignor.id).orElseThrow();
+        assertEquals(new BigDecimal("85.0000"), updatedLedger.pendingBalance.setScale(4));
+        ConsignmentItem fullRef = ConsignmentItem.findById(fullItem.id);
+        assertEquals("returned", fullRef.status);
     }
 
     // ========================================
@@ -375,5 +437,61 @@ class ConsignmentServiceTest {
         Consignor consignor = createTestConsignor("Test Vendor");
         Product product = createTestProduct("Test Product");
         return createConsignmentItem(consignor, product);
+    }
+
+    private ProductVariant createVariant(Product product) {
+        ProductVariant variant = new ProductVariant();
+        variant.tenant = product.tenant;
+        variant.product = product;
+        variant.name = product.name + " Variant";
+        variant.sku = "VAR-" + UUID.randomUUID().toString().substring(0, 8);
+        variant.price = new BigDecimal("99.00");
+        variant.status = "active";
+        variant.createdAt = OffsetDateTime.now();
+        variant.updatedAt = OffsetDateTime.now();
+        entityManager.persist(variant);
+        entityManager.flush();
+        return variant;
+    }
+
+    private Order createConsignmentOrder(Consignor consignor, Product product, BigDecimal unitPrice, int quantity) {
+        Order order = new Order();
+        order.tenant = Tenant.findById(tenantId);
+        order.orderNumber = "ORD-" + UUID.randomUUID().toString().substring(0, 8);
+        order.customerEmail = "buyer@example.com";
+        order.shippingAddress = "{\"line1\":\"123\"}";
+        order.billingAddress = "{\"line1\":\"123\"}";
+        order.status = Order.OrderStatus.PAID;
+        order.subtotalAmount = unitPrice.multiply(new BigDecimal(quantity));
+        order.discountAmount = BigDecimal.ZERO;
+        order.shippingAmount = BigDecimal.ZERO;
+        order.taxAmount = BigDecimal.ZERO;
+        order.totalAmount = order.subtotalAmount;
+        order.currency = "USD";
+        order.createdAt = OffsetDateTime.now();
+        order.updatedAt = OffsetDateTime.now();
+        entityManager.persist(order);
+
+        ProductVariant variant = createVariant(product);
+
+        OrderLineItem lineItem = new OrderLineItem();
+        lineItem.tenant = order.tenant;
+        lineItem.order = order;
+        lineItem.productId = product.id;
+        lineItem.variantId = variant.id;
+        lineItem.productName = product.name;
+        lineItem.variantName = variant.name;
+        lineItem.sku = variant.sku;
+        lineItem.quantity = quantity;
+        lineItem.unitPrice = unitPrice;
+        lineItem.vendorId = consignor.id;
+        lineItem.commissionRate = new BigDecimal("0.1500");
+        lineItem.calculateSubtotal();
+        lineItem.createdAt = OffsetDateTime.now();
+        lineItem.updatedAt = OffsetDateTime.now();
+        entityManager.persist(lineItem);
+        entityManager.flush();
+
+        return order;
     }
 }

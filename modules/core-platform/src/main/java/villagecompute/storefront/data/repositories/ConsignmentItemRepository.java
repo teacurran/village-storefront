@@ -36,6 +36,8 @@ public class ConsignmentItemRepository implements PanacheRepositoryBase<Consignm
     private static final String QUERY_FIND_BY_TENANT_AND_PRODUCT = "tenant.id = :tenantId and product.id = :productId";
     private static final String QUERY_FIND_BY_TENANT_AND_STATUS = "tenant.id = :tenantId and status = :status";
     private static final String QUERY_FIND_SOLD_BY_CONSIGNOR = "tenant.id = :tenantId and consignor.id = :consignorId and status = :status";
+    private static final String QUERY_FIND_ACTIVE_BY_PRODUCT = "tenant.id = :tenantId and product.id = :productId and status = 'active' order by createdAt asc";
+    private static final String QUERY_FIND_SOLD_BY_PRODUCT = "tenant.id = :tenantId and product.id = :productId and status = 'sold' order by soldAt desc";
 
     /**
      * Find all consignment items for a consignor.
@@ -65,6 +67,51 @@ public class ConsignmentItemRepository implements PanacheRepositoryBase<Consignm
         UUID tenantId = TenantContext.getCurrentTenantId();
         return list(QUERY_FIND_BY_TENANT_AND_PRODUCT,
                 Parameters.with("tenantId", tenantId).and("productId", productId));
+    }
+
+    /**
+     * Find the first active consignment item for a product (used when attributing consignment sales).
+     *
+     * @param productId
+     *            product UUID
+     * @return optional active consignment item
+     */
+    public Optional<ConsignmentItem> findActiveItemByProduct(UUID productId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_FIND_ACTIVE_BY_PRODUCT, Parameters.with("tenantId", tenantId).and("productId", productId))
+                .firstResultOptional();
+    }
+
+    /**
+     * Find up to {@code limit} active consignment items for a product ordered by intake date.
+     *
+     * @param productId
+     *            product UUID
+     * @param limit
+     *            max number of rows to return
+     * @return list of active items
+     */
+    public List<ConsignmentItem> findActiveItemsByProduct(UUID productId, int limit) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        int safeLimit = limit > 0 ? limit : 1;
+        return find(QUERY_FIND_ACTIVE_BY_PRODUCT, Parameters.with("tenantId", tenantId).and("productId", productId))
+                .page(Page.ofSize(safeLimit)).list();
+    }
+
+    /**
+     * Find up to {@code limit} sold consignment items for a product ordered by most recent sale timestamp.
+     *
+     * @param productId
+     *            product UUID
+     * @param limit
+     *            max number of rows to return
+     * @return list of sold items
+     */
+    public List<ConsignmentItem> findSoldItemsByProduct(UUID productId, int limit) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        int safeLimit = limit > 0 ? limit : 1;
+        return find(QUERY_FIND_SOLD_BY_PRODUCT, Parameters.with("tenantId", tenantId).and("productId", productId))
+                .page(Page.ofSize(safeLimit)).list();
     }
 
     /**

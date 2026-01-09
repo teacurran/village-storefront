@@ -1,6 +1,7 @@
 package villagecompute.storefront.services;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -21,6 +22,7 @@ import villagecompute.storefront.data.models.CartItem;
 import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.OrderLineItem;
+import villagecompute.storefront.data.repositories.ConsignmentItemRepository;
 import villagecompute.storefront.tenant.TenantContext;
 
 /**
@@ -49,6 +51,12 @@ public class OrderService {
 
     @Inject
     CartService cartService;
+
+    @Inject
+    ConsignmentItemRepository consignmentItemRepository;
+
+    @Inject
+    ConsignmentService consignmentService;
 
     /**
      * Create order from cart (initial checkout stage).
@@ -143,6 +151,10 @@ public class OrderService {
             lineItem.quantity = cartItem.quantity;
             lineItem.unitPrice = cartItem.unitPrice;
             lineItem.metadata = cartItem.metadata;
+            consignmentItemRepository.findActiveItemByProduct(cartItem.variant.product.id).ifPresent(item -> {
+                lineItem.vendorId = item.consignor.id;
+                lineItem.commissionRate = item.commissionRate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            });
             lineItem.calculateSubtotal();
             lineItem.persist();
 
@@ -190,6 +202,7 @@ public class OrderService {
                 order.orderNumber);
 
         publishOrderEvent("OrderPaid", order);
+        consignmentService.handleOrderPaid(order);
     }
 
     /**

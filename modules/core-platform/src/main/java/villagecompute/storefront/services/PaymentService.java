@@ -12,6 +12,7 @@ import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
 
+import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.PlatformFeeConfig;
 import villagecompute.storefront.data.models.Refund;
@@ -44,6 +45,9 @@ public class PaymentService {
 
     @Inject
     MeterRegistry meterRegistry;
+
+    @Inject
+    ConsignmentService consignmentService;
 
     /**
      * Create a payment intent and persist it locally.
@@ -205,6 +209,13 @@ public class PaymentService {
 
         LOGGER.infof("[Tenant: %s] Refunded payment: id=%d, amount=%s, reason=%s", tenantId, paymentIntentId,
                 result.amountRefunded(), reason);
+
+        if (paymentIntent.orderId != null) {
+            Order order = Order.findById(paymentIntent.orderId);
+            if (order != null && order.tenant != null && order.tenant.id.equals(tenantId)) {
+                consignmentService.handleOrderRefund(order, result.amountRefunded(), reason);
+            }
+        }
 
         return paymentIntent;
     }

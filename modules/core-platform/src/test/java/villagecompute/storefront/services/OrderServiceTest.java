@@ -19,8 +19,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import villagecompute.storefront.data.models.Cart;
+import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.Order;
+import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
@@ -43,11 +45,15 @@ class OrderServiceTest {
     CartService cartService;
 
     @Inject
+    ConsignmentService consignmentService;
+
+    @Inject
     EntityManager entityManager;
 
     private UUID tenantId;
     private UUID userId;
     private UUID variantId;
+    private UUID productId;
 
     @BeforeEach
     @Transactional
@@ -58,6 +64,12 @@ class OrderServiceTest {
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLedgerEntry").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLedger").executeUpdate();
+        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
@@ -95,6 +107,7 @@ class OrderServiceTest {
         product.createdAt = now;
         product.updatedAt = now;
         entityManager.persist(product);
+        productId = product.id;
 
         ProductVariant variant = new ProductVariant();
         variant.tenant = tenant;
@@ -118,6 +131,12 @@ class OrderServiceTest {
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLedgerEntry").executeUpdate();
+        entityManager.createQuery("DELETE FROM PayoutLedger").executeUpdate();
+        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
+        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
@@ -144,6 +163,30 @@ class OrderServiceTest {
         List<DomainEvent> events = DomainEvent.find("aggregateId = ?1 AND eventType = ?2", order.id, "OrderInitiated")
                 .list();
         assertFalse(events.isEmpty(), "OrderInitiated event should be recorded");
+    }
+
+    @Test
+    @Transactional
+    void createOrderFromCart_shouldPopulateConsignmentMetadata() {
+        Consignor consignor = new Consignor();
+        consignor.name = "Consignment Vendor";
+        consignor.contactInfo = "{\"email\":\"vendor@example.com\"}";
+        consignor.payoutSettings = "{\"default_commission_rate\":12.0}";
+        consignor.status = "active";
+        Consignor persistedConsignor = consignmentService.createConsignor(consignor);
+
+        consignmentService.createConsignmentItem(persistedConsignor.id, productId, new BigDecimal("12.00"));
+
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+        cartService.addItemToCart(cart.id, variantId, 1);
+
+        Order order = orderService.createOrderFromCart(cart, "buyer@example.com", "{\"line1\":\"123\"}",
+                "{\"line1\":\"456\"}", BigDecimal.ZERO, BigDecimal.ZERO, "USD");
+
+        OrderLineItem lineItem = OrderLineItem.find("order.id = ?1", order.id).firstResult();
+        assertNotNull(lineItem);
+        assertEquals(persistedConsignor.id, lineItem.vendorId);
+        assertEquals(new BigDecimal("0.1200"), lineItem.commissionRate.setScale(4));
     }
 
     @Test
