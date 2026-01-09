@@ -22,6 +22,7 @@ import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.PayoutBatch;
 import villagecompute.storefront.data.models.WebhookEvent;
 import villagecompute.storefront.payment.WebhookHandler;
+import villagecompute.storefront.services.PaymentJobService;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -47,6 +48,9 @@ public class StripeWebhookHandler implements WebhookHandler {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    PaymentJobService paymentJobService;
 
     @Override
     public boolean verifySignature(String payload, String signature, String secret) {
@@ -247,8 +251,13 @@ public class StripeWebhookHandler implements WebhookHandler {
             return;
         }
 
+        payoutBatch.paymentReference = payoutId;
         payoutBatch.status = success ? "completed" : "failed";
         payoutBatch.processedAt = OffsetDateTime.now();
+
+        if (success) {
+            paymentJobService.enqueuePayoutReconciliation(payoutBatch, payoutId);
+        }
     }
 
     private void handleAccountUpdated(UUID tenantId, JsonNode payload) {

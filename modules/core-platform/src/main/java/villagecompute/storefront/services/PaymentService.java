@@ -14,6 +14,7 @@ import org.jboss.logging.Logger;
 
 import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.PlatformFeeConfig;
+import villagecompute.storefront.data.models.Refund;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.payment.MarketplaceProvider;
 import villagecompute.storefront.payment.PaymentProvider;
@@ -188,6 +189,19 @@ public class PaymentService {
                 : BigDecimal.ZERO;
         paymentIntent.amountRefunded = currentRefunded.add(result.amountRefunded());
         paymentIntent.updatedAt = Instant.now();
+
+        Refund refundRecord = new Refund();
+        refundRecord.paymentIntent = paymentIntent;
+        refundRecord.tenant = paymentIntent.tenant;
+        refundRecord.provider = PROVIDER_STRIPE;
+        refundRecord.providerRefundId = result.refundId();
+        refundRecord.orderId = paymentIntent.orderId;
+        refundRecord.amount = result.amountRefunded();
+        refundRecord.currency = paymentIntent.currency;
+        refundRecord.status = Refund.RefundStatus.valueOf(result.status().name());
+        refundRecord.reason = reason;
+        refundRecord.metadata = paymentIntent.metadata;
+        refundRecord.persist();
 
         LOGGER.infof("[Tenant: %s] Refunded payment: id=%d, amount=%s, reason=%s", tenantId, paymentIntentId,
                 result.amountRefunded(), reason);

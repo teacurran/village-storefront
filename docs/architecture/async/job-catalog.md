@@ -236,6 +236,125 @@ Exported CSV matches import schema for round-trip compatibility. See CSV format 
 
 ---
 
+### Payout Reconciliation Job
+
+**Queue:** `payments.payout.reconciliation`
+**Priority:** HIGH
+**Handler:** `PayoutReconciliationJobHandler`
+
+#### Purpose
+
+Reconciles consignment payouts with payment provider (Stripe Connect) payout batches. Verifies payout amounts match expected consignment totals, updates payout status, and flags discrepancies for manual review.
+
+#### Payload Schema
+
+```json
+{
+  "jobId": "uuid",
+  "tenantId": "uuid",
+  "payoutBatchId": "uuid",
+  "providerPayoutId": "string",
+  "expectedAmount": "decimal",
+  "currency": "string",
+  "periodStart": "date",
+  "periodEnd": "date",
+  "consignorId": "uuid",
+  "idempotencyToken": "string",
+  "createdAt": "timestamp",
+  "version": 1
+}
+```
+
+**Field Descriptions:**
+- `jobId`: Unique identifier for this job execution
+- `tenantId`: Tenant owning the payout
+- `payoutBatchId`: Internal payout batch UUID
+- `providerPayoutId`: Stripe payout ID (e.g., `po_xxx`)
+- `expectedAmount`: Expected payout amount calculated from consignment sales
+- `currency`: ISO 4217 currency code (e.g., `USD`)
+- `periodStart`: Start of payout period (inclusive)
+- `periodEnd`: End of payout period (inclusive)
+- `consignorId`: Consignor UUID receiving the payout
+- `idempotencyToken`: Token for duplicate detection across retries
+- `createdAt`: Job creation timestamp
+- `version`: Payload schema version (current: 1)
+
+#### Reconciliation Logic
+
+1. **Fetch Provider Payout:** Retrieve payout from Stripe using `providerPayoutId`
+2. **Verify Amount:** Compare provider amount with `expectedAmount`
+3. **Check Status:** Ensure payout status is `paid` or `in_transit`
+4. **Update Local State:**
+   - Set `PayoutBatch.status` to `completed` if payout succeeded
+   - Set to `failed` if payout failed
+   - Set to `pending_review` if amounts don't match
+5. **Flag Discrepancies:** If amount mismatch exceeds tolerance (0.01), create admin alert
+6. **Record Metrics:** Emit reconciliation success/failure counters
+
+#### Retry Policy
+
+- **Max Attempts:** 5
+- **Initial Delay:** 5 seconds
+- **Max Delay:** 10 minutes
+- **Backoff Multiplier:** 2.0 (exponential)
+
+**Note:** Higher retry count than default due to occasional Stripe API delays in payout finalization.
+
+#### Idempotency
+
+Jobs are idempotent via `idempotencyToken`. Re-running reconciliation for the same payout batch updates status without duplication. Provider payout status is retrieved fresh on each attempt.
+
+#### Error Handling
+
+- **Provider API errors:** Job enters retry cycle
+- **Payout not found:** Job fails after max retries, enters DLQ
+- **Amount mismatch:** Job succeeds but marks payout as `pending_review` and sends alert
+- **Status mismatch:** If payout failed at provider, mark local status as `failed`
+
+#### Metrics
+
+- `payments.payout.reconciliation.started` - Counter, tags: `tenant_id`
+- `payments.payout.reconciliation.duration` - Timer, tags: `tenant_id`
+- `payments.payout.reconciliation.completed` - Counter, tags: `tenant_id`
+- `payments.payout.reconciliation.failed` - Counter, tags: `tenant_id`, `reason`
+- `payments.payout.reconciliation.discrepancy` - Counter, tags: `tenant_id`, `discrepancy_type`
+- `payments.payout.enqueued` - Counter, tags: `tenant_id`
+- `payments.payout.enqueue_rejected` - Counter, tags: `tenant_id`
+
+#### Operator Workflow
+
+1. **Automatic Enqueue:**
+   - System automatically enqueues reconciliation job when webhook `payout.paid` received
+   - Job runs in background to verify payout completion
+
+2. **Monitor Queue Depth:**
+   ```bash
+   # Query Prometheus metrics
+   payments_payout_reconciliation_queue_depth{priority="HIGH"}
+   ```
+
+3. **Check Reconciliation Status:**
+   - Review `PayoutBatch` table for status updates
+   - Check metrics dashboard for reconciliation success/failure rates
+   - Inspect logs for discrepancy alerts
+
+4. **Handle Discrepancies:**
+   - Query `payout_batches` where `status = 'pending_review'`
+   - Compare expected vs actual amounts
+   - Manually adjust or contact provider support
+   - Update status to `completed` after resolution
+
+5. **Troubleshooting:**
+   - If job fails repeatedly: Check Stripe API credentials and account status
+   - If amount mismatches persist: Verify consignment calculation logic
+   - If webhook delivery delayed: Payouts may enter reconciliation before webhook arrives; job will retry
+
+**Processing Cadence:** `PaymentJobScheduler` drains the `payments.payout.reconciliation` queue every 10 seconds (batch size 10) to ensure timely payout confirmation. Queue capacity is 5,000 jobs (HIGH priority).
+
+**Feature Flag:** `payments.payout.reconciliation.enabled` - Defaults to `true`, can be disabled globally or per-tenant to pause reconciliation during provider outages.
+
+---
+
 ## Queue Configuration
 
 All catalog jobs use the DEFAULT priority queue with the following settings:

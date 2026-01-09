@@ -20,6 +20,7 @@ import com.stripe.param.PaymentIntentCaptureParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.RefundCreateParams;
 
+import villagecompute.storefront.featureflags.FeatureFlagged;
 import villagecompute.storefront.payment.PaymentProvider;
 import villagecompute.storefront.tenant.TenantContext;
 
@@ -31,8 +32,27 @@ import io.micrometer.core.instrument.Timer;
  * retrieval using Stripe SDK.
  *
  * All operations are tenant-aware and emit metrics for observability.
+ *
+ * <p>
+ * <strong>Feature Flags:</strong>
+ * <ul>
+ * <li>{@code payments.stripe.enabled} - Global/tenant-level flag to enable/disable Stripe payment processing</li>
+ * <li>{@code payments.stripe.connect.enabled} - Control Stripe Connect marketplace features</li>
+ * <li>{@code payments.alternative.providers.enabled} - Feature flag to prepare for PayPal, Square, CashApp pilots</li>
+ * </ul>
+ *
+ * <p>
+ * <strong>Provider Extensibility:</strong> This implementation serves as the reference for future payment providers.
+ * New providers (PayPal, Square, etc.) should follow the same pattern: implement {@link PaymentProvider}, emit
+ * tenant-tagged metrics, support stub mode for missing credentials, and maintain idempotency.
+ *
+ * @see PaymentProvider
+ * @see villagecompute.storefront.payment.MarketplaceProvider
  */
 @ApplicationScoped
+@FeatureFlagged(
+        value = "payments.stripe.enabled",
+        description = "Emergency kill switch for Stripe payment processing")
 public class StripePaymentProvider implements PaymentProvider {
 
     private static final Logger LOGGER = Logger.getLogger(StripePaymentProvider.class);
