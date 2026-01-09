@@ -2,21 +2,23 @@ package villagecompute.storefront.services.mappers;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 
 import villagecompute.storefront.api.types.ProductVariantDto;
 import villagecompute.storefront.data.models.ProductVariant;
 
 /**
- * MapStruct mapper for converting ProductVariant entities to DTOs.
+ * MapStruct mapper for converting ProductVariant entities to/from DTOs.
  *
  * <p>
- * Maps variant pricing, SKU, and attributes. Stock information must be enriched separately via inventory service.
+ * Maps variant SKU, pricing, option values, inventory policy, dimensions, and media references.
  *
  * <p>
  * References:
  * <ul>
  * <li>Entity: {@link ProductVariant}</li>
  * <li>DTO: {@link ProductVariantDto}</li>
+ * <li>Task I2.T1: Catalog domain model DTO mapping</li>
  * </ul>
  */
 @Mapper(
@@ -30,14 +32,54 @@ public interface ProductVariantMapper {
      *            source entity
      * @return ProductVariantDto
      */
-    @Mapping(
-            target = "price",
-            expression = "java(new villagecompute.storefront.api.types.Money(variant.price, \"USD\"))")
-    @Mapping(
-            target = "stock",
-            ignore = true) // Set separately in service via inventory lookup
-    @Mapping(
-            target = "options",
-            ignore = true) // Set separately by parsing attributes JSON
     ProductVariantDto toDto(ProductVariant variant);
+
+    /**
+     * Map ProductVariantDto to ProductVariant entity.
+     *
+     * @param dto
+     *            source DTO
+     * @return ProductVariant entity
+     */
+    @Mapping(
+            target = "product",
+            ignore = true) // Set separately in service
+    @Mapping(
+            target = "tenant",
+            ignore = true) // Set by @PrePersist
+    @Mapping(
+            target = "createdAt",
+            ignore = true)
+    @Mapping(
+            target = "updatedAt",
+            ignore = true)
+    ProductVariant toEntity(ProductVariantDto dto);
+
+    /**
+     * Update existing ProductVariant entity from DTO (for PATCH/PUT operations).
+     *
+     * @param dto
+     *            source DTO with updated fields
+     * @param variant
+     *            target entity to update
+     */
+    @Mapping(
+            target = "id",
+            ignore = true)
+    @Mapping(
+            target = "product",
+            ignore = true)
+    @Mapping(
+            target = "tenant",
+            ignore = true)
+    @Mapping(
+            target = "createdAt",
+            ignore = true)
+    @Mapping(
+            target = "updatedAt",
+            ignore = true)
+    @Mapping(
+            target = "version",
+            ignore = true)
+    void updateEntityFromDto(ProductVariantDto dto, @MappingTarget ProductVariant variant);
 }

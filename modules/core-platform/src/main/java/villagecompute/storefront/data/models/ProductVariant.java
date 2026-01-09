@@ -28,15 +28,16 @@ import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
  * ProductVariant entity representing a specific variation of a product (e.g., size, color).
  *
  * <p>
- * Each variant has its own SKU, pricing, inventory tracking, and attribute values. The attributes field stores
- * variant-specific options as JSONB (e.g., {"color": "Red", "size": "Large"}).
+ * Each variant has its own SKU, pricing, inventory tracking, and option values. The optionValues field stores
+ * variant-specific options as JSONB (e.g., {"color": "Red", "size": "Large"}). Variants are the actual sellable items
+ * in the catalog.
  *
  * <p>
  * References:
  * <ul>
- * <li>ERD: datamodel_erd.puml (product_variants table)</li>
+ * <li>ERD: datamodel_erd.mmd (variants table)</li>
  * <li>ADR-001: Tenant-scoped entities</li>
- * <li>OpenAPI: ProductVariant schema</li>
+ * <li>Task I2.T1: Catalog domain model implementation</li>
  * </ul>
  */
 @Entity
@@ -78,7 +79,17 @@ public class ProductVariant extends PanacheEntityBase {
     public String name;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    public String attributes; // JSON object: {"color": "Red", "size": "Large"}
+    public String attributes; // JSON object: {"color": "Red", "size": "Large"} - Legacy field
+
+    @Column(
+            length = 100)
+    public String barcode;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(
+            name = "option_values",
+            columnDefinition = "jsonb")
+    public String optionValues; // JSON object: {"color": "Red", "size": "Large"} - New I2.T1 field
 
     @Column(
             nullable = false,
@@ -108,10 +119,6 @@ public class ProductVariant extends PanacheEntityBase {
     public String weightUnit; // kg, lb, oz, g
 
     @Column(
-            length = 100)
-    public String barcode;
-
-    @Column(
             name = "requires_shipping",
             nullable = false)
     public Boolean requiresShipping = true;
@@ -128,6 +135,23 @@ public class ProductVariant extends PanacheEntityBase {
             nullable = false,
             length = 20)
     public String status = "active"; // active|archived|deleted
+
+    @Column(
+            name = "inventory_policy",
+            length = 20)
+    public String inventoryPolicy; // continue|deny - New I2.T1 field
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(
+            name = "dimensions",
+            columnDefinition = "jsonb")
+    public String dimensions; // JSON: {length, width, height} - New I2.T1 field
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(
+            name = "media_ids",
+            columnDefinition = "jsonb")
+    public String mediaIds; // JSON array of MediaAsset UUIDs - New I2.T1 field
 
     @Version
     @Column(

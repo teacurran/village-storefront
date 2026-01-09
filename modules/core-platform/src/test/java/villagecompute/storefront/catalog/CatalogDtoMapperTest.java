@@ -74,17 +74,16 @@ class CatalogDtoMapperTest {
     void productDtoAccessorsWorkAsExpected() {
         UUID variantId = UUID.randomUUID();
         ProductVariantDto variantDto = new ProductVariantDto();
-        variantDto.setId(variantId);
-        variantDto.setSku("VAR-001");
-        variantDto.setPrice(new Money("45.00", "USD"));
-        variantDto.setStock(12);
-        variantDto.setOptions(Map.of("color", "red", "size", "M"));
+        variantDto.id = variantId;
+        variantDto.sku = "VAR-001";
+        variantDto.price = new BigDecimal("45.00");
+        // Note: stock field removed in I2.T1 - inventory tracked separately
+        variantDto.optionValues = "{\"color\":\"red\",\"size\":\"M\"}";
 
-        assertEquals(variantId, variantDto.getId());
-        assertEquals("VAR-001", variantDto.getSku());
-        assertEquals("45.00", variantDto.getPrice().getAmount());
-        assertEquals(12, variantDto.getStock());
-        assertEquals("red", variantDto.getOptions().get("color"));
+        assertEquals(variantId, variantDto.id);
+        assertEquals("VAR-001", variantDto.sku);
+        assertEquals(new BigDecimal("45.00"), variantDto.price);
+        assertTrue(variantDto.optionValues.contains("red"));
 
         ProductDetail detail = new ProductDetail();
         detail.setId(UUID.randomUUID());
@@ -137,9 +136,9 @@ class CatalogDtoMapperTest {
 
         ProductVariantDto dto = productVariantMapper.toDto(variant);
         assertNotNull(dto);
-        assertEquals(variant.id, dto.getId());
-        assertEquals("VAR-MAP-123", dto.getSku());
-        assertEquals("19.95", dto.getPrice().getAmount());
+        assertEquals(variant.id, dto.id);
+        assertEquals("VAR-MAP-123", dto.sku);
+        assertEquals(new BigDecimal("19.95"), dto.price);
     }
 
     @Test

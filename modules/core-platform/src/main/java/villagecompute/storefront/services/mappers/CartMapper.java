@@ -84,8 +84,8 @@ public class CartMapper {
         CartItemDto dto = new CartItemDto();
         dto.setId(item.id);
         dto.setVariantId(item.variant.id);
-        dto.setProductName(item.variant.product.name);
-        dto.setVariantName(item.variant.name);
+        dto.setProductName(item.variant.product.title);
+        dto.setVariantName(item.variant.sku); // Use SKU as variant name since ProductVariant no longer has name field
         dto.setSku(item.variant.sku);
         dto.setQuantity(item.quantity);
         dto.setUnitPrice(new Money(item.unitPrice, DEFAULT_CURRENCY));

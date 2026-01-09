@@ -1,79 +1,68 @@
 package villagecompute.storefront.api.types;
 
-import java.util.Map;
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * ProductVariant DTO for API responses.
+ * ProductVariant DTO for API requests and responses.
  *
  * <p>
- * Represents a product variant with pricing, stock availability, and variant-specific attributes.
+ * Represents a product variant with SKU, pricing, inventory policy, and option values (e.g., color, size).
  *
  * <p>
  * References:
  * <ul>
- * <li>OpenAPI: ProductVariant component schema</li>
  * <li>Entity: {@link villagecompute.storefront.data.models.ProductVariant}</li>
+ * <li>Task I2.T1: Catalog domain model DTO mapping</li>
  * </ul>
  */
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ProductVariantDto {
 
-    @JsonProperty("id")
-    private UUID id;
+    public UUID id;
 
-    @JsonProperty("sku")
-    private String sku;
+    @NotBlank
+    @Size(
+            max = 100)
+    public String sku;
 
-    @JsonProperty("price")
-    private Money price;
+    @Size(
+            max = 100)
+    public String barcode;
 
-    @JsonProperty("stock")
-    private Integer stock;
+    public String optionValues; // JSON string: {"color": "Red", "size": "Large"}
 
-    @JsonProperty("options")
-    private Map<String, String> options;
+    @NotNull
+    public BigDecimal price;
 
-    // Getters and setters
+    public BigDecimal compareAtPrice;
 
-    public UUID getId() {
-        return id;
-    }
+    @Pattern(
+            regexp = "^(continue|deny)$",
+            message = "Inventory policy must be 'continue' or 'deny'")
+    public String inventoryPolicy;
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
+    public BigDecimal weight;
 
-    public String getSku() {
-        return sku;
-    }
+    public String dimensions; // JSON string: {length, width, height}
 
-    public void setSku(String sku) {
-        this.sku = sku;
-    }
+    public String mediaIds; // JSON array string of MediaAsset UUIDs
 
-    public Money getPrice() {
-        return price;
-    }
+    public Long version;
 
-    public void setPrice(Money price) {
-        this.price = price;
-    }
+    public OffsetDateTime createdAt;
 
-    public Integer getStock() {
-        return stock;
-    }
+    public OffsetDateTime updatedAt;
 
-    public void setStock(Integer stock) {
-        this.stock = stock;
-    }
-
-    public Map<String, String> getOptions() {
-        return options;
-    }
-
-    public void setOptions(Map<String, String> options) {
-        this.options = options;
+    // Constructor
+    public ProductVariantDto() {
     }
 }

@@ -29,16 +29,16 @@ import io.quarkus.panache.common.Parameters;
 @ApplicationScoped
 public class ProductVariantRepository implements PanacheRepositoryBase<ProductVariant, UUID> {
 
-    private static final String QUERY_FIND_BY_PRODUCT = "tenant.id = :tenantId and product.id = :productId and status = 'active' order by position";
+    private static final String QUERY_FIND_BY_PRODUCT = "tenant.id = :tenantId and product.id = :productId";
     private static final String QUERY_FIND_BY_TENANT_AND_SKU = "tenant.id = :tenantId and sku = :sku";
-    private static final String QUERY_FIND_BY_ID = "tenant.id = :tenantId and id = :variantId and status = 'active'";
+    private static final String QUERY_FIND_BY_ID = "tenant.id = :tenantId and id = :variantId";
 
     /**
-     * Find all active variants for a product.
+     * Find all variants for a product.
      *
      * @param productId
      *            product UUID
-     * @return list of variants ordered by position
+     * @return list of variants
      */
     public List<ProductVariant> findByProduct(UUID productId) {
         UUID tenantId = TenantContext.getCurrentTenantId();

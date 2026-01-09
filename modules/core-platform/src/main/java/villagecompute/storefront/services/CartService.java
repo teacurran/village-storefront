@@ -278,9 +278,9 @@ public class CartService {
 
         // Eagerly initialize lazy-loaded relationships before transaction ends
         if (cartItem.variant != null) {
-            cartItem.variant.name.length(); // Force Hibernate to load
+            cartItem.variant.sku.length(); // Force Hibernate to load
             if (cartItem.variant.product != null) {
-                cartItem.variant.product.name.length(); // Force Hibernate to load
+                cartItem.variant.product.title.length(); // Force Hibernate to load
             }
         }
 
@@ -338,9 +338,9 @@ public class CartService {
 
         // Eagerly initialize lazy-loaded relationships before transaction ends
         if (cartItem.variant != null) {
-            cartItem.variant.name.length(); // Force Hibernate to load
+            cartItem.variant.sku.length(); // Force Hibernate to load
             if (cartItem.variant.product != null) {
-                cartItem.variant.product.name.length(); // Force Hibernate to load
+                cartItem.variant.product.title.length(); // Force Hibernate to load
             }
         }
 
@@ -411,9 +411,9 @@ public class CartService {
         // Eagerly initialize lazy-loaded relationships for all items
         items.forEach(item -> {
             if (item.variant != null) {
-                item.variant.name.length(); // Force Hibernate to load
+                item.variant.sku.length(); // Force Hibernate to load
                 if (item.variant.product != null) {
-                    item.variant.product.name.length(); // Force Hibernate to load
+                    item.variant.product.title.length(); // Force Hibernate to load
                 }
             }
         });

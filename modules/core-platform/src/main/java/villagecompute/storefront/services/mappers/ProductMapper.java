@@ -2,15 +2,17 @@ package villagecompute.storefront.services.mappers;
 
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 
 import villagecompute.storefront.api.types.Money;
 import villagecompute.storefront.api.types.ProductDetail;
+import villagecompute.storefront.api.types.ProductDto;
 import villagecompute.storefront.api.types.ProductSummary;
 import villagecompute.storefront.data.models.Product;
 
 /**
- * MapStruct mapper for converting Product entities to DTOs.
+ * MapStruct mapper for converting Product entities to/from DTOs.
  *
  * <p>
  * Uses CDI component model for dependency injection. Automatically generates implementation at compile time.
@@ -28,7 +30,7 @@ import villagecompute.storefront.data.models.Product;
 public interface ProductMapper {
 
     /**
-     * Map Product entity to ProductSummary DTO.
+     * Map Product entity to ProductSummary DTO (legacy API).
      *
      * @param product
      *            source entity
@@ -47,7 +49,7 @@ public interface ProductMapper {
     ProductSummary toSummary(Product product);
 
     /**
-     * Map Product entity to ProductDetail DTO.
+     * Map Product entity to ProductDetail DTO (legacy API).
      *
      * @param product
      *            source entity
@@ -78,7 +80,65 @@ public interface ProductMapper {
     ProductDetail toDetail(Product product);
 
     /**
-     * Get product base price from the first active variant.
+     * Map Product entity to ProductDto.
+     *
+     * @param product
+     *            source entity
+     * @return ProductDto
+     */
+    ProductDto toDto(Product product);
+
+    /**
+     * Map ProductDto to Product entity.
+     *
+     * @param dto
+     *            source DTO
+     * @return Product entity
+     */
+    @Mapping(
+            target = "tenant",
+            ignore = true) // Set by @PrePersist
+    @Mapping(
+            target = "variants",
+            ignore = true) // Managed separately
+    @Mapping(
+            target = "createdAt",
+            ignore = true)
+    @Mapping(
+            target = "updatedAt",
+            ignore = true)
+    Product toEntity(ProductDto dto);
+
+    /**
+     * Update existing Product entity from DTO (for PATCH/PUT operations).
+     *
+     * @param dto
+     *            source DTO with updated fields
+     * @param product
+     *            target entity to update
+     */
+    @Mapping(
+            target = "id",
+            ignore = true)
+    @Mapping(
+            target = "tenant",
+            ignore = true)
+    @Mapping(
+            target = "variants",
+            ignore = true)
+    @Mapping(
+            target = "createdAt",
+            ignore = true)
+    @Mapping(
+            target = "updatedAt",
+            ignore = true)
+    @Mapping(
+            target = "version",
+            ignore = true)
+    void updateEntityFromDto(ProductDto dto, @MappingTarget Product product);
+
+    /**
+     * Get product base price from the first active variant (legacy helper).
      *
      * <p>
      * Note: This is a simplified approach. Real implementation should have a pricing service or store base price on

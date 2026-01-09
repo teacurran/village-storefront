@@ -35,6 +35,7 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     private static final String QUERY_FIND_BY_TENANT_AND_SKU = "tenant.id = :tenantId and sku = :sku";
     private static final String QUERY_FIND_BY_TENANT_AND_SLUG = "tenant.id = :tenantId and slug = :slug";
     private static final String QUERY_SEARCH_BY_NAME_OR_SKU = "tenant.id = :tenantId and status = :status and (lower(name) like :search or lower(sku) like :search)";
+    private static final String QUERY_SEARCH_BY_TITLE = "tenant.id = :tenantId and status = :status and lower(title) like :search";
     private static final String QUERY_ACTIVE_BY_CATEGORY_SLUG = "tenant.id = :tenantId and status = 'active' and id in (select pc.product.id from ProductCategory pc where pc.id.tenantId = :tenantId and pc.category.slug = :categorySlug)";
     private static final String QUERY_ACTIVE_BY_COLLECTION_SLUG = "tenant.id = :tenantId and status = 'active' and id in (select pcl.product.id from ProductCollection pcl where pcl.id.tenantId = :tenantId and pcl.collection.slug = :collectionSlug)";
     private static final String QUERY_ACTIVE_BY_CATEGORY_AND_COLLECTION = QUERY_ACTIVE_BY_CATEGORY_SLUG
@@ -123,7 +124,26 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     }
 
     /**
-     * Search products by name or SKU within current tenant.
+     * Search products by name or SKU within current tenant (legacy).
+     *
+     * @param searchTerm
+     *            search term (case-insensitive partial match)
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @return list of matching active products
+     */
+    public List<Product> searchProductsByNameOrSku(String searchTerm, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        String searchPattern = "%" + searchTerm.toLowerCase() + "%";
+        return find(QUERY_SEARCH_BY_NAME_OR_SKU,
+                Parameters.with("tenantId", tenantId).and("status", "active").and("search", searchPattern))
+                .page(Page.of(page, size)).list();
+    }
+
+    /**
+     * Search products by title within current tenant.
      *
      * @param searchTerm
      *            search term (case-insensitive partial match)
@@ -136,7 +156,7 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     public List<Product> searchProducts(String searchTerm, int page, int size) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         String searchPattern = "%" + searchTerm.toLowerCase() + "%";
-        return find(QUERY_SEARCH_BY_NAME_OR_SKU,
+        return find(QUERY_SEARCH_BY_TITLE,
                 Parameters.with("tenantId", tenantId).and("status", "active").and("search", searchPattern))
                 .page(Page.of(page, size)).list();
     }
@@ -151,7 +171,7 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     public long countSearchResults(String searchTerm) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         String searchPattern = "%" + searchTerm.toLowerCase() + "%";
-        return count(QUERY_SEARCH_BY_NAME_OR_SKU,
+        return count(QUERY_SEARCH_BY_TITLE,
                 Parameters.with("tenantId", tenantId).and("status", "active").and("search", searchPattern));
     }
 
@@ -173,6 +193,19 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     public long countActiveByCurrentTenant() {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return count(QUERY_FIND_BY_TENANT_AND_STATUS, Parameters.with("tenantId", tenantId).and("status", "active"));
+    }
+
+    /**
+     * Find product by ID ensuring it belongs to the current tenant.
+     *
+     * @param id
+     *            product UUID
+     * @return product if tenant owns it
+     */
+    public Optional<Product> findByIdAndTenant(UUID id) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find("id = :id and tenant.id = :tenantId", Parameters.with("id", id).and("tenantId", tenantId))
+                .firstResultOptional();
     }
 
     /**
@@ -231,18 +264,5 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return count(QUERY_ACTIVE_BY_CATEGORY_AND_COLLECTION, Parameters.with("tenantId", tenantId)
                 .and("categorySlug", categorySlug).and("collectionSlug", collectionSlug));
-    }
-
-    /**
-     * Find product by ID ensuring it belongs to the current tenant.
-     *
-     * @param id
-     *            product UUID
-     * @return product if tenant owns it
-     */
-    public Optional<Product> findByIdAndTenant(UUID id) {
-        UUID tenantId = TenantContext.getCurrentTenantId();
-        return find("id = :id and tenant.id = :tenantId", Parameters.with("id", id).and("tenantId", tenantId))
-                .firstResultOptional();
     }
 }
