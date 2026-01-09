@@ -118,7 +118,8 @@ sequenceDiagram
     Note over Worker,Payment: Phase 7: Background Job Processing
 
     Worker->>+Queue: Poll for next job
-    Queue-->>-Worker: POSOfflineSyncJobPayload
+    Queue-->>Worker: POSOfflineSyncJobPayload
+    deactivate Queue
 
     Worker->>DB: SELECT device encryption key hash<br/>WHERE device_id={deviceId}
     Worker->>DB: SELECT encryptedPayload, iv, keyVersion<br/>FROM pos_offline_queue
@@ -163,8 +164,7 @@ sequenceDiagram
             Audit-->>-Worker: Audit complete
         end
     end
-
-    Worker-->>-Payment: Processing complete
+    deactivate Payment
 
     %% === PHASE 8: Client Notification & Cleanup ===
     Note over POS,IDB: Phase 8: Client Notification & Cleanup

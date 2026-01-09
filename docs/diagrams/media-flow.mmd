@@ -78,7 +78,7 @@ sequenceDiagram
         Worker->>+Processor: processImage(sourceFile, outputDir)
         Note right of Processor: Thumbnailator generates:<br/>thumbnail:150px, small:400px,<br/>medium:800px, large:1600px<br/>Quality: 0.85 JPEG
         Processor->>Processor: For each size tier:<br/>resize with bicubic interpolation
-        Processor-->>-Worker: List&lt;ImageDerivative&gt;
+        Processor-->>-Worker: List of ImageDerivatives
     else Video processing
         Worker->>+Processor: processVideo(sourceFile, outputDir)
         Note right of Processor: FFmpeg HLS variants:<br/>720p@2Mbps, 480p@1Mbps, 360p@500Kbps<br/>Segment duration: 6s (VOD)
@@ -117,13 +117,15 @@ sequenceDiagram
     Note over API,Storefront: Phase 6b: Surface asset readiness to UI clients<br/>and invalidate caches (planned follow-up)
 
     API->>+Admin: Push SSE event media.asset.ready<br/>/admin/api/media/events/stream
-    Note right of Admin: Future step (tracked in ops backlog)<br/>updates Admin grid + toast; gated by flag<br/>media.admin_stream.enabled
+    Note right of Admin: Future step tracked in ops backlog,<br/>updates Admin grid and toast notification,<br/>gated by flag media.admin stream.enabled
+    Admin-->>API: Broadcast acknowledged by listeners
+    deactivate Admin
     API->>+Storefront: Publish DomainEvent MediaAssetReady<br/>/api/internal/events (HTTP POST)
-    Note right of Storefront: Planned queue media.cdn_invalidate<br/>Priority: HIGH for cache bust; Flag:<br/>media.storefront_refresh.enabled
+    Note right of Storefront: Planned queue media.cdn invalidate<br/>Priority HIGH for cache bust<br/>Flag media.storefront refresh.enabled
     Storefront->>Storefront: Invalidate CDN + re-render sections<br/>for product detail & gallery widgets
+    Storefront-->>API: Domain event accepted
+    deactivate Storefront
     Note over Admin,Storefront: Metrics:<br/>media.event.dispatch.latency{channel}<br/>Alerts when >5s (P2)
-    API-->>-Admin: Broadcast acknowledged by listeners
-    API-->>-Storefront: Domain event accepted
 
     %% === PHASE 7: Download URL Generation ===
     Note over Client,R2: Phase 7: Signed Download URL (on-demand)
