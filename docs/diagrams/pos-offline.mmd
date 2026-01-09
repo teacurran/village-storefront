@@ -201,6 +201,20 @@ sequenceDiagram
         Note over Staff: Warning: Contains encrypted<br/>payment data - handle securely
     end
 
+    %% === FUTURE IMPLEMENTATION: Offline Resume & CRM Tie-ins ===
+    Note over POS,Worker: Planned reconciliation ensures<br/>queued transactions refresh downstream ledgers
+
+    POS->>+API: POST /api/pos/offline/reconcile<br/>{deviceId, lastSyncedAt}
+    API->>Queue: Enqueue reconciliation job<br/>Priority: LOW (planned)
+    Note right of Queue: Queue (planned): pos.offline_reconcile<br/>Dispatch interval: 10s<br/>Flag: pos.offline_reconcile.enabled
+
+    Queue-->>Worker: POSOfflineReconcileJobPayload
+    Worker->>DB: SELECT orders synced after {lastSyncedAt}<br/>WITH offline flag
+    Worker->>+Checkout: PATCH /admin/api/checkout/orders/{orderId}<br/>statusHints
+    Worker->>+Audit: Emit POSOfflineReconciled event<br/>for CRM timeline & staff notification
+    Note over Checkout,Audit: Metrics (planned):<br/>pos.offline_reconcile.job.duration<br/>pos.offline_reconcile.job.failed
+    Worker-->>Queue: Job complete<br/>Alert if duration >5m (P2)
+
     %% === ERROR SCENARIOS ===
     Note over Worker,Audit: Error Scenarios & Alerts
 

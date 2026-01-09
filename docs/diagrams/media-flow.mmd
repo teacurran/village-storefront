@@ -15,6 +15,8 @@ sequenceDiagram
     participant Worker as Background Worker
     participant Processor as MediaProcessor
     participant DB as PostgreSQL
+    participant Admin as Admin SPA
+    participant Storefront as Storefront UI
 
     %% === PHASE 1: Upload Negotiation ===
     Note over Client,DB: Phase 1: Upload Negotiation
@@ -53,7 +55,7 @@ sequenceDiagram
     API->>+JobService: enqueueProcessingJob(assetId, tenantId)
 
     JobService->>Queue: Enqueue job<br/>Priority: DEFAULT (images) / LOW (videos)
-    Note right of Queue: Queue config:<br/>media.processing.dispatch-interval=3s<br/>jobs.queue.capacity.default=500
+    Note right of Queue: Queue config:<br/>media.processing.dispatch-interval=3s<br/>jobs.queue.capacity.default=500<br/><br/>Metric: media.job.enqueued{tenant,priority}
 
     JobService-->>-API: Job enqueued
     API-->>-Client: 202 Accepted
@@ -62,6 +64,7 @@ sequenceDiagram
     Note over Worker,R2: Phase 4: Async Processing (media.processing.dispatch-interval)
 
     Worker->>+Queue: Poll for next job (priority order)
+    Note right of Queue: Metric: media.queue.depth{priority}
     Queue-->>-Worker: MediaProcessingJobPayload
 
     Worker->>DB: Update MediaAsset status=processing
@@ -109,6 +112,18 @@ sequenceDiagram
 
     Worker->>Queue: Mark job complete
     Note right of Worker: Metrics emitted:<br/>media.job.success{tenant,type}<br/>media.job.duration{tenant,type}
+
+    %% === PHASE 6B: Admin & Storefront Notifications (Future Implementation) ===
+    Note over API,Storefront: Phase 6b: Surface asset readiness to UI clients<br/>and invalidate caches (planned follow-up)
+
+    API->>+Admin: Push SSE event media.asset.ready<br/>/admin/api/media/events/stream
+    Note right of Admin: Future step (tracked in ops backlog)<br/>updates Admin grid + toast; gated by flag<br/>media.admin_stream.enabled
+    API->>+Storefront: Publish DomainEvent MediaAssetReady<br/>/api/internal/events (HTTP POST)
+    Note right of Storefront: Planned queue media.cdn_invalidate<br/>Priority: HIGH for cache bust; Flag:<br/>media.storefront_refresh.enabled
+    Storefront->>Storefront: Invalidate CDN + re-render sections<br/>for product detail & gallery widgets
+    Note over Admin,Storefront: Metrics:<br/>media.event.dispatch.latency{channel}<br/>Alerts when >5s (P2)
+    API-->>-Admin: Broadcast acknowledged by listeners
+    API-->>-Storefront: Domain event accepted
 
     %% === PHASE 7: Download URL Generation ===
     Note over Client,R2: Phase 7: Signed Download URL (on-demand)

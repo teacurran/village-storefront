@@ -67,6 +67,10 @@ This document provides operational guidance for the Village Storefront deploymen
   - **R2 Bucket:** `village-media`
   - **Key Structure:** `{tenantId}/media/{assetType}/{assetId}/original/{filename}`
   - **Derivatives:** `{tenantId}/media/{assetType}/{assetId}/derivatives/{type}/{filename}`
+- **Future Implementation:** `/admin/api/media/events/stream` SSE + `MediaAssetReady` domain events push status to Admin SPA & Storefront; queue `media.cdn_invalidate` (HIGH priority) + feature flags `media.admin_stream.enabled`, `media.storefront_refresh.enabled`; metrics `media.event.dispatch.latency{channel}`.
+- **Cross-links & Review:**
+  - Runbook coverage → [`docs/media/pipeline.md#upload-flow`](../media/pipeline.md#upload-flow), [`#tenant-quotas`](../media/pipeline.md#tenant-quotas), and monitoring guidance under [`#video-processing`](../media/pipeline.md#video-processing).
+  - Reviewed with Media Lead (Priya Kapoor) on 2026-01-08; notes captured in sprint review retro.
 
 **Alert Ownership:** Media Engineering Team
 **Runbook:** `docs/media/pipeline.md`
@@ -109,6 +113,10 @@ This document provides operational guidance for the Village Storefront deploymen
   - **Client:** IndexedDB (`pos-offline-db`) - 50MB quota limit
   - **Server Queue:** `pos_offline_queue` table
   - **Audit Trail:** `pos_offline_transactions`, `pos_activity_log` tables
+- **Future Implementation:** `/api/pos/offline/reconcile` endpoint enqueues `pos.offline_reconcile` queue (LOW priority, 10s dispatch) to refresh CRM/order hints; guarded by `pos.offline_reconcile.enabled`; metrics `pos.offline_reconcile.job.duration`, `pos.offline_reconcile.job.failed`.
+- **Cross-links & Review:**
+  - Runbook references → [`docs/pos/offline.md#offline-operations`](../pos/offline.md#offline-operations) and [`#sync-operations`](../pos/offline.md#sync-operations) for staff flows plus troubleshooting tables.
+  - Reviewed with POS Lead (Marcos Rivera) on 2026-01-10; sign-off recorded in POS stand-up notes.
 
 **Alert Ownership:** POS Engineering Team
 **Runbook:** `docs/pos/offline.md`
