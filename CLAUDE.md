@@ -43,6 +43,12 @@ This project follows the VillageCompute Java Project Standards. See `docs/java-p
 
 # Run migrations
 cd migrations && mvn migration:up -Dmigration.env=development
+
+# Run specific test suites
+./mvnw test -Dtest=CatalogImportJobHandlerTest
+./mvnw test -Dtest=CatalogExportJobHandlerTest
+./mvnw test -Dtest=CatalogAdminImportExportIT
+./mvnw test -Dtest=CatalogJobServiceTest
 ```
 
 ### Package Structure
