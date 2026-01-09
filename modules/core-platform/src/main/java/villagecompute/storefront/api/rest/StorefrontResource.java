@@ -290,6 +290,11 @@ public class StorefrontResource {
 
             populateTokenMap(tokens, "primary", themeNode.path("primaryColors"));
             populateTokenMap(tokens, "secondary", themeNode.path("secondaryColors"));
+            populateTokenMap(tokens, "accent", themeNode.path("accentColors"));
+            tokens.putIfAbsent("fontFamilyPrimary", themeNode.path("fontFamilyPrimary").asText("Inter, sans-serif"));
+            tokens.putIfAbsent("fontFamilySecondary",
+                    themeNode.path("fontFamilySecondary").asText("Source Serif Pro, serif"));
+            tokens.putIfAbsent("fontFamilyMono", themeNode.path("fontFamilyMono").asText("JetBrains Mono, monospace"));
         } catch (IOException e) {
             LOG.warn("Failed to hydrate theme tokens from generated files", e);
         }
