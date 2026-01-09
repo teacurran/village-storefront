@@ -244,6 +244,167 @@ jobs:
           duration=$((end - JOB_START))
           echo "⏱️ test-${{ matrix.runtime }} duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
+  e2e-visual:
+    name: E2E Visual Regression (Percy)
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: villagestore_test
+          POSTGRES_USER: villagestore
+          POSTGRES_PASSWORD: dev_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install root npm dependencies
+        run: npm ci
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e/playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build and start Quarkus application
+        run: |
+          ./mvnw -B -pl modules/core-platform clean package -DskipTests
+          nohup java -jar modules/core-platform/target/quarkus-app/quarkus-run.jar > quarkus.log 2>&1 &
+          echo "Waiting for Quarkus to start..."
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/ready 2>/dev/null; do sleep 2; done'
+          echo "✅ Quarkus is ready"
+
+      - name: Run Percy visual regression tests
+        working-directory: tests/e2e/playwright
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+        run: npm run test:visual
+
+      - name: Upload Quarkus logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-logs-visual
+          path: quarkus.log
+          retention-days: 7
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ e2e-visual duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
+  lighthouse-performance:
+    name: Lighthouse Performance (LCP < 2s)
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: villagestore_test
+          POSTGRES_USER: villagestore
+          POSTGRES_PASSWORD: dev_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build and start Quarkus application
+        run: |
+          ./mvnw -B -pl modules/core-platform clean package -DskipTests
+          nohup java -jar modules/core-platform/target/quarkus-app/quarkus-run.jar > quarkus.log 2>&1 &
+          echo "Waiting for Quarkus to start..."
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/ready 2>/dev/null; do sleep 2; done'
+          echo "✅ Quarkus is ready"
+
+      - name: Run Lighthouse CI
+        run: npm run test:lighthouse
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 14
+
+      - name: Upload Quarkus logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-logs-lighthouse
+          path: quarkus.log
+          retention-days: 7
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ lighthouse-performance duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
   admin-spa:
     name: Admin SPA (Lint & Test)
     runs-on: ubuntu-latest
@@ -300,7 +461,7 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: [test, admin-spa]
+    needs: [test, admin-spa, e2e-visual, lighthouse-performance]
     timeout-minutes: 25
 
     steps:

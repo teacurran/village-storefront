@@ -1,0 +1,112 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:8080/",
+        "http://localhost:8080/category/all",
+        "http://localhost:8080/product/sample-product",
+        "http://localhost:8080/cart",
+        "http://localhost:8080/checkout",
+        "http://localhost:8080/account"
+      ],
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop",
+        "throttling": {
+          "rttMs": 40,
+          "throughputKbps": 10240,
+          "cpuSlowdownMultiplier": 1
+        },
+        "skipAudits": [
+          "uses-http2",
+          "canonical"
+        ],
+        "chromeFlags": "--no-sandbox --disable-gpu --headless"
+      }
+    },
+    "assert": {
+      "preset": "lighthouse:no-pwa",
+      "assertions": {
+        "largest-contentful-paint": [
+          "error",
+          {
+            "maxNumericValue": 2000,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "cumulative-layout-shift": [
+          "error",
+          {
+            "maxNumericValue": 0.1,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "total-blocking-time": [
+          "error",
+          {
+            "maxNumericValue": 300,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "first-contentful-paint": [
+          "warn",
+          {
+            "maxNumericValue": 1000,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "speed-index": [
+          "warn",
+          {
+            "maxNumericValue": 2500,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "interactive": [
+          "warn",
+          {
+            "maxNumericValue": 3000,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "max-potential-fid": [
+          "warn",
+          {
+            "maxNumericValue": 130,
+            "aggregationMethod": "median-run"
+          }
+        ],
+        "errors-in-console": "off",
+        "uses-long-cache-ttl": "off",
+        "uses-rel-preconnect": "warn",
+        "font-display": "warn",
+        "uses-optimized-images": "warn",
+        "uses-responsive-images": "warn",
+        "offscreen-images": "warn",
+        "render-blocking-resources": "warn",
+        "unminified-css": "warn",
+        "unminified-javascript": "warn",
+        "unused-css-rules": "warn",
+        "unused-javascript": "warn",
+        "modern-image-formats": "warn",
+        "uses-text-compression": "warn",
+        "uses-webp-images": "warn",
+        "efficient-animated-content": "warn",
+        "duplicated-javascript": "warn",
+        "legacy-javascript": "warn",
+        "bootup-time": "warn",
+        "mainthread-work-breakdown": "warn",
+        "dom-size": "warn",
+        "redirects": "warn",
+        "uses-passive-event-listeners": "warn",
+        "no-document-write": "warn",
+        "uses-http2": "off",
+        "uses-long-cache-ttl": "off"
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage",
+      "githubAppToken": ""
+    }
+  }
+}
