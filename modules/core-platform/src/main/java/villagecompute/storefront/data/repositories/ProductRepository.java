@@ -51,6 +51,20 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     }
 
     /**
+     * Find products for the current tenant with pagination.
+     *
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @return list of products for requested page
+     */
+    public List<Product> findByCurrentTenant(int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_FIND_BY_TENANT, Parameters.with("tenantId", tenantId)).page(Page.of(page, size)).list();
+    }
+
+    /**
      * Find active products for the current tenant with pagination.
      *
      * @param page
@@ -62,6 +76,23 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     public List<Product> findActiveByCurrentTenant(int page, int size) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return find(QUERY_FIND_BY_TENANT_AND_STATUS, Parameters.with("tenantId", tenantId).and("status", "active"))
+                .page(Page.of(page, size)).list();
+    }
+
+    /**
+     * Find products by status for the current tenant with pagination.
+     *
+     * @param status
+     *            product status
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @return list of products
+     */
+    public List<Product> findByStatusForCurrentTenant(String status, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_FIND_BY_TENANT_AND_STATUS, Parameters.with("tenantId", tenantId).and("status", status))
                 .page(Page.of(page, size)).list();
     }
 

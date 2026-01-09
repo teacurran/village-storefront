@@ -32,6 +32,7 @@ import villagecompute.storefront.data.models.Category;
 import villagecompute.storefront.data.models.Collection;
 import villagecompute.storefront.data.repositories.CategoryRepository;
 import villagecompute.storefront.data.repositories.CollectionRepository;
+import villagecompute.storefront.services.CatalogJobService;
 import villagecompute.storefront.services.mappers.CategoryMapper;
 import villagecompute.storefront.services.mappers.CollectionMapper;
 import villagecompute.storefront.tenant.TenantContext;
@@ -83,6 +84,9 @@ public class CatalogAdminResource {
 
     @Inject
     CollectionMapper collectionMapper;
+
+    @Inject
+    CatalogJobService catalogJobService;
 
     // ========================================
     // Category Endpoints
@@ -427,6 +431,99 @@ public class CatalogAdminResource {
         collectionRepository.persist(collection);
 
         return Response.noContent().build();
+    }
+
+    // ========================================
+    // Import/Export Endpoints
+    // ========================================
+
+    /**
+     * Enqueue a catalog import job.
+     *
+     * @param request
+     *            import request containing file location and options
+     * @return job ID
+     */
+    @POST
+    @Path("/import")
+    public Response importCatalog(Map<String, Object> request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /admin/catalog/import - tenantId=%s", tenantId);
+
+        // Extract request parameters
+        String fileLocation = (String) request.get("fileLocation");
+        String requestedBy = (String) request.getOrDefault("requestedBy", "admin");
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> options = (Map<String, String>) request.getOrDefault("options", new HashMap<>());
+
+        if (fileLocation == null || fileLocation.isBlank()) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Request", "fileLocation is required", Status.BAD_REQUEST))
+                    .build();
+        }
+
+        try {
+            UUID jobId = catalogJobService.enqueueImport(fileLocation, requestedBy, options);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("jobId", jobId.toString());
+            response.put("status", "enqueued");
+            response.put("message", "Catalog import job enqueued successfully");
+
+            return Response.accepted().entity(response).build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Import request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Request", e.getMessage(), Status.BAD_REQUEST)).build();
+        } catch (IllegalStateException e) {
+            LOG.warnf("Import request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Status.SERVICE_UNAVAILABLE)
+                    .entity(createProblemDetails("Import Unavailable", e.getMessage(), Status.SERVICE_UNAVAILABLE))
+                    .build();
+        }
+    }
+
+    /**
+     * Enqueue a catalog export job.
+     *
+     * @param request
+     *            export request containing filters and format
+     * @return job ID
+     */
+    @POST
+    @Path("/export")
+    public Response exportCatalog(Map<String, Object> request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /admin/catalog/export - tenantId=%s", tenantId);
+
+        String requestedBy = (String) request.getOrDefault("requestedBy", "admin");
+        String format = (String) request.getOrDefault("format", "csv");
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> filters = (Map<String, String>) request.getOrDefault("filters", new HashMap<>());
+
+        try {
+            UUID jobId = catalogJobService.enqueueExport(requestedBy, filters, format);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("jobId", jobId.toString());
+            response.put("status", "enqueued");
+            response.put("message", "Catalog export job enqueued successfully");
+
+            return Response.accepted().entity(response).build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Export request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Request", e.getMessage(), Status.BAD_REQUEST)).build();
+        } catch (IllegalStateException e) {
+            LOG.warnf("Export request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Status.SERVICE_UNAVAILABLE)
+                    .entity(createProblemDetails("Export Unavailable", e.getMessage(), Status.SERVICE_UNAVAILABLE))
+                    .build();
+        }
     }
 
     /**
