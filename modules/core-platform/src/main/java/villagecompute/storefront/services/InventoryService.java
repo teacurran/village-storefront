@@ -85,7 +85,12 @@ public class InventoryService {
     }
 
     /**
-     * Adjust inventory quantity (add or subtract).
+     * Adjust inventory quantity (add or subtract) without event publishing.
+     *
+     * <p>
+     * This method is used internally for system-driven adjustments (e.g., transfers, reservations) that publish their
+     * own domain events. For manual adjustments with reason codes, use
+     * {@link InventoryTransferService#recordAdjustment}.
      *
      * @param variantId
      *            variant UUID

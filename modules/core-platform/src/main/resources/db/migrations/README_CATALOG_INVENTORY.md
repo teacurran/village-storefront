@@ -9,6 +9,7 @@ The catalog and inventory schema is split across multiple migration files:
 | Migration | Description | Tables Created |
 |-----------|-------------|----------------|
 | `V20260102__baseline_schema.sql` | Baseline schema with core catalog tables | `categories`, `products`, `product_variants`, `product_categories`, `product_images`, `inventory_levels` |
+| `V20260112__domain_events_table.sql` | Domain events for event sourcing and reporting | `domain_events` |
 | `V20260113__enable_rls_policies.sql` | Enable RLS on baseline tables | N/A (policies only) |
 | `V20260114__catalog_inventory_extensions.sql` | Extended catalog/inventory models | `collections`, `product_collections`, `inventory_locations`, `inventory_adjustments`, `inventory_transfers`, `inventory_transfer_lines` |
 | `V20260115__catalog_inventory_rls_policies.sql` | Enable RLS on extended tables | N/A (policies only) |
@@ -52,6 +53,36 @@ Curator-defined product groupings for merchandising and promotions. Unlike hiera
 - `idx_collections_published`: Filter published collections
 
 **RLS Policy:** `collections_isolation_policy` restricts access to `tenant_id = get_current_tenant_id()`
+
+### Domain Events
+
+**Table:** `domain_events`
+
+Immutable event log for inventory operations, transfers, and adjustments. Events support event-driven reporting projections and audit trails.
+
+**Fields:**
+- `id` (UUID): Primary key
+- `tenant_id` (UUID): Tenant scope (FK → tenants)
+- `aggregate_type` (VARCHAR): Type of aggregate (e.g., `INVENTORY_LEVEL`, `INVENTORY_TRANSFER`)
+- `aggregate_id` (UUID): UUID of the aggregate instance
+- `event_type` (VARCHAR): Type of event (e.g., `INVENTORY_ADJUSTED`, `TRANSFER_INITIATED`, `TRANSFER_RECEIVED`)
+- `payload` (JSONB): Event-specific data structure
+- `metadata` (JSONB): Correlation IDs, user context, trace information
+- `occurred_at` (TIMESTAMPTZ): Business event timestamp
+
+**Indexes:**
+- `idx_domain_events_tenant_aggregate`: Query events by tenant and aggregate
+- `idx_domain_events_tenant_type_occurred`: Query events by type and time range
+- `idx_domain_events_occurred_at`: Temporal queries for event replay
+
+**RLS Policy:** `domain_events_tenant_isolation` restricts access to `tenant_id = current_setting('app.current_tenant_id', true)::uuid`
+
+**Event Types:**
+- `INVENTORY_ADJUSTED`: Manual inventory adjustments with reason codes (payload: variant, location, quantities, reason, adjustedBy)
+- `TRANSFER_INITIATED`: Transfer creation between locations (payload: transferId, source/destination locations, line items, initiatedBy)
+- `TRANSFER_RECEIVED`: Transfer completion (payload: transferId, locations, received quantities, timestamp)
+
+**Usage:** Reporting services poll `domain_events` to build read-optimized aggregates for dashboards and analytics.
 
 ### Inventory Locations
 

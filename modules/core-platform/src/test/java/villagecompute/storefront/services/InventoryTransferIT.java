@@ -80,6 +80,7 @@ class InventoryTransferIT {
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM DomainEvent").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryTransfer").executeUpdate();

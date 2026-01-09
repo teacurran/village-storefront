@@ -1,5 +1,6 @@
 package villagecompute.storefront.services;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,6 +23,9 @@ import villagecompute.storefront.data.repositories.InventoryLevelRepository;
 import villagecompute.storefront.data.repositories.InventoryLocationRepository;
 import villagecompute.storefront.data.repositories.InventoryTransferRepository;
 import villagecompute.storefront.data.repositories.ProductVariantRepository;
+import villagecompute.storefront.services.events.InventoryAdjustedPayload;
+import villagecompute.storefront.services.events.TransferInitiatedPayload;
+import villagecompute.storefront.services.events.TransferReceivedPayload;
 import villagecompute.storefront.services.jobs.BarcodeLabelJobPayload;
 import villagecompute.storefront.services.jobs.BarcodeLabelJobQueue;
 import villagecompute.storefront.tenant.TenantContext;
@@ -71,6 +75,9 @@ public class InventoryTransferService {
 
     @Inject
     BarcodeLabelJobQueue barcodeLabelJobQueue;
+
+    @Inject
+    DomainEventPublisher eventPublisher;
 
     /**
      * Create a new inventory transfer between locations.
@@ -163,6 +170,17 @@ public class InventoryTransferService {
         UUID jobId = enqueueBarcodeJob(transfer);
         transfer.barcodeJobId = jobId;
 
+        // Publish domain event
+        TransferInitiatedPayload eventPayload = new TransferInitiatedPayload(transfer.id, source.id, source.code,
+                destination.id, destination.code, transfer.status,
+                transfer.lines.stream()
+                        .map(line -> new TransferInitiatedPayload.TransferLineItem(line.variant.id, line.variant.sku,
+                                line.quantity))
+                        .toList(),
+                transfer.initiatedBy, transfer.expectedArrivalDate, transfer.notes);
+
+        eventPublisher.publish("INVENTORY_TRANSFER", transfer.id, "TRANSFER_INITIATED", eventPayload);
+
         LOG.infof("Transfer created - tenantId=%s, transferId=%s, jobId=%s", tenantId, transfer.id, jobId);
 
         return transfer;
@@ -216,6 +234,16 @@ public class InventoryTransferService {
 
         meterRegistry.counter("inventory.transfer.completed", "tenant_id", tenantId.toString(), "source_location",
                 sourceCode, "destination_location", destCode).increment();
+
+        // Publish domain event
+        TransferReceivedPayload eventPayload = new TransferReceivedPayload(transfer.id, sourceCode, destCode,
+                transfer.lines.stream()
+                        .map(line -> new TransferReceivedPayload.ReceivedLineItem(line.variant.id, line.quantity,
+                                line.receivedQuantity != null ? line.receivedQuantity : line.quantity))
+                        .toList(),
+                OffsetDateTime.now());
+
+        eventPublisher.publish("INVENTORY_TRANSFER", transfer.id, "TRANSFER_RECEIVED", eventPayload);
 
         LOG.infof("Transfer received - tenantId=%s, transferId=%s", tenantId, transferId);
 
@@ -293,6 +321,12 @@ public class InventoryTransferService {
 
         meterRegistry.counter("inventory.adjustment.count", "tenant_id", tenantId.toString(), "location", location.code,
                 "reason", reason.toString()).increment();
+
+        // Publish domain event
+        InventoryAdjustedPayload eventPayload = new InventoryAdjustedPayload(variantId, location.code, quantityBefore,
+                quantityAfter, quantityChange, reason, adjustedBy, notes, adjustment.id);
+
+        eventPublisher.publish("INVENTORY_LEVEL", level.id, "INVENTORY_ADJUSTED", eventPayload);
 
         LOG.infof("Adjustment recorded - tenantId=%s, adjustmentId=%s, before=%d, after=%d", tenantId, adjustment.id,
                 quantityBefore, quantityAfter);

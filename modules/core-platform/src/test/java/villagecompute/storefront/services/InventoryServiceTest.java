@@ -49,9 +49,14 @@ class InventoryServiceTest {
     @Transactional
     void setUp() {
         // Clean up existing data
+        entityManager.createQuery("DELETE FROM DomainEvent").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryTransfer").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+        entityManager.createQuery("DELETE FROM InventoryLocation").executeUpdate();
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
         entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
