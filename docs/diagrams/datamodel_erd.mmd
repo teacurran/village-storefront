@@ -1,29 +1,24 @@
 %% Village Storefront - Entity Relationship Diagram (Mermaid)
 %% Version: Baseline (2026-01-08)
-%%
 %% References:
 %% - Architecture Overview: docs/architecture_overview.md Section 5
 %% - Tenancy ADR: docs/adr/ADR-001-tenancy.md
 %% - OpenAPI Contract: api/v1/openapi.yaml
 %% - PlantUML ERD: docs/diagrams/datamodel_erd.puml
-%%
 %% Conventions:
 %% - All tenant-scoped tables include tenant_id (UUID FK → tenants)
 %% - Audit columns: created_at, updated_at, created_by (TIMESTAMPTZ/UUID)
-%% - Monetary values: NUMERIC(19,4) mapped to Money schema in API
+%% - Monetary values: NUMERIC mapped to Money schema in API (precision 19,4)
 %% - Flexible data: JSONB columns for settings, metadata, addresses
 %% - Soft deletes: status enum includes 'deleted' where applicable
-%%
 %% RLS (Row-Level Security):
 %% All tenant-scoped tables marked with [RLS] require policies per ADR-001
 %% Policy template: USING (tenant_id = current_setting('app.current_tenant_id')::uuid)
-%%
 %% Partitioning Strategy:
 %% Tables marked with [PARTITIONED] use range partitioning by created_at
 %% - session_log: Monthly partitions, 90-day retention
 %% - audit_events: Monthly partitions, 1-year retention, archival to cold storage
 %% - background_jobs: Weekly partitions, 30-day retention
-%%
 %% Rendering:
 %% mmdc -i docs/diagrams/datamodel_erd.mmd -o docs/diagrams/datamodel_erd.png
 
@@ -35,10 +30,10 @@ erDiagram
 
     tenants {
         UUID id PK "Primary key"
-        VARCHAR(63) subdomain UK "Unique subdomain"
-        VARCHAR(255) name "Tenant display name"
-        VARCHAR(20) status "active|suspended|deleted"
-        VARCHAR(3) base_currency "ISO 4217 currency code"
+        VARCHAR subdomain UK "Unique subdomain"
+        VARCHAR name "Tenant display name"
+        VARCHAR status "active|suspended|deleted"
+        VARCHAR base_currency "ISO 4217 currency code"
         JSONB settings "Tenant-specific configuration"
         JSONB branding "Theme colors, logos, fonts"
         JSONB config_flags "Feature toggles per tenant"
@@ -50,9 +45,9 @@ erDiagram
     custom_domains {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(253) domain UK "FQDN (RFC 1035)"
+        VARCHAR domain UK "FQDN (RFC 1035)"
         BOOLEAN verified "Domain ownership verified"
-        VARCHAR(64) verification_token "DNS/HTTP verification token"
+        VARCHAR verification_token "DNS/HTTP verification token"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -64,12 +59,12 @@ erDiagram
     store_users {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(255) email "Unique per tenant"
-        VARCHAR(255) hashed_password "bcrypt/argon2 hash"
+        VARCHAR email "Unique per tenant"
+        VARCHAR hashed_password "bcrypt/argon2 hash"
         JSONB roles "Array of role strings"
         JSONB permissions "Granular permissions map"
-        VARCHAR(20) status "active|suspended|deleted"
-        VARCHAR(255) mfa_secret "TOTP secret (nullable)"
+        VARCHAR status "active|suspended|deleted"
+        VARCHAR mfa_secret "TOTP secret (nullable)"
         JSONB staff_profile "Name, phone, metadata"
         TIMESTAMPTZ last_login_at
         TIMESTAMPTZ created_at
@@ -79,11 +74,11 @@ erDiagram
     customers {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(255) email "Customer email (unique per tenant)"
-        VARCHAR(255) password_hash "Auth hash (nullable for guest)"
-        VARCHAR(255) name "Full name"
+        VARCHAR email "Customer email (unique per tenant)"
+        VARCHAR password_hash "Auth hash (nullable for guest)"
+        VARCHAR name "Full name"
         JSONB addresses "Shipping/billing addresses array"
-        VARCHAR(20) phone
+        VARCHAR phone
         INTEGER loyalty_balance "Points balance"
         JSONB preferences "Communication, marketing opts"
         TIMESTAMPTZ created_at
@@ -92,15 +87,15 @@ erDiagram
 
     session_log {
         UUID id PK "[PARTITIONED]"
-        VARCHAR(20) user_type "store_user|customer|guest"
+        VARCHAR user_type "store_user|customer|guest"
         UUID user_id FK "→ store_users.id or customers.id (nullable)"
         UUID tenant_id FK "→ tenants.id [RLS]"
         INET ip "Client IP address"
         TEXT user_agent "Client user agent"
-        VARCHAR(255) device_fingerprint "Browser fingerprint hash"
+        VARCHAR device_fingerprint "Browser fingerprint hash"
         TIMESTAMPTZ login_at "Session start"
         TIMESTAMPTZ last_activity_at "Last request timestamp"
-        VARCHAR(50) logout_reason "manual|timeout|forced|impersonation_end"
+        VARCHAR logout_reason "manual|timeout|forced|impersonation_end"
         JSONB impersonation_context "Actor details if impersonated"
         TIMESTAMPTZ created_at
     }
@@ -109,13 +104,13 @@ erDiagram
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
         UUID user_id FK "→ store_users.id (nullable)"
-        VARCHAR(255) key_hash "SHA256 hash of API key"
-        VARCHAR(20) key_prefix "First 8 chars for identification"
-        VARCHAR(100) name "Human-readable key name"
+        VARCHAR key_hash "SHA256 hash of API key"
+        VARCHAR key_prefix "First 8 chars for identification"
+        VARCHAR name "Human-readable key name"
         JSONB scopes "Allowed API operations"
         TIMESTAMPTZ expires_at
         TIMESTAMPTZ last_used_at
-        VARCHAR(20) status "active|revoked"
+        VARCHAR status "active|revoked"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -128,12 +123,12 @@ erDiagram
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
         UUID parent_id FK "→ categories.id (nullable, self-ref)"
-        VARCHAR(50) code UK "Unique code per tenant"
-        VARCHAR(255) name
-        VARCHAR(255) slug UK "URL slug per tenant"
+        VARCHAR code UK "Unique code per tenant"
+        VARCHAR name
+        VARCHAR slug UK "URL slug per tenant"
         TEXT description
         INTEGER display_order
-        VARCHAR(20) status "active|deleted"
+        VARCHAR status "active|deleted"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -141,10 +136,10 @@ erDiagram
     products {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(255) title "Product display title"
-        VARCHAR(255) slug UK "URL slug per tenant"
+        VARCHAR title "Product display title"
+        VARCHAR slug UK "URL slug per tenant"
         TEXT description "Rich text description"
-        VARCHAR(20) status "draft|active|archived|deleted"
+        VARCHAR status "draft|active|archived|deleted"
         JSONB visibility_window "start_date, end_date"
         JSONB seo "title, description, keywords"
         JSONB category_ids "Array of category UUIDs"
@@ -158,13 +153,13 @@ erDiagram
         UUID id PK
         UUID product_id FK "→ products.id"
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(100) sku UK "Unique per tenant"
-        VARCHAR(100) barcode
+        VARCHAR sku UK "Unique per tenant"
+        VARCHAR barcode
         JSONB option_values "Size, color, etc."
-        NUMERIC(19,4) price
-        NUMERIC(19,4) compare_at_price
-        VARCHAR(20) inventory_policy "continue|deny"
-        NUMERIC(10,2) weight
+        NUMERIC price
+        NUMERIC compare_at_price
+        VARCHAR inventory_policy "continue|deny"
+        NUMERIC weight
         JSONB dimensions "length, width, height"
         JSONB media_ids "Array of MediaAsset UUIDs"
         TIMESTAMPTZ created_at
@@ -174,11 +169,11 @@ erDiagram
     inventory_locations {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(255) name "Location display name"
+        VARCHAR name "Location display name"
         JSONB address "Structured address object"
-        VARCHAR(20) type "warehouse|retail|dropship|consignor"
+        VARCHAR type "warehouse|retail|dropship|consignor"
         INTEGER capacity "Max units (nullable)"
-        VARCHAR(50) timezone "IANA timezone"
+        VARCHAR timezone "IANA timezone"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -218,11 +213,11 @@ erDiagram
         JSONB discounts "Applied discount codes"
         JSONB shipping_address
         JSONB billing_address
-        VARCHAR(3) currency "ISO 4217 code"
-        NUMERIC(19,4) subtotal "Pre-tax, pre-shipping"
-        NUMERIC(19,4) tax_total
-        NUMERIC(19,4) shipping_total
-        NUMERIC(19,4) grand_total
+        VARCHAR currency "ISO 4217 code"
+        NUMERIC subtotal "Pre-tax, pre-shipping"
+        NUMERIC tax_total
+        NUMERIC shipping_total
+        NUMERIC grand_total
         TIMESTAMPTZ last_activity_at "TTL for cart expiration"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
@@ -231,12 +226,12 @@ erDiagram
     orders {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(50) order_number UK "Human-readable order ID per tenant"
+        VARCHAR order_number UK "Human-readable order ID per tenant"
         UUID customer_id FK "→ customers.id"
         JSONB cart_snapshot "Immutable cart state at checkout"
-        VARCHAR(20) status "pending|confirmed|processing|shipped|delivered|cancelled|refunded"
-        VARCHAR(20) payment_state "unpaid|authorized|paid|partially_refunded|refunded"
-        VARCHAR(20) fulfillment_state "unfulfilled|partial|fulfilled|returned"
+        VARCHAR status "pending|confirmed|processing|shipped|delivered|cancelled|refunded"
+        VARCHAR payment_state "unpaid|authorized|paid|partially_refunded|refunded"
+        VARCHAR fulfillment_state "unfulfilled|partial|fulfilled|returned"
         JSONB shipping_address
         JSONB billing_address
         JSONB totals "Subtotal, tax, shipping, grand_total"
@@ -253,7 +248,7 @@ erDiagram
         UUID variant_id FK "→ variants.id"
         UUID tenant_id FK "→ tenants.id [RLS]"
         INTEGER quantity
-        NUMERIC(19,4) unit_price "Price at time of order"
+        NUMERIC unit_price "Price at time of order"
         JSONB totals "Line-level tax, discounts"
         JSONB product_snapshot "Product/variant state at purchase"
         TIMESTAMPTZ created_at
@@ -264,12 +259,12 @@ erDiagram
         UUID id PK
         UUID order_id FK "→ orders.id"
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(50) provider "stripe|square|manual"
-        VARCHAR(255) provider_reference "External transaction ID"
-        NUMERIC(19,4) amount
-        VARCHAR(3) currency
-        NUMERIC(19,4) application_fee "Platform fee"
-        VARCHAR(20) status "pending|processing|succeeded|failed|cancelled"
+        VARCHAR provider "stripe|square|manual"
+        VARCHAR provider_reference "External transaction ID"
+        NUMERIC amount
+        VARCHAR currency
+        NUMERIC application_fee "Platform fee"
+        VARCHAR status "pending|processing|succeeded|failed|cancelled"
         TIMESTAMPTZ captured_at
         TEXT failure_reason
         JSONB metadata
@@ -281,12 +276,12 @@ erDiagram
         UUID id PK
         UUID payment_intent_id FK "→ payment_intents.id"
         UUID tenant_id FK "→ tenants.id [RLS]"
-        NUMERIC(19,4) amount
-        VARCHAR(3) currency
+        NUMERIC amount
+        VARCHAR currency
         TEXT reason "Customer reason code"
         TIMESTAMPTZ processed_at
-        VARCHAR(255) provider_reference
-        VARCHAR(20) status "pending|processing|succeeded|failed"
+        VARCHAR provider_reference
+        VARCHAR status "pending|processing|succeeded|failed"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -295,12 +290,12 @@ erDiagram
         UUID id PK
         UUID order_id FK "→ orders.id"
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(100) carrier "usps|ups|fedex|dhl"
-        VARCHAR(100) service_level "standard|express|overnight"
-        VARCHAR(255) tracking_number
+        VARCHAR carrier "usps|ups|fedex|dhl"
+        VARCHAR service_level "standard|express|overnight"
+        VARCHAR tracking_number
         JSONB labels "Array of label URLs"
         JSONB packages "Box dimensions, weights"
-        VARCHAR(20) status "pending|in_transit|delivered|failed"
+        VARCHAR status "pending|in_transit|delivered|failed"
         TIMESTAMPTZ shipped_at
         TIMESTAMPTZ delivered_at
         TIMESTAMPTZ created_at
@@ -313,11 +308,11 @@ erDiagram
         UUID tenant_id FK "→ tenants.id [RLS]"
         JSONB items "Returned line items"
         JSONB reason_codes "Return reasons per item"
-        VARCHAR(20) status "requested|approved|received|restocked|rejected"
+        VARCHAR status "requested|approved|received|restocked|rejected"
         UUID approved_by FK "→ store_users.id (nullable)"
         TIMESTAMPTZ received_at
-        VARCHAR(50) restock_decision "restock|discard|quarantine"
-        NUMERIC(19,4) refund_amount
+        VARCHAR restock_decision "restock|discard|quarantine"
+        NUMERIC refund_amount
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -333,8 +328,8 @@ erDiagram
         JSONB tax_info "SSN/EIN, W9 data"
         JSONB commission_rules "Percentage by category/tier"
         JSONB payout_preferences "ACH, PayPal, check"
-        VARCHAR(255) portal_access_token "Portal login token hash"
-        VARCHAR(20) status "active|suspended|deleted"
+        VARCHAR portal_access_token "Portal login token hash"
+        VARCHAR status "active|suspended|deleted"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -344,12 +339,12 @@ erDiagram
         UUID tenant_id FK "→ tenants.id [RLS]"
         UUID variant_id FK "→ variants.id"
         UUID consignor_id FK "→ consignors.id"
-        NUMERIC(19,4) cost_basis "Consignor's cost"
+        NUMERIC cost_basis "Consignor's cost"
         TIMESTAMPTZ received_at
         TIMESTAMPTZ expires_at "Consignment agreement expiry"
-        VARCHAR(20) status "available|sold|returned|expired"
+        VARCHAR status "available|sold|returned|expired"
         INTEGER aging_days "Days since received"
-        VARCHAR(20) payout_state "pending|paid"
+        VARCHAR payout_state "pending|paid"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -360,11 +355,11 @@ erDiagram
         UUID consignor_id FK "→ consignors.id"
         DATE period_start
         DATE period_end
-        NUMERIC(19,4) total_amount
-        VARCHAR(3) currency
-        VARCHAR(20) status "pending|processing|completed|failed"
+        NUMERIC total_amount
+        VARCHAR currency
+        VARCHAR status "pending|processing|completed|failed"
         TIMESTAMPTZ processed_at
-        VARCHAR(255) payment_reference
+        VARCHAR payment_reference
         JSONB line_items "Array of sold items"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
@@ -383,7 +378,7 @@ erDiagram
         UUID order_id FK "→ orders.id (nullable)"
         INTEGER balance_after "Running balance snapshot"
         TIMESTAMPTZ expires_at "Point expiration (nullable)"
-        VARCHAR(50) source "order|promotion|manual|expiration"
+        VARCHAR source "order|promotion|manual|expiration"
         TIMESTAMPTZ created_at
     }
 
@@ -394,13 +389,13 @@ erDiagram
     gift_cards {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(255) code UK "Redemption code per tenant"
-        NUMERIC(19,4) initial_balance
-        NUMERIC(19,4) current_balance
-        VARCHAR(3) currency
+        VARCHAR code UK "Redemption code per tenant"
+        NUMERIC initial_balance
+        NUMERIC current_balance
+        VARCHAR currency
         UUID customer_id FK "→ customers.id (nullable, recipient)"
         TIMESTAMPTZ expires_at
-        VARCHAR(20) status "active|redeemed|expired|cancelled"
+        VARCHAR status "active|redeemed|expired|cancelled"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -409,12 +404,12 @@ erDiagram
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
         UUID customer_id FK "→ customers.id"
-        NUMERIC(19,4) amount
-        VARCHAR(3) currency
+        NUMERIC amount
+        VARCHAR currency
         TEXT reason "Refund, compensation, promotion"
         UUID order_id FK "→ orders.id (nullable)"
         TIMESTAMPTZ expires_at
-        VARCHAR(20) status "active|used|expired"
+        VARCHAR status "active|used|expired"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -426,15 +421,15 @@ erDiagram
     media_assets {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(255) storage_key "Object storage path (tenant_id/media_type/hash/file)"
-        VARCHAR(100) filename "Original filename"
-        VARCHAR(50) mime_type "image/jpeg, video/mp4, etc."
-        VARCHAR(20) media_type "product_image|logo|banner|document"
+        VARCHAR storage_key "Object storage path (tenant_id/media_type/hash/file)"
+        VARCHAR filename "Original filename"
+        VARCHAR mime_type "image/jpeg, video/mp4, etc."
+        VARCHAR media_type "product_image|logo|banner|document"
         INTEGER file_size "Bytes"
         INTEGER width "Pixels (nullable, images only)"
         INTEGER height "Pixels (nullable, images only)"
         JSONB variants "Processed sizes/formats"
-        VARCHAR(20) status "processing|ready|failed"
+        VARCHAR status "processing|ready|failed"
         JSONB metadata "EXIF, alt_text, copyright"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
@@ -447,7 +442,7 @@ erDiagram
     feature_flags {
         UUID id PK
         UUID tenant_id FK "→ tenants.id (nullable, platform defaults) [RLS]"
-        VARCHAR(100) key UK "Global or tenant-specific flag key"
+        VARCHAR key UK "Global or tenant-specific flag key"
         TEXT description
         BOOLEAN default_state "Global default"
         JSONB allowed_audiences "Tenant IDs, user roles"
@@ -459,10 +454,10 @@ erDiagram
     audit_events {
         UUID id PK "[PARTITIONED]"
         UUID tenant_id FK "→ tenants.id (nullable, platform events) [RLS]"
-        VARCHAR(20) actor_type "store_user|customer|system"
+        VARCHAR actor_type "store_user|customer|system"
         UUID actor_id "→ store_users.id or customers.id (nullable)"
-        VARCHAR(100) action "create|update|delete|view|export"
-        VARCHAR(100) target_type "product|order|customer|setting"
+        VARCHAR action "create|update|delete|view|export"
+        VARCHAR target_type "product|order|customer|setting"
         UUID target_id "Entity UUID"
         JSONB metadata "Changed fields, IP, user_agent"
         JSONB impersonation_context "Impersonator details (nullable)"
@@ -472,7 +467,7 @@ erDiagram
 
     background_jobs {
         UUID id PK "[PARTITIONED]"
-        VARCHAR(100) queue "default|import|export|email|media"
+        VARCHAR queue "default|import|export|email|media"
         INTEGER priority "1=highest, 10=lowest"
         JSONB payload "Handler class, arguments"
         INTEGER attempts "Retry count"
@@ -489,11 +484,11 @@ erDiagram
     webhook_events {
         UUID id PK
         UUID tenant_id FK "→ tenants.id [RLS]"
-        VARCHAR(100) provider "stripe|shippo|mailgun"
-        VARCHAR(100) event_type "payment.succeeded, shipment.delivered"
+        VARCHAR provider "stripe|shippo|mailgun"
+        VARCHAR event_type "payment.succeeded, shipment.delivered"
         JSONB payload "Raw webhook body"
-        VARCHAR(255) idempotency_key UK "Provider event ID"
-        VARCHAR(20) status "pending|processed|failed|ignored"
+        VARCHAR idempotency_key UK "Provider event ID"
+        VARCHAR status "pending|processed|failed|ignored"
         TEXT processing_error
         INTEGER attempts
         TIMESTAMPTZ processed_at
@@ -504,9 +499,9 @@ erDiagram
     domain_events {
         UUID id PK "[PARTITIONED]"
         UUID tenant_id FK "→ tenants.id (nullable, platform events) [RLS]"
-        VARCHAR(100) event_type "OrderPlaced, InventoryUpdated, etc."
+        VARCHAR event_type "OrderPlaced, InventoryUpdated, etc."
         UUID aggregate_id "Entity UUID"
-        VARCHAR(100) aggregate_type "Order, Product, Customer"
+        VARCHAR aggregate_type "Order, Product, Customer"
         JSONB payload "Event data"
         UUID caused_by FK "→ store_users.id or customers.id (nullable)"
         TIMESTAMPTZ occurred_at
@@ -516,9 +511,9 @@ erDiagram
     platform_commands {
         UUID id PK
         UUID tenant_id FK "→ tenants.id (nullable, platform-level commands) [RLS]"
-        VARCHAR(100) command_type "SuspendTenant, MigrateTenant, etc."
+        VARCHAR command_type "SuspendTenant, MigrateTenant, etc."
         JSONB payload "Command arguments"
-        VARCHAR(20) status "pending|processing|completed|failed"
+        VARCHAR status "pending|processing|completed|failed"
         UUID executed_by FK "→ store_users.id (platform admin)"
         TIMESTAMPTZ executed_at
         TEXT execution_result
@@ -528,12 +523,12 @@ erDiagram
 
     rate_limit_buckets {
         UUID id PK
-        VARCHAR(100) key UK "API endpoint or action identifier"
+        VARCHAR key UK "API endpoint or action identifier"
         UUID tenant_id FK "→ tenants.id (nullable, platform-level limits) [RLS]"
         UUID user_id FK "→ store_users.id or customers.id (nullable)"
         INTEGER tokens "Remaining tokens in bucket"
         INTEGER capacity "Max tokens (burst size)"
-        NUMERIC(10,2) refill_rate "Tokens per second"
+        NUMERIC refill_rate "Tokens per second"
         TIMESTAMPTZ last_refill_at
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
