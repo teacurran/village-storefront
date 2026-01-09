@@ -502,11 +502,10 @@ public class StorefrontResource {
                 .data("categoryDescription", categoryDescription).data("breadcrumbs", breadcrumbs)
                 .data("products", mapProductsToDisplayData(products)).data("totalProducts", totalProducts)
                 .data("currentPage", page).data("currentPageDisplay", currentPageDisplay).data("totalPages", totalPages)
-                .data("totalPagesDisplay", totalPagesDisplay).data("pageNumbers", pageNumbers)
-                .data("sortBy", sortBy).data("sortParam", sortParam).data("filterParams", filterParams)
-                .data("filters", filters).data("activeFilters", activeFilters).data("locale", locale)
-                .data("currentYear", Year.now().getValue()).data("pageTitle", categoryName)
-                .data("seoDescription", categoryDescription).render();
+                .data("totalPagesDisplay", totalPagesDisplay).data("pageNumbers", pageNumbers).data("sortBy", sortBy)
+                .data("sortParam", sortParam).data("filterParams", filterParams).data("filters", filters)
+                .data("activeFilters", activeFilters).data("locale", locale).data("currentYear", Year.now().getValue())
+                .data("pageTitle", categoryName).data("seoDescription", categoryDescription).render();
     }
 
     /**

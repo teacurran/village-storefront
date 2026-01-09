@@ -35,7 +35,11 @@ import villagecompute.storefront.data.repositories.CollectionRepository;
 import villagecompute.storefront.services.CatalogJobService;
 import villagecompute.storefront.services.mappers.CategoryMapper;
 import villagecompute.storefront.services.mappers.CollectionMapper;
+import villagecompute.storefront.services.metrics.CatalogMetrics;
 import villagecompute.storefront.tenant.TenantContext;
+
+import io.micrometer.core.annotation.Timed;
+import io.opentelemetry.api.trace.Span;
 
 /**
  * REST resource for admin catalog management operations.
@@ -88,6 +92,9 @@ public class CatalogAdminResource {
     @Inject
     CatalogJobService catalogJobService;
 
+    @Inject
+    CatalogMetrics catalogMetrics;
+
     // ========================================
     // Category Endpoints
     // ========================================
@@ -99,9 +106,15 @@ public class CatalogAdminResource {
      */
     @GET
     @Path("/categories")
+    @Timed(
+            value = "catalog.admin.category.list",
+            description = "Time to list categories")
     public Response listCategories() {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("GET /admin/catalog/categories - tenantId=%s", tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "list_categories");
 
         List<Category> categories = categoryRepository.findByCurrentTenant();
         List<CategoryDto> dtos = categories.stream().map(categoryMapper::toDto).collect(Collectors.toList());
@@ -119,9 +132,16 @@ public class CatalogAdminResource {
     @POST
     @Path("/categories")
     @Transactional
+    @Timed(
+            value = "catalog.admin.category.create",
+            description = "Time to create category")
     public Response createCategory(@Valid CategoryDto dto) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/catalog/categories - tenantId=%s, code=%s", tenantId, dto.code);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "create_category");
+        span.setAttribute("category.code", dto.code);
 
         // Check for duplicate code
         if (categoryRepository.findByCode(dto.code).isPresent()) {
@@ -138,6 +158,8 @@ public class CatalogAdminResource {
         Category category = categoryMapper.toEntity(dto);
         category.parent = parentCategory;
         categoryRepository.persist(category);
+
+        catalogMetrics.recordCategoryCreated(tenantId);
 
         CategoryDto responseDto = categoryMapper.toDto(category);
         return Response.status(Status.CREATED).entity(responseDto).build();
@@ -183,9 +205,16 @@ public class CatalogAdminResource {
     @PUT
     @Path("/categories/{categoryId}")
     @Transactional
+    @Timed(
+            value = "catalog.admin.category.update",
+            description = "Time to update category")
     public Response updateCategory(@PathParam("categoryId") UUID categoryId, @Valid CategoryDto dto) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("PUT /admin/catalog/categories/%s - tenantId=%s", categoryId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "update_category");
+        span.setAttribute("category.id", categoryId.toString());
 
         Optional<Category> categoryOpt = categoryRepository.findByIdOptional(categoryId);
 
@@ -216,6 +245,7 @@ public class CatalogAdminResource {
         category.parent = parentCategory;
 
         categoryRepository.persist(category);
+        catalogMetrics.recordCategoryUpdated(tenantId);
 
         CategoryDto responseDto = categoryMapper.toDto(category);
         return Response.ok(responseDto).build();
@@ -231,9 +261,16 @@ public class CatalogAdminResource {
     @DELETE
     @Path("/categories/{categoryId}")
     @Transactional
+    @Timed(
+            value = "catalog.admin.category.delete",
+            description = "Time to delete category")
     public Response deleteCategory(@PathParam("categoryId") UUID categoryId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("DELETE /admin/catalog/categories/%s - tenantId=%s", categoryId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "delete_category");
+        span.setAttribute("category.id", categoryId.toString());
 
         Optional<Category> categoryOpt = categoryRepository.findByIdOptional(categoryId);
 
@@ -246,6 +283,7 @@ public class CatalogAdminResource {
         Category category = categoryOpt.get();
         category.status = "deleted";
         categoryRepository.persist(category);
+        catalogMetrics.recordCategoryDeleted(tenantId);
 
         return Response.noContent().build();
     }
@@ -267,12 +305,21 @@ public class CatalogAdminResource {
      */
     @GET
     @Path("/collections")
+    @Timed(
+            value = "catalog.admin.collection.list",
+            description = "Time to list collections")
     public Response listCollections(@QueryParam("status") String status, @QueryParam("page") Integer page,
             @QueryParam("pageSize") Integer pageSize) {
 
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("GET /admin/catalog/collections - tenantId=%s, status=%s, page=%d, pageSize=%d", tenantId, status,
                 page, pageSize);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "list_collections");
+        if (status != null && !status.isBlank()) {
+            span.setAttribute("collection.status_filter", status);
+        }
 
         // Validate pagination parameters
         int pageNumber = page != null && page > 0 ? page - 1 : 0; // Convert to 0-indexed
@@ -315,9 +362,16 @@ public class CatalogAdminResource {
     @POST
     @Path("/collections")
     @Transactional
+    @Timed(
+            value = "catalog.admin.collection.create",
+            description = "Time to create collection")
     public Response createCollection(@Valid CollectionDto dto) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/catalog/collections - tenantId=%s, code=%s", tenantId, dto.code);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "create_collection");
+        span.setAttribute("collection.code", dto.code);
 
         // Check for duplicate code
         if (collectionRepository.findByCode(dto.code).isPresent()) {
@@ -327,6 +381,7 @@ public class CatalogAdminResource {
 
         Collection collection = collectionMapper.toEntity(dto);
         collectionRepository.persist(collection);
+        catalogMetrics.recordCollectionCreated(tenantId);
 
         CollectionDto responseDto = collectionMapper.toDto(collection);
         return Response.status(Status.CREATED).entity(responseDto).build();
@@ -341,9 +396,16 @@ public class CatalogAdminResource {
      */
     @GET
     @Path("/collections/{collectionId}")
+    @Timed(
+            value = "catalog.admin.collection.get",
+            description = "Time to fetch collection details")
     public Response getCollection(@PathParam("collectionId") UUID collectionId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("GET /admin/catalog/collections/%s - tenantId=%s", collectionId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "get_collection");
+        span.setAttribute("collection.id", collectionId.toString());
 
         Optional<Collection> collectionOpt = collectionRepository.findByIdAndTenant(collectionId);
 
@@ -371,9 +433,16 @@ public class CatalogAdminResource {
     @PUT
     @Path("/collections/{collectionId}")
     @Transactional
+    @Timed(
+            value = "catalog.admin.collection.update",
+            description = "Time to update collection")
     public Response updateCollection(@PathParam("collectionId") UUID collectionId, @Valid CollectionDto dto) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("PUT /admin/catalog/collections/%s - tenantId=%s", collectionId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "update_collection");
+        span.setAttribute("collection.id", collectionId.toString());
 
         Optional<Collection> collectionOpt = collectionRepository.findByIdAndTenant(collectionId);
 
@@ -400,6 +469,7 @@ public class CatalogAdminResource {
         collection.seoDescription = dto.seoDescription;
 
         collectionRepository.persist(collection);
+        catalogMetrics.recordCollectionUpdated(tenantId);
 
         CollectionDto responseDto = collectionMapper.toDto(collection);
         return Response.ok(responseDto).build();
@@ -415,9 +485,16 @@ public class CatalogAdminResource {
     @DELETE
     @Path("/collections/{collectionId}")
     @Transactional
+    @Timed(
+            value = "catalog.admin.collection.delete",
+            description = "Time to delete collection")
     public Response deleteCollection(@PathParam("collectionId") UUID collectionId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("DELETE /admin/catalog/collections/%s - tenantId=%s", collectionId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "delete_collection");
+        span.setAttribute("collection.id", collectionId.toString());
 
         Optional<Collection> collectionOpt = collectionRepository.findByIdAndTenant(collectionId);
 
@@ -429,6 +506,7 @@ public class CatalogAdminResource {
         Collection collection = collectionOpt.get();
         collection.status = "deleted";
         collectionRepository.persist(collection);
+        catalogMetrics.recordCollectionDeleted(tenantId);
 
         return Response.noContent().build();
     }
@@ -446,9 +524,15 @@ public class CatalogAdminResource {
      */
     @POST
     @Path("/import")
+    @Timed(
+            value = "catalog.admin.import.enqueue",
+            description = "Time to enqueue catalog import job")
     public Response importCatalog(Map<String, Object> request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/catalog/import - tenantId=%s", tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "import_enqueue");
 
         // Extract request parameters
         String fileLocation = (String) request.get("fileLocation");
@@ -463,22 +547,30 @@ public class CatalogAdminResource {
                     .build();
         }
 
+        span.setAttribute("import.file_location", fileLocation);
+        span.setAttribute("import.requested_by", requestedBy);
+
         try {
             UUID jobId = catalogJobService.enqueueImport(fileLocation, requestedBy, options);
+            catalogMetrics.recordImportEnqueued(tenantId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("jobId", jobId.toString());
             response.put("status", "enqueued");
             response.put("message", "Catalog import job enqueued successfully");
 
+            span.setAttribute("import.job_id", jobId.toString());
+
             return Response.accepted().entity(response).build();
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Import request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            catalogMetrics.recordImportFailure(tenantId, "validation_error");
             return Response.status(Status.BAD_REQUEST)
                     .entity(createProblemDetails("Invalid Request", e.getMessage(), Status.BAD_REQUEST)).build();
         } catch (IllegalStateException e) {
             LOG.warnf("Import request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            catalogMetrics.recordImportFailure(tenantId, "service_unavailable");
             return Response.status(Status.SERVICE_UNAVAILABLE)
                     .entity(createProblemDetails("Import Unavailable", e.getMessage(), Status.SERVICE_UNAVAILABLE))
                     .build();
@@ -494,9 +586,15 @@ public class CatalogAdminResource {
      */
     @POST
     @Path("/export")
+    @Timed(
+            value = "catalog.admin.export.enqueue",
+            description = "Time to enqueue catalog export job")
     public Response exportCatalog(Map<String, Object> request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/catalog/export - tenantId=%s", tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "export_enqueue");
 
         String requestedBy = (String) request.getOrDefault("requestedBy", "admin");
         String format = (String) request.getOrDefault("format", "csv");
@@ -504,22 +602,30 @@ public class CatalogAdminResource {
         @SuppressWarnings("unchecked")
         Map<String, String> filters = (Map<String, String>) request.getOrDefault("filters", new HashMap<>());
 
+        span.setAttribute("export.format", format);
+        span.setAttribute("export.requested_by", requestedBy);
+
         try {
             UUID jobId = catalogJobService.enqueueExport(requestedBy, filters, format);
+            catalogMetrics.recordExportEnqueued(tenantId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("jobId", jobId.toString());
             response.put("status", "enqueued");
             response.put("message", "Catalog export job enqueued successfully");
 
+            span.setAttribute("export.job_id", jobId.toString());
+
             return Response.accepted().entity(response).build();
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Export request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            catalogMetrics.recordExportFailure(tenantId, "validation_error");
             return Response.status(Status.BAD_REQUEST)
                     .entity(createProblemDetails("Invalid Request", e.getMessage(), Status.BAD_REQUEST)).build();
         } catch (IllegalStateException e) {
             LOG.warnf("Export request rejected - tenantId=%s, error=%s", tenantId, e.getMessage());
+            catalogMetrics.recordExportFailure(tenantId, "service_unavailable");
             return Response.status(Status.SERVICE_UNAVAILABLE)
                     .entity(createProblemDetails("Export Unavailable", e.getMessage(), Status.SERVICE_UNAVAILABLE))
                     .build();
@@ -546,6 +652,16 @@ public class CatalogAdminResource {
             problem.put("detail", detail);
         }
         return problem;
+    }
+
+    private Span spanWithTenant(UUID tenantId) {
+        Span span = Span.current();
+        if (tenantId != null && span.getSpanContext().isValid()) {
+            String tenantValue = tenantId.toString();
+            span.setAttribute("tenant.id", tenantValue);
+            span.setAttribute("tenant_id", tenantValue);
+        }
+        return span;
     }
 
     private Category resolveParentCategory(UUID parentId, UUID tenantId) {

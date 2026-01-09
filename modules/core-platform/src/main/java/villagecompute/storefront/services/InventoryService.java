@@ -12,9 +12,8 @@ import org.jboss.logging.Logger;
 
 import villagecompute.storefront.data.models.InventoryLevel;
 import villagecompute.storefront.data.repositories.InventoryLevelRepository;
+import villagecompute.storefront.services.metrics.InventoryMetrics;
 import villagecompute.storefront.tenant.TenantContext;
-
-import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Service layer for inventory management operations.
@@ -39,7 +38,7 @@ public class InventoryService {
     InventoryLevelRepository inventoryRepository;
 
     @Inject
-    MeterRegistry meterRegistry;
+    InventoryMetrics inventoryMetrics;
 
     /**
      * Create or update inventory level for a variant at a location.
@@ -78,8 +77,7 @@ public class InventoryService {
         }
 
         inventoryRepository.persist(inventoryLevel);
-        meterRegistry.counter("inventory.level.updated", "tenant_id", tenantId.toString(), "location", location)
-                .increment();
+        inventoryMetrics.recordLevelUpdated(tenantId, location);
 
         return inventoryLevel;
     }
@@ -158,8 +156,7 @@ public class InventoryService {
 
         LOG.infof("Inventory reserved - tenantId=%s, variantId=%s, location=%s, reserved=%d", tenantId, variantId,
                 location, quantity);
-        meterRegistry.counter("inventory.reserved", "tenant_id", tenantId.toString(), "location", location)
-                .increment(quantity);
+        inventoryMetrics.recordReserved(tenantId, location, quantity);
 
         return inventoryLevel;
     }
@@ -190,6 +187,7 @@ public class InventoryService {
 
         LOG.infof("Inventory reservation released - tenantId=%s, variantId=%s, location=%s, released=%d", tenantId,
                 variantId, location, quantity);
+        inventoryMetrics.recordReleased(tenantId, location, quantity);
 
         return inventoryLevel;
     }
@@ -221,8 +219,7 @@ public class InventoryService {
 
         LOG.infof("Inventory reservation committed - tenantId=%s, variantId=%s, location=%s, committed=%d", tenantId,
                 variantId, location, quantity);
-        meterRegistry.counter("inventory.committed", "tenant_id", tenantId.toString(), "location", location)
-                .increment(quantity);
+        inventoryMetrics.recordCommitted(tenantId, location, quantity);
 
         return inventoryLevel;
     }

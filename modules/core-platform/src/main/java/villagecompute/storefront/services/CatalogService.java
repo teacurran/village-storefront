@@ -19,10 +19,9 @@ import villagecompute.storefront.data.repositories.CategoryRepository;
 import villagecompute.storefront.data.repositories.CollectionRepository;
 import villagecompute.storefront.data.repositories.ProductRepository;
 import villagecompute.storefront.data.repositories.ProductVariantRepository;
+import villagecompute.storefront.services.metrics.CatalogMetrics;
 import villagecompute.storefront.services.validation.CatalogValidator;
 import villagecompute.storefront.tenant.TenantContext;
-
-import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Service layer for catalog operations (products, variants, categories).
@@ -62,7 +61,7 @@ public class CatalogService {
     CatalogCacheService catalogCacheService;
 
     @Inject
-    MeterRegistry meterRegistry;
+    CatalogMetrics catalogMetrics;
 
     // ========================================
     // Product Operations
@@ -90,7 +89,7 @@ public class CatalogService {
 
         LOG.infof("Product created successfully - tenantId=%s, productId=%s, sku=%s", tenantId, product.id,
                 product.sku);
-        meterRegistry.counter("catalog.product.created", "tenant_id", tenantId.toString()).increment();
+        catalogMetrics.recordProductCreated(tenantId);
 
         return product;
     }
@@ -144,6 +143,7 @@ public class CatalogService {
         catalogCacheService.invalidateTenantCache(tenantId, "product-updated");
 
         LOG.infof("Product updated successfully - tenantId=%s, productId=%s", tenantId, productId);
+        catalogMetrics.recordProductUpdated(tenantId);
         return product;
     }
 
@@ -256,9 +256,13 @@ public class CatalogService {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("Searching products - tenantId=%s, term=%s, page=%d, size=%d", tenantId, searchTerm, page, size);
 
+        long startTime = System.currentTimeMillis();
         List<Product> results = productRepository.searchProducts(searchTerm, page, size);
         long total = productRepository.countSearchResults(searchTerm);
-        meterRegistry.counter("catalog.product.search", "tenant_id", tenantId.toString()).increment();
+        long duration = System.currentTimeMillis() - startTime;
+
+        catalogMetrics.recordProductSearch(tenantId, duration);
+        catalogMetrics.recordProductSearchResults(tenantId, results.size());
 
         return new CatalogSearchResult(results, total);
     }
@@ -296,6 +300,7 @@ public class CatalogService {
         catalogCacheService.invalidateTenantCache(tenantId, "product-deleted");
 
         LOG.infof("Product deleted successfully - tenantId=%s, productId=%s", tenantId, productId);
+        catalogMetrics.recordProductDeleted(tenantId);
     }
 
     // ========================================
@@ -419,7 +424,7 @@ public class CatalogService {
         catalogCacheService.invalidateTenantCache(tenantId, "collection-created");
 
         LOG.infof("Collection created successfully - tenantId=%s, collectionId=%s", tenantId, collection.id);
-        meterRegistry.counter("catalog.collection.created", "tenant_id", tenantId.toString()).increment();
+        catalogMetrics.recordCollectionCreated(tenantId);
 
         return collection;
     }
@@ -476,6 +481,7 @@ public class CatalogService {
         catalogCacheService.invalidateTenantCache(tenantId, "collection-updated");
 
         LOG.infof("Collection updated successfully - tenantId=%s, collectionId=%s", tenantId, collectionId);
+        catalogMetrics.recordCollectionUpdated(tenantId);
         return collection;
     }
 
@@ -568,6 +574,7 @@ public class CatalogService {
         catalogCacheService.invalidateTenantCache(tenantId, "collection-deleted");
 
         LOG.infof("Collection deleted successfully - tenantId=%s, collectionId=%s", tenantId, collectionId);
+        catalogMetrics.recordCollectionDeleted(tenantId);
     }
 
     // ========================================
@@ -591,6 +598,7 @@ public class CatalogService {
 
         LOG.infof("Variant created successfully - tenantId=%s, variantId=%s, sku=%s", tenantId, variant.id,
                 variant.sku);
+        catalogMetrics.recordVariantCreated(tenantId);
         return variant;
     }
 

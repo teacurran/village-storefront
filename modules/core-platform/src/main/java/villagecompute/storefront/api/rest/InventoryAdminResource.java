@@ -34,7 +34,11 @@ import villagecompute.storefront.data.repositories.InventoryLocationRepository;
 import villagecompute.storefront.services.InvalidLocationException;
 import villagecompute.storefront.services.InventoryTransferService;
 import villagecompute.storefront.services.mappers.InventoryMapper;
+import villagecompute.storefront.services.metrics.InventoryMetrics;
 import villagecompute.storefront.tenant.TenantContext;
+
+import io.micrometer.core.annotation.Timed;
+import io.opentelemetry.api.trace.Span;
 
 /**
  * REST resource for admin inventory management operations.
@@ -77,6 +81,9 @@ public class InventoryAdminResource {
 
     @Inject
     InventoryMapper inventoryMapper;
+
+    @Inject
+    InventoryMetrics inventoryMetrics;
 
     // ========================================
     // Location Endpoints
@@ -183,10 +190,18 @@ public class InventoryAdminResource {
      */
     @POST
     @Path("/transfers")
+    @Timed(
+            value = "inventory.admin.transfer.create",
+            description = "Time to create inventory transfer")
     public Response createTransfer(@Valid CreateInventoryTransferRequest request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/inventory/transfers - tenantId=%s, sourceLocationId=%s, destinationLocationId=%s",
                 tenantId, request.getSourceLocationId(), request.getDestinationLocationId());
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("inventory.operation", "create_transfer");
+        span.setAttribute("transfer.source_location_id", request.getSourceLocationId().toString());
+        span.setAttribute("transfer.destination_location_id", request.getDestinationLocationId().toString());
 
         try {
             // Load locations
@@ -224,6 +239,9 @@ public class InventoryAdminResource {
 
             // Create transfer (validates, reserves inventory, enqueues barcode job)
             InventoryTransfer createdTransfer = transferService.createTransfer(transfer);
+            inventoryMetrics.recordTransferCreated(tenantId, sourceLocation.code, destinationLocation.code);
+
+            span.setAttribute("transfer.id", createdTransfer.id.toString());
 
             InventoryTransferDto dto = inventoryMapper.toDto(createdTransfer);
             return Response.status(Status.CREATED).entity(dto).build();
@@ -244,12 +262,21 @@ public class InventoryAdminResource {
      */
     @POST
     @Path("/transfers/{transferId}/receive")
+    @Timed(
+            value = "inventory.admin.transfer.receive",
+            description = "Time to receive inventory transfer")
     public Response receiveTransfer(@PathParam("transferId") UUID transferId) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/inventory/transfers/%s/receive - tenantId=%s", transferId, tenantId);
 
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("inventory.operation", "receive_transfer");
+        span.setAttribute("transfer.id", transferId.toString());
+
         try {
             InventoryTransfer transfer = transferService.receiveTransfer(transferId);
+            inventoryMetrics.recordTransferReceived(tenantId, transfer.destinationLocation.code);
+
             InventoryTransferDto dto = inventoryMapper.toDto(transfer);
             return Response.ok(dto).build();
         } catch (IllegalArgumentException e) {
@@ -272,10 +299,20 @@ public class InventoryAdminResource {
      */
     @POST
     @Path("/adjustments")
+    @Timed(
+            value = "inventory.admin.adjustment.create",
+            description = "Time to record inventory adjustment")
     public Response createAdjustment(@Valid CreateInventoryAdjustmentRequest request) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("POST /admin/inventory/adjustments - tenantId=%s, variantId=%s, locationId=%s, change=%d", tenantId,
                 request.getVariantId(), request.getLocationId(), request.getQuantityChange());
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("inventory.operation", "create_adjustment");
+        span.setAttribute("adjustment.variant_id", request.getVariantId().toString());
+        span.setAttribute("adjustment.location_id", request.getLocationId().toString());
+        span.setAttribute("adjustment.quantity_change", request.getQuantityChange());
+        span.setAttribute("adjustment.reason", request.getReason());
 
         try {
             AdjustmentReason reason = AdjustmentReason.valueOf(request.getReason().toUpperCase());
@@ -283,6 +320,12 @@ public class InventoryAdminResource {
             InventoryAdjustment adjustment = transferService.recordAdjustment(request.getVariantId(),
                     request.getLocationId(), request.getQuantityChange(), reason, request.getAdjustedBy(),
                     request.getNotes());
+
+            // Record metrics - fetch location code from adjustment
+            InventoryLocation location = locationRepository.findByIdForTenant(request.getLocationId())
+                    .orElseThrow(() -> new InvalidLocationException(request.getLocationId()));
+            inventoryMetrics.recordAdjustment(tenantId, location.code, request.getReason(),
+                    request.getQuantityChange());
 
             InventoryAdjustmentDto dto = inventoryMapper.toDto(adjustment);
             return Response.status(Status.CREATED).entity(dto).build();
@@ -292,5 +335,15 @@ public class InventoryAdminResource {
         } catch (InvalidLocationException e) {
             return Response.status(Status.NOT_FOUND).entity(e.getMessage()).build();
         }
+    }
+
+    private Span spanWithTenant(UUID tenantId) {
+        Span span = Span.current();
+        if (tenantId != null && span.getSpanContext().isValid()) {
+            String tenantValue = tenantId.toString();
+            span.setAttribute("tenant.id", tenantValue);
+            span.setAttribute("tenant_id", tenantValue);
+        }
+        return span;
     }
 }
