@@ -1,6 +1,5 @@
 package villagecompute.storefront.api.rest;
 
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +24,13 @@ import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
 
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
 import villagecompute.storefront.api.types.AddToCartRequest;
@@ -36,6 +42,7 @@ import villagecompute.storefront.data.models.CartItem;
 import villagecompute.storefront.services.CartService;
 import villagecompute.storefront.services.mappers.CartMapper;
 import villagecompute.storefront.tenant.TenantContext;
+import villagecompute.storefront.util.ProblemDetailsUtil;
 
 /**
  * REST resource for cart operations.
@@ -57,11 +64,15 @@ import villagecompute.storefront.tenant.TenantContext;
  * References:
  * <ul>
  * <li>Task I2.T4: Cart REST endpoints with optimistic locking and Problem Details</li>
+ * <li>Task I3.T2: Add OpenAPI annotations and ProblemDetailsUtil usage</li>
  * <li>OpenAPI: /cart endpoints specification</li>
  * </ul>
  */
 @Path("/api/v1/cart")
 @Produces(MediaType.APPLICATION_JSON)
+@Tag(
+        name = "Storefront",
+        description = "Customer-facing cart operations")
 public class CartResource {
 
     private static final Logger LOG = Logger.getLogger(CartResource.class);
@@ -85,6 +96,28 @@ public class CartResource {
      * @return cart DTO
      */
     @GET
+    @Operation(
+            summary = "Get current user's cart",
+            description = """
+                    Returns the active cart for the authenticated user or guest session.
+                    Includes all line items with calculated totals.
+
+                    **Authentication:** Optional - guest carts tracked via session, user carts via JWT.
+                    Provide the X-Session-Id header (or rely on the vs_session cookie issued by the API) to continue a guest cart.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Cart retrieved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = CartDto.class))),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "No active cart found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
     public Response getCart() {
         SessionContext session = resolveSessionContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
@@ -92,8 +125,8 @@ public class CartResource {
 
         Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
         if (cartOptional.isEmpty()) {
-            return respond(session, Response.status(Status.NOT_FOUND).entity(
-                    createProblemDetails("Cart Not Found", "No active cart found for session", Status.NOT_FOUND)));
+            return respond(session, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
         }
 
         Cart cart = cartOptional.get();
@@ -108,6 +141,21 @@ public class CartResource {
      * @return 204 No Content
      */
     @DELETE
+    @Operation(
+            summary = "Clear all items from cart",
+            description = """
+                    Removes all line items from the cart. The cart entity itself remains
+                    and can be reused for future items.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "204",
+                    description = "Cart cleared successfully"),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
     public Response clearCart() {
         SessionContext session = resolveSessionContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
@@ -115,8 +163,8 @@ public class CartResource {
 
         Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
         if (cartOptional.isEmpty()) {
-            return respond(session, Response.status(Status.NOT_FOUND).entity(
-                    createProblemDetails("Cart Not Found", "No active cart found for session", Status.NOT_FOUND)));
+            return respond(session, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
         }
 
         cartService.clearCart(cartOptional.get().id);
@@ -133,6 +181,41 @@ public class CartResource {
     @POST
     @Path("/items")
     @Consumes(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Add item to cart",
+            description = """
+                    Adds a product variant to the cart with specified quantity.
+                    If the variant already exists in the cart, the quantities are merged.
+
+                    **Price Snapshot:** The current variant price is captured at add-to-cart
+                    time to prevent cart total changes when product prices are updated.
+
+                    **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+                    **Guest Session:** Provide X-Session-Id or use the vs_session cookie to add to the same anonymous cart.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "201",
+                    description = "Item added to cart successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = CartItemDto.class))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Validation error (invalid variant, negative quantity, etc.)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Product variant not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "409",
+                            description = "Optimistic lock exception (concurrent modification detected)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
     public Response addToCart(@Valid AddToCartRequest request) {
         SessionContext session = resolveSessionContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
@@ -150,14 +233,15 @@ public class CartResource {
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid add to cart request - tenantId=%s, error=%s", tenantId, e.getMessage());
             Status status = isResourceMissing(e) ? Status.NOT_FOUND : Status.BAD_REQUEST;
-            String title = status == Status.NOT_FOUND ? "Not Found" : "Bad Request";
-            return respond(session,
-                    Response.status(status).entity(createProblemDetails(title, e.getMessage(), status)));
+            Map<String, Object> problemDetails = status == Status.NOT_FOUND
+                    ? ProblemDetailsUtil.notFound(e.getMessage())
+                    : ProblemDetailsUtil.badRequest(e.getMessage());
+            return respond(session, Response.status(status).entity(problemDetails));
 
         } catch (OptimisticLockException e) {
             LOG.warnf("Optimistic lock exception - tenantId=%s, cartId=%s", tenantId, session.sessionId());
-            return respond(session, Response.status(Status.CONFLICT).entity(createProblemDetails("Conflict",
-                    "Cart was modified concurrently. Please refresh and try again.", Status.CONFLICT)));
+            return respond(session, Response.status(Status.CONFLICT).entity(
+                    ProblemDetailsUtil.conflict("Cart was modified concurrently. Please refresh and try again.")));
         }
     }
 
@@ -173,7 +257,39 @@ public class CartResource {
     @PATCH
     @Path("/items/{itemId}")
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response updateCartItem(@PathParam("itemId") UUID itemId, @Valid UpdateCartItemRequest request) {
+    @Operation(
+            summary = "Update cart item quantity",
+            description = """
+                    Updates the quantity of a specific cart line item.
+
+                    **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Cart item updated successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = CartItemDto.class))),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Validation error (negative quantity, etc.)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart item not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "409",
+                            description = "Optimistic lock exception (concurrent modification detected)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response updateCartItem(@Parameter(
+            description = "Cart item UUID",
+            required = true) @PathParam("itemId") UUID itemId, @Valid UpdateCartItemRequest request) {
         SessionContext session = resolveSessionContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("PATCH /cart/items/%s - tenantId=%s, sessionId=%s, quantity=%d", itemId, tenantId,
@@ -192,15 +308,16 @@ public class CartResource {
                     e.getMessage());
 
             Status status = isResourceMissing(e) ? Status.NOT_FOUND : Status.BAD_REQUEST;
-            String title = status == Status.NOT_FOUND ? "Not Found" : "Bad Request";
-            return respond(session,
-                    Response.status(status).entity(createProblemDetails(title, e.getMessage(), status)));
+            Map<String, Object> problemDetails = status == Status.NOT_FOUND
+                    ? ProblemDetailsUtil.notFound(e.getMessage())
+                    : ProblemDetailsUtil.badRequest(e.getMessage());
+            return respond(session, Response.status(status).entity(problemDetails));
 
         } catch (OptimisticLockException e) {
             LOG.warnf("Optimistic lock exception - tenantId=%s, itemId=%s, sessionId=%s", tenantId, itemId,
                     session.sessionId());
-            return respond(session, Response.status(Status.CONFLICT).entity(createProblemDetails("Conflict",
-                    "Cart item was modified concurrently. Please refresh and try again.", Status.CONFLICT)));
+            return respond(session, Response.status(Status.CONFLICT).entity(
+                    ProblemDetailsUtil.conflict("Cart item was modified concurrently. Please refresh and try again.")));
         }
     }
 
@@ -213,7 +330,21 @@ public class CartResource {
      */
     @DELETE
     @Path("/items/{itemId}")
-    public Response removeCartItem(@PathParam("itemId") UUID itemId) {
+    @Operation(
+            summary = "Remove item from cart",
+            description = "Removes a specific line item from the cart.")
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "204",
+                    description = "Cart item removed successfully"),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart item not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response removeCartItem(@Parameter(
+            description = "Cart item UUID",
+            required = true) @PathParam("itemId") UUID itemId) {
         SessionContext session = resolveSessionContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("DELETE /cart/items/%s - tenantId=%s, sessionId=%s", itemId, tenantId, session.sessionId());
@@ -226,31 +357,9 @@ public class CartResource {
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Cart item not found - tenantId=%s, itemId=%s, error=%s", tenantId, itemId, e.getMessage());
-            return respond(session, Response.status(Status.NOT_FOUND)
-                    .entity(createProblemDetails("Not Found", e.getMessage(), Status.NOT_FOUND)));
+            return respond(session,
+                    Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())));
         }
-    }
-
-    /**
-     * Create RFC 7807 Problem Details error response.
-     *
-     * @param title
-     *            error title
-     * @param detail
-     *            error detail message
-     * @param status
-     *            HTTP status code
-     * @return problem details object
-     */
-    private Map<String, Object> createProblemDetails(String title, String detail, Status status) {
-        Map<String, Object> problem = new HashMap<>();
-        problem.put("type", "about:blank");
-        problem.put("title", title);
-        problem.put("status", status.getStatusCode());
-        if (detail != null && !detail.isBlank()) {
-            problem.put("detail", detail);
-        }
-        return problem;
     }
 
     private SessionContext resolveSessionContext() {

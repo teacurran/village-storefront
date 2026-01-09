@@ -75,6 +75,77 @@ components:
           type: string
         approvalNotes:
           type: string
+    CartDto:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        userId:
+          $ref: "#/components/schemas/UUID"
+        sessionId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CartItemDto"
+        subtotal:
+          $ref: "#/components/schemas/Money"
+        itemCount:
+          type: integer
+          format: int64
+        expiresAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        createdAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        loyalty:
+          $ref: "#/components/schemas/CartLoyaltySummary"
+    CartItemDto:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        variantId:
+          $ref: "#/components/schemas/UUID"
+        productName:
+          type: string
+        variantName:
+          type: string
+        sku:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPrice:
+          $ref: "#/components/schemas/Money"
+        lineTotal:
+          $ref: "#/components/schemas/Money"
+        createdAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+    CartLoyaltySummary:
+      type: object
+      properties:
+        programEnabled:
+          type: boolean
+        programId:
+          $ref: "#/components/schemas/UUID"
+        memberPointsBalance:
+          type: integer
+          format: int32
+        estimatedPointsEarned:
+          type: integer
+          format: int32
+        estimatedRewardValue:
+          $ref: "#/components/schemas/Money"
+        availableRedemptionValue:
+          $ref: "#/components/schemas/Money"
+        currentTier:
+          type: string
+        dataFreshnessTimestamp:
+          $ref: "#/components/schemas/OffsetDateTime"
     CategoryDto:
       type: object
       properties:
@@ -152,6 +223,23 @@ components:
         paymentMethodId:
           type: string
           pattern: \S
+    CheckoutResponse:
+      type: object
+      properties:
+        orderId:
+          $ref: "#/components/schemas/UUID"
+        orderNumber:
+          type: string
+        paymentIntentId:
+          type: string
+        status:
+          type: string
+        totalAmount:
+          type: number
+        currency:
+          type: string
+        paidAt:
+          $ref: "#/components/schemas/OffsetDateTime"
     CollectionDto:
       type: object
       properties:
@@ -447,6 +535,15 @@ components:
           type: integer
           format: int32
           minimum: 1
+    Money:
+      type: object
+      properties:
+        amount:
+          type: string
+        currency:
+          type: string
+        amountAsDecimal:
+          type: number
     OfflineBatchUploadRequest:
       type: object
       properties:
@@ -1832,21 +1929,54 @@ paths:
         - admin
   /api/v1/cart:
     get:
+      summary: Get current user's cart
+      description: |
+        Returns the active cart for the authenticated user or guest session.
+        Includes all line items with calculated totals.
+
+        **Authentication:** Optional - guest carts tracked via session, user carts via JWT.
+        Provide the X-Session-Id header (or rely on the vs_session cookie issued by the API) to continue a guest cart.
+      tags:
+      - Storefront
       responses:
         "200":
-          description: OK
-      summary: Get Cart
-      tags:
-      - Cart Resource
+          description: Cart retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartDto"
+        "404":
+          description: No active cart found
+          content:
+            application/json: {}
     delete:
-      responses:
-        "200":
-          description: OK
-      summary: Clear Cart
+      summary: Clear all items from cart
+      description: |
+        Removes all line items from the cart. The cart entity itself remains
+        and can be reused for future items.
       tags:
-      - Cart Resource
+      - Storefront
+      responses:
+        "204":
+          description: Cart cleared successfully
+        "404":
+          description: Cart not found
+          content:
+            application/json: {}
   /api/v1/cart/items:
     post:
+      summary: Add item to cart
+      description: |
+        Adds a product variant to the cart with specified quantity.
+        If the variant already exists in the cart, the quantities are merged.
+
+        **Price Snapshot:** The current variant price is captured at add-to-cart
+        time to prevent cart total changes when product prices are updated.
+
+        **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+        **Guest Session:** Provide X-Session-Id or use the vs_session cookie to add to the same anonymous cart.
+      tags:
+      - Storefront
       requestBody:
         content:
           application/json:
@@ -1854,19 +1984,38 @@ paths:
               $ref: "#/components/schemas/AddToCartRequest"
         required: true
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Item added to cart successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartItemDto"
         "400":
-          description: Bad Request
-      summary: Add To Cart
-      tags:
-      - Cart Resource
+          description: "Validation error (invalid variant, negative quantity, etc.)"
+          content:
+            application/json: {}
+        "404":
+          description: Product variant not found
+          content:
+            application/json: {}
+        "409":
+          description: Optimistic lock exception (concurrent modification detected)
+          content:
+            application/json: {}
   /api/v1/cart/items/{itemId}:
     patch:
+      summary: Update cart item quantity
+      description: |
+        Updates the quantity of a specific cart line item.
+
+        **Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.
+      tags:
+      - Storefront
       parameters:
-      - name: itemId
-        in: path
+      - description: Cart item UUID
         required: true
+        name: itemId
+        in: path
         schema:
           $ref: "#/components/schemas/UUID"
       requestBody:
@@ -1877,23 +2026,42 @@ paths:
         required: true
       responses:
         "200":
-          description: OK
-      summary: Update Cart Item
-      tags:
-      - Cart Resource
+          description: Cart item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CartItemDto"
+        "400":
+          description: "Validation error (negative quantity, etc.)"
+          content:
+            application/json: {}
+        "404":
+          description: Cart item not found
+          content:
+            application/json: {}
+        "409":
+          description: Optimistic lock exception (concurrent modification detected)
+          content:
+            application/json: {}
     delete:
+      summary: Remove item from cart
+      description: Removes a specific line item from the cart.
+      tags:
+      - Storefront
       parameters:
-      - name: itemId
-        in: path
+      - description: Cart item UUID
         required: true
+        name: itemId
+        in: path
         schema:
           $ref: "#/components/schemas/UUID"
       responses:
-        "200":
-          description: OK
-      summary: Remove Cart Item
-      tags:
-      - Cart Resource
+        "204":
+          description: Cart item removed successfully
+        "404":
+          description: Cart item not found
+          content:
+            application/json: {}
   /api/v1/catalog/products:
     get:
       parameters:
@@ -1955,11 +2123,27 @@ paths:
       - Product Resource
   /api/v1/checkout/commit:
     post:
+      summary: Complete checkout and create order
+      description: |
+        Atomically:
+        1. Validates cart and inventory availability
+        2. Creates order record
+        3. Processes payment via Stripe
+        4. Reduces inventory
+        5. Clears cart
+
+        **Idempotent:** Uses X-Idempotency-Key header to prevent duplicate orders.
+        **Requires authentication:** Must be logged-in customer or use valid API key.
+      tags:
+      - Storefront
       parameters:
-      - name: X-Idempotency-Key
+      - description: Idempotency key (UUID v4) for safe retries
+        required: true
+        name: X-Idempotency-Key
         in: header
         schema:
           type: string
+          pattern: \S
       requestBody:
         content:
           application/json:
@@ -1967,13 +2151,29 @@ paths:
               $ref: "#/components/schemas/CheckoutCommitRequest"
         required: true
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Order successfully created and payment charged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
         "400":
-          description: Bad Request
-      summary: Commit Checkout
-      tags:
-      - Checkout Resource
+          description: "Invalid request (validation errors, out of stock, etc.)"
+          content:
+            application/json: {}
+        "402":
+          description: Payment required (payment method declined)
+          content:
+            application/json: {}
+        "409":
+          description: Duplicate idempotency key (order already created or in-flight
+            request)
+          content:
+            application/json: {}
+        "503":
+          description: Service unavailable (checkout feature disabled)
+          content:
+            application/json: {}
   /api/v1/gift-cards/check-balance:
     post:
       requestBody:
@@ -3431,6 +3631,8 @@ paths:
 tags:
 - name: POS Offline
   description: POS device management and offline transaction sync
+- name: Storefront
+  description: Customer-facing checkout operations
 info:
   title: Village Storefront API
   version: 1.0.0

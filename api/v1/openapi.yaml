@@ -875,8 +875,6 @@ paths:
       operationId: previewCheckout
       summary: Preview checkout totals (cart calculation)
       description: |
-        **TODO:** Implement checkout preview/calculation.
-
         Calculates order totals including:
         - Line item subtotals (product price × quantity)
         - Discounts (promo codes, customer-specific pricing)
@@ -913,16 +911,21 @@ paths:
       operationId: commitCheckout
       summary: Complete checkout and create order
       description: |
-        **TODO:** Implement order creation and payment processing.
-
         Atomically:
-        1. Creates order record
-        2. Charges payment method via Stripe
-        3. Reduces inventory
-        4. Enqueues fulfillment job
+        1. Validates cart and inventory availability
+        2. Creates order record with PENDING_PAYMENT status
+        3. Charges payment method via Stripe PaymentIntent
+        4. Reduces inventory and reserves items
+        5. Updates order to PAID status
+        6. Clears customer cart
+        7. Enqueues fulfillment job
 
         **Idempotent:** Uses `X-Idempotency-Key` header to prevent duplicate orders
-        if client retries due to network failure.
+        if client retries due to network failure. Duplicate requests within 60 minutes
+        return cached response with 200 OK (not 201).
+
+        **Feature Flag:** Requires `checkout.order-creation.enabled` to be true.
+        Returns 503 if disabled.
 
         **Requires authentication:** Must be logged-in customer or use valid API key.
       tags: [Storefront, Headless]
@@ -961,7 +964,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
         '409':
-          description: Duplicate idempotency key (order already created)
+          description: Duplicate idempotency key (order already created or in-flight request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Service unavailable (checkout feature disabled via feature flag)
           content:
             application/json:
               schema:

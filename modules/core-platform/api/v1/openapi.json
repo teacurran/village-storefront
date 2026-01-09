@@ -102,6 +102,112 @@
           }
         }
       },
+      "CartDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "userId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "sessionId" : {
+            "type" : "string"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CartItemDto"
+            }
+          },
+          "subtotal" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "itemCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "expiresAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "createdAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "updatedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "loyalty" : {
+            "$ref" : "#/components/schemas/CartLoyaltySummary"
+          }
+        }
+      },
+      "CartItemDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "variantId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "productName" : {
+            "type" : "string"
+          },
+          "variantName" : {
+            "type" : "string"
+          },
+          "sku" : {
+            "type" : "string"
+          },
+          "quantity" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "unitPrice" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "lineTotal" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "createdAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "updatedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "CartLoyaltySummary" : {
+        "type" : "object",
+        "properties" : {
+          "programEnabled" : {
+            "type" : "boolean"
+          },
+          "programId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "memberPointsBalance" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedPointsEarned" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedRewardValue" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "availableRedemptionValue" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "currentTier" : {
+            "type" : "string"
+          },
+          "dataFreshnessTimestamp" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
       "CategoryDto" : {
         "type" : "object",
         "properties" : {
@@ -193,6 +299,32 @@
           "paymentMethodId" : {
             "type" : "string",
             "pattern" : "\\S"
+          }
+        }
+      },
+      "CheckoutResponse" : {
+        "type" : "object",
+        "properties" : {
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "orderNumber" : {
+            "type" : "string"
+          },
+          "paymentIntentId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "paidAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
           }
         }
       },
@@ -580,6 +712,20 @@
             "type" : "integer",
             "format" : "int32",
             "minimum" : 1
+          }
+        }
+      },
+      "Money" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "amountAsDecimal" : {
+            "type" : "number"
           }
         }
       },
@@ -2523,26 +2669,50 @@
     },
     "/api/v1/cart" : {
       "get" : {
+        "summary" : "Get current user's cart",
+        "description" : "Returns the active cart for the authenticated user or guest session.\nIncludes all line items with calculated totals.\n\n**Authentication:** Optional - guest carts tracked via session, user carts via JWT.\nProvide the X-Session-Id header (or rely on the vs_session cookie issued by the API) to continue a guest cart.\n",
+        "tags" : [ "Storefront" ],
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Cart retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartDto"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No active cart found",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Get Cart",
-        "tags" : [ "Cart Resource" ]
+        }
       },
       "delete" : {
+        "summary" : "Clear all items from cart",
+        "description" : "Removes all line items from the cart. The cart entity itself remains\nand can be reused for future items.\n",
+        "tags" : [ "Storefront" ],
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "Cart cleared successfully"
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Clear Cart",
-        "tags" : [ "Cart Resource" ]
+        }
       }
     },
     "/api/v1/cart/items" : {
       "post" : {
+        "summary" : "Add item to cart",
+        "description" : "Adds a product variant to the cart with specified quantity.\nIf the variant already exists in the cart, the quantities are merged.\n\n**Price Snapshot:** The current variant price is captured at add-to-cart\ntime to prevent cart total changes when product prices are updated.\n\n**Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie to add to the same anonymous cart.\n",
+        "tags" : [ "Storefront" ],
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -2554,23 +2724,47 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "201" : {
+            "description" : "Item added to cart successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartItemDto"
+                }
+              }
+            }
           },
           "400" : {
-            "description" : "Bad Request"
+            "description" : "Validation error (invalid variant, negative quantity, etc.)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Product variant not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Optimistic lock exception (concurrent modification detected)",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Add To Cart",
-        "tags" : [ "Cart Resource" ]
+        }
       }
     },
     "/api/v1/cart/items/{itemId}" : {
       "patch" : {
+        "summary" : "Update cart item quantity",
+        "description" : "Updates the quantity of a specific cart line item.\n\n**Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.\n",
+        "tags" : [ "Storefront" ],
         "parameters" : [ {
+          "description" : "Cart item UUID",
+          "required" : true,
           "name" : "itemId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
@@ -2587,28 +2781,59 @@
         },
         "responses" : {
           "200" : {
-            "description" : "OK"
+            "description" : "Cart item updated successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartItemDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Validation error (negative quantity, etc.)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart item not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Optimistic lock exception (concurrent modification detected)",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Update Cart Item",
-        "tags" : [ "Cart Resource" ]
+        }
       },
       "delete" : {
+        "summary" : "Remove item from cart",
+        "description" : "Removes a specific line item from the cart.",
+        "tags" : [ "Storefront" ],
         "parameters" : [ {
+          "description" : "Cart item UUID",
+          "required" : true,
           "name" : "itemId",
           "in" : "path",
-          "required" : true,
           "schema" : {
             "$ref" : "#/components/schemas/UUID"
           }
         } ],
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "204" : {
+            "description" : "Cart item removed successfully"
+          },
+          "404" : {
+            "description" : "Cart item not found",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Remove Cart Item",
-        "tags" : [ "Cart Resource" ]
+        }
       }
     },
     "/api/v1/catalog/products" : {
@@ -2695,11 +2920,17 @@
     },
     "/api/v1/checkout/commit" : {
       "post" : {
+        "summary" : "Complete checkout and create order",
+        "description" : "Atomically:\n1. Validates cart and inventory availability\n2. Creates order record\n3. Processes payment via Stripe\n4. Reduces inventory\n5. Clears cart\n\n**Idempotent:** Uses X-Idempotency-Key header to prevent duplicate orders.\n**Requires authentication:** Must be logged-in customer or use valid API key.\n",
+        "tags" : [ "Storefront" ],
         "parameters" : [ {
+          "description" : "Idempotency key (UUID v4) for safe retries",
+          "required" : true,
           "name" : "X-Idempotency-Key",
           "in" : "header",
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "pattern" : "\\S"
           }
         } ],
         "requestBody" : {
@@ -2713,15 +2944,41 @@
           "required" : true
         },
         "responses" : {
-          "200" : {
-            "description" : "OK"
+          "201" : {
+            "description" : "Order successfully created and payment charged",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CheckoutResponse"
+                }
+              }
+            }
           },
           "400" : {
-            "description" : "Bad Request"
+            "description" : "Invalid request (validation errors, out of stock, etc.)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "402" : {
+            "description" : "Payment required (payment method declined)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Duplicate idempotency key (order already created or in-flight request)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "503" : {
+            "description" : "Service unavailable (checkout feature disabled)",
+            "content" : {
+              "application/json" : { }
+            }
           }
-        },
-        "summary" : "Commit Checkout",
-        "tags" : [ "Checkout Resource" ]
+        }
       }
     },
     "/api/v1/gift-cards/check-balance" : {
@@ -4786,6 +5043,9 @@
   "tags" : [ {
     "name" : "POS Offline",
     "description" : "POS device management and offline transaction sync"
+  }, {
+    "name" : "Storefront",
+    "description" : "Customer-facing checkout operations"
   } ],
   "info" : {
     "title" : "Village Storefront API",
