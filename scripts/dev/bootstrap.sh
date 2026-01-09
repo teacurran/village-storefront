@@ -219,6 +219,53 @@ else
 fi
 
 # ==============================================================================
+# STEP 4.5: VERIFY SHIPPING MOCKS HEALTH (Task I3.T7)
+# ==============================================================================
+
+print_header "Step 4.5: Verifying Shipping Mock Services"
+
+if [ -f "$SCRIPT_DIR/wait-for-shipping-mocks.sh" ]; then
+  chmod +x "$SCRIPT_DIR/wait-for-shipping-mocks.sh"
+  if "$SCRIPT_DIR/wait-for-shipping-mocks.sh" 30; then
+    print_success "All shipping mock services are healthy"
+  else
+    print_warning "One or more shipping mocks failed health checks"
+    print_info "Tests may fail if shipping mocks are not running"
+    print_info "Check logs: docker compose logs usps-mock ups-mock fedex-mock"
+  fi
+else
+  print_info "Verifying shipping mock health manually..."
+  MOCK_CHECK_FAILED=false
+
+  if curl -sf http://localhost:9100/health > /dev/null 2>&1; then
+    print_success "✅ USPS mock (port 9100) is healthy"
+  else
+    print_warning "⚠️  USPS mock (port 9100) health check failed"
+    MOCK_CHECK_FAILED=true
+  fi
+
+  if curl -sf http://localhost:9101/health > /dev/null 2>&1; then
+    print_success "✅ UPS mock (port 9101) is healthy"
+  else
+    print_warning "⚠️  UPS mock (port 9101) health check failed"
+    MOCK_CHECK_FAILED=true
+  fi
+
+  if curl -sf http://localhost:9102/health > /dev/null 2>&1; then
+    print_success "✅ FedEx mock (port 9102) is healthy"
+  else
+    print_warning "⚠️  FedEx mock (port 9102) health check failed"
+    MOCK_CHECK_FAILED=true
+  fi
+
+  if [ "$MOCK_CHECK_FAILED" = true ]; then
+    print_warning "Some shipping mocks are not healthy - tests may fail"
+  else
+    print_success "All shipping mock services verified"
+  fi
+fi
+
+# ==============================================================================
 # STEP 5: RUN DATABASE MIGRATIONS
 # ==============================================================================
 

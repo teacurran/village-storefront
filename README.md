@@ -854,6 +854,29 @@ docker-compose up -d
 ./mvnw verify
 ```
 
+### QA Testing with Mock Services
+
+For comprehensive testing of the checkout pipeline (payments, shipping, consignment), see the dedicated **[QA Testing Guide](docs/QA_TESTING_GUIDE.md)**.
+
+The guide covers:
+- Setting up Stripe CLI for webhook testing
+- Testing shipping rate calculation with carrier mocks (USPS, UPS, FedEx)
+- Multi-tenant consignment scenarios and payout flows
+- Complete end-to-end checkout scenarios
+- Troubleshooting common issues
+
+**Quick mock service health check:**
+
+```bash
+# Verify all shipping mocks are running
+./scripts/dev/wait-for-shipping-mocks.sh
+
+# Test individual mock services
+curl http://localhost:9100/health  # USPS Mock
+curl http://localhost:9101/health  # UPS Mock
+curl http://localhost:9102/health  # FedEx Mock
+```
+
 ## Deployment
 
 ### JVM Deployment

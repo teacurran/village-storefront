@@ -100,6 +100,30 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Start shipping mock services (Task I3.T7)
+        if: matrix.runtime == 'jvm'
+        run: |
+          cd docker
+          docker compose up -d usps-mock ups-mock fedex-mock
+          docker compose ps
+
+      - name: Wait for shipping mocks to be healthy
+        if: matrix.runtime == 'jvm'
+        run: |
+          echo "Waiting for USPS mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9100/health 2>/dev/null; do sleep 1; done'
+          echo "✅ USPS mock is healthy"
+
+          echo "Waiting for UPS mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9101/health 2>/dev/null; do sleep 1; done'
+          echo "✅ UPS mock is healthy"
+
+          echo "Waiting for FedEx mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9102/health 2>/dev/null; do sleep 1; done'
+          echo "✅ FedEx mock is healthy"
+
+          echo "All shipping mock services are ready"
+
       - name: Capture job start time
         run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
 
@@ -134,6 +158,10 @@ jobs:
 
       - name: Run JVM tests via npm (Spotless + JaCoCo enforced)
         if: matrix.runtime == 'jvm'
+        env:
+          USPS_MOCK_URL: http://localhost:9100/ShippingAPI.dll
+          UPS_MOCK_URL: http://localhost:9101/api/rating/v1
+          FEDEX_MOCK_URL: http://localhost:9102/rate/v1
         run: npm run test
 
       - name: Upload coverage reports
@@ -201,6 +229,13 @@ jobs:
             modules/core-platform/target/*-runner
             modules/core-platform/target/quarkus-artifact.properties
           retention-days: 7
+
+      - name: Stop shipping mock services
+        if: always() && matrix.runtime == 'jvm'
+        run: |
+          cd docker
+          docker compose down usps-mock ups-mock fedex-mock || true
+          docker compose logs usps-mock ups-mock fedex-mock || true
 
       - name: Record job duration
         if: always()
