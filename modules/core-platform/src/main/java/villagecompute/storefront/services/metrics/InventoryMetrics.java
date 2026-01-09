@@ -225,6 +225,95 @@ public class InventoryMetrics {
     }
 
     // ========================================
+    // KPI Metrics (Component Performance Indicators)
+    // ========================================
+
+    /**
+     * Record adjustment operation latency.
+     *
+     * <p>
+     * Tracks the full adjustment operation including RLS policy checks, validation, and database commits.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param durationMillis
+     *            operation duration in milliseconds
+     */
+    public void recordAdjustmentOperation(UUID tenantId, long durationMillis) {
+        timer("inventory.adjustment.operation.duration", tenantId).record(durationMillis, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Record transfer operation latency and quantity.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param durationMillis
+     *            operation duration in milliseconds
+     * @param quantity
+     *            quantity transferred
+     */
+    public void recordTransferOperation(UUID tenantId, long durationMillis, int quantity) {
+        timer("inventory.transfer.operation.duration", tenantId).record(durationMillis, TimeUnit.MILLISECONDS);
+        meterRegistry.counter("inventory.transfer.quantity", "tenant_id", tenantId.toString()).increment(quantity);
+    }
+
+    /**
+     * Record insufficient stock error.
+     *
+     * <p>
+     * Target KPI: Error rate <1% (Foundation §4.3)
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param variantId
+     *            variant identifier
+     */
+    public void recordInsufficientStockError(UUID tenantId, UUID variantId) {
+        meterRegistry.counter("inventory.error.insufficient_stock", "tenant_id", tenantId.toString(), "variant_id",
+                variantId.toString()).increment();
+    }
+
+    /**
+     * Record negative inventory warning.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param variantId
+     *            variant identifier
+     * @param level
+     *            current negative inventory level
+     */
+    public void recordNegativeInventoryWarning(UUID tenantId, UUID variantId, int level) {
+        meterRegistry.counter("inventory.warning.negative_level", "tenant_id", tenantId.toString(), "variant_id",
+                variantId.toString()).increment();
+        meterRegistry.gauge("inventory.level.negative",
+                java.util.List.of(io.micrometer.core.instrument.Tag.of("tenant_id", tenantId.toString()),
+                        io.micrometer.core.instrument.Tag.of("variant_id", variantId.toString())),
+                level);
+    }
+
+    /**
+     * Record current inventory level (real-time gauge).
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param location
+     *            location identifier
+     * @param variantId
+     *            variant identifier
+     * @param currentLevel
+     *            current inventory level
+     */
+    public void recordInventoryLevel(UUID tenantId, String location, UUID variantId, int currentLevel) {
+        meterRegistry.gauge("inventory.level.current",
+                java.util.List.of(io.micrometer.core.instrument.Tag.of("tenant_id", tenantId.toString()),
+                        io.micrometer.core.instrument.Tag.of("location", location),
+                        io.micrometer.core.instrument.Tag.of("variant_id", variantId.toString())),
+                currentLevel);
+    }
+
+    // ========================================
     // Stock Availability Metrics
     // ========================================
 

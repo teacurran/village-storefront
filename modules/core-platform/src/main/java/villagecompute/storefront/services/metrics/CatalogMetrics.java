@@ -201,6 +201,96 @@ public class CatalogMetrics {
     }
 
     // ========================================
+    // KPI Metrics (Component Performance Indicators)
+    // ========================================
+
+    /**
+     * Record bulk import throughput (products per minute).
+     *
+     * <p>
+     * Target KPI: >5000 products/min (Foundation §4.3)
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param productsPerMinute
+     *            current throughput in products/minute
+     */
+    public void recordBulkImportThroughput(UUID tenantId, int productsPerMinute) {
+        meterRegistry.gauge("catalog.bulk.import.throughput",
+                java.util.List.of(io.micrometer.core.instrument.Tag.of("tenant_id", tenantId.toString())),
+                productsPerMinute);
+    }
+
+    /**
+     * Record variant upsert batch operation.
+     *
+     * <p>
+     * Target KPI: p95 latency <200ms (Foundation §4.3)
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param durationMillis
+     *            batch processing duration in milliseconds
+     * @param batchSize
+     *            number of variants in batch
+     */
+    public void recordVariantUpsertBatch(UUID tenantId, long durationMillis, int batchSize) {
+        timer("catalog.variant.upsert.batch.duration", tenantId).record(durationMillis, TimeUnit.MILLISECONDS);
+        distributionSummary("catalog.variant.upsert.batch.size", tenantId).record(batchSize);
+    }
+
+    /**
+     * Record category search operation.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param durationMillis
+     *            search duration in milliseconds
+     */
+    public void recordCategorySearch(UUID tenantId, long durationMillis) {
+        timer("catalog.category.search.duration", tenantId).record(durationMillis, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Record cache hit.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param cacheType
+     *            cache type (e.g., "product", "category", "collection")
+     */
+    public void recordCacheHit(UUID tenantId, String cacheType) {
+        meterRegistry.counter("catalog.cache.hit", "tenant_id", tenantId.toString(), "cache_type", cacheType)
+                .increment();
+    }
+
+    /**
+     * Record cache miss.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param cacheType
+     *            cache type (e.g., "product", "category", "collection")
+     */
+    public void recordCacheMiss(UUID tenantId, String cacheType) {
+        meterRegistry.counter("catalog.cache.miss", "tenant_id", tenantId.toString(), "cache_type", cacheType)
+                .increment();
+    }
+
+    /**
+     * Record validation error during catalog operations.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param errorType
+     *            error type (e.g., "invalid_sku", "duplicate_slug", "missing_required_field")
+     */
+    public void recordValidationError(UUID tenantId, String errorType) {
+        meterRegistry.counter("catalog.validation.error", "tenant_id", tenantId.toString(), "error_type", errorType)
+                .increment();
+    }
+
+    // ========================================
     // Import/Export Job Metrics
     // ========================================
 

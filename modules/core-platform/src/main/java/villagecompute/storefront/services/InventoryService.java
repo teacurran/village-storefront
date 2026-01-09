@@ -15,6 +15,9 @@ import villagecompute.storefront.data.repositories.InventoryLevelRepository;
 import villagecompute.storefront.services.metrics.InventoryMetrics;
 import villagecompute.storefront.tenant.TenantContext;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
+
 /**
  * Service layer for inventory management operations.
  *
@@ -99,8 +102,17 @@ public class InventoryService {
      * @return updated inventory level
      */
     @Transactional
+    @WithSpan("InventoryService.adjustInventory")
     public InventoryLevel adjustInventory(UUID variantId, String location, int adjustment) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+        span.setAttribute("location", location);
+        span.setAttribute("adjustment", adjustment);
+
         LOG.infof("Adjusting inventory - tenantId=%s, variantId=%s, location=%s, adjustment=%d", tenantId, variantId,
                 location, adjustment);
 
@@ -137,8 +149,17 @@ public class InventoryService {
      * @return updated inventory level
      */
     @Transactional
+    @WithSpan("InventoryService.reserveInventory")
     public InventoryLevel reserveInventory(UUID variantId, String location, int quantity) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+        span.setAttribute("location", location);
+        span.setAttribute("quantity", quantity);
+
         LOG.infof("Reserving inventory - tenantId=%s, variantId=%s, location=%s, quantity=%d", tenantId, variantId,
                 location, quantity);
 
@@ -173,8 +194,17 @@ public class InventoryService {
      * @return updated inventory level
      */
     @Transactional
+    @WithSpan("InventoryService.releaseReservation")
     public InventoryLevel releaseReservation(UUID variantId, String location, int quantity) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+        span.setAttribute("location", location);
+        span.setAttribute("quantity", quantity);
+
         LOG.infof("Releasing inventory reservation - tenantId=%s, variantId=%s, location=%s, quantity=%d", tenantId,
                 variantId, location, quantity);
 

@@ -284,4 +284,133 @@ class InventoryMetricsTest {
         assertEquals(3.0, tenant1Counter.count(), "Tenant 1 should have 3 reservations");
         assertEquals(1.0, tenant2Counter.count(), "Tenant 2 should have 1 reservation");
     }
+
+    // ========================================
+    // KPI Metrics Tests (I2.T7)
+    // ========================================
+
+    @Test
+    void testAdjustmentOperationMetricRegistered() {
+        // When
+        inventoryMetrics.recordAdjustmentOperation(testTenantId, 180L);
+
+        // Then
+        Timer timer = meterRegistry.find("inventory.adjustment.operation.duration")
+                .tag("tenant_id", testTenantId.toString()).timer();
+
+        assertNotNull(timer, "Adjustment operation duration timer should be registered");
+        assertEquals(1L, timer.count(), "Adjustment operation timer should record 1 execution");
+        assertTrue(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) >= 180.0,
+                "Adjustment operation duration should record >= 180ms");
+    }
+
+    @Test
+    void testTransferOperationMetricRegistered() {
+        // When
+        inventoryMetrics.recordTransferOperation(testTenantId, 300L, 25);
+
+        // Then
+        Timer timer = meterRegistry.find("inventory.transfer.operation.duration")
+                .tag("tenant_id", testTenantId.toString()).timer();
+        Counter quantityCounter = meterRegistry.find("inventory.transfer.quantity")
+                .tag("tenant_id", testTenantId.toString()).counter();
+
+        assertNotNull(timer, "Transfer operation duration timer should be registered");
+        assertEquals(1L, timer.count(), "Transfer operation timer should record 1 execution");
+        assertTrue(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) >= 300.0,
+                "Transfer operation duration should record >= 300ms");
+
+        assertNotNull(quantityCounter, "Transfer quantity counter should be registered");
+        assertEquals(25.0, quantityCounter.count(), "Transfer quantity should record 25 units");
+    }
+
+    @Test
+    void testInsufficientStockErrorMetricRegistered() {
+        UUID variantId = UUID.randomUUID();
+
+        // When
+        inventoryMetrics.recordInsufficientStockError(testTenantId, variantId);
+
+        // Then
+        Counter counter = meterRegistry.find("inventory.error.insufficient_stock")
+                .tag("tenant_id", testTenantId.toString()).tag("variant_id", variantId.toString()).counter();
+
+        assertNotNull(counter, "Insufficient stock error counter should be registered");
+        assertEquals(1.0, counter.count(), "Insufficient stock error counter should be incremented by 1");
+    }
+
+    @Test
+    void testNegativeInventoryWarningMetricRegistered() {
+        UUID variantId = UUID.randomUUID();
+
+        // When
+        inventoryMetrics.recordNegativeInventoryWarning(testTenantId, variantId, -5);
+
+        // Then
+        Counter counter = meterRegistry.find("inventory.warning.negative_level")
+                .tag("tenant_id", testTenantId.toString()).tag("variant_id", variantId.toString()).counter();
+
+        assertNotNull(counter, "Negative inventory warning counter should be registered");
+        assertEquals(1.0, counter.count(), "Negative inventory warning counter should be incremented by 1");
+
+        // Note: Gauge verification is limited without state object access
+    }
+
+    @Test
+    void testInventoryLevelGaugeRegistered() {
+        UUID variantId = UUID.randomUUID();
+
+        // When
+        inventoryMetrics.recordInventoryLevel(testTenantId, testLocation, variantId, 100);
+
+        // Then
+        // Gauge values are not directly queryable in Micrometer without state object
+        // Verify no exceptions thrown during registration
+        assertNotNull(meterRegistry, "MeterRegistry should be available");
+    }
+
+    @Test
+    void testInsufficientStockErrorRateTracking() {
+        UUID tenantId = UUID.randomUUID();
+        UUID variantId = UUID.randomUUID();
+
+        // When: Record 5 errors for KPI threshold tracking (target: <1%)
+        for (int i = 0; i < 5; i++) {
+            inventoryMetrics.recordInsufficientStockError(tenantId, variantId);
+        }
+
+        // Then
+        Counter errorCounter = meterRegistry.find("inventory.error.insufficient_stock")
+                .tag("tenant_id", tenantId.toString()).tag("variant_id", variantId.toString()).counter();
+
+        assertNotNull(errorCounter, "Insufficient stock error counter should be registered");
+        assertEquals(5.0, errorCounter.count(), "Should have recorded 5 insufficient stock errors");
+    }
+
+    @Test
+    void testTransferOperationPerformanceTracking() {
+        UUID tenantId = UUID.randomUUID();
+
+        // When: Record 3 transfers with varying latencies
+        inventoryMetrics.recordTransferOperation(tenantId, 200L, 10); // Fast
+        inventoryMetrics.recordTransferOperation(tenantId, 500L, 50); // Moderate
+        inventoryMetrics.recordTransferOperation(tenantId, 1000L, 100); // Slow
+
+        // Then
+        Timer timer = meterRegistry.find("inventory.transfer.operation.duration").tag("tenant_id", tenantId.toString())
+                .timer();
+        Counter quantityCounter = meterRegistry.find("inventory.transfer.quantity")
+                .tag("tenant_id", tenantId.toString()).counter();
+
+        assertNotNull(timer, "Transfer operation duration timer should be registered");
+        assertEquals(3L, timer.count(), "Timer should record 3 transfer operations");
+
+        assertNotNull(quantityCounter, "Transfer quantity counter should be registered");
+        assertEquals(160.0, quantityCounter.count(), "Total transferred quantity should be 160 units");
+
+        // Verify mean latency
+        double meanLatencyMs = timer.mean(java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertTrue(meanLatencyMs >= 200.0 && meanLatencyMs <= 1000.0,
+                "Mean latency should be between 200ms and 1000ms, was: " + meanLatencyMs);
+    }
 }

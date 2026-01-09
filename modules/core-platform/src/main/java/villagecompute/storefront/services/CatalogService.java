@@ -23,6 +23,9 @@ import villagecompute.storefront.services.metrics.CatalogMetrics;
 import villagecompute.storefront.services.validation.CatalogValidator;
 import villagecompute.storefront.tenant.TenantContext;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
+
 /**
  * Service layer for catalog operations (products, variants, categories).
  *
@@ -75,8 +78,18 @@ public class CatalogService {
      * @return created product with generated ID
      */
     @Transactional
+    @WithSpan("CatalogService.createProduct")
     public Product createProduct(Product product) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("product.sku", product.sku);
+        span.setAttribute("product.name", product.name);
+        span.setAttribute("product.type", product.type);
+        span.setAttribute("product.slug", product.slug);
+
         LOG.infof("Creating product - tenantId=%s, sku=%s, name=%s", tenantId, product.sku, product.name);
 
         // Validate before persisting
@@ -86,6 +99,9 @@ public class CatalogService {
 
         productRepository.persist(product);
         catalogCacheService.invalidateTenantCache(tenantId, "product-created");
+
+        // Add product.id to span after persistence
+        span.setAttribute("product.id", product.id.toString());
 
         LOG.infof("Product created successfully - tenantId=%s, productId=%s, sku=%s", tenantId, product.id,
                 product.sku);
@@ -106,8 +122,15 @@ public class CatalogService {
      *             if product not found
      */
     @Transactional
+    @WithSpan("CatalogService.updateProduct")
     public Product updateProduct(UUID productId, Product updatedProduct) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("product.id", productId.toString());
+
         LOG.infof("Updating product - tenantId=%s, productId=%s", tenantId, productId);
 
         Product product = productRepository.findByIdOptional(productId)
@@ -231,10 +254,23 @@ public class CatalogService {
      *            page size
      * @return catalog result including total items
      */
+    @WithSpan("CatalogService.listProducts")
     public CatalogSearchResult listProducts(String categorySlug, String collectionSlug, int page, int size) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         boolean hasCategory = categorySlug != null && !categorySlug.isBlank();
         boolean hasCollection = collectionSlug != null && !collectionSlug.isBlank();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("page", page);
+        span.setAttribute("size", size);
+        if (hasCategory) {
+            span.setAttribute("category.slug", categorySlug);
+        }
+        if (hasCollection) {
+            span.setAttribute("collection.slug", collectionSlug);
+        }
 
         LOG.debugf("Listing products with filters - tenantId=%s, category=%s, collection=%s, page=%d, size=%d",
                 tenantId, categorySlug, collectionSlug, page, size);
@@ -270,14 +306,27 @@ public class CatalogService {
      *            page size
      * @return search result with products and total count
      */
+    @WithSpan("CatalogService.searchProducts")
     public CatalogSearchResult searchProducts(String searchTerm, int page, int size) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("search.term", searchTerm);
+        span.setAttribute("page", page);
+        span.setAttribute("size", size);
+
         LOG.infof("Searching products - tenantId=%s, term=%s, page=%d, size=%d", tenantId, searchTerm, page, size);
 
         long startTime = System.currentTimeMillis();
         List<Product> results = productRepository.searchProducts(searchTerm, page, size);
         long total = productRepository.countSearchResults(searchTerm);
         long duration = System.currentTimeMillis() - startTime;
+
+        // Add result metrics to span
+        span.setAttribute("search.results.count", results.size());
+        span.setAttribute("search.results.total", total);
 
         catalogMetrics.recordProductSearch(tenantId, duration);
         catalogMetrics.recordProductSearchResults(tenantId, results.size());

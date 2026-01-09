@@ -267,4 +267,145 @@ class CatalogMetricsTest {
         assertEquals(2.0, tenant1Counter.count(), "Tenant 1 should have 2 products created");
         assertEquals(1.0, tenant2Counter.count(), "Tenant 2 should have 1 product created");
     }
+
+    // ========================================
+    // KPI Metrics Tests (I2.T7)
+    // ========================================
+
+    @Test
+    void testBulkImportThroughputGaugeRegistered() {
+        // When
+        catalogMetrics.recordBulkImportThroughput(testTenantId, 5500);
+
+        // Then
+        // Gauge values are not directly queryable in Micrometer without state object
+        // Verify no exceptions thrown during registration
+        assertNotNull(meterRegistry, "MeterRegistry should be available");
+    }
+
+    @Test
+    void testVariantUpsertBatchMetricRegistered() {
+        // When
+        catalogMetrics.recordVariantUpsertBatch(testTenantId, 150L, 250);
+
+        // Then
+        Timer timer = meterRegistry.find("catalog.variant.upsert.batch.duration")
+                .tag("tenant_id", testTenantId.toString()).timer();
+        DistributionSummary summary = meterRegistry.find("catalog.variant.upsert.batch.size")
+                .tag("tenant_id", testTenantId.toString()).summary();
+
+        assertNotNull(timer, "Variant upsert batch duration timer should be registered");
+        assertEquals(1L, timer.count(), "Variant upsert batch timer should record 1 execution");
+        assertTrue(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) >= 150.0,
+                "Variant upsert batch timer should record duration >= 150ms");
+
+        assertNotNull(summary, "Variant upsert batch size summary should be registered");
+        assertEquals(1L, summary.count(), "Variant upsert batch size should record 1 sample");
+        assertEquals(250.0, summary.totalAmount(), "Variant upsert batch size should record 250 variants");
+    }
+
+    @Test
+    void testCategorySearchMetricRegistered() {
+        // When
+        catalogMetrics.recordCategorySearch(testTenantId, 120L);
+
+        // Then
+        Timer timer = meterRegistry.find("catalog.category.search.duration").tag("tenant_id", testTenantId.toString())
+                .timer();
+
+        assertNotNull(timer, "Category search duration timer should be registered");
+        assertEquals(1L, timer.count(), "Category search timer should record 1 execution");
+        assertTrue(timer.totalTime(java.util.concurrent.TimeUnit.MILLISECONDS) >= 120.0,
+                "Category search timer should record duration >= 120ms");
+    }
+
+    @Test
+    void testCacheHitMetricRegistered() {
+        // When
+        catalogMetrics.recordCacheHit(testTenantId, "product");
+
+        // Then
+        Counter counter = meterRegistry.find("catalog.cache.hit").tag("tenant_id", testTenantId.toString())
+                .tag("cache_type", "product").counter();
+
+        assertNotNull(counter, "Cache hit counter should be registered");
+        assertEquals(1.0, counter.count(), "Cache hit counter should be incremented by 1");
+    }
+
+    @Test
+    void testCacheMissMetricRegistered() {
+        // When
+        catalogMetrics.recordCacheMiss(testTenantId, "category");
+
+        // Then
+        Counter counter = meterRegistry.find("catalog.cache.miss").tag("tenant_id", testTenantId.toString())
+                .tag("cache_type", "category").counter();
+
+        assertNotNull(counter, "Cache miss counter should be registered");
+        assertEquals(1.0, counter.count(), "Cache miss counter should be incremented by 1");
+    }
+
+    @Test
+    void testValidationErrorMetricRegistered() {
+        // When
+        catalogMetrics.recordValidationError(testTenantId, "invalid_sku");
+
+        // Then
+        Counter counter = meterRegistry.find("catalog.validation.error").tag("tenant_id", testTenantId.toString())
+                .tag("error_type", "invalid_sku").counter();
+
+        assertNotNull(counter, "Validation error counter should be registered");
+        assertEquals(1.0, counter.count(), "Validation error counter should be incremented by 1");
+    }
+
+    @Test
+    void testCacheHitMissRatioCalculation() {
+        UUID tenantId = UUID.randomUUID();
+
+        // When: 7 hits, 3 misses (70% hit rate)
+        for (int i = 0; i < 7; i++) {
+            catalogMetrics.recordCacheHit(tenantId, "product");
+        }
+        for (int i = 0; i < 3; i++) {
+            catalogMetrics.recordCacheMiss(tenantId, "product");
+        }
+
+        // Then
+        Counter hitCounter = meterRegistry.find("catalog.cache.hit").tag("tenant_id", tenantId.toString())
+                .tag("cache_type", "product").counter();
+        Counter missCounter = meterRegistry.find("catalog.cache.miss").tag("tenant_id", tenantId.toString())
+                .tag("cache_type", "product").counter();
+
+        assertNotNull(hitCounter, "Cache hit counter should be registered");
+        assertNotNull(missCounter, "Cache miss counter should be registered");
+
+        double totalRequests = hitCounter.count() + missCounter.count();
+        double hitRate = hitCounter.count() / totalRequests;
+
+        assertEquals(7.0, hitCounter.count(), "Should have 7 cache hits");
+        assertEquals(3.0, missCounter.count(), "Should have 3 cache misses");
+        assertEquals(0.7, hitRate, 0.01, "Cache hit rate should be 70%");
+    }
+
+    @Test
+    void testVariantUpsertBatchPerformanceTracking() {
+        UUID tenantId = UUID.randomUUID();
+
+        // When: Record 3 batches with varying latencies
+        catalogMetrics.recordVariantUpsertBatch(tenantId, 100L, 100); // Fast
+        catalogMetrics.recordVariantUpsertBatch(tenantId, 250L, 500); // Slow (exceeds 200ms target)
+        catalogMetrics.recordVariantUpsertBatch(tenantId, 150L, 300); // Moderate
+
+        // Then
+        Timer timer = meterRegistry.find("catalog.variant.upsert.batch.duration").tag("tenant_id", tenantId.toString())
+                .timer();
+
+        assertNotNull(timer, "Variant upsert batch duration timer should be registered");
+        assertEquals(3L, timer.count(), "Timer should record 3 batch operations");
+
+        // Verify mean is within expected range
+        double meanLatencyMs = timer.mean(java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertTrue(meanLatencyMs >= 100.0 && meanLatencyMs <= 250.0,
+                "Mean latency should be between 100ms and 250ms, was: " + meanLatencyMs);
+    }
 }

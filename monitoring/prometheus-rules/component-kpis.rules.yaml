@@ -149,6 +149,51 @@ groups:
       description: "Variant upsert latency is {{ $value | humanizeDuration }} (batch SQL expected per Section 4)"
       runbook_url: "https://docs.villagecompute.com/runbooks/catalog-inventory"
 
+  - alert: CatalogSearchLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(catalog_product_search_duration_bucket[5m])) by (le)) > 0.500
+    for: 5m
+    labels:
+      severity: warning
+      component: catalog
+      kpi: search-latency
+    annotations:
+      summary: "Product search p95 exceeds 500ms target"
+      description: "Search latency is {{ $value | humanizeDuration }} (target: <500ms per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/catalog-inventory"
+      action: "Check database indexes on products table, verify RLS policy performance, review search query complexity"
+      dashboard: "https://grafana.villagecompute.com/d/component-kpis?panelId=6"
+
+  - alert: InventoryAdjustmentFailureRateHigh
+    expr: |
+      sum(rate(inventory_error_insufficient_stock_total[5m])) / sum(rate(inventory_adjustment_total[5m])) > 0.01
+    for: 10m
+    labels:
+      severity: critical
+      component: inventory
+      kpi: adjustment-failure-rate
+    annotations:
+      summary: "Inventory adjustment failure rate exceeds 1% threshold"
+      description: "Failure rate is {{ $value | humanizePercentage }} (target: <1% per Section 4)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/catalog-inventory"
+      action: "Review insufficient stock errors, check inventory reservation logic, verify stock level synchronization"
+      dashboard: "https://grafana.villagecompute.com/d/component-kpis?panelId=6"
+
+  - alert: CatalogImportJobFailureRateHigh
+    expr: |
+      sum(rate(catalog_import_failed_total[5m])) / sum(rate(catalog_import_enqueued_total[5m])) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: catalog
+      kpi: import-success-rate
+    annotations:
+      summary: "Catalog import job failure rate exceeds 5%"
+      description: "Import failure rate is {{ $value | humanizePercentage }} for reason: {{ $labels.reason }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/catalog-inventory"
+      action: "Review import job logs, check CSV validation errors, verify file format and encoding"
+      dashboard: "https://grafana.villagecompute.com/d/component-kpis?panelId=6"
+
 - name: consignment-module
   interval: 30s
   rules:

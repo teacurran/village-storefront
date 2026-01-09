@@ -190,7 +190,7 @@
         "id": 6,
         "title": "Catalog & Inventory - Bulk Import Throughput",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "rate(catalog_bulk_import_products_total{tenant_id=~\"$tenant_id\"}[5m]) * 60",
@@ -206,13 +206,161 @@
             "format": "short",
             "label": "Products/Minute"
           }
-        ]
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [5000],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"]
+              },
+              "reducer": {
+                "params": [],
+                "type": "avg"
+              },
+              "type": "query"
+            }
+          ],
+          "frequency": "60s",
+          "handler": 1,
+          "name": "Catalog Bulk Import Throughput Low",
+          "message": "Bulk import throughput below 5k products/min target (Section 4 KPI)"
+        }
+      },
+      {
+        "id": 23,
+        "title": "Catalog & Inventory - Variant Upsert Latency",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(catalog_variant_upsert_batch_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(catalog_variant_upsert_batch_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(catalog_variant_upsert_batch_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p99"
+          },
+          {
+            "expr": "200",
+            "legendFormat": "Target (200ms p95)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 200, "color": "yellow"},
+                {"value": 500, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 24,
+        "title": "Catalog & Inventory - Product Search Latency",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(catalog_product_search_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(catalog_product_search_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(catalog_product_search_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le)) * 1000",
+            "legendFormat": "p99"
+          },
+          {
+            "expr": "500",
+            "legendFormat": "Target (500ms p95)"
+          }
+        ],
+        "yaxes": [
+          {
+            "format": "ms",
+            "label": "Latency"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 500, "color": "yellow"},
+                {"value": 1000, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 25,
+        "title": "Catalog & Inventory - Import/Export Job Success Rate",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(catalog_import_success_total{tenant_id=~\"$tenant_id\"}[5m])) / sum(rate(catalog_import_enqueued_total{tenant_id=~\"$tenant_id\"}[5m]))",
+            "legendFormat": "Import Success Rate"
+          },
+          {
+            "expr": "sum(rate(catalog_export_success_total{tenant_id=~\"$tenant_id\"}[5m])) / sum(rate(catalog_export_enqueued_total{tenant_id=~\"$tenant_id\"}[5m]))",
+            "legendFormat": "Export Success Rate"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.95, "color": "yellow"},
+                {"value": 0.99, "color": "green"}
+              ]
+            }
+          }
+        }
       },
       {
         "id": 7,
         "title": "Checkout - 95th Percentile Latency",
         "type": "graph",
-        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(checkout_saga_duration_bucket{tenant_id=~\"$tenant_id\",stage=\"complete\"}[5m])) by (le))",
@@ -259,7 +407,7 @@
         "id": 8,
         "title": "Checkout - Failure Funnel by Stage",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "sum(rate(checkout_saga_failed_total{tenant_id=~\"$tenant_id\"}[5m])) by (stage, error_type)",
@@ -277,7 +425,7 @@
         "id": 9,
         "title": "Media Pipeline - Job Success Rate",
         "type": "stat",
-        "gridPos": {"x": 0, "y": 32, "w": 6, "h": 4},
+        "gridPos": {"x": 0, "y": 40, "w": 6, "h": 4},
         "targets": [
           {
             "expr": "rate(media_job_success_total{tenant_id=~\"$tenant_id\"}[5m]) / rate(media_job_total{tenant_id=~\"$tenant_id\"}[5m])",
@@ -310,7 +458,7 @@
         "id": 10,
         "title": "Media Pipeline - Queue Depth",
         "type": "graph",
-        "gridPos": {"x": 6, "y": 32, "w": 12, "h": 8},
+        "gridPos": {"x": 6, "y": 40, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "media_queue_depth{tenant_id=~\"$tenant_id\",priority=~\"default|low\"}",
@@ -357,7 +505,7 @@
         "id": 11,
         "title": "Background Jobs - Queue Depth by Priority",
         "type": "graph",
-        "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 48, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "reporting_refresh_queue_depth{priority=\"critical\"}",
@@ -387,7 +535,7 @@
         "id": 12,
         "title": "Background Jobs - Failure Rate",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+        "gridPos": {"x": 12, "y": 48, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "rate(reporting_job_failed_total{priority=~\"critical|high\"}[5m]) / rate(reporting_job_started_total{priority=~\"critical|high\"}[5m])",
@@ -409,7 +557,7 @@
         "id": 13,
         "title": "Payment - Webhook Idempotency Ratio",
         "type": "stat",
-        "gridPos": {"x": 0, "y": 48, "w": 6, "h": 4},
+        "gridPos": {"x": 0, "y": 56, "w": 6, "h": 4},
         "targets": [
           {
             "expr": "rate(stripe_webhook_duplicate_total[5m]) / rate(stripe_webhook_received_total[5m])",
@@ -439,7 +587,7 @@
         "id": 14,
         "title": "Loyalty - Points Accrual Overhead",
         "type": "graph",
-        "gridPos": {"x": 6, "y": 48, "w": 12, "h": 8},
+        "gridPos": {"x": 6, "y": 56, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(loyalty_points_accrual_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
@@ -461,7 +609,7 @@
         "id": 15,
         "title": "POS Offline - Queue Flush Time",
         "type": "graph",
-        "gridPos": {"x": 0, "y": 56, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 64, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(pos_offline_flush_duration_bucket[5m])) by (le))",
@@ -483,7 +631,7 @@
         "id": 16,
         "title": "Reporting - Report Generation Throughput",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 56, "w": 12, "h": 8},
+        "gridPos": {"x": 12, "y": 64, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "rate(reporting_rows_generated_total[5m]) * 60",
@@ -505,7 +653,7 @@
         "id": 17,
         "title": "Platform Admin - Global Store List Query Latency",
         "type": "graph",
-        "gridPos": {"x": 0, "y": 64, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 72, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(platform_admin_store_list_duration_bucket[5m])) by (le))",
@@ -527,7 +675,7 @@
         "id": 18,
         "title": "Integration Adapters - External Call Failure Rate",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 64, "w": 12, "h": 8},
+        "gridPos": {"x": 12, "y": 72, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "sum(rate(integration_adapter_failed_total[5m])) by (adapter, failure_type)",
@@ -545,7 +693,7 @@
         "id": 19,
         "title": "Admin SPA Delivery - Initial Bundle Size",
         "type": "graph",
-        "gridPos": {"x": 0, "y": 72, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 80, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "avg(admin_spa_bundle_size_bytes{tenant_id=~\"$tenant_id\",type=\"initial\"})",
@@ -567,7 +715,7 @@
         "id": 20,
         "title": "Admin SPA Delivery - Navigation Latency",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 72, "w": 12, "h": 8},
+        "gridPos": {"x": 12, "y": 80, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(admin_spa_navigation_latency_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
@@ -589,7 +737,7 @@
         "id": 21,
         "title": "Consignment Module - Intake Batch Duration",
         "type": "graph",
-        "gridPos": {"x": 0, "y": 80, "w": 12, "h": 8},
+        "gridPos": {"x": 0, "y": 88, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(consignment_intake_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
@@ -611,7 +759,7 @@
         "id": 22,
         "title": "Consignment Module - Payout Closing Duration",
         "type": "graph",
-        "gridPos": {"x": 12, "y": 80, "w": 12, "h": 8},
+        "gridPos": {"x": 12, "y": 88, "w": 12, "h": 8},
         "targets": [
           {
             "expr": "histogram_quantile(0.95, sum(rate(consignment_payout_close_duration_bucket{tenant_id=~\"$tenant_id\"}[5m])) by (le))",
