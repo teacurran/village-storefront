@@ -2,6 +2,7 @@ package villagecompute.storefront.services;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -59,7 +60,7 @@ public class PaymentService {
      * @return Created payment intent entity
      */
     @Transactional
-    public PaymentIntent createPaymentIntent(BigDecimal amount, String currency, Long orderId,
+    public PaymentIntent createPaymentIntent(BigDecimal amount, String currency, UUID orderId,
             boolean captureImmediately, String idempotencyKey) {
 
         UUID tenantId = TenantContext.getCurrentTenantId();
@@ -79,10 +80,15 @@ public class PaymentService {
             }
 
             // Create payment intent via provider
+            Map<String, String> metadata = new HashMap<>();
+            if (orderId != null) {
+                metadata.put("order_id", orderId.toString());
+            }
+
             PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(amount,
                     currency, null, // customerId - TODO: lookup from order
                     null, // paymentMethodId - will be provided by client
-                    captureImmediately, Map.of("order_id", orderId.toString()), idempotencyKey);
+                    captureImmediately, metadata, idempotencyKey);
 
             PaymentProvider.PaymentIntentResult result = stripePaymentProvider.createIntent(request);
 

@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.UUID;
 
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -216,7 +217,7 @@ class StripeWebhookIT {
         paymentIntent.tenant = testTenant;
         paymentIntent.provider = "stripe";
         paymentIntent.providerPaymentId = providerPaymentId;
-        paymentIntent.orderId = 1L;
+        paymentIntent.orderId = UUID.randomUUID();
         paymentIntent.amount = new BigDecimal("100.00");
         paymentIntent.currency = "USD";
         paymentIntent.status = PaymentIntent.PaymentStatus.PENDING;

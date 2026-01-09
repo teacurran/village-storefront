@@ -15,9 +15,15 @@ import jakarta.transaction.Transactional.TxType;
 
 import org.jboss.logging.Logger;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
 import villagecompute.storefront.data.models.Cart;
 import villagecompute.storefront.data.models.CartItem;
+import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.ProductVariant;
+import villagecompute.storefront.data.models.Promotion;
 import villagecompute.storefront.data.models.User;
 import villagecompute.storefront.data.repositories.CartItemRepository;
 import villagecompute.storefront.data.repositories.CartRepository;
@@ -62,6 +68,9 @@ public class CartService {
 
     @Inject
     CatalogCacheService catalogCacheService;
+
+    @Inject
+    ObjectMapper objectMapper;
 
     // ========================================
     // Cart Operations
@@ -265,6 +274,7 @@ public class CartService {
         cart.updatedAt = OffsetDateTime.now();
         cartRepository.persist(cart);
         catalogCacheService.invalidateTenantCache(tenantId, "cart-item-upsert");
+        publishCartEvent("CartUpdated", cart);
 
         // Eagerly initialize lazy-loaded relationships before transaction ends
         if (cartItem.variant != null) {
@@ -324,6 +334,7 @@ public class CartService {
                 itemId, quantity);
         meterRegistry.counter("cart.item.quantity_updated", "tenant_id", tenantId.toString()).increment();
         catalogCacheService.invalidateTenantCache(tenantId, "cart-item-quantity");
+        publishCartEvent("CartUpdated", cartItem.cart);
 
         // Eagerly initialize lazy-loaded relationships before transaction ends
         if (cartItem.variant != null) {
@@ -372,6 +383,7 @@ public class CartService {
         LOG.infof("Cart item removed - tenantId=%s, cartId=%s, itemId=%s", tenantId, cartId, itemId);
         meterRegistry.counter("cart.item.removed", "tenant_id", tenantId.toString()).increment();
         catalogCacheService.invalidateTenantCache(tenantId, "cart-item-removed");
+        publishCartEvent("CartUpdated", cart);
     }
 
     /**
@@ -436,6 +448,7 @@ public class CartService {
         LOG.infof("Cart cleared - tenantId=%s, cartId=%s, deletedItems=%d", tenantId, cartId, deletedItems);
         meterRegistry.counter("cart.cleared", "tenant_id", tenantId.toString()).increment();
         catalogCacheService.invalidateTenantCache(tenantId, "cart-cleared");
+        publishCartEvent("CartUpdated", cart);
     }
 
     // ========================================
@@ -489,6 +502,225 @@ public class CartService {
     public Optional<Cart> findActiveCartForSession(String sessionId) {
         return normalizeSessionId(sessionId).flatMap(cartRepository::findActiveBySession);
     }
+
+    // ========================================
+    // Promotion Operations
+    // ========================================
+
+    /**
+     * Apply promotion code to cart.
+     *
+     * @param cartId
+     *            cart UUID
+     * @param promoCode
+     *            promotion code
+     * @return applied promotion
+     */
+    @Transactional
+    public Promotion applyPromotion(UUID cartId, String promoCode) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Applying promotion to cart - tenantId=%s, cartId=%s, promoCode=%s", tenantId, cartId, promoCode);
+
+        Cart cart = cartRepository.findByIdOptional(cartId)
+                .orElseThrow(() -> new IllegalArgumentException("Cart not found: " + cartId));
+
+        if (!cart.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Cart does not belong to current tenant");
+        }
+
+        Promotion promotion = Promotion
+                .<Promotion>find("tenant.id = ?1 AND UPPER(code) = ?2", tenantId, promoCode.toUpperCase())
+                .firstResultOptional()
+                .orElseThrow(() -> new IllegalArgumentException("Promotion code not found: " + promoCode));
+
+        if (!promotion.isValid()) {
+            throw new IllegalStateException("Promotion code is not valid or has expired: " + promoCode);
+        }
+
+        // Calculate cart subtotal
+        BigDecimal subtotal = calculateCartSubtotal(cartId);
+
+        if (!promotion.meetsMinimumOrder(subtotal)) {
+            throw new IllegalStateException("Cart does not meet minimum order amount for promotion: " + promoCode);
+        }
+
+        // Store promotion in cart metadata
+        try {
+            ObjectNode metadata = cart.metadata != null ? (ObjectNode) objectMapper.readTree(cart.metadata)
+                    : objectMapper.createObjectNode();
+            metadata.put("promotionCode", promoCode);
+            metadata.put("promotionId", promotion.id.toString());
+            metadata.put("discountType", promotion.discountType.name());
+            metadata.put("discountValue", promotion.discountValue.toString());
+            metadata.put("discountAmount", promotion.calculateDiscount(subtotal).toString());
+            cart.metadata = objectMapper.writeValueAsString(metadata);
+            cartRepository.persist(cart);
+
+            LOG.infof("Applied promotion to cart - tenantId=%s, cartId=%s, promoCode=%s, discountAmount=%s", tenantId,
+                    cartId, promoCode, promotion.calculateDiscount(subtotal));
+
+            publishPromotionAppliedEvent(cart, promotion, subtotal);
+            publishCartEvent("CartUpdated", cart);
+            meterRegistry.counter("cart.promotion.applied", "tenant_id", tenantId.toString()).increment();
+
+            return promotion;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to apply promotion", e);
+        }
+    }
+
+    /**
+     * Remove promotion from cart.
+     *
+     * @param cartId
+     *            cart UUID
+     */
+    @Transactional
+    public void removePromotion(UUID cartId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Removing promotion from cart - tenantId=%s, cartId=%s", tenantId, cartId);
+
+        Cart cart = cartRepository.findByIdOptional(cartId)
+                .orElseThrow(() -> new IllegalArgumentException("Cart not found: " + cartId));
+
+        if (!cart.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Cart does not belong to current tenant");
+        }
+
+        try {
+            if (cart.metadata != null) {
+                ObjectNode metadata = (ObjectNode) objectMapper.readTree(cart.metadata);
+                metadata.remove("promotionCode");
+                metadata.remove("promotionId");
+                metadata.remove("discountType");
+                metadata.remove("discountValue");
+                metadata.remove("discountAmount");
+                cart.metadata = objectMapper.writeValueAsString(metadata);
+                cartRepository.persist(cart);
+            }
+
+            LOG.infof("Removed promotion from cart - tenantId=%s, cartId=%s", tenantId, cartId);
+            meterRegistry.counter("cart.promotion.removed", "tenant_id", tenantId.toString()).increment();
+            publishCartEvent("CartUpdated", cart);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to remove promotion", e);
+        }
+    }
+
+    /**
+     * Get applied promotion details from cart.
+     *
+     * @param cartId
+     *            cart UUID
+     * @return promotion if applied, empty otherwise
+     */
+    @Transactional(TxType.SUPPORTS)
+    public Optional<Promotion> getAppliedPromotion(UUID cartId) {
+        Cart cart = cartRepository.findByIdOptional(cartId).orElse(null);
+        if (cart == null || cart.metadata == null) {
+            return Optional.empty();
+        }
+
+        try {
+            JsonNode metadata = objectMapper.readTree(cart.metadata);
+            if (metadata.has("promotionId")) {
+                UUID promotionId = UUID.fromString(metadata.get("promotionId").asText());
+                return Promotion.findByIdOptional(promotionId);
+            }
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to parse promotion from cart metadata - cartId=%s", cartId);
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * Calculate cart total including discounts.
+     *
+     * @param cartId
+     *            cart UUID
+     * @return total amount after discounts
+     */
+    @Transactional(TxType.SUPPORTS)
+    public BigDecimal calculateCartTotal(UUID cartId) {
+        BigDecimal subtotal = calculateCartSubtotal(cartId);
+        BigDecimal discount = BigDecimal.ZERO;
+
+        Cart cart = cartRepository.findByIdOptional(cartId).orElse(null);
+        if (cart != null && cart.metadata != null) {
+            try {
+                JsonNode metadata = objectMapper.readTree(cart.metadata);
+                if (metadata.has("discountAmount")) {
+                    discount = new BigDecimal(metadata.get("discountAmount").asText());
+                }
+            } catch (Exception e) {
+                LOG.warnf(e, "Failed to parse discount from cart metadata - cartId=%s", cartId);
+            }
+        }
+
+        return subtotal.subtract(discount).max(BigDecimal.ZERO);
+    }
+
+    // ========================================
+    // Domain Event Publishing
+    // ========================================
+
+    /**
+     * Publish cart domain event.
+     */
+    private void publishCartEvent(String eventType, Cart cart) {
+        try {
+            DomainEvent event = new DomainEvent();
+            event.tenant = cart.tenant;
+            event.aggregateType = "CART";
+            event.aggregateId = cart.id;
+            event.eventType = eventType;
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("cartId", cart.id.toString());
+            payload.put("userId", cart.user != null ? cart.user.id.toString() : null);
+            payload.put("sessionId", cart.sessionId);
+            payload.put("itemCount", cartItemRepository.countByCart(cart.id));
+
+            event.payload = objectMapper.writeValueAsString(payload);
+            event.persist();
+
+            LOG.debugf("Published cart event - eventType=%s, cartId=%s", eventType, cart.id);
+        } catch (Exception e) {
+            LOG.errorf(e, "Failed to publish cart event - eventType=%s, cartId=%s", eventType, cart.id);
+        }
+    }
+
+    /**
+     * Publish promotion applied event.
+     */
+    private void publishPromotionAppliedEvent(Cart cart, Promotion promotion, BigDecimal subtotal) {
+        try {
+            DomainEvent event = new DomainEvent();
+            event.tenant = cart.tenant;
+            event.aggregateType = "CART";
+            event.aggregateId = cart.id;
+            event.eventType = "PromotionApplied";
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("cartId", cart.id.toString());
+            payload.put("promotionCode", promotion.code);
+            payload.put("promotionId", promotion.id.toString());
+            payload.put("subtotal", subtotal.toString());
+            payload.put("discountAmount", promotion.calculateDiscount(subtotal).toString());
+
+            event.payload = objectMapper.writeValueAsString(payload);
+            event.persist();
+
+            LOG.debugf("Published promotion applied event - cartId=%s, promoCode=%s", cart.id, promotion.code);
+        } catch (Exception e) {
+            LOG.errorf(e, "Failed to publish promotion event - cartId=%s", cart.id);
+        }
+    }
+
+    // ========================================
+    // Private Helper Methods
+    // ========================================
 
     private String requireSessionId(String sessionId) {
         return normalizeSessionId(sessionId).orElseThrow(() -> new IllegalArgumentException("Session ID is required"));

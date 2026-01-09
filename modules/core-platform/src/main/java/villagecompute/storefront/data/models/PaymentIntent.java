@@ -73,7 +73,7 @@ public class PaymentIntent extends PanacheEntityBase {
 
     @Column(
             name = "order_id")
-    public Long orderId; // Link to Order entity when available
+    public UUID orderId; // Link to Order aggregate
 
     @Column(
             name = "amount",

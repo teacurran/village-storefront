@@ -66,6 +66,8 @@ class ConsignmentServiceTest {
         entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
+        entityManager.createQuery("DELETE FROM IdempotencyKey").executeUpdate();
+        entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 
         // Create test tenant

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import villagecompute.storefront.data.models.Cart;
 import villagecompute.storefront.data.models.CartItem;
+import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
@@ -63,6 +64,7 @@ class CartServiceTest {
         // Clean up existing data
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
         entityManager.createQuery("DELETE FROM Cart").executeUpdate();
+        entityManager.createQuery("DELETE FROM DomainEvent").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
         entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
@@ -561,5 +563,19 @@ class CartServiceTest {
         CartItem item = cartService.addItemToCart(primaryCart.id, variantId, 1);
 
         assertThrows(IllegalArgumentException.class, () -> cartService.removeCartItem(otherCart.id, item.id));
+    }
+
+    @Test
+    @Transactional
+    void addItemToCart_shouldEmitCartUpdatedEvent() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        cartService.addItemToCart(cart.id, variantId, 1);
+
+        List<DomainEvent> events = DomainEvent.find("aggregateType = ?1 AND aggregateId = ?2", "CART", cart.id).list();
+
+        assertFalse(events.isEmpty(), "Expected cart domain event to be persisted");
+        assertTrue(events.stream().anyMatch(event -> "CartUpdated".equals(event.eventType)),
+                "CartUpdated event should be emitted");
     }
 }
