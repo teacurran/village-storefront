@@ -45,4 +45,11 @@ export class ProductPage extends BasePage {
   async getProductPrice(): Promise<string> {
     return await this.getText(this.productPrice);
   }
+
+  async getPrice(): Promise<number> {
+    const priceText = await this.getText(this.productPrice);
+    // Extract numeric value from price text like "$29.99" or "29.99"
+    const match = priceText.match(/\$?([\d,]+\.?\d*)/);
+    return match ? parseFloat(match[1].replace(/,/g, '')) : 0;
+  }
 }
