@@ -30,8 +30,12 @@ import villagecompute.storefront.data.models.LoyaltyTransaction;
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.ShippingProfile;
+import villagecompute.storefront.data.models.StoreCreditAccount;
+import villagecompute.storefront.data.models.StoreCreditTransaction;
 import villagecompute.storefront.exceptions.CheckoutDisabledException;
 import villagecompute.storefront.exceptions.IdempotencyConflictException;
+import villagecompute.storefront.giftcard.GiftCardService;
+import villagecompute.storefront.giftcard.GiftCardService.GiftCardRedemptionResult;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.Address;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationRequest;
@@ -40,6 +44,7 @@ import villagecompute.storefront.integration.shipping.CarrierRateAdapter.Rate;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.ServiceLevel;
 import villagecompute.storefront.loyalty.LoyaltyService;
 import villagecompute.storefront.services.ShippingService.AggregatedRateResult;
+import villagecompute.storefront.storecredit.StoreCreditService;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -93,6 +98,15 @@ public class CheckoutSaga {
 
     @Inject
     LoyaltyService loyaltyService;
+
+    @Inject
+    GiftCardService giftCardService;
+
+    @Inject
+    StoreCreditService storeCreditService;
+
+    @Inject
+    CheckoutTenderService checkoutTenderService;
 
     /**
      * Execute the checkout flow for the given request.
@@ -157,16 +171,30 @@ public class CheckoutSaga {
             attachShippingMetadata(order, shippingDecision);
             context.orderCreated(order.id);
 
-            PaymentIntent paymentIntent = paymentService.createPaymentIntent(order.totalAmount, order.currency,
-                    order.id, true, context.idempotencyKey());
-            orderService.markOrderPaid(order.id, paymentIntent.providerPaymentId);
+            // Apply multi-tender payments (gift cards, store credit, then credit card)
+            BigDecimal remainingAmount = applyGiftCardsAndStoreCredit(request, order, context);
+
+            // Charge remaining amount to credit card (if needed)
+            String paymentIntentId = null;
+            if (remainingAmount.compareTo(BigDecimal.ZERO) > 0) {
+                PaymentIntent paymentIntent = paymentService.createPaymentIntent(remainingAmount, order.currency,
+                        order.id, true, context.idempotencyKey() + "_card");
+                paymentIntentId = paymentIntent.providerPaymentId;
+
+                checkoutTenderService.recordCardTender(order.id, paymentIntent, remainingAmount, order.currency);
+                LOG.infof("Applied card payment - orderId=%s, amount=%s, remaining=0.00", order.id, remainingAmount);
+            } else {
+                LOG.infof("Order fully paid by gift cards/store credit - orderId=%s, no card charge needed", order.id);
+            }
+
+            orderService.markOrderPaid(order.id, paymentIntentId);
 
             // Award loyalty points if feature enabled
             awardLoyaltyPointsForOrder(order);
 
             cartService.clearCart(cart.id);
 
-            return new CheckoutResult(order.id, order.orderNumber, paymentIntent.providerPaymentId, order.status.name(),
+            return new CheckoutResult(order.id, order.orderNumber, paymentIntentId, order.status.name(),
                     order.totalAmount, order.currency, order.paidAt);
         } catch (RuntimeException e) {
             handleFailure(context, e);
@@ -372,6 +400,26 @@ public class CheckoutSaga {
 
     private void handleFailure(CheckoutContext context, RuntimeException e) {
         LOG.errorf(e, "Checkout failed for key=%s, executing compensation", context.idempotencyKey());
+
+        // Compensate applied tenders (reverse order)
+        if (!context.appliedTenders.isEmpty()) {
+            LOG.infof("Compensating %d applied tenders for failed checkout - orderId=%s", context.appliedTenders.size(),
+                    context.orderId);
+
+            // Reverse tenders in LIFO order (unwinding saga)
+            for (int i = context.appliedTenders.size() - 1; i >= 0; i--) {
+                AppliedTender tender = context.appliedTenders.get(i);
+                try {
+                    compensateTender(tender, context.orderId, e.getMessage());
+                } catch (Exception compensationEx) {
+                    LOG.errorf(compensationEx, "Failed to compensate tender - orderId=%s, type=%s, amount=%s",
+                            context.orderId, tender.tenderType(), tender.amount());
+                    // Continue with other compensations (best-effort)
+                }
+            }
+        }
+
+        // Cancel order
         if (context.orderId != null && context.orderCreated) {
             try {
                 orderService.cancelOrder(context.orderId, "Checkout failed: " + e.getMessage());
@@ -380,10 +428,57 @@ public class CheckoutSaga {
             }
         }
 
+        // Mark idempotency key as failed
         try {
             idempotencyService.markFailed(context.idempotencyKey(), serializeError(e), determineStatusCode(e));
         } catch (Exception markEx) {
             LOG.warnf(markEx, "Failed to mark idempotency key %s as failed", context.idempotencyKey());
+        }
+    }
+
+    /**
+     * Compensate a single tender by reversing the transaction.
+     */
+    private void compensateTender(AppliedTender tender, UUID orderId, String reason) {
+        String compensationReason = "Checkout compensation: " + reason;
+
+        switch (tender.tenderType()) {
+            case "gift_card" :
+                if (tender.giftCardId() != null) {
+                    // Refund amount back to gift card
+                    giftCardService.refund(tender.giftCardId(), tender.amount(), compensationReason);
+                    LOG.infof("Compensated gift card tender - orderId=%s, giftCardId=%s, amount=%s", orderId,
+                            tender.giftCardId(), tender.amount());
+                    meterRegistry
+                            .counter("checkout.tender.refunded", "tenant_id",
+                                    TenantContext.getCurrentTenantId().toString(), "tender_type", "gift_card")
+                            .increment();
+                }
+                break;
+
+            case "store_credit" :
+                if (tender.storeCreditAccountId() != null) {
+                    // Find user for this account and adjust balance
+                    StoreCreditAccount account = StoreCreditAccount.findById(tender.storeCreditAccountId());
+                    if (account != null && account.user != null) {
+                        storeCreditService.adjust(account.user.id, tender.amount(), compensationReason);
+                        LOG.infof("Compensated store credit tender - orderId=%s, accountId=%s, amount=%s", orderId,
+                                tender.storeCreditAccountId(), tender.amount());
+                        meterRegistry
+                                .counter("checkout.tender.refunded", "tenant_id",
+                                        TenantContext.getCurrentTenantId().toString(), "tender_type", "store_credit")
+                                .increment();
+                    }
+                }
+                break;
+
+            case "card" :
+                // Card payment refunds are handled by PaymentService (not implemented here)
+                LOG.debugf("Skipping card tender compensation (handled by payment service) - orderId=%s", orderId);
+                break;
+
+            default :
+                LOG.warnf("Unknown tender type for compensation - type=%s, orderId=%s", tender.tenderType(), orderId);
         }
     }
 
@@ -448,6 +543,92 @@ public class CheckoutSaga {
     }
 
     /**
+     * Apply gift cards and store credit to order, returning remaining amount to be charged to card.
+     *
+     * @param request
+     *            checkout request with gift card codes and store credit flag
+     * @param order
+     *            the order to apply tenders to
+     * @param context
+     *            checkout context to track applied tenders for compensation
+     * @return remaining amount after applying all gift cards and store credit
+     */
+    private BigDecimal applyGiftCardsAndStoreCredit(CheckoutRequest request, Order order, CheckoutContext context) {
+        BigDecimal remainingAmount = order.totalAmount;
+
+        // Step 1: Apply gift cards (if provided in request)
+        if (request.giftCardCodes() != null && !request.giftCardCodes().isEmpty()) {
+            for (String giftCardCode : request.giftCardCodes()) {
+                if (remainingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                    break; // Order fully paid by previous gift cards
+                }
+
+                try {
+                    GiftCardRedemptionResult redemption = giftCardService.redeem(giftCardCode, remainingAmount,
+                            order.id, context.idempotencyKey() + "_giftcard_" + giftCardCode.hashCode(), null, null);
+
+                    remainingAmount = remainingAmount.subtract(redemption.amountRedeemed());
+
+                    // Track tender for compensation
+                    context.recordTender(new AppliedTender("gift_card", redemption.amountRedeemed(), order.currency,
+                            redemption.transaction().giftCard.id, null, redemption.transaction().id));
+
+                    LOG.infof("Applied gift card - orderId=%s, code=%s, amount=%s, remaining=%s", order.id,
+                            maskCode(giftCardCode), redemption.amountRedeemed(), remainingAmount);
+                } catch (Exception e) {
+                    LOG.errorf(e, "Failed to apply gift card - orderId=%s, code=%s", order.id, maskCode(giftCardCode));
+                    throw new IllegalStateException("Gift card redemption failed: " + e.getMessage(), e);
+                }
+            }
+        }
+
+        // Step 2: Apply store credit (if user opted in)
+        if (Boolean.TRUE.equals(request.useStoreCredit()) && remainingAmount.compareTo(BigDecimal.ZERO) > 0) {
+            if (order.user != null) { // Store credit requires authenticated user
+                try {
+                    Optional<StoreCreditAccount> accountOpt = storeCreditService.findAccount(order.user.id);
+                    if (accountOpt.isPresent() && accountOpt.get().balance.compareTo(BigDecimal.ZERO) > 0) {
+                        StoreCreditTransaction redemption = storeCreditService.redeem(order.user.id, remainingAmount,
+                                order.id, context.idempotencyKey() + "_storecredit", null, null);
+
+                        BigDecimal appliedAmount = redemption.amount.abs(); // Transaction records negative amount
+                        remainingAmount = remainingAmount.subtract(appliedAmount);
+
+                        // Track tender for compensation
+                        context.recordTender(new AppliedTender("store_credit", appliedAmount, order.currency, null,
+                                redemption.account.id, redemption.id));
+
+                        LOG.infof("Applied store credit - orderId=%s, userId=%s, amount=%s, remaining=%s", order.id,
+                                order.user.id, appliedAmount, remainingAmount);
+                    }
+                } catch (Exception e) {
+                    LOG.errorf(e, "Failed to apply store credit - orderId=%s, userId=%s", order.id,
+                            order.user != null ? order.user.id : "guest");
+                    throw new IllegalStateException("Store credit redemption failed: " + e.getMessage(), e);
+                }
+            } else {
+                LOG.debugf("Skipping store credit for guest checkout - orderId=%s", order.id);
+            }
+        }
+
+        return remainingAmount;
+    }
+
+    /**
+     * Mask gift card code showing only last 4 characters for logging.
+     */
+    private String maskCode(String code) {
+        if (code == null || code.length() <= 4) {
+            return "****";
+        }
+        String[] parts = code.split("-");
+        if (parts.length == 4) {
+            return "****-****-****-" + parts[3];
+        }
+        return "****" + code.substring(code.length() - 4);
+    }
+
+    /**
      * Award loyalty points for completed order.
      *
      * <p>
@@ -504,7 +685,7 @@ public class CheckoutSaga {
      */
     public record CheckoutRequest(UUID cartId, String customerEmail, String shippingAddress, String billingAddress,
             BigDecimal shippingAmount, BigDecimal taxAmount, String currency, String paymentMethodId,
-            String idempotencyKey) {
+            String idempotencyKey, List<String> giftCardCodes, Boolean useStoreCredit) {
     }
 
     /**
@@ -525,6 +706,7 @@ public class CheckoutSaga {
         private final String idempotencyKey;
         private UUID orderId;
         private boolean orderCreated;
+        private final List<AppliedTender> appliedTenders = new ArrayList<>();
 
         CheckoutContext(String idempotencyKey) {
             this.idempotencyKey = idempotencyKey;
@@ -535,8 +717,19 @@ public class CheckoutSaga {
             this.orderCreated = true;
         }
 
+        void recordTender(AppliedTender tender) {
+            this.appliedTenders.add(tender);
+        }
+
         String idempotencyKey() {
             return idempotencyKey;
         }
+    }
+
+    /**
+     * Record of a tender applied during checkout, used for compensation if checkout fails.
+     */
+    private record AppliedTender(String tenderType, BigDecimal amount, String currency, Long giftCardId,
+            Long storeCreditAccountId, Long transactionId) {
     }
 }

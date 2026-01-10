@@ -18,7 +18,7 @@ public class RedeemStoreCreditRequest {
             message = "Amount must be positive")
     public BigDecimal amount;
 
-    public Long orderId;
+    public java.util.UUID orderId;
     public String idempotencyKey;
     public Long posDeviceId;
     public OffsetDateTime offlineSyncedAt;

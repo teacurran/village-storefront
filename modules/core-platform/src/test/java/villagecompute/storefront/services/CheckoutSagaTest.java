@@ -212,6 +212,6 @@ class CheckoutSagaTest {
 
         return new CheckoutRequest(cart.id, "checkout@example.com", "{\"line1\":\"123 Checkout\"}",
                 "{\"line1\":\"123 Checkout\"}", new BigDecimal("5.00"), new BigDecimal("3.00"), "USD", "pm_card_visa",
-                idempotencyKey);
+                idempotencyKey, null, null);
     }
 }

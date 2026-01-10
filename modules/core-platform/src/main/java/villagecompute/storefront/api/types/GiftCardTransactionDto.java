@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
 public class GiftCardTransactionDto {
     public Long id;
     public Long giftCardId;
-    public Long orderId;
+    public java.util.UUID orderId;
     public BigDecimal amount;
     public String transactionType;
     public BigDecimal balanceAfter;

@@ -308,7 +308,8 @@ public class CheckoutResource {
             CheckoutSaga.CheckoutRequest sagaRequest = new CheckoutSaga.CheckoutRequest(
                     UUID.fromString(request.getCartId()), request.getCustomerEmail(), request.getShippingAddress(),
                     request.getBillingAddress(), request.getShippingAmount(), request.getTaxAmount(),
-                    request.getCurrency(), request.getPaymentMethodId(), idempotencyKey);
+                    request.getCurrency(), request.getPaymentMethodId(), idempotencyKey, request.getGiftCardCodes(),
+                    request.getUseStoreCredit());
 
             CheckoutSaga.CheckoutResult result = checkoutSaga.execute(sagaRequest);
 

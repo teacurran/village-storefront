@@ -75,7 +75,7 @@ public class GiftCardTransaction extends PanacheEntityBase {
      */
     @Column(
             name = "order_id")
-    public Long orderId;
+    public UUID orderId;
 
     /**
      * Amount of transaction. Positive for load/refund, negative for redemption.

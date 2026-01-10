@@ -39,7 +39,7 @@ public class CheckoutTenderService {
      * @return persisted {@link PaymentTender} or {@code null} when orderId missing
      */
     @Transactional
-    public PaymentTender recordGiftCardTender(Long orderId, GiftCardTransaction transaction) {
+    public PaymentTender recordGiftCardTender(java.util.UUID orderId, GiftCardTransaction transaction) {
         if (orderId == null || transaction == null) {
             LOG.debug("Skipping gift card tender recording - missing orderId or transaction");
             return null;
@@ -66,7 +66,7 @@ public class CheckoutTenderService {
      * Record a store credit tender for an order if order id available.
      */
     @Transactional
-    public PaymentTender recordStoreCreditTender(Long orderId, StoreCreditTransaction transaction) {
+    public PaymentTender recordStoreCreditTender(java.util.UUID orderId, StoreCreditTransaction transaction) {
         if (orderId == null || transaction == null) {
             LOG.debug("Skipping store credit tender recording - missing orderId or transaction");
             return null;
@@ -86,6 +86,34 @@ public class CheckoutTenderService {
                 TenantContext.getCurrentTenantId(), orderId, transaction.account.id, tender.amount);
         meterRegistry.counter("checkout.tender.recorded", "tenant_id", TenantContext.getCurrentTenantId().toString(),
                 "tender_type", "store_credit").increment();
+        return tender;
+    }
+
+    /**
+     * Record a credit card tender for an order.
+     */
+    @Transactional
+    public PaymentTender recordCardTender(java.util.UUID orderId,
+            villagecompute.storefront.data.models.PaymentIntent paymentIntent, java.math.BigDecimal amount,
+            String currency) {
+        if (orderId == null || paymentIntent == null) {
+            LOG.debug("Skipping card tender recording - missing orderId or paymentIntent");
+            return null;
+        }
+
+        PaymentTender tender = new PaymentTender();
+        tender.orderId = orderId;
+        tender.tenderType = "card";
+        tender.amount = amount;
+        tender.currency = currency;
+        tender.paymentIntent = paymentIntent;
+        tender.status = "captured";
+        tender.persist();
+
+        LOG.infof("Recorded card tender - tenantId=%s, orderId=%s, paymentIntentId=%s, amount=%s",
+                TenantContext.getCurrentTenantId(), orderId, paymentIntent.id, tender.amount);
+        meterRegistry.counter("checkout.tender.recorded", "tenant_id", TenantContext.getCurrentTenantId().toString(),
+                "tender_type", "card").increment();
         return tender;
     }
 }

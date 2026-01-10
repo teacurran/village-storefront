@@ -135,7 +135,7 @@ public class GiftCardService {
      * @return redemption result including actual amount applied and remaining balance
      */
     @Transactional
-    public GiftCardRedemptionResult redeem(String code, BigDecimal requestedAmount, Long orderId, String idempotencyKey,
+    public GiftCardRedemptionResult redeem(String code, BigDecimal requestedAmount, UUID orderId, String idempotencyKey,
             Long posDeviceId, OffsetDateTime offlineSyncedAt) {
         validateRedemptionInput(code, requestedAmount, idempotencyKey);
         UUID tenantId = TenantContext.getCurrentTenantId();
@@ -263,6 +263,46 @@ public class GiftCardService {
         }
 
         return card;
+    }
+
+    /**
+     * Refund amount back to gift card (compensation for failed checkout).
+     *
+     * @param giftCardId
+     *            the gift card to refund to
+     * @param amount
+     *            the amount to refund
+     * @param reason
+     *            reason for the refund
+     * @return the refund transaction
+     */
+    @Transactional
+    public GiftCardTransaction refund(Long giftCardId, BigDecimal amount, String reason) {
+        Objects.requireNonNull(amount, "Amount is required");
+        validateInitialBalance(amount);
+
+        GiftCard card = lockCardById(giftCardId);
+        BigDecimal normalized = normalizeAmount(amount);
+
+        card.currentBalance = card.currentBalance.add(normalized);
+
+        GiftCardTransaction transaction = new GiftCardTransaction();
+        transaction.tenant = card.tenant;
+        transaction.giftCard = card;
+        transaction.amount = normalized; // Positive for refund
+        transaction.transactionType = "refunded";
+        transaction.balanceAfter = card.currentBalance;
+        transaction.reason = reason != null ? reason : "Checkout compensation refund";
+        transaction.persist();
+
+        reportingProjectionService.recordGiftCardLedgerEvent(transaction);
+
+        LOG.infof("Refunded gift card - tenantId=%s, giftCardId=%s, amount=%s, newBalance=%s",
+                TenantContext.getCurrentTenantId(), giftCardId, normalized, card.currentBalance);
+        meterRegistry.counter("giftcard.refunded", "tenant_id", TenantContext.getCurrentTenantId().toString())
+                .increment();
+
+        return transaction;
     }
 
     /**

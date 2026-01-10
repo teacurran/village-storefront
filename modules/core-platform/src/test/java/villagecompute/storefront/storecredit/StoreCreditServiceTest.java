@@ -108,10 +108,10 @@ class StoreCreditServiceTest {
     void redeemIsIdempotentAndPartial() {
         storeCreditService.adjust(userId, new BigDecimal("30.00"), "seed");
 
-        StoreCreditTransaction first = storeCreditService.redeem(userId, new BigDecimal("50.00"), 111L, "sc-key", null,
-                null);
-        StoreCreditTransaction second = storeCreditService.redeem(userId, new BigDecimal("50.00"), 111L, "sc-key", null,
-                null);
+        StoreCreditTransaction first = storeCreditService.redeem(userId, new BigDecimal("50.00"),
+                java.util.UUID.randomUUID(), "sc-key", null, null);
+        StoreCreditTransaction second = storeCreditService.redeem(userId, new BigDecimal("50.00"),
+                java.util.UUID.randomUUID(), "sc-key", null, null);
 
         assertSame(first, second);
         StoreCreditAccount account = StoreCreditAccount.findByUser(userId);

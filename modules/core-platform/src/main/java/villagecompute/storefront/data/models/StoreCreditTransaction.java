@@ -75,7 +75,7 @@ public class StoreCreditTransaction extends PanacheEntityBase {
      */
     @Column(
             name = "order_id")
-    public Long orderId;
+    public UUID orderId;
 
     /**
      * Gift card ID if credit came from conversion.

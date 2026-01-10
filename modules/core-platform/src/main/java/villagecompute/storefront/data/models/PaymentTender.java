@@ -58,7 +58,7 @@ public class PaymentTender extends PanacheEntityBase {
     @Column(
             name = "order_id",
             nullable = false)
-    public Long orderId;
+    public UUID orderId;
 
     @Column(
             name = "tender_type",

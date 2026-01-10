@@ -109,7 +109,7 @@ public class StoreCreditService {
      * Redeem store credit amount with idempotency safeguards.
      */
     @Transactional
-    public StoreCreditTransaction redeem(UUID userId, BigDecimal requestedAmount, Long orderId, String idempotencyKey,
+    public StoreCreditTransaction redeem(UUID userId, BigDecimal requestedAmount, UUID orderId, String idempotencyKey,
             Long posDeviceId, OffsetDateTime offlineSyncedAt) {
         Objects.requireNonNull(userId, "User id is required");
         validateAmount(requestedAmount);

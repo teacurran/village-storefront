@@ -126,8 +126,8 @@ class GiftCardServiceTest {
     void redeemGiftCardSupportsPartialAmount() {
         GiftCard card = createGiftCard(new BigDecimal("100.00"));
 
-        GiftCardRedemptionResult result = giftCardService.redeem(card.code, new BigDecimal("150.00"), 42L, "key-123",
-                null, null);
+        GiftCardRedemptionResult result = giftCardService.redeem(card.code, new BigDecimal("150.00"),
+                java.util.UUID.randomUUID(), "key-123", null, null);
 
         assertTrue(result.partial());
         assertEquals(new BigDecimal("100.00"), result.amountRedeemed());
@@ -141,10 +141,10 @@ class GiftCardServiceTest {
     void redeemGiftCardIsIdempotent() {
         GiftCard card = createGiftCard(new BigDecimal("80.00"));
 
-        GiftCardRedemptionResult first = giftCardService.redeem(card.code, new BigDecimal("30.00"), 99L, "dup-key",
-                null, null);
-        GiftCardRedemptionResult second = giftCardService.redeem(card.code, new BigDecimal("30.00"), 99L, "dup-key",
-                null, null);
+        GiftCardRedemptionResult first = giftCardService.redeem(card.code, new BigDecimal("30.00"),
+                java.util.UUID.randomUUID(), "dup-key", null, null);
+        GiftCardRedemptionResult second = giftCardService.redeem(card.code, new BigDecimal("30.00"),
+                java.util.UUID.randomUUID(), "dup-key", null, null);
 
         assertSame(first.transaction(), second.transaction());
         GiftCard updated = GiftCard.findById(card.id);

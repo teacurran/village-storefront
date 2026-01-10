@@ -1,6 +1,7 @@
 package villagecompute.storefront.api.types;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -57,6 +58,12 @@ public class CheckoutCommitRequest {
     @NotBlank(
             message = "Payment method ID is required")
     private String paymentMethodId;
+
+    @JsonProperty("giftCardCodes")
+    private List<String> giftCardCodes;
+
+    @JsonProperty("useStoreCredit")
+    private Boolean useStoreCredit;
 
     public String getCartId() {
         return cartId;
@@ -120,5 +127,21 @@ public class CheckoutCommitRequest {
 
     public void setPaymentMethodId(String paymentMethodId) {
         this.paymentMethodId = paymentMethodId;
+    }
+
+    public List<String> getGiftCardCodes() {
+        return giftCardCodes;
+    }
+
+    public void setGiftCardCodes(List<String> giftCardCodes) {
+        this.giftCardCodes = giftCardCodes;
+    }
+
+    public Boolean getUseStoreCredit() {
+        return useStoreCredit;
+    }
+
+    public void setUseStoreCredit(Boolean useStoreCredit) {
+        this.useStoreCredit = useStoreCredit;
     }
 }
