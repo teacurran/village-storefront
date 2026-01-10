@@ -428,6 +428,84 @@ public class PayoutLedgerService {
     }
 
     // ========================================
+    // Automated Settlement Operations (Task I5.T6)
+    // ========================================
+
+    /**
+     * Settle pending sales to available balance for all consignors (batch operation).
+     *
+     * <p>
+     * Queries all SALE-type ledger entries older than the cutoff date and moves their amounts from pending to available
+     * balance. Called by {@link villagecompute.storefront.jobs.ConsignmentPayoutAutomationJob} on scheduled basis.
+     *
+     * <p>
+     * This method processes settlements in batches to avoid long-running transactions. Each consignor's settlement is
+     * recorded as a SETTLEMENT entry in the ledger.
+     *
+     * @param cutoffDate
+     *            settlement cutoff timestamp (entries created before this date are eligible)
+     * @return number of consignors settled
+     */
+    @Transactional
+    public int settlePendingSales(OffsetDateTime cutoffDate) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Settling pending sales to available - tenantId=%s, cutoffDate=%s", tenantId, cutoffDate);
+
+        // Query all SALE entries older than cutoff that haven't been settled yet
+        List<PayoutLedgerEntry> pendingSales = entryRepository
+                .find("entryType = 'SALE' and createdAt <= ?1 and tenant.id = ?2 order by ledger.id, createdAt",
+                        cutoffDate, tenantId)
+                .list();
+
+        if (pendingSales.isEmpty()) {
+            LOG.debugf("No pending sales to settle - tenantId=%s, cutoffDate=%s", tenantId, cutoffDate);
+            return 0;
+        }
+
+        // Group by ledger and sum amounts
+        java.util.Map<UUID, BigDecimal> settlementsByLedger = new java.util.HashMap<>();
+        for (PayoutLedgerEntry sale : pendingSales) {
+            settlementsByLedger.merge(sale.ledger.id, sale.amount, BigDecimal::add);
+        }
+
+        int settledCount = 0;
+        for (java.util.Map.Entry<UUID, BigDecimal> settlement : settlementsByLedger.entrySet()) {
+            UUID ledgerId = settlement.getKey();
+            BigDecimal amountToSettle = settlement.getValue();
+
+            if (amountToSettle.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            PayoutLedger ledger = ledgerRepository.findById(ledgerId);
+            if (ledger == null) {
+                LOG.warnf("Ledger not found during settlement - tenantId=%s, ledgerId=%s", tenantId, ledgerId);
+                continue;
+            }
+
+            try {
+                settlePendingToAvailable(ledger.consignor.id, amountToSettle,
+                        String.format("Settlement of pending sales (cutoff: %s)", cutoffDate));
+                settledCount++;
+                LOG.infof("Settled pending balance - tenantId=%s, consignorId=%s, amount=%s", tenantId,
+                        ledger.consignor.id, amountToSettle);
+            } catch (Exception e) {
+                LOG.errorf(e, "Failed to settle ledger - tenantId=%s, ledgerId=%s, consignorId=%s", tenantId, ledgerId,
+                        ledger.consignor.id);
+                meterRegistry.counter("consignment.ledger.settlement.failed", "tenant", tenantId.toString(), "reason",
+                        "exception").increment();
+            }
+        }
+
+        LOG.infof("Pending sales settlement completed - tenantId=%s, consignorsSettled=%d, totalEntries=%d", tenantId,
+                settledCount, pendingSales.size());
+        meterRegistry.counter("consignment.ledger.bulk_settlement.completed", "tenant", tenantId.toString())
+                .increment();
+
+        return settledCount;
+    }
+
+    // ========================================
     // Helper Methods
     // ========================================
 
