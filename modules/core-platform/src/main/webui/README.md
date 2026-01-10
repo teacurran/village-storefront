@@ -385,6 +385,158 @@ The same events also dispatch a `vsf:telemetry` CustomEvent on `window` for Quin
 
 **Props**: `tone`, `title`, `description`, `actions`, `dismissible`, `persistDismissal`
 
+## Data Visualization with Chart.js
+
+The reporting module uses Chart.js (v4.4.1) with vue-chartjs (v5.3.0) for accessible, responsive data visualizations.
+
+### Available Chart Components
+
+#### SalesLineChart
+
+Displays revenue trends over time with a smooth line chart:
+
+```vue
+<SalesLineChart :sales-data="reportingStore.salesSeries" />
+```
+
+**Props**:
+- `salesData`: Array of `SalesAggregate` objects with `periodStart`, `totalAmount`, `orderCount`
+
+**Features**:
+- Responsive design (maintains aspect ratio)
+- Currency-formatted Y-axis labels
+- Interactive tooltips on hover
+- Accessibility: ARIA labels, keyboard navigation
+
+#### InventoryBarChart
+
+Shows slow-moving inventory by days in stock:
+
+```vue
+<InventoryBarChart :inventory-data="reportingStore.slowMovers" />
+```
+
+**Props**:
+- `inventoryData`: Array of inventory items with `variant.sku`, `daysInStock`, `quantity`
+
+**Features**:
+- Horizontal bar chart (easier to read long SKU labels)
+- Color-coded bars (red for aging inventory)
+- Tooltip shows quantity on hover
+- Top 10 items displayed
+
+### Chart Accessibility
+
+All charts include:
+
+- ✅ `aria-label` describing chart purpose and data
+- ✅ `role="img"` for screen reader compatibility
+- ✅ Keyboard navigation (Tab to focus, Arrow keys to navigate)
+- ✅ WCAG 2.1 AA compliant color contrast (4.5:1 minimum)
+- ✅ Responsive scaling for mobile devices
+
+See [Chart Accessibility Guide](../../../docs/reporting/chart-accessibility.md) for full compliance checklist and testing procedures.
+
+### Creating New Charts
+
+1. **Install dependencies** (already included):
+   ```bash
+   npm install chart.js vue-chartjs
+   ```
+
+2. **Register Chart.js components**:
+   ```typescript
+   import { Chart as ChartJS, LineElement, PointElement, ... } from 'chart.js'
+   ChartJS.register(LineElement, PointElement, ...)
+   ```
+
+3. **Create Vue component**:
+   ```vue
+   <template>
+     <div class="chart-container">
+       <Line
+         :data="chartData"
+         :options="chartOptions"
+         aria-label="Descriptive chart label"
+         role="img"
+       />
+     </div>
+   </template>
+
+   <script setup lang="ts">
+   import { computed } from 'vue'
+   import { Line } from 'vue-chartjs'
+
+   const chartData = computed(() => ({
+     labels: [...],
+     datasets: [...]
+   }))
+
+   const chartOptions = {
+     responsive: true,
+     maintainAspectRatio: false,
+     // ... other options
+   }
+   </script>
+   ```
+
+4. **Add accessibility attributes**:
+   - `aria-label`: Describe what the chart shows
+   - `role="img"`: Mark as image for screen readers
+   - `tabindex="0"`: Enable keyboard focus
+
+5. **Test accessibility**:
+   ```bash
+   npm run test:coverage
+   ```
+
+### Color Palette for Charts
+
+Use platform design tokens for consistency:
+
+```typescript
+const chartColors = {
+  primary: '#3b82f6',    // Blue (revenue, positive trends)
+  success: '#10b981',    // Green (completed, growth)
+  warning: '#f59e0b',    // Amber (pending, caution)
+  danger: '#ef4444',     // Red (failed, decline)
+  neutral: '#6b7280',    // Gray (neutral data)
+}
+```
+
+### Common Chart Patterns
+
+**Line Chart for Time Series**:
+```typescript
+datasets: [{
+  label: 'Revenue',
+  data: salesData.map(d => d.totalAmount),
+  borderColor: '#3b82f6',
+  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  tension: 0.3,
+  fill: true
+}]
+```
+
+**Bar Chart for Comparisons**:
+```typescript
+datasets: [{
+  label: 'Days in Stock',
+  data: inventoryData.map(d => d.daysInStock),
+  backgroundColor: 'rgba(239, 68, 68, 0.7)',
+  borderColor: 'rgba(239, 68, 68, 1)',
+  borderWidth: 1
+}]
+```
+
+**Doughnut Chart for Proportions**:
+```typescript
+datasets: [{
+  data: [35, 25, 20, 20],
+  backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']
+}]
+```
+
 ## Testing
 
 ### Unit Tests

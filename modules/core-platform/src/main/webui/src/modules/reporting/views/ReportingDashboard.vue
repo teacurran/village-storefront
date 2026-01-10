@@ -5,12 +5,18 @@
         <h1 class="dashboard-title">{{ t('reporting.title') }}</h1>
         <p class="dashboard-subtitle">{{ t('reporting.subtitle') }}</p>
       </div>
-      <Button
-        v-if="authStore.hasRole('REPORTS_EXPORT')"
-        icon="pi pi-download"
-        :label="t('reporting.actions.export')"
-        @click="handleExport"
-      />
+      <div class="header-actions">
+        <div class="sse-status" :class="{ connected: reportingStore.sseConnected }">
+          <div class="sse-indicator" />
+          <span class="text-sm">{{ reportingStore.sseConnected ? t('common.live') : t('common.offline') }}</span>
+        </div>
+        <Button
+          v-if="authStore.hasRole('REPORTS_EXPORT')"
+          icon="pi pi-download"
+          :label="t('reporting.actions.export')"
+          @click="handleExport"
+        />
+      </div>
     </div>
 
     <div class="filters-card">
@@ -26,25 +32,46 @@
     </div>
 
     <div class="metrics-grid">
-      <MetricsCard
-        :title="t('reporting.metrics.revenue')"
-        :value="formatCurrency(totalRevenueMoney)"
-        icon="💰"
-        color="primary"
-        :change="reportingStore.trend"
-      />
-      <MetricsCard
-        :title="t('reporting.metrics.orders')"
-        :value="reportingStore.metrics.orderCount.toString()"
-        icon="📦"
-        color="success"
-      />
-      <MetricsCard
-        :title="t('reporting.metrics.avgOrderValue')"
-        :value="formatCurrency(avgOrderValueMoney)"
-        icon="📊"
-        color="secondary"
-      />
+      <div class="metric-with-freshness">
+        <MetricsCard
+          :title="t('reporting.metrics.revenue')"
+          :value="formatCurrency(totalRevenueMoney)"
+          icon="💰"
+          color="primary"
+          :change="reportingStore.trend"
+        />
+        <FreshnessBadge :timestamp="reportingStore.dataFreshnessTimestamp" />
+      </div>
+      <div class="metric-with-freshness">
+        <MetricsCard
+          :title="t('reporting.metrics.orders')"
+          :value="reportingStore.metrics.orderCount.toString()"
+          icon="📦"
+          color="success"
+        />
+        <FreshnessBadge :timestamp="reportingStore.dataFreshnessTimestamp" />
+      </div>
+      <div class="metric-with-freshness">
+        <MetricsCard
+          :title="t('reporting.metrics.avgOrderValue')"
+          :value="formatCurrency(avgOrderValueMoney)"
+          icon="📊"
+          color="secondary"
+        />
+        <FreshnessBadge :timestamp="reportingStore.dataFreshnessTimestamp" />
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="charts-grid">
+      <section class="chart-section">
+        <h2 class="section-title">{{ t('reporting.charts.salesTrend') }}</h2>
+        <SalesLineChart :sales-data="reportingStore.salesSeries" />
+      </section>
+      <section class="chart-section">
+        <h2 class="section-title">{{ t('reporting.charts.slowMovers') }}</h2>
+        <InventoryBarChart :inventory-data="reportingStore.slowMovers" />
+      </section>
     </div>
 
     <div class="content-grid">
@@ -85,13 +112,20 @@
         </header>
         <ul class="job-list">
           <li v-for="job in reportingStore.exportJobs" :key="job.jobId" class="job-item">
-            <div>
+            <div class="job-info">
               <p class="job-title">{{ job.reportType }}</p>
-              <p class="job-meta">
-                {{ job.status }} · {{ job.createdAt ? new Date(job.createdAt).toLocaleString() : '' }}
-              </p>
+              <div class="job-meta-row">
+                <JobStatusBadge :status="job.status" />
+                <span class="job-time">{{ job.createdAt ? new Date(job.createdAt).toLocaleString() : '' }}</span>
+              </div>
             </div>
-            <a v-if="job.downloadUrl" :href="job.downloadUrl" target="_blank">{{ t('reporting.actions.download') }}</a>
+            <Button
+              v-if="job.downloadUrl"
+              class="p-button-sm"
+              icon="pi pi-download"
+              :label="t('reporting.actions.download')"
+              @click="() => window.open(job.downloadUrl, '_blank')"
+            />
           </li>
           <li v-if="!reportingStore.exportJobs.length" class="job-empty">
             {{ t('reporting.exports.empty') }}
@@ -103,9 +137,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import Button from 'primevue/button'
 import MetricsCard from '@/components/base/MetricsCard.vue'
+import SalesLineChart from '../components/SalesLineChart.vue'
+import InventoryBarChart from '../components/InventoryBarChart.vue'
+import JobStatusBadge from '../components/JobStatusBadge.vue'
+import FreshnessBadge from '../components/FreshnessBadge.vue'
 import { useReportingStore } from '../store'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from '@/composables/useI18n'
@@ -134,6 +172,11 @@ onMounted(async () => {
   authStore.restoreAuth()
   if (!authStore.hasRole('REPORTS_VIEW')) return
   await reportingStore.loadDashboard()
+  reportingStore.connectSSE()
+})
+
+onBeforeUnmount(() => {
+  reportingStore.disconnectSSE()
 })
 
 async function handleRefresh() {
@@ -166,8 +209,28 @@ async function handleExport() {
   @apply flex items-center justify-between;
 }
 
+.header-actions {
+  @apply flex items-center gap-3;
+}
+
 .dashboard-title {
   @apply text-3xl font-bold text-neutral-900;
+}
+
+.sse-status {
+  @apply flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-100 text-neutral-600 text-sm;
+}
+
+.sse-status.connected {
+  @apply bg-green-100 text-green-700;
+}
+
+.sse-indicator {
+  @apply w-2 h-2 rounded-full bg-neutral-400;
+}
+
+.sse-status.connected .sse-indicator {
+  @apply bg-green-500 animate-pulse;
 }
 
 .filters-card {
@@ -184,6 +247,22 @@ async function handleExport() {
 
 .metrics-grid {
   @apply grid grid-cols-1 md:grid-cols-3 gap-4;
+}
+
+.metric-with-freshness {
+  @apply space-y-2;
+}
+
+.charts-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 gap-6;
+}
+
+.chart-section {
+  @apply space-y-3;
+}
+
+.section-title {
+  @apply text-lg font-semibold text-neutral-900;
 }
 
 .content-grid {
@@ -203,18 +282,26 @@ async function handleExport() {
 }
 
 .job-item {
-  @apply flex items-center justify-between;
+  @apply flex items-center justify-between p-3 bg-neutral-50 rounded-lg border border-neutral-200;
+}
+
+.job-info {
+  @apply flex-1;
 }
 
 .job-title {
-  @apply font-medium text-neutral-900;
+  @apply font-medium text-neutral-900 mb-1;
 }
 
-.job-meta {
+.job-meta-row {
+  @apply flex items-center gap-2;
+}
+
+.job-time {
   @apply text-xs text-neutral-500;
 }
 
 .job-empty {
-  @apply text-sm text-neutral-500;
+  @apply text-sm text-neutral-500 p-3;
 }
 </style>

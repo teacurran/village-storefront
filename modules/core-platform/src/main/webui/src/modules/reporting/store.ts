@@ -8,6 +8,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { emitTelemetryEvent } from '@/telemetry'
 import * as reportingApi from './api'
+import type { SSEReportJobEvent } from './types'
 
 export interface ReportingMetrics {
   totalRevenue: number
@@ -23,6 +24,9 @@ export const useReportingStore = defineStore('reporting', () => {
   const dateRange = ref<{ start?: string; end?: string }>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const sseConnected = ref(false)
+  const sseEventSource = ref<EventSource | null>(null)
+  const dataFreshnessTimestamp = ref<string>(new Date().toISOString())
 
   const trend = computed(() => {
     if (salesSeries.value.length < 2) return 0
@@ -55,6 +59,11 @@ export const useReportingStore = defineStore('reporting', () => {
         avgOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
       }
 
+      // Update freshness timestamp if available
+      if (sales.length > 0 && sales[0].dataFreshnessTimestamp) {
+        dataFreshnessTimestamp.value = sales[0].dataFreshnessTimestamp
+      }
+
       emitTelemetryEvent('view_reports', {
         range: dateRange.value,
         totalRevenue,
@@ -82,6 +91,81 @@ export const useReportingStore = defineStore('reporting', () => {
     dateRange.value = range
   }
 
+  function connectSSE(): void {
+    if (sseEventSource.value) {
+      return // Already connected
+    }
+
+    try {
+      sseEventSource.value = reportingApi.connectReportsSSE(handleSSEEvent, handleSSEError)
+      sseConnected.value = true
+
+      emitTelemetryEvent('sse_reports_connected', {
+        timestamp: new Date().toISOString(),
+      })
+    } catch (err) {
+      console.error('Failed to connect SSE:', err)
+      sseConnected.value = false
+    }
+  }
+
+  function disconnectSSE(): void {
+    if (sseEventSource.value) {
+      sseEventSource.value.close()
+      sseEventSource.value = null
+      sseConnected.value = false
+
+      emitTelemetryEvent('sse_reports_disconnected', {
+        timestamp: new Date().toISOString(),
+      })
+    }
+  }
+
+  function handleSSEEvent(event: SSEReportJobEvent): void {
+    // Update job in list if present
+    const index = exportJobs.value.findIndex((j) => j.jobId === event.jobId)
+    if (index !== -1) {
+      exportJobs.value[index] = {
+        ...exportJobs.value[index],
+        status: event.status,
+        completedAt: event.completedAt,
+        downloadUrl: event.downloadUrl,
+      }
+    } else {
+      // Job not in list, refresh to get it
+      refreshExportJobs().catch(console.error)
+    }
+
+    emitTelemetryEvent('sse_report_job_event', {
+      jobId: event.jobId,
+      reportType: event.reportType,
+      status: event.status,
+    })
+  }
+
+  function handleSSEError(error: Error): void {
+    console.error('SSE error:', error)
+    sseConnected.value = false
+
+    // Close existing connection
+    if (sseEventSource.value) {
+      sseEventSource.value.close()
+      sseEventSource.value = null
+    }
+
+    emitTelemetryEvent('sse_reports_error', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    })
+
+    // Attempt reconnection after delay
+    setTimeout(() => {
+      if (!sseConnected.value) {
+        connectSSE()
+      }
+    }, 5000)
+  }
+
   return {
     salesSeries,
     metrics,
@@ -91,9 +175,13 @@ export const useReportingStore = defineStore('reporting', () => {
     loading,
     error,
     trend,
+    sseConnected,
+    dataFreshnessTimestamp,
     loadDashboard,
     exportReport,
     refreshExportJobs,
     setDateRange,
+    connectSSE,
+    disconnectSSE,
   }
 })
