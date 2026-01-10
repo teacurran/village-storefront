@@ -1,0 +1,94 @@
+---
+# Backup Configuration ConfigMap
+#
+# Non-sensitive backup configuration shared across all environments.
+# Environment-specific values are overridden in overlays.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  labels:
+    app: village-storefront
+    component: backup
+data:
+  # R2 storage endpoint (Cloudflare R2)
+  r2-endpoint: "https://account.r2.cloudflarestorage.com"
+
+  # R2 bucket name for backups
+  r2-bucket: "village-storefront-backups"
+
+  # Backup retention period (days)
+  retention-days: "30"
+
+  # WAL retention period (days)
+  wal-retention-days: "7"
+
+---
+# Backup Credentials Secret (Template)
+#
+# IMPORTANT: This is a placeholder template. Actual credentials MUST be
+# provided in environment-specific overlays (staging, production).
+#
+# DO NOT commit real credentials to git!
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: r2-backup-credentials
+  labels:
+    app: village-storefront
+    component: backup
+type: Opaque
+stringData:
+  # Cloudflare R2 Access Key ID
+  # Override in overlays with actual value
+  access-key-id: "PLACEHOLDER_REPLACE_IN_OVERLAY"
+
+  # Cloudflare R2 Secret Access Key
+  # Override in overlays with actual value
+  secret-access-key: "PLACEHOLDER_REPLACE_IN_OVERLAY"
+
+---
+# PostgreSQL Configuration ConfigMap
+#
+# Database connection settings for backup jobs.
+# Environment-specific values are overridden in overlays.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  labels:
+    app: village-storefront
+    component: database
+data:
+  # PostgreSQL host (managed service or internal service name)
+  host: "postgres.storefront.svc.cluster.local"
+
+  # PostgreSQL port
+  port: "5432"
+
+  # PostgreSQL database name
+  database: "storefront"
+
+---
+# PostgreSQL Credentials Secret (Template)
+#
+# IMPORTANT: This is a placeholder template. Actual credentials MUST be
+# provided in environment-specific overlays.
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  labels:
+    app: village-storefront
+    component: database
+type: Opaque
+stringData:
+  # PostgreSQL username
+  username: "PLACEHOLDER_REPLACE_IN_OVERLAY"
+
+  # PostgreSQL password
+  password: "PLACEHOLDER_REPLACE_IN_OVERLAY"

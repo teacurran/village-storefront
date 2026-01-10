@@ -1,0 +1,203 @@
+---
+# Database Backup CronJob
+#
+# Executes daily base backup of PostgreSQL database to R2 storage.
+# Triggers DatabaseBackupJob via Quarkus scheduler endpoint.
+#
+# References:
+#   - Task: I6.T5 - Data Ops + DR Automation
+#   - Job: modules/core-platform/src/main/java/villagecompute/storefront/jobs/DatabaseBackupJob.java
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+  labels:
+    app: village-storefront
+    component: backup
+    tier: ops
+spec:
+  # Daily at 3 AM UTC
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid  # Don't allow concurrent backup jobs
+  jobTemplate:
+    spec:
+      backoffLimit: 3  # Retry up to 3 times on failure
+      activeDeadlineSeconds: 7200  # Timeout after 2 hours
+      template:
+        metadata:
+          labels:
+            app: village-storefront
+            component: backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: village-storefront:latest  # Replace with actual image in overlays
+            imagePullPolicy: Always
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting database backup job..."
+              # Trigger Quarkus scheduler job via HTTP endpoint
+              # Alternative: Use quarkus.scheduler.trigger annotation or direct invocation
+              curl -X POST -f http://localhost:8080/q/scheduler/trigger/database-backup-base || exit 1
+              echo "Backup job completed successfully"
+            env:
+            - name: QUARKUS_PROFILE
+              value: "production"
+
+            # Backup storage configuration
+            - name: BACKUP_STORAGE_R2_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: r2-endpoint
+            - name: BACKUP_STORAGE_R2_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: r2-bucket
+            - name: BACKUP_STORAGE_R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: access-key-id
+            - name: BACKUP_STORAGE_R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: secret-access-key
+            - name: BACKUP_STORAGE_R2_REGION
+              value: "auto"
+
+            # Backup job configuration
+            - name: BACKUP_RETENTION_DAYS
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: retention-days
+            - name: BACKUP_TEMP_DIRECTORY
+              value: "/tmp/backups"
+
+            # PostgreSQL connection
+            - name: BACKUP_POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: host
+            - name: BACKUP_POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: port
+                  optional: true
+            - name: BACKUP_POSTGRES_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: database
+            - name: BACKUP_POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: BACKUP_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+
+            volumeMounts:
+            - name: backup-temp
+              mountPath: /tmp/backups
+
+          volumes:
+          - name: backup-temp
+            emptyDir:
+              sizeLimit: 10Gi  # Reserve 10GB for backup staging
+
+---
+# WAL Archiving Verification CronJob
+#
+# Verifies hourly that WAL segments are being archived to R2 continuously.
+# Alerts if last WAL archive is older than 2 hours (exceeds RPO).
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wal-verify
+  labels:
+    app: village-storefront
+    component: backup
+    tier: ops
+spec:
+  # Every hour at :15 (offset from backup job)
+  schedule: "15 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Replace  # Allow concurrent verification
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300  # 5 minute timeout
+      template:
+        metadata:
+          labels:
+            app: village-storefront
+            component: wal-verify
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: wal-verify
+            image: village-storefront:latest
+            imagePullPolicy: Always
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting WAL archiving verification..."
+              curl -X POST -f http://localhost:8080/q/scheduler/trigger/database-backup-wal-verify || exit 1
+              echo "WAL verification completed"
+            env:
+            - name: QUARKUS_PROFILE
+              value: "production"
+            - name: BACKUP_STORAGE_R2_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: r2-endpoint
+            - name: BACKUP_STORAGE_R2_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: r2-bucket
+            - name: BACKUP_STORAGE_R2_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: access-key-id
+            - name: BACKUP_STORAGE_R2_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: secret-access-key
+
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"

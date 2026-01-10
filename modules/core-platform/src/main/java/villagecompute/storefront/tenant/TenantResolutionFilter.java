@@ -121,8 +121,13 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
                 currentSpan.setStatus(StatusCode.ERROR, "Tenant suspended");
                 currentSpan.setAttribute("tenant.id", tenantInfo.tenantId().toString());
                 tenantMissingEvent.fire(new TenantMissing(normalizedHost, "tenant_suspended"));
-                requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
-                        .entity("{\"error\":\"Store temporarily unavailable\"}").build());
+                requestContext
+                        .abortWith(Response.status(Response.Status.SERVICE_UNAVAILABLE).header("Retry-After", "3600") // Suggest
+                                                                                                                      // retry
+                                                                                                                      // in
+                                                                                                                      // 1
+                                                                                                                      // hour
+                                .entity("{\"error\":\"Store temporarily unavailable\"}").build());
                 return;
             }
 
