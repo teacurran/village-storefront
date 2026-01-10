@@ -191,6 +191,29 @@
           </configuration>
         </plugin>
 
+        <!-- OWASP Dependency-Check for vulnerability scanning (Task I6.T2) -->
+        <plugin>
+          <groupId>org.owasp</groupId>
+          <artifactId>dependency-check-maven</artifactId>
+          <version>10.0.4</version>
+          <configuration>
+            <failBuildOnCVSS>7</failBuildOnCVSS>
+            <suppressionFile>owasp-suppressions.xml</suppressionFile>
+            <formats>
+              <format>HTML</format>
+              <format>JSON</format>
+            </formats>
+            <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+          </configuration>
+          <executions>
+            <execution>
+              <goals>
+                <goal>check</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+
         <!-- JaCoCo for code coverage -->
         <plugin>
           <groupId>org.jacoco</groupId>

@@ -452,6 +452,37 @@ components:
           type: integer
           format: int32
           minimum: 100
+    CspReport:
+      type: object
+      properties:
+        document-uri:
+          type: string
+        violated-directive:
+          type: string
+        effective-directive:
+          type: string
+        original-policy:
+          type: string
+        blocked-uri:
+          type: string
+        referrer:
+          type: string
+        status-code:
+          type: integer
+          format: int32
+        source-file:
+          type: string
+        line-number:
+          type: integer
+          format: int32
+        column-number:
+          type: integer
+          format: int32
+    CspViolationReport:
+      type: object
+      properties:
+        csp-report:
+          $ref: "#/components/schemas/CspReport"
     DevicePairingRequest:
       type: object
       properties:
@@ -2620,6 +2651,22 @@ paths:
           description: Internal server error
           content:
             application/json: {}
+  /api/v1/csp-report:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CspViolationReport"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Report Violation
+      tags:
+      - Csp Report Resource
   /api/v1/gift-cards/check-balance:
     post:
       requestBody:

@@ -19,6 +19,7 @@ import jakarta.ws.rs.ext.Provider;
 import org.jboss.logging.Logger;
 
 import villagecompute.storefront.data.models.OAuthClient;
+import villagecompute.storefront.security.ProblemDetail;
 import villagecompute.storefront.services.OAuthService;
 import villagecompute.storefront.services.RateLimitService;
 import villagecompute.storefront.services.RateLimitService.RateLimitResult;
@@ -172,26 +173,24 @@ public class HeadlessAuthFilter implements ContainerRequestFilter, ContainerResp
     }
 
     private Response createUnauthorizedResponse(String detail) {
+        ProblemDetail problem = ProblemDetail.unauthorized(detail);
         return Response.status(Response.Status.UNAUTHORIZED)
-                .header(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=\"Headless API\"").entity(java.util.Map.of("type",
-                        "about:blank", "title", "Unauthorized", "status", 401, "detail", detail))
-                .build();
+                .header(HttpHeaders.WWW_AUTHENTICATE, "Basic realm=\"Headless API\"").entity(problem).build();
     }
 
     private Response createForbiddenResponse(String detail) {
-        return Response.status(Response.Status.FORBIDDEN)
-                .entity(java.util.Map.of("type", "about:blank", "title", "Forbidden", "status", 403, "detail", detail))
-                .build();
+        ProblemDetail problem = ProblemDetail.forbidden(detail);
+        return Response.status(Response.Status.FORBIDDEN).entity(problem).build();
     }
 
     private Response createRateLimitResponse(RateLimitResult result) {
+        long retryAfter = calculateRetryAfter(result);
+        ProblemDetail problem = ProblemDetail
+                .tooManyRequests("Rate limit exceeded. Please retry after " + retryAfter + " seconds.");
         return Response.status(429).header("X-RateLimit-Limit", result.limit())
                 .header("X-RateLimit-Remaining", result.remaining())
-                .header("X-RateLimit-Reset", result.resetAt().getEpochSecond())
-                .header("Retry-After", calculateRetryAfter(result))
-                .entity(java.util.Map.of("type", "about:blank", "title", "Too Many Requests", "status", 429, "detail",
-                        "Rate limit exceeded. Please retry after " + calculateRetryAfter(result) + " seconds."))
-                .build();
+                .header("X-RateLimit-Reset", result.resetAt().getEpochSecond()).header("Retry-After", retryAfter)
+                .entity(problem).build();
     }
 
     private long calculateRetryAfter(RateLimitResult result) {
