@@ -1,5 +1,8 @@
 package villagecompute.storefront.platformops.api.rest;
 
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStreamWriter;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,6 +19,8 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
+
+import com.opencsv.CSVWriter;
 
 import villagecompute.storefront.platformops.api.types.AuditLogEntry;
 import villagecompute.storefront.platformops.data.models.PlatformAdminRole;
@@ -174,6 +179,89 @@ public class AuditLogResource {
         stats.put("lookbackDays", lookbackDays);
 
         return Response.ok(stats).build();
+    }
+
+    /**
+     * Export audit logs to CSV file.
+     *
+     * <p>
+     * Generates a CSV download with all audit log entries matching the specified filters. Exports are limited to
+     * 100,000 records to prevent memory issues. For larger exports, narrow the date range or use specific filters.
+     *
+     * @param actorId
+     *            optional actor filter
+     * @param action
+     *            optional action filter
+     * @param targetType
+     *            optional target type filter
+     * @param startDate
+     *            optional date range start (ISO-8601 format)
+     * @param endDate
+     *            optional date range end (ISO-8601 format)
+     * @return CSV file download
+     */
+    @GET
+    @Path("/export")
+    @Produces("text/csv")
+    public Response exportAuditLogs(@QueryParam("actorId") UUID actorId, @QueryParam("action") String action,
+            @QueryParam("targetType") String targetType, @QueryParam("startDate") String startDate,
+            @QueryParam("endDate") String endDate) {
+
+        authorizationService.requirePermissions(securityIdentity, PlatformAdminRole.PERMISSION_VIEW_AUDIT);
+
+        LOG.infof("GET /platform/audit/export - actor=%s, action=%s, targetType=%s", actorId, action, targetType);
+
+        OffsetDateTime start = parseDate(startDate);
+        OffsetDateTime end = parseDate(endDate);
+        if (startDate != null && start == null) {
+            return badRequest("Invalid startDate format");
+        }
+        if (endDate != null && end == null) {
+            return badRequest("Invalid endDate format");
+        }
+
+        // Query with NO pagination but cap at 100K records
+        List<PlatformCommand> commands = platformCommandRepo.findWithFilters(actorId, action, targetType, start, end, 0,
+                100000);
+
+        if (commands.size() >= 100000) {
+            LOG.warnf("Audit export hit 100K record limit. Actual count may be higher.");
+        }
+
+        try (ByteArrayOutputStream csvStream = new ByteArrayOutputStream();
+                CSVWriter writer = new CSVWriter(new OutputStreamWriter(csvStream))) {
+
+            // CSV header
+            writer.writeNext(new String[]{"ID", "Actor Type", "Actor ID", "Actor Email", "Action", "Target Type",
+                    "Target ID", "Reason", "Ticket Number", "Occurred At", "IP Address"});
+
+            // CSV rows
+            for (PlatformCommand cmd : commands) {
+                writer.writeNext(new String[]{cmd.id != null ? cmd.id.toString() : "",
+                        cmd.actorType != null ? cmd.actorType : "", cmd.actorId != null ? cmd.actorId.toString() : "",
+                        cmd.actorEmail != null ? cmd.actorEmail : "", cmd.action != null ? cmd.action : "",
+                        cmd.targetType != null ? cmd.targetType : "",
+                        cmd.targetId != null ? cmd.targetId.toString() : "", cmd.reason != null ? cmd.reason : "",
+                        cmd.ticketNumber != null ? cmd.ticketNumber : "",
+                        cmd.occurredAt != null ? cmd.occurredAt.toString() : "",
+                        cmd.ipAddress != null ? cmd.ipAddress.getHostAddress() : ""});
+            }
+
+            writer.flush();
+
+            String filename = "audit_export_" + LocalDate.now() + ".csv";
+
+            LOG.infof("Exported %d audit log entries to CSV", commands.size());
+
+            return Response.ok(csvStream.toByteArray())
+                    .header("Content-Disposition", "attachment; filename=\"" + filename + "\"").build();
+
+        } catch (Exception ex) {
+            LOG.errorf(ex, "Failed to generate CSV export");
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Failed to generate CSV export");
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(error).build();
+        }
     }
 
     // --- Helper Methods ---

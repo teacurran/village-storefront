@@ -15,8 +15,8 @@ import org.jboss.logging.Logger;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.ConsignmentPayoutAggregate;
+import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.repositories.ConsignmentPayoutAggregateRepository;
 

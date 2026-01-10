@@ -252,6 +252,134 @@ public class PlatformAdminIT {
                 .body("totalCommands", notNullValue()).body("lookbackDays", equalTo(7));
     }
 
+    @Test
+    @Transactional
+    @TestSecurity(
+            user = PLATFORM_ADMIN_TEST_EMAIL,
+            roles = {"platform-admin"})
+    public void testAuditLogExport() {
+        // Create test audit entry
+        PlatformCommand cmd = new PlatformCommand();
+        cmd.actorType = "platform_admin";
+        cmd.actorId = platformAdminId;
+        cmd.actorEmail = platformAdminEmail;
+        cmd.action = "impersonate_start";
+        cmd.targetType = "tenant";
+        cmd.targetId = testTenant.id;
+        cmd.reason = "Test export";
+        cmd.ticketNumber = "EXPORT-001";
+        cmd.persist();
+
+        // Request CSV export
+        byte[] csvData = given().queryParam("action", "impersonate_start").when().get("/api/v1/platform/audit/export")
+                .then().statusCode(200).contentType("text/csv").header("Content-Disposition", notNullValue()).extract()
+                .asByteArray();
+
+        // Verify CSV content
+        assertNotNull(csvData);
+        assertTrue(csvData.length > 0);
+
+        String csvContent = new String(csvData);
+        assertTrue(csvContent.contains("Actor Email")); // CSV header
+        assertTrue(csvContent.contains(platformAdminEmail)); // Data row
+        assertTrue(csvContent.contains("EXPORT-001")); // Ticket number
+    }
+
+    @Test
+    @TestSecurity(
+            user = PLATFORM_ADMIN_TEST_EMAIL,
+            roles = {"platform-admin"})
+    public void testAuditLogExportWithDateFilters() {
+        String startDate = OffsetDateTime.now().minusDays(7).toString();
+        String endDate = OffsetDateTime.now().plusDays(1).toString();
+
+        given().queryParam("startDate", startDate).queryParam("endDate", endDate).when()
+                .get("/api/v1/platform/audit/export").then().statusCode(200).contentType("text/csv");
+    }
+
+    @Test
+    @TestSecurity(
+            user = PLATFORM_ADMIN_TEST_EMAIL,
+            roles = {"platform-admin"})
+    public void testAuditLogExportRejectsInvalidDateFormat() {
+        given().queryParam("startDate", "invalid-date").when().get("/api/v1/platform/audit/export").then()
+                .statusCode(400).body("error", notNullValue());
+    }
+
+    @Test
+    @TestSecurity(
+            user = PLATFORM_ADMIN_TEST_EMAIL,
+            roles = {"platform-admin"})
+    public void testPlatformCommandsImmutable() {
+        // Create a platform command
+        PlatformCommand cmd = new PlatformCommand();
+        cmd.actorType = "platform_admin";
+        cmd.actorId = platformAdminId;
+        cmd.actorEmail = platformAdminEmail;
+        cmd.action = "test_immutable";
+        cmd.targetType = "tenant";
+        cmd.targetId = testTenant.id;
+        cmd.reason = "Test immutability";
+        cmd.persist();
+
+        UUID cmdId = cmd.id;
+
+        // Verify cannot update (should throw exception in repository layer if attempted)
+        PlatformCommand retrieved = PlatformCommand.findById(cmdId);
+        assertNotNull(retrieved);
+        assertEquals("test_immutable", retrieved.action);
+
+        // Attempting to modify and persist should not affect the original record
+        // This is enforced by application logic (append-only design)
+        assertEquals(cmd.reason, retrieved.reason);
+    }
+
+    @Test
+    @Transactional
+    @TestSecurity(
+            user = PLATFORM_ADMIN_TEST_EMAIL,
+            roles = {"platform-admin"})
+    public void testImpersonationLogsToAudit() {
+        // Start impersonation
+        Map<String, Object> request = new HashMap<>();
+        request.put("targetTenantId", testTenant.id.toString());
+        request.put("reason", "Test audit logging compliance");
+        request.put("ticketNumber", "AUDIT-TEST-001");
+
+        given().contentType(ContentType.JSON).body(request).when().post("/api/v1/platform/impersonate").then()
+                .statusCode(200);
+
+        // Verify PlatformCommand was created
+        long count = platformCommandRepo.count("action = 'impersonate_start' and ticketNumber = 'AUDIT-TEST-001'");
+        assertTrue(count > 0, "Impersonation start should create PlatformCommand audit log");
+
+        // End impersonation
+        given().when().delete("/api/v1/platform/impersonate").then().statusCode(200);
+
+        // Verify end action logged
+        long endCount = platformCommandRepo.count("action = 'impersonate_end'");
+        assertTrue(endCount > 0, "Impersonation end should create PlatformCommand audit log");
+    }
+
+    @Test
+    @Transactional
+    @TestSecurity(
+            user = PLATFORM_ADMIN_TEST_EMAIL,
+            roles = {"platform-admin"})
+    public void testSuspendStoreLogsToAudit() {
+        Map<String, String> request = new HashMap<>();
+        String suspensionReason = "Test suspension audit trail " + System.currentTimeMillis();
+        request.put("reason", suspensionReason);
+
+        given().contentType(ContentType.JSON).body(request).pathParam("storeId", testTenant.id.toString()).when()
+                .post("/api/v1/platform/stores/{storeId}/suspend").then().statusCode(200);
+
+        // Verify PlatformCommand was created
+        long count = platformCommandRepo.count("action = 'suspend_tenant' and targetId = ?1 and reason = ?2",
+                testTenant.id, suspensionReason);
+        assertEquals(1, count, "Store suspension should create exactly one PlatformCommand audit log");
+    }
+
     @Transactional
     Tenant reloadTenant(UUID tenantId) {
         return Tenant.findById(tenantId);

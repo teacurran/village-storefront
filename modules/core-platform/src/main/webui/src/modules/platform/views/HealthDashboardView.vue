@@ -74,20 +74,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePlatformStore } from '../store'
 import ImpersonationBanner from '../components/ImpersonationBanner.vue'
 
 const platformStore = usePlatformStore()
-const { healthMetrics, loading, error } = storeToRefs(platformStore)
+const { healthMetrics, loading, error, sseConnected } = storeToRefs(platformStore)
 
 const formattedTimestamp = computed(() =>
   healthMetrics.value ? new Date(healthMetrics.value.timestamp).toLocaleString() : '',
 )
 
 onMounted(async () => {
+  // Load initial health metrics
   await platformStore.loadHealthMetrics()
+
+  // Establish SSE connection for real-time updates
+  platformStore.connectSSE()
+})
+
+onBeforeUnmount(() => {
+  // Clean up SSE connection when leaving the dashboard
+  platformStore.disconnectSSE()
 })
 
 async function refreshHealth() {

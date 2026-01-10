@@ -48,6 +48,10 @@ export const usePlatformStore = defineStore('platform', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  // SSE connection state
+  const eventSource = ref<EventSource | null>(null)
+  const sseConnected = ref(false)
+
   // --- Computed ---
   const isImpersonating = computed(() => impersonation.value !== null)
   const storeCount = computed(() => stores.value.length)
@@ -351,6 +355,76 @@ export const usePlatformStore = defineStore('platform', () => {
     await updateFeatureFlag(flagId, { markReviewed: true, reason })
   }
 
+  // --- Actions: SSE Connection ---
+
+  function connectSSE(): void {
+    if (eventSource.value) {
+      console.warn('SSE connection already established')
+      return
+    }
+
+    try {
+      const url = '/api/v1/platform/events'
+      eventSource.value = new EventSource(url)
+
+      eventSource.value.addEventListener('open', () => {
+        sseConnected.value = true
+        console.log('SSE connection established')
+      })
+
+      eventSource.value.addEventListener('error', (event) => {
+        sseConnected.value = false
+        console.error('SSE connection error:', event)
+        // Browser will auto-reconnect with exponential backoff
+      })
+
+      eventSource.value.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          handleSSEEvent(data)
+        } catch (err) {
+          console.error('Failed to parse SSE event:', err)
+        }
+      })
+
+      emitTelemetryEvent('platform_sse_connect', {})
+    } catch (err) {
+      console.error('Failed to establish SSE connection:', err)
+      error.value = 'Failed to establish real-time event connection'
+    }
+  }
+
+  function disconnectSSE(): void {
+    if (eventSource.value) {
+      eventSource.value.close()
+      eventSource.value = null
+      sseConnected.value = false
+      console.log('SSE connection closed')
+      emitTelemetryEvent('platform_sse_disconnect', {})
+    }
+  }
+
+  function handleSSEEvent(eventData: any): void {
+    const eventType = eventData.eventType
+
+    switch (eventType) {
+      case 'health_update':
+        // Update health metrics in real-time
+        if (eventData.health) {
+          healthMetrics.value = eventData.health
+        }
+        break
+
+      case 'heartbeat':
+        // Keep-alive event, no action needed
+        console.debug('SSE heartbeat received')
+        break
+
+      default:
+        console.warn('Unknown SSE event type:', eventType)
+    }
+  }
+
   // --- Helper: Clear State ---
 
   function clearError(): void {
@@ -387,6 +461,7 @@ export const usePlatformStore = defineStore('platform', () => {
     staleFlagReport,
     loading,
     error,
+    sseConnected,
 
     // Computed
     isImpersonating,
@@ -414,6 +489,8 @@ export const usePlatformStore = defineStore('platform', () => {
     updateFeatureFlag,
     toggleFeatureFlag,
     reviewFeatureFlag,
+    connectSSE,
+    disconnectSSE,
     clearError,
     reset,
   }

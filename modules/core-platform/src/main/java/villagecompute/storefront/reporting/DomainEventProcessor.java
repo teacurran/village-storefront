@@ -87,10 +87,8 @@ public class DomainEventProcessor {
             OffsetDateTime watermark = checkpoint.lastProcessedAt.minusMinutes(lookbackMinutes);
 
             // Fetch next batch of events
-            List<DomainEvent> events = DomainEvent
-                    .find("occurredAt > ?1 ORDER BY occurredAt ASC", watermark)
-                    .page(0, batchSize)
-                    .list();
+            List<DomainEvent> events = DomainEvent.find("occurredAt > ?1 ORDER BY occurredAt ASC", watermark)
+                    .page(0, batchSize).list();
 
             if (events.isEmpty()) {
                 LOG.debugf("No new events to process since watermark %s", watermark);
@@ -166,29 +164,29 @@ public class DomainEventProcessor {
      */
     private void processEvent(DomainEvent event) {
         switch (event.eventType) {
-            case "ORDER_PLACED":
-            case "ORDER_COMPLETED":
+            case "ORDER_PLACED" :
+            case "ORDER_COMPLETED" :
                 salesAggregator.processEvent(event);
                 break;
 
-            case "INVENTORY_ADJUSTED":
-            case "INVENTORY_RECEIVED":
-            case "INVENTORY_TRANSFERRED":
+            case "INVENTORY_ADJUSTED" :
+            case "INVENTORY_RECEIVED" :
+            case "INVENTORY_TRANSFERRED" :
                 inventoryAggregator.processEvent(event);
                 break;
 
-            case "LOYALTY_EARNED":
-            case "LOYALTY_REDEEMED":
-            case "LOYALTY_TIER_CHANGED":
+            case "LOYALTY_EARNED" :
+            case "LOYALTY_REDEEMED" :
+            case "LOYALTY_TIER_CHANGED" :
                 loyaltyAggregator.processEvent(event);
                 break;
 
-            case "CONSIGNMENT_SOLD":
-            case "CONSIGNMENT_RETURNED":
+            case "CONSIGNMENT_SOLD" :
+            case "CONSIGNMENT_RETURNED" :
                 consignmentAggregator.processEvent(event);
                 break;
 
-            default:
+            default :
                 // Unknown event type - log and skip
                 LOG.debugf("Ignoring unknown event type: %s", event.eventType);
         }
@@ -222,8 +220,7 @@ public class DomainEventProcessor {
      */
     private void registerLagMetric() {
         Gauge.builder("reporting.events.lag_seconds", this::calculateLagSeconds)
-                .description("Lag in seconds between current time and last processed event")
-                .register(meterRegistry);
+                .description("Lag in seconds between current time and last processed event").register(meterRegistry);
     }
 
     /**
@@ -288,11 +285,9 @@ public class DomainEventProcessor {
      * @return true if event already processed
      */
     private boolean isEventAlreadyProcessed(java.util.UUID eventId) {
-        Long count = (Long) entityManager
-                .createNativeQuery("SELECT COUNT(*) FROM processed_domain_events WHERE event_id = :eventId AND processor_name = :processorName")
-                .setParameter("eventId", eventId)
-                .setParameter("processorName", PROCESSOR_NAME)
-                .getSingleResult();
+        Long count = (Long) entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM processed_domain_events WHERE event_id = :eventId AND processor_name = :processorName")
+                .setParameter("eventId", eventId).setParameter("processorName", PROCESSOR_NAME).getSingleResult();
 
         return count != null && count > 0;
     }
@@ -304,10 +299,8 @@ public class DomainEventProcessor {
      *            domain event UUID
      */
     private void markEventAsProcessed(java.util.UUID eventId) {
-        entityManager
-                .createNativeQuery("INSERT INTO processed_domain_events (event_id, processor_name, processed_at) VALUES (:eventId, :processorName, NOW()) ON CONFLICT (event_id) DO NOTHING")
-                .setParameter("eventId", eventId)
-                .setParameter("processorName", PROCESSOR_NAME)
-                .executeUpdate();
+        entityManager.createNativeQuery(
+                "INSERT INTO processed_domain_events (event_id, processor_name, processed_at) VALUES (:eventId, :processorName, NOW()) ON CONFLICT (event_id) DO NOTHING")
+                .setParameter("eventId", eventId).setParameter("processorName", PROCESSOR_NAME).executeUpdate();
     }
 }

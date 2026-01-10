@@ -154,9 +154,8 @@ public class PartitionMaintenanceJob {
             return;
         }
 
-        String sql = String.format(
-                "CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')", partitionName,
-                tableName, month, nextMonth);
+        String sql = String.format("CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')",
+                partitionName, tableName, month, nextMonth);
 
         try {
             entityManager.createNativeQuery(sql).executeUpdate();
@@ -180,7 +179,8 @@ public class PartitionMaintenanceJob {
     @Transactional
     void createPartitionIndexes(String partitionName) {
         String[] indexSqls = {
-                String.format("CREATE INDEX IF NOT EXISTS idx_%s_tenant ON %s(tenant_id)", partitionName, partitionName),
+                String.format("CREATE INDEX IF NOT EXISTS idx_%s_tenant ON %s(tenant_id)", partitionName,
+                        partitionName),
                 String.format("CREATE INDEX IF NOT EXISTS idx_%s_type ON %s(event_type)", partitionName, partitionName),
                 String.format("CREATE INDEX IF NOT EXISTS idx_%s_aggregate ON %s(aggregate_id)", partitionName,
                         partitionName),

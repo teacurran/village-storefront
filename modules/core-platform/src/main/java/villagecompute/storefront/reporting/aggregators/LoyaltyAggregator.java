@@ -71,17 +71,17 @@ public class LoyaltyAggregator implements EventAggregator {
 
             // Update aggregate based on event type
             switch (event.eventType) {
-                case "LOYALTY_EARNED":
+                case "LOYALTY_EARNED" :
                     int pointsEarned = payload.get("points").asInt();
                     aggregate.pointsEarned += pointsEarned;
                     break;
 
-                case "LOYALTY_REDEEMED":
+                case "LOYALTY_REDEEMED" :
                     int pointsRedeemed = payload.get("points").asInt();
                     aggregate.pointsRedeemed += pointsRedeemed;
                     break;
 
-                case "LOYALTY_TIER_CHANGED":
+                case "LOYALTY_TIER_CHANGED" :
                     // Update tier distribution (simplified - actual implementation would query customer tiers)
                     LOG.debugf("Tier changed event - tenantId=%s, customerId=%s", event.tenant.id,
                             payload.has("customerId") ? payload.get("customerId").asText() : "unknown");

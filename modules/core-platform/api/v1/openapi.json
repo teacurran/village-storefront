@@ -816,6 +816,9 @@
           }
         }
       },
+      "PlatformEvent" : {
+        "type" : "object"
+      },
       "RateRequestDTO" : {
         "type" : "object",
         "properties" : {
@@ -4021,6 +4024,57 @@
         } ]
       }
     },
+    "/api/v1/platform/audit/export" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "action",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "actorId",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "endDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "startDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "targetType",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Export Audit Logs",
+        "tags" : [ "Audit Log Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
     "/api/v1/platform/audit/stats" : {
       "get" : {
         "parameters" : [ {
@@ -4293,6 +4347,36 @@
         },
         "summary" : "Approve Privacy Request",
         "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/events" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PlatformEvent"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Stream Events",
+        "tags" : [ "Platform Events Resource" ],
         "security" : [ {
           "SecurityScheme" : [ ]
         } ]

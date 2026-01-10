@@ -6,10 +6,16 @@
         <h1>Audit Log Viewer</h1>
         <p class="subtitle">Filter and paginate immutable platform actions</p>
       </div>
-      <button class="refresh-btn" :disabled="loading" @click="refreshLogs">
-        <i class="pi pi-refresh" />
-        Refresh
-      </button>
+      <div class="header-actions">
+        <button class="refresh-btn" :disabled="loading" @click="refreshLogs">
+          <i class="pi pi-refresh" />
+          Refresh
+        </button>
+        <button class="export-btn" :disabled="loading" @click="exportAuditLogs">
+          <i class="pi pi-download" />
+          Export CSV
+        </button>
+      </div>
     </header>
 
     <section class="filters">
@@ -167,6 +173,19 @@ function loadNextPage() {
 function formatTimestamp(timestamp: string): string {
   return new Date(timestamp).toLocaleString()
 }
+
+function exportAuditLogs() {
+  const params = new URLSearchParams()
+
+  if (actorId.value) params.append('actorId', actorId.value)
+  if (action.value) params.append('action', action.value)
+  if (targetType.value) params.append('targetType', targetType.value)
+  if (startDate.value) params.append('startDate', new Date(startDate.value).toISOString())
+  if (endDate.value) params.append('endDate', new Date(endDate.value).toISOString())
+
+  const url = `/api/v1/platform/audit/export?${params.toString()}`
+  window.open(url, '_blank')
+}
 </script>
 
 <style scoped>
@@ -278,8 +297,14 @@ td {
   align-items: center;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .pagination-btn,
-.refresh-btn {
+.refresh-btn,
+.export-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -288,6 +313,17 @@ td {
   padding: 0.5rem 1rem;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.export-btn {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.export-btn:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
 }
 
 .loading-state,

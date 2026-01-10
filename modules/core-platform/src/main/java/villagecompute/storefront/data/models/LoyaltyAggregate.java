@@ -41,11 +41,9 @@ import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 @Entity
 @Table(
         name = "loyalty_aggregates",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uq_loyalty_period",
-                        columnNames = {"tenant_id", "period_date"})
-        })
+        uniqueConstraints = {@UniqueConstraint(
+                name = "uq_loyalty_period",
+                columnNames = {"tenant_id", "period_date"})})
 public class LoyaltyAggregate extends PanacheEntityBase {
 
     @Id
