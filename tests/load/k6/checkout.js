@@ -5,7 +5,7 @@ import { Rate, Trend } from 'k6/metrics';
 /**
  * k6 Load Test: Checkout Flow
  * Tests checkout API performance under load
- * Target: 95th percentile < 300ms (excluding external calls)
+ * Target: API p50 < 200ms, checkout p95 < 800ms (per acceptance criteria)
  */
 
 // Custom metrics
@@ -24,11 +24,11 @@ export const options = {
     { duration: '1m', target: 0 }, // Ramp down to 0
   ],
   thresholds: {
-    http_req_duration: ['p(95)<300'], // 95% of requests < 300ms
-    http_req_failed: ['rate<0.05'], // Error rate < 5%
-    checkout_success: ['rate>0.95'], // Success rate > 95%
-    cart_duration: ['p(95)<200'], // Cart operations < 200ms
-    order_placement_duration: ['p(95)<500'], // Order placement < 500ms
+    'http_req_duration': ['p(50)<200', 'p(95)<300'], // p50 < 200ms (acceptance criteria), p95 < 300ms
+    'http_req_failed': ['rate<0.05'], // Error rate < 5%
+    'checkout_success': ['rate>0.95'], // Success rate > 95%
+    'cart_duration': ['p(95)<200'], // Cart operations < 200ms
+    'order_placement_duration': ['p(95)<800'], // Checkout p95 < 800ms (acceptance criteria)
   },
 };
 
