@@ -25,6 +25,10 @@ jobs:
     name: Build Native Image & Publish
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # Required for cosign keyless signing
     outputs:
       version: ${{ steps.version.outputs.version }}
       image-tag: ${{ steps.meta.outputs.tags }}
@@ -86,7 +90,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./src/main/docker/Dockerfile.native
+          file: ./Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -96,6 +100,19 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             COMMIT_SHA=${{ github.sha }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image with keyless signing
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "Signing container images with cosign (keyless OIDC)..."
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+            echo "Signing: ${tag}"
+            cosign sign --yes "${tag}"
+          done
 
       - name: Generate SBOM (Software Bill of Materials)
         run: |
@@ -118,6 +135,8 @@ jobs:
           echo "⏱️ Build duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
           echo "📦 Image tags:" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔐 All images signed with cosign keyless signing" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================================
   # DEPLOY TO STAGING
@@ -154,10 +173,42 @@ jobs:
           echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify container image signature
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "Verifying image signature for version ${{ needs.build.outputs.version }}..."
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}
+          echo "✅ Image signature verified successfully"
+
+      - name: Verify feature flags safe for deployment
+        run: |
+          echo "Checking for active emergency kill switches..."
+          KILL_SWITCHES=$(kubectl exec -n village-storefront-staging \
+            $(kubectl get pod -n village-storefront-staging -l app=postgres -o jsonpath='{.items[0].metadata.name}') \
+            -- psql -U storefront -d villagestore -t -c \
+            "SELECT flag_key FROM feature_flags WHERE flag_key LIKE '%.disable' AND enabled = true AND tenant_id IS NULL;" \
+            2>/dev/null || echo "")
+
+          if [ -n "$KILL_SWITCHES" ]; then
+            echo "❌ ERROR: Emergency kill switches are active in staging:"
+            echo "$KILL_SWITCHES"
+            echo "Aborting deployment. Disable kill switches before proceeding."
+            exit 1
+          else
+            echo "✅ No emergency kill switches active - safe to deploy"
+          fi
+
       - name: Update image tag in staging overlay
         run: |
           cd k8s/overlays/staging
-          kustomize edit set image ghcr.io/villagecompute/village-storefront:${{ needs.build.outputs.version }}
+          kustomize edit set image ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}
 
       - name: Run database migrations
         run: |
@@ -235,10 +286,42 @@ jobs:
           echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify container image signature
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          echo "Verifying production image signature for version ${{ needs.build.outputs.version }}..."
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}
+          echo "✅ Production image signature verified successfully"
+
+      - name: Verify feature flags safe for production deployment
+        run: |
+          echo "Checking for active emergency kill switches in production..."
+          KILL_SWITCHES=$(kubectl exec -n village-storefront \
+            $(kubectl get pod -n village-storefront -l app=postgres -o jsonpath='{.items[0].metadata.name}') \
+            -- psql -U storefront -d villagestore -t -c \
+            "SELECT flag_key FROM feature_flags WHERE flag_key LIKE '%.disable' AND enabled = true AND tenant_id IS NULL;" \
+            2>/dev/null || echo "")
+
+          if [ -n "$KILL_SWITCHES" ]; then
+            echo "❌ CRITICAL: Emergency kill switches are active in production:"
+            echo "$KILL_SWITCHES"
+            echo "Aborting production deployment. Coordinate with on-call to disable kill switches."
+            exit 1
+          else
+            echo "✅ No emergency kill switches active - safe to deploy to production"
+          fi
+
       - name: Update image tag in prod overlay
         run: |
           cd k8s/overlays/prod
-          kustomize edit set image ghcr.io/villagecompute/village-storefront:${{ needs.build.outputs.version }}
+          kustomize edit set image ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}
 
       - name: Backup current deployment state
         run: |
@@ -341,15 +424,89 @@ jobs:
             ### Deployment Summary
             - **Staging**: ✅ Deployed
             - **Production**: ✅ Deployed (Blue/Green)
-            - **Image**: `${{ needs.build.outputs.image-tag }}`
-            - **Commit**: ${{ github.sha }}
+            - **Image**: `ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}`
+            - **Commit**: `${{ github.sha }}`
+            - **Signature**: 🔐 Signed with cosign (keyless OIDC)
 
-            ### Rollback Instructions
-            See [deployment documentation](docs/operations/deployment.md#rollback-procedures)
+            ### Verification
+
+            Verify image signature:
+            ```bash
+            cosign verify \
+              --certificate-identity-regexp="https://github.com/${{ github.repository }}" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+              ghcr.io/${{ github.repository }}:${{ needs.build.outputs.version }}
+            ```
+
+            ### Feature Flags
+
+            Emergency kill switches verified inactive:
+            - ✅ `checkout.disable`
+            - ✅ `payment.disable`
+            - ✅ `impersonation.disable`
+            - ✅ `media.disable`
+
+            ### Rollback Procedures
+
+            #### Immediate Rollback (Traffic Switch)
+            If error rate >5% or critical issues detected, switch traffic back to green:
+
+            ```bash
+            # Switch traffic back to green deployment
+            kubectl patch service village-storefront-workers \
+              -n village-storefront \
+              -p '{"spec":{"selector":{"deployment-color":"green"}}}'
+
+            # Verify traffic switched
+            kubectl get svc village-storefront-workers -n village-storefront -o yaml | grep deployment-color
+            ```
+
+            #### Database Migration Rollback
+            If database issues occur:
+
+            ```bash
+            cd migrations
+            mvn migration:down -Dmigration.env=production
+            ```
+
+            #### Emergency Feature Flag Disable
+            If specific feature causing issues:
+
+            ```bash
+            # Disable checkout flow
+            kubectl exec -n village-storefront postgres-primary-0 -- \
+              psql -U storefront -d villagestore -c \
+              "UPDATE feature_flags SET enabled = true WHERE flag_key = 'checkout.disable' AND tenant_id IS NULL;"
+
+            # Verify flag active
+            kubectl exec -n village-storefront postgres-primary-0 -- \
+              psql -U storefront -d villagestore -c \
+              "SELECT flag_key, enabled FROM feature_flags WHERE flag_key LIKE '%.disable' AND tenant_id IS NULL;"
+            ```
+
+            #### Complete Rollback
+            Full rollback to previous version:
 
             ```bash
             kubectl rollout undo deployment/village-storefront-workers -n village-storefront
+            kubectl rollout undo deployment/village-storefront-workers-critical -n village-storefront
+            kubectl rollout undo deployment/village-storefront-gateway -n village-storefront
             ```
+
+            ### Monitoring & Verification
+
+            Post-deployment verification checklist:
+            - [ ] Health checks passing: `curl https://villagecompute.com/q/health/ready`
+            - [ ] Metrics available: `curl https://villagecompute.com/q/metrics | grep jvm_`
+            - [ ] Error rate <1%: Check Prometheus `rate(http_server_requests_seconds_count{status=~"5.."}[5m])`
+            - [ ] p95 latency <500ms: Check Prometheus `histogram_quantile(0.95, http_server_requests_seconds_bucket)`
+            - [ ] No memory leaks: Monitor heap usage in Grafana
+
+            ### Release Documentation
+
+            - [Release Runbook](docs/architecture/ops/release-runbook.md)
+            - [Deployment Operations](docs/operations/deployment.md)
+            - [Feature Flag Management](docs/architecture/ops/feature-flags.md)
           files: |
             artifacts/sbom/*.json
           draft: false

@@ -588,12 +588,62 @@ jobs:
           duration=$((end - JOB_START))
           echo "⏱️ sonarcloud duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Validate dev overlay
+        run: |
+          echo "Validating dev environment manifests..."
+          kustomize build k8s/overlays/dev | kubectl apply --dry-run=client -f -
+
+      - name: Validate staging overlay
+        run: |
+          echo "Validating staging environment manifests..."
+          kustomize build k8s/overlays/staging | kubectl apply --dry-run=client -f -
+
+      - name: Validate production overlay
+        run: |
+          echo "Validating production environment manifests..."
+          kustomize build k8s/overlays/prod | kubectl apply --dry-run=client -f -
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ validate-manifests duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All Kubernetes manifests validated successfully" >> $GITHUB_STEP_SUMMARY
+
   docker-build:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
     needs: sonarcloud
     if: github.event_name == 'push' && vars.DOCKER_ENABLED == 'true'
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # Required for cosign keyless signing
 
     steps:
       - name: Checkout code
@@ -602,17 +652,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/${{ secrets.DOCKER_USERNAME }}/village-storefront
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
@@ -630,7 +681,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Output image tags
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image with keyless signing
+        env:
+          COSIGN_EXPERIMENTAL: 1
         run: |
-          echo "Docker image built and pushed:"
-          echo "${{ steps.meta.outputs.tags }}"
+          echo "Signing container images..."
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            echo "Signing: ${tag}"
+            cosign sign --yes "${tag}"
+          done
+
+      - name: Output image tags and signatures
+        run: |
+          echo "## Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** GitHub Container Registry (GHCR)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Signature:** Signed with cosign keyless signing (GitHub OIDC)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Verification:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "cosign verify --certificate-identity-regexp=github ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

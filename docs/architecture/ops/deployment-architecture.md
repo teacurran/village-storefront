@@ -33,6 +33,118 @@ This document provides operational guidance for the Village Storefront deploymen
 | Database ERD | `docs/diagrams/erd.mmd` | Multi-tenant schema with RLS | I1.T3, I3.T3 |
 | Deployment Topology | `docs/diagrams/deployment.puml` | K8s cluster, CI/CD pipeline | I4.T4 |
 
+---
+
+## CI/CD Pipeline & Artifact Security
+
+### Container Image Signing
+
+**All production container images are signed with cosign using keyless signing (GitHub OIDC).**
+
+#### Signing Process
+
+Container images are automatically signed during the CI/CD pipeline:
+
+1. **CI Workflow** (`.github/workflows/ci.yml`):
+   - Builds Docker image on every push to main
+   - Pushes to `ghcr.io/villagecompute/village-storefront`
+   - Signs image with cosign using GitHub OIDC identity
+   - Tags: `sha-<commit>`, `latest` (main branch only)
+
+2. **Release Workflow** (`.github/workflows/release.yml`):
+   - Triggered by semver tags (`v*.*.*`)
+   - Builds native executable with GraalVM
+   - Pushes to `ghcr.io/villagecompute/village-storefront`
+   - Signs image with cosign using GitHub OIDC identity
+   - Tags: `<version>`, `<major>.<minor>`, `<major>`, `sha-<commit>`, `latest`
+
+#### Signature Verification
+
+**Before deployment**, the release workflow automatically verifies image signatures:
+
+```bash
+# Verify signature using cosign
+cosign verify \
+  --certificate-identity-regexp="https://github.com/villagecompute/village-storefront" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+  ghcr.io/villagecompute/village-storefront:v1.2.3
+```
+
+**Manual verification**:
+
+```bash
+# Install cosign
+brew install cosign
+
+# Verify image signature
+export VERSION="v1.2.3"
+cosign verify \
+  --certificate-identity-regexp="https://github.com/villagecompute/village-storefront" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+  ghcr.io/villagecompute/village-storefront:${VERSION}
+
+# Expected output:
+# Verification for ghcr.io/villagecompute/village-storefront:v1.2.3 --
+# The following checks were performed on each of these signatures:
+#   - The cosign claims were validated
+#   - Existence of the claims in the transparency log was verified offline
+#   - The code-signing certificate was verified using trusted certificate authority certificates
+```
+
+#### Signature Transparency
+
+Signatures are stored in:
+- **Rekor transparency log**: Public ledger of all signatures (https://rekor.sigstore.dev)
+- **OCI registry**: Stored alongside container image as OCI artifact
+
+#### Security Benefits
+
+1. **Supply Chain Security**: Proves image was built by official GitHub Actions workflow
+2. **Tamper Detection**: Any modification to image invalidates signature
+3. **Audit Trail**: Rekor log provides immutable record of all signatures
+4. **No Key Management**: Keyless signing eliminates private key rotation/storage
+
+#### Emergency Procedures
+
+If signature verification fails during deployment:
+
+```bash
+# DO NOT bypass signature verification
+# Instead:
+
+# 1. Check if image was pushed correctly
+docker manifest inspect ghcr.io/villagecompute/village-storefront:${VERSION}
+
+# 2. Check Rekor transparency log
+rekor-cli search --artifact ghcr.io/villagecompute/village-storefront:${VERSION}
+
+# 3. Re-run signing manually (emergency only, requires approval)
+cosign sign --yes ghcr.io/villagecompute/village-storefront:${VERSION}
+
+# 4. If issue persists, rollback to previous version
+kubectl rollout undo deployment/village-storefront-workers -n village-storefront
+```
+
+### Deployment Workflow
+
+See [Release Runbook](release-runbook.md) for comprehensive deployment procedures including:
+- Pre-release quality gate checklist
+- Blue/green deployment strategy
+- Feature flag rollout procedures
+- Rollback decision matrix
+- Post-release verification
+
+**Key Quality Gates:**
+- ✅ SonarCloud quality gate (≥80% coverage, 0 bugs, 0 vulnerabilities)
+- ✅ Kubernetes manifest validation (kustomize dry-run)
+- ✅ Container security scan (Trivy: no CRITICAL/HIGH)
+- ✅ Container image signature verification (cosign)
+- ✅ Feature flag safety check (no active kill switches)
+
+**Registry:**
+- Production: `ghcr.io/villagecompute/village-storefront`
+- All images signed with cosign keyless signing
+
 ### Workflow Sequence Diagrams
 
 #### Media Processing Pipeline
@@ -398,6 +510,13 @@ pg_restore -h $DB_HOST -U $DB_USER -d village_storefront backup-2026-01-08.dump
 
 ## Document Changelog
 
+**v1.1 (2026-01-10):**
+- Added CI/CD Pipeline & Artifact Security section (I6.T1)
+- Documented cosign keyless signing with GitHub OIDC
+- Added signature verification procedures
+- Cross-referenced Release Runbook
+- Updated quality gates with image signing requirements
+
 **v1.0 (2026-01-08):**
 - Initial release for I3.T6
 - Media flow diagram cross-references
@@ -407,5 +526,5 @@ pg_restore -h $DB_HOST -U $DB_USER -d village_storefront backup-2026-01-08.dump
 
 ---
 
-**Review Status:** Pending review by Media/POS leads
-**Next Review:** 2026-04-08 (Quarterly)
+**Review Status:** Updated for I6.T1 (Artifact Signing)
+**Next Review:** 2026-04-10 (Quarterly)
