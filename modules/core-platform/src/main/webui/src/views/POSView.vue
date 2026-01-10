@@ -95,6 +95,110 @@
       </div>
     </section>
 
+    <section v-if="pairedDevice" class="card cart-card">
+      <div class="cart-header">
+        <h2>Cart</h2>
+        <button class="btn-link danger" :disabled="cartItems.length === 0" aria-label="Clear cart" @click="clearCart">
+          Clear
+        </button>
+      </div>
+
+      <!-- Product search -->
+      <div class="search-bar">
+        <input
+          v-model="searchQuery"
+          placeholder="Search products by name or SKU..."
+          aria-label="Search products"
+          class="search-input"
+          @input="searchProducts"
+        />
+      </div>
+
+      <!-- Search results -->
+      <div v-if="searchResults.length > 0" class="search-results">
+        <div
+          v-for="product in searchResults"
+          :key="product.variantId"
+          class="search-result-item"
+          role="button"
+          tabindex="0"
+          aria-label="`Add ${product.productName} to cart`"
+          @click="addToCart(product)"
+          @keydown.enter="addToCart(product)"
+        >
+          <span class="product-name">{{ product.productName }}</span>
+          <span class="product-price">${{ product.price.toFixed(2) }}</span>
+        </div>
+      </div>
+
+      <!-- Cart items -->
+      <div v-if="cartItems.length > 0" class="cart-items">
+        <div v-for="item in cartItems" :key="item.variantId" class="cart-item">
+          <span class="item-name">{{ item.productName }}</span>
+          <div class="quantity-controls">
+            <button
+              aria-label="Decrease quantity"
+              class="qty-btn"
+              @click="decrementQty(item)"
+            >
+              -
+            </button>
+            <span class="quantity">{{ item.quantity }}</span>
+            <button
+              aria-label="Increase quantity"
+              class="qty-btn"
+              @click="incrementQty(item)"
+            >
+              +
+            </button>
+          </div>
+          <span class="item-total">${{ (item.price * item.quantity).toFixed(2) }}</span>
+          <button
+            class="btn-link danger"
+            aria-label="Remove item from cart"
+            @click="removeItem(item)"
+          >
+            <i class="pi pi-times"></i>
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="empty-cart">
+        <p>Cart is empty. Search for products to add them.</p>
+      </div>
+
+      <div v-if="cartItems.length > 0" class="cart-total">
+        <strong>Total:</strong> ${{ cartTotal.toFixed(2) }}
+      </div>
+    </section>
+
+    <section v-if="pairedDevice && cartItems.length > 0" class="card tender-card">
+      <h2>Tender</h2>
+      <div class="tender-form">
+        <label for="payment-method">Payment Method</label>
+        <select
+          id="payment-method"
+          v-model="paymentMethodId"
+          aria-label="Payment method"
+          class="payment-select"
+        >
+          <option value="">Select payment method</option>
+          <option value="cash">Cash</option>
+          <option value="card">Card on File</option>
+          <option value="terminal">Card Reader</option>
+        </select>
+
+        <button
+          class="btn-primary btn-large"
+          :disabled="!paymentMethodId || isProcessing"
+          aria-label="Complete sale"
+          @click="completeSale"
+        >
+          {{ isProcessing ? 'Processing...' : 'Complete Sale' }}
+        </button>
+      </div>
+    </section>
+
     <section v-if="pairedDevice" class="card queue-card">
       <div class="queue-card-header">
         <h2>Offline Queue</h2>
@@ -110,6 +214,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { v4 as uuidv4 } from 'uuid'
 import OfflineIndicator from '@/modules/pos/offline/OfflineIndicator.vue'
 import OfflineQueueList from '@/modules/pos/offline/OfflineQueueList.vue'
 import { useOfflineStore } from '@/modules/pos/offline/offlineStore'
@@ -122,6 +227,14 @@ interface PairedDevice {
   pairedAt: string
 }
 
+interface Product {
+  productId: string
+  variantId: string
+  productName: string
+  price: number
+  quantity?: number
+}
+
 const offlineStore = useOfflineStore()
 const toast = useToast()
 const { queueStats, lastSyncAt, isSyncOnHold } = storeToRefs(offlineStore)
@@ -132,6 +245,17 @@ const pairingError = ref('')
 const pairedDevice = ref<PairedDevice | null>(null)
 const terminalToken = ref<string | null>(null)
 const isTerminalLoading = ref(false)
+
+// Cart state
+const searchQuery = ref('')
+const searchResults = ref<Product[]>([])
+const cartItems = ref<Product[]>([])
+const paymentMethodId = ref('')
+const isProcessing = ref(false)
+
+const cartTotal = computed(() =>
+  cartItems.value.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0)
+)
 
 const lastSyncLabel = computed(() => {
   if (!lastSyncAt.value) return 'Not yet synced'
@@ -281,6 +405,137 @@ function formatRelative(dateString: string) {
   }
   const diffDays = Math.floor(diffHours / 24)
   return formatter.format(-diffDays, 'day')
+}
+
+// Cart management functions
+let searchTimeout: number | null = null
+
+function searchProducts() {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+
+  if (!searchQuery.value || searchQuery.value.length < 2) {
+    searchResults.value = []
+    return
+  }
+
+  searchTimeout = window.setTimeout(async () => {
+    // Mock product search for demo - replace with actual API call
+    // TODO: Call /api/catalog/products/search?q=${searchQuery.value}
+    const mockProducts: Product[] = [
+      {
+        productId: '1',
+        variantId: '1-default',
+        productName: 'Widget Pro',
+        price: 29.99,
+      },
+      {
+        productId: '2',
+        variantId: '2-default',
+        productName: 'Gadget Plus',
+        price: 49.99,
+      },
+      {
+        productId: '3',
+        variantId: '3-default',
+        productName: 'Device Elite',
+        price: 99.99,
+      },
+    ]
+
+    searchResults.value = mockProducts.filter(
+      (p) =>
+        p.productName.toLowerCase().includes(searchQuery.value.toLowerCase())
+    )
+  }, 300)
+}
+
+function addToCart(product: Product) {
+  const existing = cartItems.value.find((i) => i.variantId === product.variantId)
+  if (existing) {
+    existing.quantity = (existing.quantity || 1) + 1
+  } else {
+    cartItems.value.push({ ...product, quantity: 1 })
+  }
+
+  toast.add({
+    severity: 'success',
+    summary: 'Added to Cart',
+    detail: product.productName,
+    life: 2000,
+  })
+
+  searchQuery.value = ''
+  searchResults.value = []
+}
+
+function incrementQty(item: Product) {
+  item.quantity = (item.quantity || 1) + 1
+}
+
+function decrementQty(item: Product) {
+  if ((item.quantity || 1) > 1) {
+    item.quantity = (item.quantity || 1) - 1
+  }
+}
+
+function removeItem(item: Product) {
+  const idx = cartItems.value.indexOf(item)
+  if (idx > -1) {
+    cartItems.value.splice(idx, 1)
+  }
+}
+
+function clearCart() {
+  cartItems.value = []
+  paymentMethodId.value = ''
+}
+
+async function completeSale() {
+  if (!pairedDevice.value || cartItems.value.length === 0 || !paymentMethodId.value) {
+    return
+  }
+
+  isProcessing.value = true
+
+  try {
+    const transaction = {
+      localTransactionId: uuidv4(),
+      totalAmount: cartTotal.value,
+      currency: 'USD',
+      paymentMethodId: paymentMethodId.value,
+      items: cartItems.value.map((i) => ({
+        productId: i.productId,
+        variantId: i.variantId,
+        quantity: i.quantity || 1,
+        price: i.price,
+      })),
+    }
+
+    await offlineStore.enqueueTransaction(transaction)
+
+    toast.add({
+      severity: 'success',
+      summary: 'Sale Queued',
+      detail: offlineStore.isOnline
+        ? 'Transaction syncing to server...'
+        : 'Transaction will sync when online',
+      life: 4000,
+    })
+
+    clearCart()
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Failed to queue transaction',
+      life: 4000,
+    })
+    console.error(error)
+  } finally {
+    isProcessing.value = false
+  }
 }
 </script>
 
@@ -456,6 +711,176 @@ function formatRelative(dateString: string) {
   margin-bottom: 1rem;
 }
 
+/* Cart and Tender Styles */
+.cart-card,
+.tender-card {
+  margin-top: 1.5rem;
+}
+
+.cart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.search-bar {
+  margin-bottom: 1rem;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--surface-border, #d1d5db);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+
+.search-results {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--surface-border, #d1d5db);
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.search-result-item:hover {
+  background: var(--surface-100, #f3f4f6);
+}
+
+.product-name {
+  font-weight: 500;
+}
+
+.product-price {
+  color: var(--primary-color, #2563eb);
+  font-weight: 600;
+}
+
+.cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.cart-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--surface-100, #f3f4f6);
+  border-radius: 0.5rem;
+}
+
+.item-name {
+  font-weight: 500;
+}
+
+.quantity-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.qty-btn {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  border: 1px solid var(--surface-border, #d1d5db);
+  border-radius: 0.5rem;
+  background: white;
+  cursor: pointer;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qty-btn:hover:not(:disabled) {
+  background: var(--surface-100, #f3f4f6);
+}
+
+.quantity {
+  min-width: 2rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.item-total {
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.empty-cart {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-color-secondary);
+}
+
+.cart-total {
+  text-align: right;
+  font-size: 1.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--surface-border, #d1d5db);
+}
+
+.tender-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tender-form label {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.payment-select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--surface-border, #d1d5db);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+
+.btn-large {
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+/* Accessibility: Ensure all buttons meet touch target size */
+button {
+  min-height: 48px;
+}
+
+/* Accessibility: Focus states for keyboard navigation */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary-color, #2563eb);
+  outline-offset: 2px;
+}
+
+.search-result-item:focus-visible {
+  outline: 2px solid var(--primary-color, #2563eb);
+  outline-offset: -2px;
+}
+
 @media (max-width: 768px) {
   .pos-header {
     flex-direction: column;
@@ -469,6 +894,15 @@ function formatRelative(dateString: string) {
 
   .device-actions {
     justify-content: flex-start;
+  }
+
+  .cart-item {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .quantity-controls {
+    justify-content: center;
   }
 }
 </style>
