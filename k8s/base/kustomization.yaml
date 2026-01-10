@@ -2,7 +2,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
+  - deployment-gateway.yaml
   - deployment-workers.yaml
+  - deployment-media-workers.yaml
+  - ingress.yaml
   # Uncomment when deploying dedicated priority workers
   # - deployment-workers-critical.yaml
 
@@ -13,12 +16,15 @@ commonLabels:
   app.kubernetes.io/managed-by: kustomize
   app.kubernetes.io/version: "1.0.0"
 
-# ConfigMap for worker configuration
+# ConfigMap for application configuration
 configMapGenerator:
   - name: village-storefront-config
     literals:
-      - r2-bucket-name=village-storefront-reports
-      - mailer-host=smtp.example.com
+      - r2-bucket-name=village-media
+      - r2-endpoint=https://r2.example.com
+      - mailer-host=smtp.sendgrid.net
+      - mailer-from=noreply@villagecompute.com
+      - otel-endpoint=http://jaeger-collector:4317
 
 # Note: Secrets should be created separately via sealed-secrets or external secrets operator
 # Example secret creation commands:

@@ -2,12 +2,13 @@
 
 ## Overview
 
-This directory contains Kubernetes manifests for deploying the Village Storefront background job workers with priority queuing, retry policies, dead-letter handling, and horizontal pod autoscaling.
+This directory contains Kubernetes manifests for deploying the Village Storefront platform with multi-tenant gateway, background job workers, media processing workers, and autoscaling.
 
 **Related Documentation:**
+- Deployment Workflow: `docs/architecture/ops/deployment-architecture.md`
 - Operations Runbook: `docs/operations/job_runbook.md`
-- Architecture: `docs/architecture/04_Operational_Architecture.md` (Section 3.6)
-- Task: I3.T6 - Background Job Framework Enhancements
+- Architecture: `docs/architecture/04_Operational_Architecture.md` (Section 3.9)
+- Tasks: I3.T6 (Job Framework), I4.T4 (Media Pipeline), I4.T7 (Deployment)
 
 ---
 
@@ -16,9 +17,16 @@ This directory contains Kubernetes manifests for deploying the Village Storefron
 ```
 k8s/
 ├── base/
+│   ├── deployment-gateway.yaml           # Multi-tenant HTTP gateway (Qute + Vue SPA)
 │   ├── deployment-workers.yaml           # General-purpose worker deployment
+│   ├── deployment-media-workers.yaml     # Media processing workers (FFmpeg)
 │   ├── deployment-workers-critical.yaml  # Dedicated CRITICAL/HIGH priority workers
+│   ├── ingress.yaml                      # Wildcard ingress with cert-manager
 │   └── kustomization.yaml                # Kustomize base configuration
+├── overlays/
+│   ├── dev/                              # Development environment (minimal resources)
+│   ├── staging/                          # Staging environment
+│   └── prod/                             # Production environment (HA configuration)
 └── README.md                             # This file
 ```
 
@@ -26,15 +34,32 @@ k8s/
 
 ## Deployment Architecture
 
-### Worker Pools
+### Component Deployments
 
-1. **General-Purpose Workers** (`deployment-workers.yaml`)
+1. **Gateway Pods** (`deployment-gateway.yaml`)
+   - Serves HTTP traffic for multi-tenant storefronts and admin SPA
+   - Handles tenant resolution via subdomain/custom domain
+   - Qute templates for customer-facing storefront (`/`)
+   - Vue.js admin dashboard served at `/admin/*`
+   - Default: 3 replicas, scales 3-20 based on CPU/memory
+   - Resource requests: 250m CPU, 512Mi memory
+
+2. **General-Purpose Workers** (`deployment-workers.yaml`)
    - Processes all priority levels (CRITICAL → BULK)
    - Default: 3 replicas, scales 2-20 based on CPU/memory
    - Resource requests: 250m CPU, 512Mi memory
    - Use case: MVP deployment, cost-effective for mixed workloads
 
-2. **Critical Workers** (`deployment-workers-critical.yaml`)
+3. **Media Processing Workers** (`deployment-media-workers.yaml`)
+   - Processes HIGH and CRITICAL priority media jobs
+   - FFmpeg video transcoding (HLS 720p/480p/360p)
+   - Thumbnailator image resizing (thumbnail/small/medium/large)
+   - Default: 2 replicas, scales 2-10 based on CPU/queue depth
+   - Resource requests: 1000m CPU, 1Gi memory (limits: 4000m CPU, 4Gi memory)
+   - EmptyDir volume: `/tmp/media_processing` (10Gi limit)
+   - Use case: Video transcoding, image processing, poster frame extraction
+
+4. **Critical Workers** (`deployment-workers-critical.yaml`)
    - Processes only CRITICAL and HIGH priority jobs
    - Default: 5 replicas, scales 3-30 based on queue depth
    - Resource requests: 500m CPU, 1Gi memory
@@ -52,6 +77,179 @@ k8s/
 - CRITICAL workers handle urgent jobs (payments, notifications)
 - General workers handle reporting, analytics, bulk operations
 - Higher resource usage but guaranteed SLA compliance
+
+---
+
+## Building the Native Container Image
+
+Village Storefront uses Quarkus native compilation via GraalVM to produce optimized, lightweight containers (<150MB) with sub-second startup times.
+
+### Prerequisites for Native Build
+
+- Docker or Podman installed
+- 8GB+ RAM available for build process
+- Maven 3.9+
+- Java 21+
+
+### Build Native Container Image
+
+```bash
+# Build native executable inside Docker container
+docker build -t ghcr.io/villagecompute/village-storefront:latest .
+
+# Alternatively, use Quarkus Maven plugin (slower but more configurable)
+./mvnw clean package -Pnative \
+  -Dquarkus.container-image.build=true \
+  -Dquarkus.container-image.tag=latest
+
+# Verify image was created
+docker images | grep village-storefront
+```
+
+### Build Configuration
+
+The multi-stage Dockerfile:
+1. **Stage 1**: Maven build with Node.js (Quinoa frontend build)
+   - Compiles Quarkus native executable via GraalVM
+   - Builds Vue.js admin SPA assets
+   - Outputs to `target/*-runner` and `target/quinoa/dist/`
+
+2. **Stage 2**: Minimal Alpine runtime
+   - Installs FFmpeg for media processing
+   - Copies native executable and frontend assets
+   - Non-root user (uid 1000)
+   - Health check via `/q/health/live`
+
+### Verify Container Locally
+
+```bash
+# Run container
+docker run -p 8080:8080 \
+  -e QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://host.docker.internal:5432/storefront \
+  -e QUARKUS_DATASOURCE_USERNAME=storefront \
+  -e QUARKUS_DATASOURCE_PASSWORD=password \
+  ghcr.io/villagecompute/village-storefront:latest
+
+# Test health endpoint
+curl http://localhost:8080/q/health
+
+# Test FFmpeg availability
+docker exec <container-id> ffmpeg -version
+
+# Check frontend assets
+curl http://localhost:8080/admin/
+```
+
+### Push to Registry (CI/CD)
+
+```bash
+# Tag with git commit SHA
+export GIT_SHA=$(git rev-parse --short HEAD)
+docker tag ghcr.io/villagecompute/village-storefront:latest \
+  ghcr.io/villagecompute/village-storefront:${GIT_SHA}
+
+# Login to GitHub Container Registry
+echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+
+# Push images
+docker push ghcr.io/villagecompute/village-storefront:latest
+docker push ghcr.io/villagecompute/village-storefront:${GIT_SHA}
+```
+
+---
+
+## Cert-Manager Setup
+
+Village Storefront uses cert-manager for automatic TLS certificate provisioning via ACME (Let's Encrypt).
+
+### Install cert-manager
+
+```bash
+# Install cert-manager CRDs and controllers
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
+
+# Verify installation
+kubectl get pods -n cert-manager
+```
+
+### Create ClusterIssuer
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@villagecompute.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+    # HTTP-01 challenge solver
+    - http01:
+        ingress:
+          class: nginx
+          ingressClassName: nginx
+EOF
+```
+
+### Create Staging Issuer (for testing)
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ops@villagecompute.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+EOF
+```
+
+### Verify Certificate Issuance
+
+After deploying the Ingress manifest:
+
+```bash
+# Check certificate status
+kubectl get certificate -n village-storefront
+kubectl describe certificate village-storefront-tls -n village-storefront
+
+# Check cert-manager logs
+kubectl logs -n cert-manager deployment/cert-manager -f
+
+# Verify TLS secret was created
+kubectl get secret village-storefront-tls -n village-storefront
+```
+
+### Troubleshooting cert-manager
+
+**Common Issues:**
+
+1. **HTTP-01 challenge fails**
+   - Ensure ingress-nginx is installed and running
+   - Verify DNS points to ingress controller LoadBalancer IP
+   - Check firewall allows HTTP (port 80) traffic
+
+2. **Rate limiting**
+   - Let's Encrypt has rate limits (50 certs/week per domain)
+   - Use staging issuer for testing: change annotation to `letsencrypt-staging`
+
+3. **Wildcard certificate issues**
+   - HTTP-01 challenge doesn't support wildcards
+   - Use DNS-01 challenge with Cloudflare/Route53 provider
+   - See: https://cert-manager.io/docs/configuration/acme/dns01/
 
 ---
 
@@ -187,7 +385,51 @@ resources:
     memory: "4Gi"
 ```
 
+**Media Workers:**
+```yaml
+resources:
+  requests:
+    cpu: "1000m"      # High CPU for FFmpeg transcoding
+    memory: "1Gi"
+  limits:
+    cpu: "4000m"      # Allow burst to 4 cores for 720p transcoding
+    memory: "4Gi"
+```
+
 Adjust based on workload profiling and cost constraints.
+
+### Media Workers Configuration
+
+Media workers are specialized for CPU-intensive FFmpeg video transcoding and image processing.
+
+**FFmpeg Requirements:**
+- Binary path: `/usr/bin/ffmpeg` (bundled in container)
+- HLS video variants: 720p@2Mbps, 480p@1Mbps, 360p@500Kbps
+- Segment duration: 6 seconds (VOD playlist)
+- Codec: H.264 + AAC audio (128k)
+- Poster frame extraction at 1 second
+
+**Temporary Storage:**
+- EmptyDir volume: `/tmp/media_processing`
+- Size limit: 10Gi
+- Cleared when pod terminates
+- Used for intermediate transcoding files
+
+**Queue Configuration:**
+- Priority filter: `WORKER_PRIORITY_FILTER=HIGH,CRITICAL`
+- Only processes HIGH and CRITICAL media jobs
+- Prevents blocking on low-priority bulk operations
+
+**Health Checks:**
+- Liveness probe: 90s initial delay (allows time for long transcode jobs)
+- Readiness probe: 60s initial delay
+- Timeout: 10s (longer than gateway/workers due to processing load)
+
+**Scaling:**
+- Min replicas: 2 (production), 1 (dev)
+- Max replicas: 10 (production), 2 (dev)
+- Triggers: CPU > 70%, memory > 80%
+- Future: Custom metric `media_queue_depth` (target: 50 jobs/pod)
 
 ### Horizontal Pod Autoscaling
 

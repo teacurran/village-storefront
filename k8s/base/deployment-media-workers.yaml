@@ -1,0 +1,282 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-media-workers
+  labels:
+    app: village-storefront
+    component: media-workers
+    tier: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: media-workers
+  template:
+    metadata:
+      labels:
+        app: village-storefront
+        component: media-workers
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/q/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: village-storefront
+
+      # Pod affinity to spread media workers across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - media-workers
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: media-worker
+        image: ghcr.io/villagecompute/village-storefront:latest
+        imagePullPolicy: IfNotPresent
+
+        # High resource limits for video transcoding (FFmpeg CPU-intensive)
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+          limits:
+            cpu: "4000m"
+            memory: "4Gi"
+
+        # Health checks with longer timeouts for transcoding jobs
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        # Ports
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+
+        # Volume mounts for temporary media processing
+        volumeMounts:
+        - name: media-processing-tmp
+          mountPath: /tmp/media_processing
+
+        # Environment variables
+        env:
+        - name: QUARKUS_PROFILE
+          value: "production"
+
+        - name: QUARKUS_SCHEDULER_ENABLED
+          value: "true"
+
+        # Worker priority filter: Process only HIGH and CRITICAL priority media jobs
+        # Ensures media workers focus on video transcoding and image processing
+        - name: WORKER_PRIORITY_FILTER
+          value: "HIGH,CRITICAL"
+
+        # FFmpeg path for video transcoding (Task I4.T4)
+        - name: MEDIA_PROCESSING_FFMPEG_PATH
+          value: "/usr/bin/ffmpeg"
+
+        # Database connection
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: jdbc-url
+
+        - name: QUARKUS_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: username
+
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-db
+              key: password
+
+        # Metrics & observability
+        - name: QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED
+          value: "true"
+
+        - name: QUARKUS_LOG_LEVEL
+          value: "INFO"
+
+        - name: QUARKUS_LOG_CONSOLE_JSON
+          value: "true"
+
+        # Job queue configuration optimized for media processing
+        - name: JOBS_QUEUE_CAPACITY_CRITICAL
+          value: "50"
+
+        - name: JOBS_QUEUE_CAPACITY_HIGH
+          value: "200"
+
+        - name: JOBS_RETRY_MAX_ATTEMPTS_HIGH
+          value: "5"
+
+        # Storage client (Cloudflare R2)
+        - name: R2_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: village-storefront-config
+              key: r2-bucket-name
+
+        - name: R2_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-r2
+              key: access-key-id
+
+        - name: R2_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: village-storefront-r2
+              key: secret-access-key
+
+        - name: R2_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: village-storefront-config
+              key: r2-endpoint
+
+        # JVM options for high-memory transcoding workloads
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -XX:+UseStringDeduplication"
+
+      # EmptyDir volume for temporary media processing
+      # FFmpeg writes intermediate files during video transcoding
+      volumes:
+      - name: media-processing-tmp
+        emptyDir:
+          sizeLimit: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: village-storefront-media-workers
+  labels:
+    app: village-storefront
+    component: media-workers
+spec:
+  type: ClusterIP
+  selector:
+    app: village-storefront
+    component: media-workers
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: village-storefront-media-workers-hpa
+  labels:
+    app: village-storefront
+    component: media-workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: village-storefront-media-workers
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+  # Scale based on CPU utilization (transcoding is CPU-bound)
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # Scale based on memory utilization
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # Custom metric: media queue depth
+  # Requires Prometheus Adapter and custom metrics API
+  # Uncomment when Prometheus adapter is configured
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: media_queue_depth
+  #     target:
+  #       type: AverageValue
+  #       averageValue: "50"
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      # Aggressive scale-up for media processing spikes
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+
+    scaleDown:
+      # Conservative scale-down to handle transcoding jobs
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: village-storefront-media-workers-pdb
+  labels:
+    app: village-storefront
+    component: media-workers
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: media-workers
