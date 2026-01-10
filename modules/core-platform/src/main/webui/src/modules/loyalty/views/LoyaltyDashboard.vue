@@ -67,20 +67,63 @@
           <Button :label="t('loyalty.members.lookup')" :disabled="!lookupId" @click="handleLookup" />
         </div>
 
-        <div v-if="loyaltyStore.member" class="member-card">
-          <div class="member-summary">
-            <p class="eyebrow">{{ t('loyalty.members.pointsBalance') }}</p>
-            <h3>{{ loyaltyStore.member.pointsBalance }}</h3>
-            <p class="eyebrow">{{ t('loyalty.members.tier') }}</p>
-            <p class="tier-label">{{ loyaltyStore.member.currentTier }}</p>
+        <div v-if="loyaltyStore.member" class="member-card-container">
+          <div class="member-card">
+            <div class="member-summary">
+              <div>
+                <p class="eyebrow">{{ t('loyalty.members.pointsBalance') }}</p>
+                <h3>{{ loyaltyStore.member.pointsBalance }}</h3>
+              </div>
+              <div>
+                <p class="eyebrow">{{ t('loyalty.members.tier') }}</p>
+                <p class="tier-label">{{ loyaltyStore.member.currentTier }}</p>
+              </div>
+              <div>
+                <p class="eyebrow">{{ t('loyalty.members.lifetimePoints') }}</p>
+                <h3>{{ loyaltyStore.member.lifetimePointsEarned }}</h3>
+              </div>
+            </div>
+            <div class="member-actions">
+              <Button
+                v-if="authStore.hasRole('LOYALTY_ADMIN')"
+                icon="pi pi-plus"
+                :label="t('loyalty.actions.adjustPoints')"
+                @click="showAdjustDialog = true"
+              />
+            </div>
           </div>
-          <div class="member-actions">
-            <Button
-              v-if="authStore.hasRole('LOYALTY_ADMIN')"
-              icon="pi pi-plus"
-              :label="t('loyalty.actions.adjustPoints')"
-              @click="showAdjustDialog = true"
+
+          <div v-if="nextTier" class="tier-progress-card">
+            <div class="tier-progress-header">
+              <div>
+                <p class="eyebrow">{{ t('loyalty.tier.progress') }}</p>
+                <h4>{{ t('loyalty.tier.nextTier', { tier: nextTier.name }) }}</h4>
+              </div>
+              <p class="points-to-go">
+                {{ pointsToNextTier }} {{ t('loyalty.tier.pointsRemaining') }}
+              </p>
+            </div>
+            <ProgressBar
+              :value="tierProgressPercent"
+              :show-value="true"
+              :pt="{
+                root: { class: 'tier-progress-bar' },
+                value: { style: 'background: var(--primary-color)' }
+              }"
             />
+            <p class="tier-progress-text">
+              {{ loyaltyStore.member.lifetimePointsEarned.toLocaleString() }} / {{ nextTier.minPoints.toLocaleString() }} {{ t('loyalty.tier.pointsToNextTier') }}
+            </p>
+          </div>
+
+          <div v-else class="tier-max-card">
+            <div class="flex items-center gap-2">
+              <i class="pi pi-crown text-2xl text-amber-500" />
+              <div>
+                <h4>{{ t('loyalty.tier.maxTierReached') }}</h4>
+                <p class="text-sm text-neutral-600">{{ t('loyalty.tier.maxTierDescription') }}</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -123,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import InputNumber from 'primevue/inputnumber'
@@ -131,6 +174,7 @@ import Dropdown from 'primevue/dropdown'
 import Dialog from 'primevue/dialog'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
+import ProgressBar from 'primevue/progressbar'
 import InlineAlert from '@/components/base/InlineAlert.vue'
 import { useLoyaltyStore } from '../store'
 import { useAuthStore } from '@/stores/auth'
@@ -154,6 +198,34 @@ const reasonOptions = [
   { label: t('loyalty.adjust.reasonCorrection'), value: 'correction' },
   { label: t('loyalty.adjust.reasonAppeasement'), value: 'appeasement' },
 ]
+
+// Computed: Next tier information
+const nextTier = computed(() => {
+  if (!loyaltyStore.tiers || !loyaltyStore.member) return null
+
+  const currentPoints = loyaltyStore.member.lifetimePointsEarned
+  const sorted = [...loyaltyStore.tiers].sort((a, b) => a.minPoints - b.minPoints)
+  return sorted.find((tier) => tier.minPoints > currentPoints)
+})
+
+// Computed: Points remaining to next tier
+const pointsToNextTier = computed(() => {
+  if (!nextTier.value || !loyaltyStore.member) return 0
+  return nextTier.value.minPoints - loyaltyStore.member.lifetimePointsEarned
+})
+
+// Computed: Tier progress percentage
+const tierProgressPercent = computed(() => {
+  if (!nextTier.value || !loyaltyStore.member || !loyaltyStore.tiers) return 100
+
+  const currentPoints = loyaltyStore.member.lifetimePointsEarned
+  const sorted = [...loyaltyStore.tiers].sort((a, b) => a.minPoints - b.minPoints)
+  const currentTierObj = sorted.find((t) => t.name === loyaltyStore.member!.currentTier)
+  const currentTierMin = currentTierObj?.minPoints || 0
+
+  const progress = ((currentPoints - currentTierMin) / (nextTier.value.minPoints - currentTierMin)) * 100
+  return Math.min(Math.round(progress), 100)
+})
 
 onMounted(async () => {
   authStore.restoreAuth()
@@ -263,12 +335,40 @@ async function handleAdjust() {
   @apply flex items-center gap-3;
 }
 
+.member-card-container {
+  @apply space-y-4;
+}
+
 .member-card {
   @apply flex items-center justify-between bg-neutral-50 border border-neutral-200 rounded-lg p-4;
 }
 
+.member-summary {
+  @apply flex items-start gap-8;
+}
+
 .tier-label {
   @apply text-sm font-medium text-primary-600;
+}
+
+.tier-progress-card {
+  @apply bg-primary-50 border border-primary-200 rounded-lg p-4 space-y-3;
+}
+
+.tier-progress-header {
+  @apply flex items-center justify-between;
+}
+
+.points-to-go {
+  @apply text-sm font-semibold text-primary-700;
+}
+
+.tier-progress-text {
+  @apply text-xs text-neutral-600 text-center;
+}
+
+.tier-max-card {
+  @apply bg-amber-50 border border-amber-200 rounded-lg p-4;
 }
 
 .transactions {

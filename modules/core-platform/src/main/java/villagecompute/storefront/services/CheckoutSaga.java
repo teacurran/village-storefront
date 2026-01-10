@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import villagecompute.storefront.data.models.Cart;
 import villagecompute.storefront.data.models.CartItem;
 import villagecompute.storefront.data.models.IdempotencyKey;
+import villagecompute.storefront.data.models.LoyaltyTransaction;
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.ShippingProfile;
@@ -37,6 +38,7 @@ import villagecompute.storefront.integration.shipping.CarrierRateAdapter.Address
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationResult;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.Rate;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.ServiceLevel;
+import villagecompute.storefront.loyalty.LoyaltyService;
 import villagecompute.storefront.services.ShippingService.AggregatedRateResult;
 import villagecompute.storefront.tenant.TenantContext;
 
@@ -88,6 +90,9 @@ public class CheckoutSaga {
 
     @Inject
     ShippingProfileService shippingProfileService;
+
+    @Inject
+    LoyaltyService loyaltyService;
 
     /**
      * Execute the checkout flow for the given request.
@@ -155,6 +160,9 @@ public class CheckoutSaga {
             PaymentIntent paymentIntent = paymentService.createPaymentIntent(order.totalAmount, order.currency,
                     order.id, true, context.idempotencyKey());
             orderService.markOrderPaid(order.id, paymentIntent.providerPaymentId);
+
+            // Award loyalty points if feature enabled
+            awardLoyaltyPointsForOrder(order);
 
             cartService.clearCart(cart.id);
 
@@ -437,6 +445,47 @@ public class CheckoutSaga {
 
     private BigDecimal defaultBigDecimal(BigDecimal value) {
         return value != null ? value : BigDecimal.ZERO;
+    }
+
+    /**
+     * Award loyalty points for completed order.
+     *
+     * <p>
+     * This method awards loyalty points to the customer after successful payment. It is feature-flagged to allow
+     * gradual rollout and tenant-specific enablement. Failures are logged but do not prevent order completion.
+     *
+     * @param order
+     *            the order to award points for
+     */
+    private void awardLoyaltyPointsForOrder(Order order) {
+        // Skip loyalty accrual if feature disabled
+        if (!featureToggle.isEnabled("loyalty.enabled")) {
+            return;
+        }
+
+        // Skip loyalty accrual for guest checkout (no user associated)
+        if (order.user == null) {
+            LOG.debugf("Skipping loyalty points for guest order %s", order.id);
+            return;
+        }
+
+        try {
+            Optional<LoyaltyTransaction> transaction = loyaltyService.awardPointsForPurchase(order.user.id,
+                    order.totalAmount, order.id);
+
+            if (transaction.isPresent()) {
+                LOG.infof("Loyalty points awarded - orderId=%s, userId=%s, points=%d, newBalance=%d", order.id,
+                        order.user.id, transaction.get().pointsDelta, transaction.get().balanceAfter);
+            } else {
+                LOG.debugf("No loyalty points awarded for order %s (below minimum threshold)", order.id);
+            }
+        } catch (Exception e) {
+            // Non-critical: Don't fail checkout if loyalty accrual fails
+            LOG.errorf(e, "Failed to award loyalty points for order %s - user=%s", order.id,
+                    order.user != null ? order.user.id : "guest");
+            meterRegistry.counter("loyalty.accrual.error", "tenant_id", TenantContext.getCurrentTenantId().toString())
+                    .increment();
+        }
     }
 
     private record CheckoutShippingDecision(BigDecimal shippingAmount, String shippingAddressJson, Rate selectedRate,
