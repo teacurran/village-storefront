@@ -5,12 +5,18 @@
  * Runs the Village Storefront application in Quarkus development mode
  * Ensures dependencies are installed before starting the dev server.
  *
- * Project type: Java Maven Quarkus
+ * Project type: Java Maven Quarkus (multi-module)
  * Dev mode: quarkus:dev (hot reload, live coding)
  */
 
 const { execSync, spawn } = require('child_process');
 const path = require('path');
+
+const MODULES = ['modules/core-platform'];
+
+function getModuleSelector() {
+  return MODULES.join(',');
+}
 
 // ANSI color codes for output
 const colors = {
@@ -38,6 +44,13 @@ function logError(message) {
 }
 
 /**
+ * Get project root directory
+ */
+function getProjectRoot() {
+  return path.resolve(__dirname, '..');
+}
+
+/**
  * Get the Maven wrapper command based on platform
  */
 function getMavenCommand() {
@@ -54,7 +67,7 @@ function runInstall() {
   try {
     execSync('node tools/install.cjs', {
       stdio: 'inherit',
-      cwd: path.resolve(__dirname, '..')
+      cwd: getProjectRoot()
     });
     logSuccess('Environment setup complete\n');
     return true;
@@ -75,11 +88,15 @@ function runDevServer() {
   // Spawn Maven process for Quarkus dev mode
   // Using spawn instead of exec to stream output in real-time
   const isWindows = process.platform === 'win32';
-  const child = spawn(mvnCmd, ['quarkus:dev', '-B'], {
-    stdio: 'inherit',
-    shell: isWindows,
-    cwd: path.resolve(__dirname, '..')
-  });
+  const child = spawn(
+    mvnCmd,
+    ['-pl', getModuleSelector(), '-am', 'quarkus:dev', '-B'],
+    {
+      stdio: 'inherit',
+      shell: isWindows,
+      cwd: getProjectRoot()
+    }
+  );
 
   // Handle process termination
   child.on('error', (error) => {
@@ -128,4 +145,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { runDevServer };
+module.exports = { runDevServer, getProjectRoot };

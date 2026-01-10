@@ -1,0 +1,246 @@
+<div class="bg-white rounded-lg border border-neutral-200 p-6 sticky top-4">
+    <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold text-neutral-900">
+            {msg.filters}
+        </h2>
+        {#if activeFilters && activeFilters.size > 0}
+        <button type="button"
+                class="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                data-clear-filters>
+            {msg.clear_all}
+        </button>
+        {/if}
+    </div>
+
+    <form method="get" class="space-y-6" data-filter-form>
+
+        <!-- Category Filter -->
+        {#if filters.categories && filters.categories.size > 0}
+        <div class="border-b border-neutral-200 pb-6">
+            <h3 class="text-sm font-medium text-neutral-900 mb-4">
+                {msg.filter_category}
+            </h3>
+            <div class="space-y-3">
+                {#for category in filters.categories}
+                <label class="flex items-center cursor-pointer group">
+                    <input type="checkbox"
+                           name="category"
+                           value="{category.slug}"
+                           {#if category.selected}checked{/if}
+                           class="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-2 focus:ring-primary-500">
+                    <span class="ml-3 text-sm text-neutral-700 group-hover:text-neutral-900">
+                        {category.name}
+                        {#if category.count}
+                        <span class="text-neutral-500">({category.count})</span>
+                        {/if}
+                    </span>
+                </label>
+                {/for}
+            </div>
+        </div>
+        {/if}
+
+        <!-- Price Range Filter -->
+        {#if filters.priceRange}
+        <div class="border-b border-neutral-200 pb-6">
+            <h3 class="text-sm font-medium text-neutral-900 mb-4">
+                {msg.filter_price}
+            </h3>
+            <div class="space-y-4">
+                <!-- Price range inputs -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="price-min" class="block text-xs text-neutral-600 mb-1">
+                            {msg.price_min}
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2 text-neutral-500 text-sm">$</span>
+                            <input type="number"
+                                   id="price-min"
+                                   name="price_min"
+                                   value="{filters.priceRange.selectedMin ?: filters.priceRange.min}"
+                                   min="{filters.priceRange.min}"
+                                   max="{filters.priceRange.max}"
+                                   step="1"
+                                   class="w-full pl-6 pr-2 py-2 border border-neutral-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="price-max" class="block text-xs text-neutral-600 mb-1">
+                            {msg.price_max}
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2 text-neutral-500 text-sm">$</span>
+                            <input type="number"
+                                   id="price-max"
+                                   name="price_max"
+                                   value="{filters.priceRange.selectedMax ?: filters.priceRange.max}"
+                                   min="{filters.priceRange.min}"
+                                   max="{filters.priceRange.max}"
+                                   step="1"
+                                   class="w-full pl-6 pr-2 py-2 border border-neutral-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick price ranges -->
+                <div class="space-y-2">
+                    {#for range in filters.priceRange.quickRanges}
+                    <label class="flex items-center cursor-pointer group">
+                        <input type="radio"
+                               name="price_range"
+                               value="{range.value}"
+                               {#if range.selected}checked{/if}
+                               class="w-4 h-4 text-primary-600 border-neutral-300 focus:ring-2 focus:ring-primary-500">
+                        <span class="ml-3 text-sm text-neutral-700 group-hover:text-neutral-900">
+                            {range.label}
+                        </span>
+                    </label>
+                    {/for}
+                </div>
+            </div>
+        </div>
+        {/if}
+
+        <!-- Availability Filter -->
+        {#if filters.availability}
+        <div class="border-b border-neutral-200 pb-6">
+            <h3 class="text-sm font-medium text-neutral-900 mb-4">
+                {msg.filter_availability}
+            </h3>
+            <div class="space-y-3">
+                <label class="flex items-center cursor-pointer group">
+                    <input type="checkbox"
+                           name="in_stock"
+                           value="true"
+                           {#if filters.availability.inStock}checked{/if}
+                           class="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-2 focus:ring-primary-500">
+                    <span class="ml-3 text-sm text-neutral-700 group-hover:text-neutral-900">
+                        {msg.in_stock_only}
+                    </span>
+                </label>
+                <label class="flex items-center cursor-pointer group">
+                    <input type="checkbox"
+                           name="on_sale"
+                           value="true"
+                           {#if filters.availability.onSale}checked{/if}
+                           class="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-2 focus:ring-primary-500">
+                    <span class="ml-3 text-sm text-neutral-700 group-hover:text-neutral-900">
+                        {msg.on_sale_only}
+                    </span>
+                </label>
+            </div>
+        </div>
+        {/if}
+
+        <!-- Brand/Vendor Filter -->
+        {#if filters.brands && filters.brands.size > 0}
+        <div class="border-b border-neutral-200 pb-6">
+            <h3 class="text-sm font-medium text-neutral-900 mb-4">
+                {msg.filter_brand}
+            </h3>
+            <div class="space-y-3 max-h-48 overflow-y-auto">
+                {#for brand in filters.brands}
+                <label class="flex items-center cursor-pointer group">
+                    <input type="checkbox"
+                           name="brand"
+                           value="{brand.slug}"
+                           {#if brand.selected}checked{/if}
+                           class="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-2 focus:ring-primary-500">
+                    <span class="ml-3 text-sm text-neutral-700 group-hover:text-neutral-900">
+                        {brand.name}
+                        {#if brand.count}
+                        <span class="text-neutral-500">({brand.count})</span>
+                        {/if}
+                    </span>
+                </label>
+                {/for}
+            </div>
+        </div>
+        {/if}
+
+        <!-- Tags/Attributes Filter -->
+        {#if filters.tags && filters.tags.size > 0}
+        <div class="pb-6">
+            <h3 class="text-sm font-medium text-neutral-900 mb-4">
+                {msg.filter_tags}
+            </h3>
+            <div class="flex flex-wrap gap-2">
+                {#for tag in filters.tags}
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox"
+                           name="tag"
+                           value="{tag.slug}"
+                           {#if tag.selected}checked{/if}
+                           class="sr-only peer">
+                    <span class="px-3 py-1.5 border border-neutral-300 rounded-full text-sm text-neutral-700 peer-checked:bg-primary-600 peer-checked:text-white peer-checked:border-primary-600 hover:border-primary-400 transition-colors">
+                        {tag.name}
+                    </span>
+                </label>
+                {/for}
+            </div>
+        </div>
+        {/if}
+
+        <!-- Apply Filters Button -->
+        <div class="pt-4">
+            <button type="submit"
+                    class="w-full bg-primary-600 text-white py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors font-medium">
+                {msg.apply_filters}
+            </button>
+        </div>
+
+    </form>
+</div>
+
+<script>
+// Progressive enhancement for filter form
+document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.querySelector('[data-filter-form]');
+
+    if (filterForm) {
+        // Auto-submit on checkbox/radio change for better UX
+        filterForm.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(input => {
+            input.addEventListener('change', function() {
+                // Debounce to avoid multiple submissions
+                clearTimeout(window.filterSubmitTimer);
+                window.filterSubmitTimer = setTimeout(() => {
+                    filterForm.requestSubmit();
+                }, 300);
+            });
+        });
+
+        // Price range inputs submit on blur
+        filterForm.querySelectorAll('input[type="number"]').forEach(input => {
+            input.addEventListener('blur', function() {
+                filterForm.requestSubmit();
+            });
+        });
+
+        // Override form submission to preserve current URL structure
+        filterForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const url = new URL(window.location);
+
+            // Clear existing filter params
+            ['category', 'brand', 'tag', 'in_stock', 'on_sale', 'price_min', 'price_max', 'price_range'].forEach(param => {
+                url.searchParams.delete(param);
+            });
+
+            // Add new filter params
+            for (const [key, value] of formData.entries()) {
+                if (value) {
+                    url.searchParams.append(key, value);
+                }
+            }
+
+            // Reset to first page when filters change
+            url.searchParams.delete('page');
+
+            window.location.href = url.toString();
+        });
+    }
+});
+</script>

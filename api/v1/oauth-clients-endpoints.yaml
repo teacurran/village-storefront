@@ -1,0 +1,403 @@
+# OAuth Client Management Endpoints
+# Add these to the main openapi.yaml file under paths section
+#
+# Task I5.T4: OAuth client management API
+# This file contains the OpenAPI spec additions for OAuth client CRUD operations.
+# Merge this into api/v1/openapi.yaml under appropriate sections.
+
+# ============================================================================
+# PATHS - Add to paths section
+# ============================================================================
+
+paths:
+  /admin/oauth-clients:
+    get:
+      operationId: listOAuthClients
+      summary: List OAuth clients for current tenant
+      description: |
+        Returns all OAuth client credentials for the current tenant.
+        Client secret hashes are NEVER exposed in responses.
+
+        **Security**: Requires admin role
+      tags: [Admin - OAuth Clients]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of OAuth clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OAuthClientDto'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      operationId: createOAuthClient
+      summary: Create new OAuth client
+      description: |
+        Creates a new OAuth client credential for headless API access.
+
+        **IMPORTANT**: The plaintext client secret is returned ONLY in the response to this request.
+        It cannot be retrieved later. Store it securely.
+
+        **Security**: Requires admin role
+      tags: [Admin - OAuth Clients]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOAuthClientRequest'
+            example:
+              name: "Mobile App Client"
+              description: "OAuth client for our mobile app"
+              scopes: ["catalog:read", "cart:read", "cart:write"]
+              rateLimitPerMinute: 5000
+      responses:
+        '201':
+          description: OAuth client created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthClientCreateResponse'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                clientId: "oauth_abc123xyz"
+                clientSecret: "dGVzdC1zZWNyZXQtZGF0YQ"
+                name: "Mobile App Client"
+                scopes: ["catalog:read", "cart:read", "cart:write"]
+                rateLimitPerMinute: 5000
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /admin/oauth-clients/{clientId}:
+    get:
+      operationId: getOAuthClient
+      summary: Get OAuth client details
+      description: |
+        Returns details for a specific OAuth client.
+        Client secret hash is NEVER exposed.
+
+        **Security**: Requires admin role, tenant isolation enforced
+      tags: [Admin - OAuth Clients]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: OAuth client ID
+          example: "oauth_abc123xyz"
+      responses:
+        '200':
+          description: OAuth client details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthClientDto'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      operationId: updateOAuthClient
+      summary: Update OAuth client
+      description: |
+        Updates an existing OAuth client's name, description, scopes, and rate limit.
+        Client secret cannot be updated via this endpoint (use regenerate-secret instead).
+
+        **Security**: Requires admin role, tenant isolation enforced
+      tags: [Admin - OAuth Clients]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: OAuth client ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOAuthClientRequest'
+      responses:
+        '200':
+          description: OAuth client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthClientDto'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /admin/oauth-clients/{clientId}/revoke:
+    post:
+      operationId: revokeOAuthClient
+      summary: Revoke OAuth client
+      description: |
+        Revokes an OAuth client by setting active=false.
+        Revoked clients cannot authenticate and all existing tokens become invalid immediately.
+
+        **Security**: Requires admin role, tenant isolation enforced
+      tags: [Admin - OAuth Clients]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: OAuth client ID
+      responses:
+        '204':
+          description: OAuth client revoked successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /admin/oauth-clients/{clientId}/regenerate-secret:
+    post:
+      operationId: regenerateOAuthClientSecret
+      summary: Regenerate OAuth client secret
+      description: |
+        Generates a new client secret for an OAuth client.
+        The old secret is invalidated immediately.
+
+        **IMPORTANT**: The new plaintext secret is returned ONLY in the response to this request.
+        Store it securely.
+
+        **Security**: Requires admin role, tenant isolation enforced
+      tags: [Admin - OAuth Clients]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: OAuth client ID
+      responses:
+        '200':
+          description: Secret regenerated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegenerateSecretResponse'
+              example:
+                clientId: "oauth_abc123xyz"
+                clientSecret: "bmV3LXNlY3JldC1kYXRh"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+# ============================================================================
+# SCHEMAS - Add to components/schemas section
+# ============================================================================
+
+components:
+  schemas:
+    OAuthClientDto:
+      type: object
+      description: |
+        OAuth client credential (response DTO).
+        Client secret hash is NEVER exposed in API responses for security reasons.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        clientId:
+          type: string
+          description: OAuth client ID (public identifier)
+          example: "oauth_abc123xyz"
+        name:
+          type: string
+          description: Display name
+          example: "Mobile App Client"
+        description:
+          type: string
+          description: Optional description
+          example: "OAuth client for our mobile application"
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [catalog:read, cart:read, cart:write, orders:read, orders:write]
+          description: Allowed OAuth scopes
+          example: ["catalog:read", "cart:read", "cart:write"]
+        active:
+          type: boolean
+          description: Whether client is active (false = revoked)
+          example: true
+        rateLimitPerMinute:
+          type: integer
+          description: Rate limit (requests per minute)
+          example: 5000
+          minimum: 100
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2026-01-10T12:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2026-01-10T12:30:00Z"
+        lastUsedAt:
+          type: string
+          format: date-time
+          description: Last authentication timestamp
+          example: "2026-01-10T14:15:00Z"
+          nullable: true
+      required:
+        - id
+        - clientId
+        - name
+        - scopes
+        - active
+        - rateLimitPerMinute
+        - createdAt
+        - updatedAt
+
+    CreateOAuthClientRequest:
+      type: object
+      description: Request to create or update an OAuth client
+      properties:
+        name:
+          type: string
+          description: Display name
+          maxLength: 255
+          example: "Mobile App Client"
+        description:
+          type: string
+          description: Optional description
+          maxLength: 2000
+          example: "OAuth client for our mobile application"
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [catalog:read, cart:read, cart:write, orders:read, orders:write]
+          description: Allowed OAuth scopes
+          minItems: 1
+          example: ["catalog:read", "cart:read", "cart:write"]
+        rateLimitPerMinute:
+          type: integer
+          description: Rate limit (requests per minute)
+          minimum: 100
+          maximum: 50000
+          default: 5000
+          example: 5000
+      required:
+        - name
+        - scopes
+
+    OAuthClientCreateResponse:
+      type: object
+      description: |
+        Response after creating an OAuth client.
+        **CRITICAL**: Contains plaintext client secret - ONLY shown once!
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        clientId:
+          type: string
+          description: OAuth client ID (public identifier)
+        clientSecret:
+          type: string
+          description: |
+            **Plaintext client secret - store securely!**
+            This is the ONLY time the secret will be visible.
+          example: "dGVzdC1zZWNyZXQtZGF0YQ"
+        name:
+          type: string
+          description: Display name
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Allowed OAuth scopes
+        rateLimitPerMinute:
+          type: integer
+          description: Rate limit (requests per minute)
+      required:
+        - id
+        - clientId
+        - clientSecret
+        - name
+        - scopes
+        - rateLimitPerMinute
+
+    RegenerateSecretResponse:
+      type: object
+      description: |
+        Response after regenerating an OAuth client secret.
+        **CRITICAL**: Contains plaintext secret - ONLY shown once!
+      properties:
+        clientId:
+          type: string
+          description: OAuth client ID
+        clientSecret:
+          type: string
+          description: |
+            **New plaintext client secret - store securely!**
+            This is the ONLY time the new secret will be visible.
+          example: "bmV3LXNlY3JldC1kYXRh"
+      required:
+        - clientId
+        - clientSecret
+
+# ============================================================================
+# TAGS - Add to tags section
+# ============================================================================
+
+tags:
+  - name: Admin - OAuth Clients
+    description: |
+      OAuth client credential management for headless API access.
+
+      OAuth clients use the Client Credentials flow with HTTP Basic Auth.
+      Clients are scoped to specific tenants and have configurable scopes and rate limits.
+
+      **Security**: All endpoints require admin role and enforce tenant isolation.
+
+      **References**:
+      - Task I5.T4: OAuth client management
+      - Documentation: docs/headless/usage.md

@@ -1,0 +1,196 @@
+{#include base.html}
+
+{#head}
+<meta name="description" content="{msg.account_meta_description}">
+<meta name="robots" content="noindex,nofollow">
+{/head}
+
+{#content}
+<div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="flex flex-col lg:flex-row gap-8">
+        <!-- Sidebar Navigation -->
+        <aside class="lg:w-64 flex-shrink-0">
+            <div class="bg-white rounded-lg shadow-soft p-6">
+                <div class="mb-6">
+                    <h2 class="text-lg font-semibold text-neutral-900 mb-1">{customerName ?: msg.my_account}</h2>
+                    <p class="text-sm text-neutral-600">{customerEmail}</p>
+                </div>
+                <nav aria-label="{msg.account_navigation}">
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="/account"
+                               class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary-50 text-primary-900 font-medium">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                                </svg>
+                                {msg.dashboard}
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/account/orders"
+                               class="flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-50 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                                </svg>
+                                {msg.orders}
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/account/addresses"
+                               class="flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-50 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                {msg.addresses}
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/account/loyalty"
+                               class="flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-50 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                {msg.loyalty_rewards}
+                            </a>
+                        </li>
+                        <li class="pt-4 mt-4 border-t border-neutral-200">
+                            <a href="/account/logout"
+                               class="flex items-center gap-3 px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-50 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                </svg>
+                                {msg.logout}
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 min-w-0">
+            <!-- Welcome Section -->
+            <div class="bg-white rounded-lg shadow-soft p-6 mb-6">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-neutral-900 mb-2">{msg.welcome_back}, {customerFirstName}!</h1>
+                        <p class="text-neutral-600">{msg.account_dashboard_intro}</p>
+                    </div>
+                    {#if loyaltyTier}
+                    <div>
+                        {#include components/loyalty-badge.html tier=loyaltyTier pointsToNext=loyaltyPointsToNext /}
+                    </div>
+                    {/if}
+                </div>
+            </div>
+
+            <!-- Loyalty Status (if applicable) -->
+            {#if loyaltyTier}
+            <div class="bg-gradient-to-r from-primary-600 to-secondary-600 rounded-lg shadow-soft p-6 mb-6 text-white" data-test="loyalty-panel">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">{loyaltyTier.icon}</span>
+                            <h2 class="text-xl font-bold">{loyaltyTier.name} {msg.member}</h2>
+                        </div>
+                        <p class="text-white/90 mb-4">
+                            {msg.loyalty_points_balance}: <span class="font-bold">{loyaltyPoints ?: 0}</span>
+                        </p>
+                        {#if loyaltyPointsToNext && loyaltyPointsToNext > 0}
+                        <div class="mb-2">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span>{loyaltyPointsToNext} {msg.points_to_next_tier}</span>
+                            </div>
+                            <div class="w-full bg-white/20 rounded-full h-2">
+                                <div class="bg-white rounded-full h-2" style="width: {loyaltyProgressPercent ?: 0}%"></div>
+                            </div>
+                        </div>
+                        {/if}
+                    </div>
+                    <a href="/account/loyalty"
+                       class="mt-4 md:mt-0 inline-flex items-center px-4 py-2 bg-white text-primary-600 font-medium rounded-lg hover:bg-neutral-50 transition-colors">
+                        {msg.view_rewards}
+                        <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+            {/if}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- Recent Orders -->
+                <div class="bg-white rounded-lg shadow-soft p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-semibold text-neutral-900">{msg.recent_orders}</h2>
+                        <a href="/account/orders" class="text-sm text-primary-600 hover:text-primary-700 font-medium">
+                            {msg.view_all}
+                        </a>
+                    </div>
+                    {#if recentOrders && recentOrders.size > 0}
+                    <div class="space-y-4">
+                        {#for order in recentOrders}
+                        <a href="/account/orders/{order.id}" class="block border border-neutral-200 rounded-lg p-4 hover:border-primary-300 hover:bg-primary-50/30 transition-colors">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <p class="font-medium text-neutral-900">{msg.order} #{order.number}</p>
+                                    <p class="text-sm text-neutral-600">{order.date}</p>
+                                </div>
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-{order.statusColor}-100 text-{order.statusColor}-800">
+                                    {order.status}
+                                </span>
+                            </div>
+                            <p class="text-sm text-neutral-700">{order.itemCount} {msg.items} · {order.total}</p>
+                        </a>
+                        {/for}
+                    </div>
+                    {#else}
+                    <div class="text-center py-8 text-neutral-500">
+                        <svg class="w-12 h-12 mx-auto mb-2 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                        </svg>
+                        <p>{msg.no_orders_yet}</p>
+                        <a href="/category/all" class="inline-block mt-3 text-primary-600 hover:text-primary-700 font-medium">
+                            {msg.start_shopping}
+                        </a>
+                    </div>
+                    {/if}
+                </div>
+
+                <!-- Account Details -->
+                <div class="bg-white rounded-lg shadow-soft p-6">
+                    <h2 class="text-lg font-semibold text-neutral-900 mb-4">{msg.account_details}</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-sm font-medium text-neutral-700 mb-1">{msg.email_address}</p>
+                            <p class="text-neutral-900">{customerEmail}</p>
+                        </div>
+                        {#if defaultAddress}
+                        <div>
+                            <p class="text-sm font-medium text-neutral-700 mb-1">{msg.default_address}</p>
+                            <p class="text-neutral-900 text-sm">
+                                {defaultAddress.name}<br>
+                                {defaultAddress.address1}<br>
+                                {#if defaultAddress.address2}{defaultAddress.address2}<br>{/if}
+                                {defaultAddress.city}, {defaultAddress.state} {defaultAddress.postalCode}
+                            </p>
+                        </div>
+                        {#else}
+                        <div>
+                            <p class="text-sm font-medium text-neutral-700 mb-1">{msg.default_address}</p>
+                            <a href="/account/addresses" class="text-sm text-primary-600 hover:text-primary-700">
+                                {msg.add_address}
+                            </a>
+                        </div>
+                        {/if}
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+{/content}
+
+{/include}

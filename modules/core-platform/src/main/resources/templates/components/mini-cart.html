@@ -1,0 +1,89 @@
+<div class="relative" data-mini-cart>
+    <button type="button"
+            class="relative p-2 text-neutral-700 hover:text-primary-600 transition-colors"
+            aria-label="{msg.shopping_cart} ({cartItemCount ?: 0} {msg.items})"
+            data-mini-cart-trigger>
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+        </svg>
+        {#if cartItemCount && cartItemCount > 0}
+        <span class="absolute -top-1 -right-1 w-5 h-5 bg-primary-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
+            {cartItemCount}
+        </span>
+        {/if}
+    </button>
+
+    <!-- Mini cart panel (hidden by default, shown via JS) -->
+    <div class="hidden absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-strong border border-neutral-200 z-50"
+         data-mini-cart-panel
+         role="dialog"
+         aria-label="{msg.shopping_cart}">
+        <div class="p-4 border-b border-neutral-200">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-neutral-900">{msg.your_cart}</h2>
+                <button type="button"
+                        class="text-neutral-400 hover:text-neutral-600 transition-colors"
+                        data-mini-cart-close
+                        aria-label="{msg.close}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="max-h-96 overflow-y-auto p-4" data-mini-cart-items>
+            {#if cartItems && cartItems.size > 0}
+            <div class="space-y-3">
+                {#for item in cartItems}
+                <div class="flex gap-3">
+                    <div class="w-16 h-16 bg-neutral-100 rounded flex-shrink-0 overflow-hidden">
+                        {#if item.imageUrl}
+                        <img src="{item.imageUrl}" alt="{item.name}" class="w-full h-full object-cover">
+                        {#else}
+                        <div class="w-full h-full flex items-center justify-center text-2xl">📦</div>
+                        {/if}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-sm font-medium text-neutral-900 truncate">{item.name}</h3>
+                        {#if item.variantTitle && item.variantTitle != 'Default'}
+                        <p class="text-xs text-neutral-600">{item.variantTitle}</p>
+                        {/if}
+                        <div class="flex items-center justify-between mt-1">
+                            <span class="text-xs text-neutral-600">{msg.qty}: {item.quantity}</span>
+                            <span class="text-sm font-semibold text-neutral-900">{item.price}</span>
+                        </div>
+                    </div>
+                </div>
+                {/for}
+            </div>
+            {#else}
+            <div class="text-center py-8 text-neutral-500">
+                <svg class="w-12 h-12 mx-auto mb-2 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                </svg>
+                <p>{msg.cart_empty}</p>
+            </div>
+            {/if}
+        </div>
+
+        {#if cartItems && cartItems.size > 0}
+        <div class="p-4 border-t border-neutral-200 space-y-3">
+            <div class="flex items-center justify-between text-sm">
+                <span class="font-medium text-neutral-700">{msg.subtotal}:</span>
+                <span class="font-bold text-neutral-900">{cartSubtotal ?: '$0.00'}</span>
+            </div>
+            <div class="space-y-2">
+                <a href="/cart"
+                   class="block w-full text-center px-4 py-2 border-2 border-primary-600 text-primary-600 font-medium rounded-lg hover:bg-primary-50 transition-colors">
+                    {msg.view_cart}
+                </a>
+                <a href="/checkout"
+                   class="block w-full text-center px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors">
+                    {msg.checkout}
+                </a>
+            </div>
+        </div>
+        {/if}
+    </div>
+</div>

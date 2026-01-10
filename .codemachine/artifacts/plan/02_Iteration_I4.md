@@ -1,141 +1,98 @@
 <!-- anchor: iteration-4-plan -->
-### Iteration 4: Checkout, Payments, Media Pipeline & Loyalty/POS Enhancements
+### Iteration 4: Frontend Experiences, Media Pipeline, POS Foundations
 
 *   **Iteration ID:** `I4`
-*   **Goal:** Ship production-ready checkout orchestration with Stripe payments, loyalty/gift card support, media processing pipeline, and POS offline flows.
-*   **Prerequisites:** `I1`, `I2`, `I3`
-*   **Retrospective Carryover:**
-    - Document operational toggles (feature flags) alongside implementation to aid release mgmt.
-    - Keep diagrams + ADRs current while coding; do not postpone modeling updates.
-    - Reuse background job improvements to avoid reinventing queue logic.
-*   **Iteration Milestones & Exit Criteria:**
-    1. PaymentProvider + Stripe Connect implementations with webhooks, payouts, disputes support.
-    2. Checkout orchestrator orchestrating cart, address validation, shipping rates, loyalty/gift cards, payments, audit logging.
-    3. Media pipeline (images + video) with FFmpeg/Thumbnailator jobs, signed URLs, CDN metadata, tenant quotas.
-    4. Loyalty program ledger + redemption logic integrated with checkout + admin UI.
-    5. POS offline workflows + Stripe Terminal bridging documented and partially implemented.
-    6. Media pipeline sequence diagram + docs ready for ops handoff.
+*   **Goal:** Deliver tenant-branded storefront flows, Vue admin/POS shell, media upload pipeline, and foundational UX/internationalization scaffolding to enable full-stack demos.
+*   **Prerequisites:** `I1`–`I3`
+*   **Tasks:**
 
 <!-- anchor: task-i4-t1 -->
 *   **Task 4.1:**
     *   **Task ID:** `I4.T1`
-    *   **Description:** Implement PaymentProvider framework + Stripe providers (PaymentProvider, PaymentMethodProvider, MarketplaceProvider, WebhookHandler); include Connect onboarding, payout scheduling, fee calculation, webhook ingestion, integration tests.
-    *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** ADRs, OpenAPI, Stripe docs.
-    *   **Input Files:** [`api/v1/openapi.yaml`, `docs/adr/ADR-004-consignment-payouts.md`, `docs/diagrams/sequence_checkout_payment.mmd`]
-    *   **Target Files:** [`src/main/java/com/village/payment/**`, `tests/backend/StripeProviderTest.java`, `tests/backend/StripeWebhookIT.java`, `docs/payments/stripe_connect.md`]
-    *   **Deliverables:** Payment provider interfaces + Stripe implementation, webhook idempotency storage, docs describing onboarding + platform fees.
-    *   **Acceptance Criteria:** Stripe sandbox integration works end-to-end, platform fees configurable per tenant, webhooks persisted + idempotent, docs show onboarding steps.
-    *   **Testing Guidance:** Use Stripe CLI/webhook emulator, integration tests verifying failure handling, include contract tests for PaymentProvider interface.
-    *   **Observability Hooks:** Emit logs for payment lifecycle (intent created, succeeded, failed) w/ tenant/payment ids; metrics for webhook latency + payout backlog.
-    *   **Dependencies:** `I2.T4`, `I3.T1`, `I3.T3`.
-    *   **Parallelizable:** Limited.
+    *   **Description:** Build end-to-end storefront pages (home, category, product, cart, checkout, account) using Qute + Tailwind + PrimeUI components; integrate with catalog/checkout APIs and feature flags.
+    *   **Agent Type Hint:** `FrontendAgent`
+    *   **Inputs:** Catalog & checkout endpoints, design tokens.
+    *   **Input Files:** [`src/main/resources/templates/storefront`, `src/main/resources/templates/emails`, `src/main/resources/messages/messages.properties`]
+    *   **Target Files:** [`src/main/resources/templates/storefront/home.html`, `category.html`, `product.html`, `cart.html`, `checkout.html`, `account.html`, `src/main/resources/templates/storefront/partials/*`, `src/main/resources/messages/messages.properties`, `messages_es.properties`]
+    *   **Deliverables:** Responsive templates, translations placeholders (EN/ES), component partials (header/nav/footer, product card, filter, loyalty badge), hooking to REST APIs.
+    *   **Acceptance Criteria:** Pages render sample data; Accept-Language toggles (en/es) update text via MessageBundle; CI screenshot tests (Percy) baseline captured; LCP <2s with seeded data.
+    *   **Dependencies:** `I2.T6`, `I3.T1-T2`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i4-t2 -->
 *   **Task 4.2:**
     *   **Task ID:** `I4.T2`
-    *   **Description:** Implement checkout orchestrator: saga handling address validation, shipping rates (USPS/UPS/FedEx adapters), loyalty redemption, gift cards/store credit, payment capture, audit logging, error handling, retrieval endpoints.
-    *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Sequence diagram, cart services, payment provider, loyalty spec.
-    *   **Input Files:** [`docs/diagrams/sequence_checkout_payment.mmd`, `src/main/java/com/village/checkout/cart/**`, `src/main/java/com/village/payment/**`, `docs/adr/ADR-003-checkout-saga.md`]
-    *   **Target Files:** [`src/main/java/com/village/checkout/orchestrator/**`, `src/main/java/com/village/shipping/**`, `tests/backend/CheckoutSagaTest.java`, `tests/backend/ShippingAdapterIT.java`, `docs/checkout/saga.md`]
-    *   **Deliverables:** Orchestrator service, adapter layer wrappers, audit + domain events, doc describing compensation + kill switches.
-    *   **Acceptance Criteria:** Saga handles success/failure, integrates with payments + loyalty, shipping adapters stub external APIs, logs actions with trace IDs, tests cover success + failure + compensations.
-    *   **Testing Guidance:** Build scenario matrix (guest vs auth, loyalty vs not), run integration tests with Testcontainers + mock carriers; include contract tests vs OpenAPI.
-    *   **Observability Hooks:** Add tracing spans for each step, metrics for checkout latency, logs for failure funnel.
-    *   **Dependencies:** `I2.T4`, `I4.T1`, `I4.T4`.
-    *   **Parallelizable:** No.
+    *   **Description:** Scaffold Vue 3 + Vite admin SPA (routing, layouts, PrimeVue theme, Pinia stores) plus Quinoa integration in Maven build; implement dashboard + catalog management views hitting backend APIs.
+    *   **Agent Type Hint:** `FrontendAgent`
+    *   **Inputs:** Admin requirements, API spec.
+    *   **Input Files:** [`src/main/webui/src`, `api/storefront-admin-platform.yaml`, `modules/catalog/...`]
+    *   **Target Files:** [`src/main/webui/src/main.ts`, `router/index.ts`, `stores/catalog.ts`, `views/Dashboard.vue`, `views/Products/List.vue`, `components/navigation/*`, `vite.config.ts`, `package.json`, `quinoa.yaml`]
+    *   **Deliverables:** Admin SPA with authentication bootstrap, navigation, dashboard cards, product table/editor views, API client generator referencing OpenAPI, tests via Vitest/Cypress.
+    *   **Acceptance Criteria:** SPA builds via Quinoa + Quarkus; login gating works with JWT; product grid supports pagination filters; lint/test scripts added to CI; docs describing admin dev workflow.
+    *   **Dependencies:** `I1.T1`, `I1.T4`, `I2.T1-T3`.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i4-t3 -->
 *   **Task 4.3:**
     *   **Task ID:** `I4.T3`
-    *   **Description:** Build media pipeline: upload negotiation endpoints, presigned URLs, tenant quotas, Thumbnailator for images, FFmpeg for video with HLS, background jobs, signed URL service, metadata persistence, API integration for storefront/admin.
-    *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Media requirements, ERD (MediaAsset/Derivative), job framework.
-    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `docs/architecture_overview.md`, `src/main/java/com/village/jobs/**`]
-    *   **Target Files:** [`src/main/java/com/village/media/**`, `tests/backend/MediaPipelineTest.java`, `docs/media/pipeline.md`, `src/main/resources/application.properties`]
-    *   **Deliverables:** Media services, FFmpeg invocation wrapper, queue integration, doc describing storage layout + TTLs.
-    *   **Acceptance Criteria:** Images/video processed with size tiers, signed URLs generated per tenant, quotas enforced, tests simulate FFmpeg via stub, doc explains failure retries.
-    *   **Testing Guidance:** Use small media fixtures, run FFmpeg locally, ensure tests cover quota enforcement + failure case.
-    *   **Observability Hooks:** Metrics for job duration, queue depth, storage usage; logs include mediaId + tenantId.
-    *   **Dependencies:** `I1.T5`, `I3.T6`.
-    *   **Parallelizable:** Limited.
+    *   **Description:** Implement POS module (Vue route + service worker + IndexedDB offline storage) with product search, cart, tender entry, offline queue, and device status bar; integrate with checkout APIs.
+    *   **Agent Type Hint:** `FrontendAgent`
+    *   **Inputs:** POS requirements, iteration 3 checkout.
+    *   **Input Files:** [`src/main/webui/src/views/POS`, `src/main/webui/src/stores/pos.ts`, `src/main/webui/src/service-worker.ts`]
+    *   **Target Files:** [`src/main/webui/src/views/POS/Register.vue`, `POSHardwarePanel.vue`, `stores/pos.ts`, `workers/offlineQueue.ts`, `service-worker.ts`, `src/main/webui/src/locales/en.json`, `es.json`]
+    *   **Deliverables:** Offline-ready POS view, hardware status components, offline queue logic (encryption stub), sync UI, tests covering offline scenario.
+    *   **Acceptance Criteria:** PWA build passes; offline queue stores transactions, syncs when online via mock; UI meets accessibility requirements (large buttons, focus states); docs for pairing hardware.
+    *   **Dependencies:** `I4.T2`, `I3.T1`, `I3.T4` (shipping).
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i4-t4 -->
 *   **Task 4.4:**
     *   **Task ID:** `I4.T4`
-    *   **Description:** Implement loyalty + rewards module: point accrual rules, ledger, redemption engine, tier calculations, admin APIs, storefront components integration (cart summary), reporting hooks.
+    *   **Description:** Implement media upload pipeline (presigned URLs, validation, FFmpeg/Thumbnailator workers, metadata persistence) plus deployment diagram updates.
     *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Requirements, ERD (LoyaltyLedger), checkout saga design.
-    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `api/v1/openapi.yaml`, `docs/checkout/saga.md`]
-    *   **Target Files:** [`src/main/java/com/village/loyalty/**`, `tests/backend/LoyaltyServiceTest.java`, `tests/backend/LoyaltyLedgerIT.java`, `docs/loyalty/program.md`]
-    *   **Deliverables:** Ledger entity/service, accrual + redemption APIs, admin endpoints for configuration, documentation for tier logic.
-    *   **Acceptance Criteria:** Points accrual + redemption operate per config, ledger persists with audit fields, checkout integrates, admin endpoints secured, docs outline formulas.
-    *   **Testing Guidance:** Fuzz accrual scenarios, include integration tests verifying concurrency + ledger rollback.
-    *   **Observability Hooks:** Add metrics for points earned, redemption volume, ledger lag; logs include tenant/customer/tier info.
-    *   **Dependencies:** `I2.T4`, `I3.T3`.
+    *   **Inputs:** Media requirements, diagrams from `I3.T6`.
+    *   **Input Files:** [`modules/media/src/main/java/...`, `worker/src/main/java/...`, `docs/diagrams/media-flow.mmd`]
+    *   **Target Files:** [`modules/media/src/main/java/.../MediaController.java`, `MediaService.java`, `MediaRepository.java`, `worker/src/main/java/.../MediaWorker.java`, `modules/media/src/test/java/...`, `docs/diagrams/media-flow.mmd`, `docs/architecture/ops/deployment-architecture.md`]
+    *   **Deliverables:** REST endpoints for upload request/complete, worker job definitions (IMAGE_VARIANT, VIDEO_TRANSCODE), integration with R2/MinIO, tests verifying checksum, size limits, job scheduling, updated diagram.
+    *   **Acceptance Criteria:** Upload handshake works in dev; worker transcodes sample video via FFmpeg; R2 paths tenant-isolated; metrics/logging added; blueprint diagram refreshed.
+    *   **Dependencies:** `I3.T6`, `I1.T7`.
     *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i4-t5 -->
 *   **Task 4.5:**
     *   **Task ID:** `I4.T5`
-    *   **Description:** Document media pipeline sequence (upload -> processing -> CDN) via Mermaid + ops runbook; include scaling guidance, failure scenarios, kill switches, capacity planning.
-    *   **Agent Type Hint:** `DiagrammingAgent`
-    *   **Inputs:** Media implementation, job policies.
-    *   **Input Files:** [`src/main/java/com/village/media/**`, `docs/media/pipeline.md`, `k8s/base/deployment-workers.yaml`]
-    *   **Target Files:** [`docs/diagrams/sequence_media_pipeline.mmd`, `docs/operations/media_runbook.md`]
-    *   **Deliverables:** Diagram + runbook with kill-switch instructions, queue scaling, troubleshooting.
-    *   **Acceptance Criteria:** Diagram renders, runbook outlines detection/response steps, references Section 6 verification metrics.
-    *   **Testing Guidance:** Walkthrough runbook w/ simulated failure, gather feedback from ops.
-    *   **Observability Hooks:** Document metrics/dashboards for pipeline health (processing backlog, error counts).
-    *   **Dependencies:** `I4.T3`.
-    *   **Parallelizable:** No.
+    *   **Description:** Implement Quarkus Mailer templates + localization (transactional emails for orders, consignment, payout) with environment domain filtering and tests.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Email requirements, MessageBundle.
+    *   **Input Files:** [`src/main/resources/templates/emails`, `modules/core-platform/src/main/java/.../MailService.java`, `src/main/resources/messages/*.properties`]
+    *   **Target Files:** [`src/main/resources/templates/emails/order-confirmation.html`, `shipping-update.html`, `consignor-payout.html`, `modules/core-platform/src/main/java/.../MailService.java`, `modules/core-platform/src/test/java/.../MailServiceTest.java`]
+    *   **Deliverables:** Email templates supporting EN/ES, service verifying domain filtering for non-prod, tests mocking SMTP.
+    *   **Acceptance Criteria:** Emails render with theme tokens; non-prod filter prevents sending to real domains; integration test ensures mail queue captured; docs outline template editing process.
+    *   **Dependencies:** `I4.T1`, `I3.T1`.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i4-t6 -->
 *   **Task 4.6:**
     *   **Task ID:** `I4.T6`
-    *   **Description:** Enhance gift cards + store credit modules and integrate with checkout & POS: APIs for issuance/redemption, ledger, admin UI wiring, POS offline usage.
-    *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Checkout saga, loyalty spec, POS requirements.
-    *   **Input Files:** [`docs/diagrams/datamodel_erd.puml`, `api/v1/openapi.yaml`, `src/main/java/com/village/checkout/orchestrator/**`, `src/main/java/com/village/pos/**`]
-    *   **Target Files:** [`src/main/java/com/village/giftcard/**`, `src/main/java/com/village/storecredit/**`, `tests/backend/GiftCardServiceTest.java`, `tests/backend/StoreCreditIT.java`, `docs/payments/giftcard.md`]
-    *   **Deliverables:** Gift card/store credit services, endpoints, integration with checkout/POS, docs for issuance + redemption.
-    *   **Acceptance Criteria:** Gift card codes unique + secure, redemption atomic, checkout + POS flows handle partial payments, docs describe lifecycle.
-    *   **Testing Guidance:** Integration tests with multi-tender payments, offline POS redemption scenario, load tests for gift card lookups.
-    *   **Observability Hooks:** Track issuance/redemption metrics, log suspicious activity, expose ledger health to reporting.
-    *   **Dependencies:** `I4.T2`, `I4.T4`.
-    *   **Parallelizable:** Limited.
+    *   **Description:** Implement Admin reporting UI skeleton (charts, exports list) consuming aggregated metrics placeholders; integrate SSE notifications for job status.
+    *   **Agent Type Hint:** `FrontendAgent`
+    *   **Inputs:** Reporting requirements, Vue SPA.
+    *   **Input Files:** [`src/main/webui/src/views/Reports`, `api/storefront-admin-platform.yaml`]
+    *   **Target Files:** [`src/main/webui/src/views/Reports/Overview.vue`, `ReportJobList.vue`, `components/charts/*`, `stores/reports.ts`]
+    *   **Deliverables:** Dashboard with KPI cards, chart placeholders (Chart.js), job history table, SSE listener hooking to backend.
+    *   **Acceptance Criteria:** UI renders stub data from dev API; SSE updates job statuses; tokens reused for data freshness indicators; tests verifying chart accessibility.
+    *   **Dependencies:** `I4.T2`, `I2.T7` (metrics), `I3.T7` (dev stack SSE).
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i4-t7 -->
 *   **Task 4.7:**
     *   **Task ID:** `I4.T7`
-    *   **Description:** Implement POS offline queue + Stripe Terminal integration: offline storage encryption, sync jobs, UI states, hardware pairing service, documentation.
-    *   **Agent Type Hint:** `FrontendAgent` + `BackendAgent` pairing
-    *   **Inputs:** POS requirements, job framework, payment provider.
-    *   **Input Files:** [`src/main/webui/admin-spa/src/modules/pos/**`, `src/main/java/com/village/payment/**`, `docs/operations/job_runbook.md`]
-    *   **Target Files:** [`src/main/webui/admin-spa/src/modules/pos/offline/**`, `src/main/java/com/village/pos/offline/**`, `tests/admin/POSOffline.spec.ts`, `tests/backend/POSOfflineIT.java`, `docs/pos/offline.md`]
-    *   **Deliverables:** Offline queue manager, encryption keys, sync job hooking into checkout, UI indicators + hold/resume features, doc for staff training.
-    *   **Acceptance Criteria:** Offline queue persists encrypted payloads, sync resumes automatically, UI highlights offline state, Stripe Terminal flows validated in sandbox.
-    *   **Testing Guidance:** Simulate offline mode via service worker, run integration tests ensuring duplicates prevented.
-    *   **Observability Hooks:** Gauge offline queue depth, metrics for sync success/failure, logs tagging device/location.
-    *   **Dependencies:** `I4.T1`, `I4.T2`, `I3.T6`.
-    *   **Parallelizable:** No.
-
-*   **Iteration KPIs & Validation Strategy:**
-    - PaymentProvider success ≥99% in sandbox load test; webhook latency median <1s.
-    - Checkout saga 95th percentile latency <800ms (excluding external calls) measured via integration harness.
-    - Media pipeline processes standard image <5s, video <10m; queue metrics accessible.
-    - Loyalty ledger integrity cross-checked vs orders; automated job recalculates tiers nightly.
-    - Gift card/store credit coverage ≥85% tests, POS offline queue flush <60s on reconnection.
-    - Runbook (media + POS) reviewed by ops + support with sign-off recorded.
-*   **Iteration Risk Log & Mitigations:**
-    - *Stripe API changes:* Monitor release notes; mitigate via feature flag to fall back to basic card flow.
-    - *FFmpeg resource spikes:* Use dedicated worker pool + Kubernetes limits.
-    - *Saga complexity:* Risk of cascade failures; mitigate with circuit breakers + compensating actions tests.
-    - *Offline data loss:* Enforce encryption + checksum; include manual reconciliation instructions.
-    - *Gift card fraud:* Add rate limits + audit alerts for suspicious behavior.
-*   **Iteration Backlog & Follow-ups:**
-    - Plan I5 work for platform payment observability dashboards.
-    - Schedule accessibility audit for checkout + POS flows.
-    - Create backlog item for multi-currency conversions in loyalty displays.
-    - Document future addition of PayPal provider hooking into PaymentProvider interface.
+    *   **Description:** Update Kubernetes deployment artifacts + Dockerfile to include Quarkus native storefront/admin assets, worker deployment scaling hints, cert-manager annotations, and FFmpeg binary packaging.
+    *   **Agent Type Hint:** `InfraAgent`
+    *   **Inputs:** Deployment requirements, Task I4.T4 outputs.
+    *   **Input Files:** [`docker/Dockerfile`, `infra/k8s/base/deployment.yaml`, `infra/k8s/base/worker.yaml`, `docs/architecture/ops/deployment-architecture.md`]
+    *   **Target Files:** [`docker/Dockerfile`, `infra/k8s/base/deployment.yaml`, `infra/k8s/base/worker.yaml`, `infra/k8s/base/ingress.yaml`, `infra/k8s/overlays/*`, `docs/architecture/ops/deployment-architecture.md`]
+    *   **Deliverables:** Multi-stage Dockerfile bundling frontend assets + FFmpeg, Quarkus config for static resources, K8s manifests with env vars for TenantContext + queue envs, documentation on cert-manager + autoscaling.
+    *   **Acceptance Criteria:** `mvn package -Dnative` image builds; `kubectl kustomize infra/k8s/overlays/dev` validates; docs highlight queue-specific pod settings; readiness/liveness probes updated.
+    *   **Dependencies:** `I1.T1`, `I3.T4`, `I4.T4`.
+    *   **Parallelizable:** Yes.

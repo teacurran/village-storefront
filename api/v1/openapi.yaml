@@ -125,6 +125,24 @@ tags:
       Restricted to platform administrators only. Not accessible to individual
       store owners.
 
+  - name: Catalog
+    description: |
+      Product catalog operations including products, variants, categories, and collections.
+      Supports both storefront (public/customer-facing) and admin scopes. All operations
+      are tenant-scoped and enforce RLS isolation.
+    externalDocs:
+      description: Catalog domain architecture
+      url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-4-blueprint
+
+  - name: Inventory
+    description: |
+      Multi-location inventory management including locations, transfers, adjustments,
+      and stock level tracking. Admin-only operations with tenant isolation and
+      audit logging for all stock movements.
+    externalDocs:
+      description: Inventory domain architecture
+      url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-4-blueprint
+
 security:
   - bearerAuth: []
   - apiKeyAuth: []
@@ -305,15 +323,18 @@ paths:
       operationId: listProducts
       summary: List products (catalog listing)
       description: |
-        **TODO:** Implement product catalog listing with filtering, sorting, and pagination.
-
         Returns paginated list of active products for the current tenant. Supports:
-        - Filtering by category, tags, price range, availability
+        - Filtering by category, collection, price range, availability
         - Sorting by name, price, created date, popularity
         - Search by product name, SKU, description
+        - Tenant-scoped results with automatic RLS enforcement
 
         **Authentication:** Optional (public catalog browsing, auth required for customer-specific pricing)
-      tags: [Storefront, Headless]
+
+        **Rate Limiting:** 100 req/min (anonymous), 1000 req/min (authenticated)
+
+        **Feature Flags:** Respects `catalog.search.enabled` and tenant-level kill switches
+      tags: [Catalog, Storefront, Headless]
       security:
         - {}  # Optional auth
         - bearerAuth: []
@@ -326,6 +347,11 @@ paths:
           schema:
             type: string
           description: Filter by category slug
+        - name: collection
+          in: query
+          schema:
+            type: string
+          description: Filter by collection slug
         - name: minPrice
           in: query
           schema:
@@ -353,6 +379,13 @@ paths:
       responses:
         '200':
           description: Product list successfully retrieved
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
           content:
             application/json:
               schema:
@@ -371,17 +404,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Feature flag disabled (catalog.search.enabled is false for tenant)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
   /catalog/products/{productId}:
     get:
       operationId: getProduct
       summary: Get product details
       description: |
-        **TODO:** Implement product detail retrieval.
-
         Returns full product details including variants, pricing, inventory, images.
-        Public endpoint (no auth required for browsing).
-      tags: [Storefront, Headless]
+        Public endpoint (no auth required for browsing). Tenant-scoped with RLS enforcement.
+
+        **Rate Limiting:** 100 req/min (anonymous), 1000 req/min (authenticated)
+      tags: [Catalog, Storefront, Headless]
       security:
         - {}  # Optional auth
         - bearerAuth: []
@@ -397,10 +436,429 @@ paths:
       responses:
         '200':
           description: Product details retrieved
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductDetail'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # ADMIN - CATALOG MANAGEMENT ENDPOINTS
+  # ============================================================================
+
+  /admin/catalog/categories:
+    get:
+      operationId: listCategories
+      summary: List categories
+      description: List all categories for the tenant, ordered by display order.
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+    post:
+      operationId: createCategory
+      summary: Create category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Duplicate category code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/categories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Category UUID
+    get:
+      operationId: getCategory
+      summary: Get category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Category retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateCategory
+      summary: Update category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteCategory
+      summary: Delete category
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: Category deleted
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/collections:
+    get:
+      operationId: listCollections
+      summary: List collections
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Optional status filter
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Paginated collection list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Collection'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+    post:
+      operationId: createCollection
+      summary: Create collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Collection'
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '409':
+          description: Duplicate collection code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/collections/{collectionId}:
+    parameters:
+      - name: collectionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCollection
+      summary: Get collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Collection retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateCollection
+      summary: Update collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Collection'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteCollection
+      summary: Delete collection
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        '204':
+          description: Collection deleted
+        '404':
+          description: Collection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/import:
+    post:
+      operationId: importCatalog
+      summary: Enqueue catalog import job
+      description: |
+        Enqueues a background job to import product catalog data from a CSV file.
+        The job processes asynchronously and returns immediately with a job ID.
+
+        **Feature Flags:** Requires `catalog.import-export.enabled`
+        **Rate Limiting:** 10 req/hour (to prevent abuse)
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogImportRequest'
+      responses:
+        '202':
+          description: Import job enqueued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+              example:
+                jobId: "550e8400-e29b-41d4-a716-446655440000"
+                status: "enqueued"
+                message: "Catalog import job enqueued successfully"
+        '400':
+          description: Invalid request (missing fileLocation or invalid options)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Feature disabled for tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Service temporarily unavailable (job queue full)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/catalog/export:
+    post:
+      operationId: exportCatalog
+      summary: Enqueue catalog export job
+      description: |
+        Enqueues a background job to export product catalog data to CSV format.
+        The job processes asynchronously and returns immediately with a job ID.
+        Download URL will be provided via webhook or job status polling.
+
+        **Feature Flags:** Requires `catalog.import-export.enabled`
+        **Rate Limiting:** 10 req/hour
+      tags: [Catalog, Admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogExportRequest'
+      responses:
+        '202':
+          description: Export job enqueued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+              example:
+                jobId: "660e8400-e29b-41d4-a716-446655440001"
+                status: "enqueued"
+                message: "Catalog export job enqueued successfully"
+        '400':
+          description: Invalid request (invalid filters or format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Feature disabled for tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Service temporarily unavailable (job queue full)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /catalog/products/{productId}/variant-matrix:
+    get:
+      operationId: getVariantMatrix
+      summary: Get product variant matrix
+      description: |
+        Returns the option axes and variant listings for a product. Used by
+        storefront configurators to build size/color pickers. Tenant-scoped with
+        feature flag enforcement.
+
+        **Feature Flags:** Requires `catalog.variant-matrix.enabled`
+        **Rate Limiting:** 100 req/min (anonymous), 1000 req/min (authenticated)
+      tags: [Catalog, Storefront, Headless]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Product UUID
+      responses:
+        '200':
+          description: Variant matrix retrieved
+          headers:
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantMatrix'
+        '403':
+          description: Feature flag disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: Product not found
           content:
@@ -417,8 +875,6 @@ paths:
       operationId: previewCheckout
       summary: Preview checkout totals (cart calculation)
       description: |
-        **TODO:** Implement checkout preview/calculation.
-
         Calculates order totals including:
         - Line item subtotals (product price × quantity)
         - Discounts (promo codes, customer-specific pricing)
@@ -455,16 +911,21 @@ paths:
       operationId: commitCheckout
       summary: Complete checkout and create order
       description: |
-        **TODO:** Implement order creation and payment processing.
-
         Atomically:
-        1. Creates order record
-        2. Charges payment method via Stripe
-        3. Reduces inventory
-        4. Enqueues fulfillment job
+        1. Validates cart and inventory availability
+        2. Creates order record with PENDING_PAYMENT status
+        3. Charges payment method via Stripe PaymentIntent
+        4. Reduces inventory and reserves items
+        5. Updates order to PAID status
+        6. Clears customer cart
+        7. Enqueues fulfillment job
 
         **Idempotent:** Uses `X-Idempotency-Key` header to prevent duplicate orders
-        if client retries due to network failure.
+        if client retries due to network failure. Duplicate requests within 60 minutes
+        return cached response with 200 OK (not 201).
+
+        **Feature Flag:** Requires `checkout.order-creation.enabled` to be true.
+        Returns 503 if disabled.
 
         **Requires authentication:** Must be logged-in customer or use valid API key.
       tags: [Storefront, Headless]
@@ -503,7 +964,810 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
         '409':
-          description: Duplicate idempotency key (order already created)
+          description: Duplicate idempotency key (order already created or in-flight request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '503':
+          description: Service unavailable (checkout feature disabled via feature flag)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # SHIPPING ENDPOINTS
+  # ============================================================================
+
+  /shipping/rates:
+    post:
+      operationId: getShippingRates
+      summary: Get shipping rates from carriers
+      description: |
+        Fetches real-time shipping rates from configured carriers (USPS, UPS, FedEx).
+        Results are cached for 15 minutes to meet performance targets per Architecture §3.0.
+
+        If carrier APIs are unavailable, returns fallback table rates with `fallbackUsed: true`.
+
+        **Correlation Tracking:** Pass `X-Correlation-ID` header for distributed tracing.
+      tags: [Shipping]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional correlation ID for request tracing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingRateRequest'
+      responses:
+        '200':
+          description: Shipping rates retrieved successfully
+          headers:
+            X-Correlation-ID:
+              description: Correlation ID for tracing
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingRateResponse'
+        '400':
+          description: Invalid request (missing required fields)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Failed to fetch rates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/validate-address:
+    post:
+      operationId: validateShippingAddress
+      summary: Validate and normalize shipping address
+      description: |
+        Validates a shipping address using carrier validation APIs (USPS, UPS, FedEx).
+        Returns normalized/corrected address with validation status.
+
+        Falls back to returning original address if all carriers are unavailable.
+      tags: [Shipping]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressValidationRequest'
+      responses:
+        '200':
+          description: Address validated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressValidationResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/labels:
+    post:
+      operationId: createShippingLabel
+      summary: Create shipping label for an order
+      description: |
+        Creates a shipping label for a confirmed order using the specified carrier.
+        Returns tracking number and label URL (PDF or image).
+
+        **Requires authentication:** Admin or API key with shipping permissions.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabelCreateRequest'
+      responses:
+        '201':
+          description: Shipping label created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabelResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Label creation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/labels/{labelId}:
+    get:
+      operationId: getShippingLabel
+      summary: Get shipping label details
+      description: |
+        Retrieves shipping label details including tracking number and label URL.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: labelId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Shipping label ID
+      responses:
+        '200':
+          description: Label details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabelResponse'
+        '404':
+          description: Label not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/profiles:
+    get:
+      operationId: listShippingProfiles
+      summary: List shipping profiles
+      description: |
+        Lists shipping profiles for the current tenant including origin addresses and enabled carriers.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Profiles retrieved successfully
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShippingProfile'
+    post:
+      operationId: createShippingProfile
+      summary: Create shipping profile
+      description: |
+        Creates a new shipping profile containing carrier credentials and default origin address.
+      tags: [Shipping, Admin]
+      parameters:
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingProfileRequest'
+      responses:
+        '201':
+          description: Profile created
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/profiles/{profileId}:
+    get:
+      operationId: getShippingProfile
+      summary: Get shipping profile
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Profile retrieved
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    put:
+      operationId: updateShippingProfile
+      summary: Update shipping profile
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShippingProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteShippingProfile
+      summary: Delete shipping profile
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Profile deleted
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /shipping/profiles/{profileId}/default:
+    post:
+      operationId: setDefaultShippingProfile
+      summary: Mark profile as default
+      tags: [Shipping, Admin]
+      parameters:
+        - name: profileId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Correlation-ID
+          in: header
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Default profile updated
+          headers:
+            X-Correlation-ID:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingProfile'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # ORDER ENDPOINTS - STOREFRONT
+  # ============================================================================
+
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Get order details
+      description: |
+        Retrieves full order details including line items, payment status, and shipment tracking.
+
+        **Authentication:** Customers can only access their own orders. Admin/API keys can access all tenant orders.
+      tags: [Storefront, Headless]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Order UUID
+      responses:
+        '200':
+          description: Order retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '404':
+          description: Order not found or unauthorized access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List orders for current user
+      description: |
+        Returns paginated list of orders for the authenticated customer.
+        Admin users see all tenant orders.
+      tags: [Storefront, Headless]
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending_payment, processing, shipped, delivered, cancelled, refunded]
+          description: Filter by order status
+      responses:
+        '200':
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - pagination
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+
+  # ============================================================================
+  # ORDER ENDPOINTS - ADMIN
+  # ============================================================================
+
+  /admin/orders:
+    get:
+      operationId: adminListOrders
+      summary: List all tenant orders (admin)
+      description: |
+        Returns paginated list of all orders for the current tenant with advanced filtering.
+        Requires `admin` role.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending_payment, processing, shipped, delivered, cancelled, refunded]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by order number, customer email, or customer name
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [created_at, order_number, total_amount, status]
+            default: created_at
+        - name: sortOrder
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Orders retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - pagination
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderSummary'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+
+  /admin/orders/{orderId}:
+    get:
+      operationId: adminGetOrder
+      summary: Get order details (admin)
+      description: |
+        Retrieves full order details with administrative metadata.
+        Requires `admin` role.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    patch:
+      operationId: adminUpdateOrder
+      summary: Update order (admin)
+      description: |
+        Partially update order details (notes, tags, status transitions).
+        Requires `admin` role. Some status transitions may be restricted based on order state.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderRequest'
+      responses:
+        '200':
+          description: Order updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '400':
+          description: Invalid request (illegal status transition, validation errors)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflict (optimistic lock exception)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/orders/{orderId}/cancel:
+    post:
+      operationId: adminCancelOrder
+      summary: Cancel order (admin)
+      description: |
+        Cancels an order and initiates refund if payment was captured.
+        Requires `admin` role.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  description: Cancellation reason for audit trail
+                  example: "Customer requested cancellation"
+                refund:
+                  type: boolean
+                  default: true
+                  description: Whether to automatically refund payment
+      responses:
+        '200':
+          description: Order cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+        '400':
+          description: Order cannot be cancelled (invalid state)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/orders/{orderId}/refund:
+    post:
+      operationId: adminRefundOrder
+      summary: Refund order (admin)
+      description: |
+        Creates a refund for the order (full or partial).
+        Requires `admin` role.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+                - reason
+              properties:
+                amount:
+                  $ref: '#/components/schemas/Money'
+                reason:
+                  type: string
+                  description: Refund reason for audit trail
+                  example: "Damaged item"
+                restockItems:
+                  type: boolean
+                  default: true
+                  description: Whether to return items to inventory
+      responses:
+        '201':
+          description: Refund created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - refundId
+                  - amount
+                  - status
+                  - createdAt
+                properties:
+                  refundId:
+                    type: string
+                    format: uuid
+                  amount:
+                    $ref: '#/components/schemas/Money'
+                  status:
+                    type: string
+                    enum: [pending, succeeded, failed]
+                  createdAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: Invalid refund request (exceeds order total, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Duplicate idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # WEBHOOK ENDPOINTS
+  # ============================================================================
+
+  /webhooks/stripe:
+    post:
+      operationId: stripeWebhook
+      summary: Stripe webhook callback
+      description: |
+        Receives webhook events from Stripe (payment confirmations, disputes, refunds).
+
+        **Security:** Validates Stripe signature via `Stripe-Signature` header.
+        Idempotent via `event.id` deduplication in database.
+      tags: [Platform]
+      security: []  # Signature verification instead of bearer auth
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Stripe webhook signature for verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Stripe event payload (varies by event type)
+              example:
+                id: evt_1234567890
+                type: payment_intent.succeeded
+                data:
+                  object:
+                    id: pi_1234567890
+                    amount: 5000
+                    currency: usd
+      responses:
+        '200':
+          description: Webhook received and processed
+        '400':
+          description: Invalid signature or payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /webhooks/shipment-tracking:
+    post:
+      operationId: shipmentTrackingWebhook
+      summary: Carrier shipment tracking webhook
+      description: |
+        Receives shipment tracking updates from shipping carriers (delivered, in transit, exception).
+
+        **Security:** Validates carrier-specific signature/token.
+        Idempotent via tracking number + event timestamp deduplication.
+      tags: [Platform]
+      security: []  # Carrier-specific auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Carrier event payload (varies by provider)
+              example:
+                tracking_number: "1Z999AA10123456784"
+                status: delivered
+                timestamp: "2026-01-08T14:30:00Z"
+      responses:
+        '200':
+          description: Webhook received and processed
+        '400':
+          description: Invalid payload
           content:
             application/json:
               schema:
@@ -586,8 +1850,6 @@ paths:
       parameters:
         - $ref: '#/components/parameters/GuestSessionId'
         - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -642,8 +1904,6 @@ paths:
             format: uuid
           description: Cart item UUID
         - $ref: '#/components/parameters/GuestSessionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
@@ -1513,7 +2773,7 @@ paths:
 
         **Authentication:** OAuth 2.0 Client Credentials flow via HTTP Basic Auth.
         Pass client_id:client_secret as Authorization header.
-      tags: [Headless]
+      tags: [Catalog, Headless]
       security:
         - oauthClientCredentials: [catalog:read]
       parameters:
@@ -1587,7 +2847,7 @@ paths:
         **Rate Limit:** 5000 requests/minute per client_id
 
         **Feature Flag:** `headless.api.enabled`
-      tags: [Headless]
+      tags: [Catalog, Headless]
       security:
         - oauthClientCredentials: [catalog:read]
       parameters:
@@ -1655,7 +2915,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartDto'
+                $ref: '#/components/schemas/Cart'
         '400':
           description: Missing X-Session-Id header
           content:
@@ -1757,7 +3017,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItemDto'
+                $ref: '#/components/schemas/CartItem'
         '400':
           description: Invalid request (missing session, invalid quantity, etc.)
           content:
@@ -1826,7 +3086,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CartItemDto'
+                $ref: '#/components/schemas/CartItem'
         '400':
           description: Invalid request (missing session, invalid quantity, etc.)
           content:
@@ -1981,6 +3241,9 @@ paths:
     put:
       operationId: updateConsignor
       summary: Update consignor
+      description: |
+        Updates an existing consignor's information including contact details, commission rules,
+        and payout preferences. All fields from the request body replace the existing values.
       tags: [Admin]
       requestBody:
         required: true
@@ -2022,6 +3285,9 @@ paths:
     get:
       operationId: listConsignmentItems
       summary: List consignment items for a consignor
+      description: |
+        Retrieves a paginated list of consignment items associated with a specific consignor.
+        Includes item details such as SKU, cost basis, received date, and current status.
       tags: [Admin]
       parameters:
         - $ref: '#/components/parameters/PageParam'
@@ -2044,6 +3310,9 @@ paths:
     post:
       operationId: createConsignmentItem
       summary: Create consignment item
+      description: |
+        Creates a new consignment item for the specified consignor. Associates the item with
+        a product variant and records cost basis, received date, and initial status.
       tags: [Admin]
       requestBody:
         required: true
@@ -2077,6 +3346,9 @@ paths:
     get:
       operationId: listPayoutBatches
       summary: List payout batches for a consignor
+      description: |
+        Retrieves a paginated list of payout batches for the specified consignor, including
+        batch totals, payout dates, and transaction details. Used for commission reconciliation.
       tags: [Admin]
       parameters:
         - $ref: '#/components/parameters/PageParam'
@@ -2199,8 +3471,13 @@ paths:
     get:
       operationId: listInventoryLocations
       summary: List inventory locations
-      description: Returns all inventory locations for the current tenant.
-      tags: [Admin]
+      description: |
+        Returns all inventory locations for the current tenant. Includes warehouses,
+        stores, and other location types with stock tracking capability.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: List of inventory locations
@@ -2215,8 +3492,13 @@ paths:
     post:
       operationId: createInventoryLocation
       summary: Create inventory location
-      description: Creates a new inventory location (warehouse, store, etc.) for the current tenant.
-      tags: [Admin]
+      description: |
+        Creates a new inventory location (warehouse, store, etc.) for the current tenant.
+        Location code must be unique within the tenant.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       requestBody:
         required: true
         content:
@@ -2247,8 +3529,13 @@ paths:
     get:
       operationId: listInventoryTransfers
       summary: List inventory transfers
-      description: Returns all inventory transfers for the current tenant.
-      tags: [Admin]
+      description: |
+        Returns all inventory transfers for the current tenant, including pending,
+        in-transit, and completed transfers across all locations.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: List of transfers
@@ -2267,7 +3554,11 @@ paths:
         Creates a new inventory transfer from source to destination location.
         Validates stock availability, reserves inventory at source, and enqueues
         background job for barcode label generation.
-      tags: [Admin]
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+        **Background Jobs:** Enqueues barcode generation job
+      tags: [Inventory, Admin]
       requestBody:
         required: true
         content:
@@ -2306,8 +3597,13 @@ paths:
     get:
       operationId: getInventoryTransfer
       summary: Get transfer details
-      description: Retrieves a transfer by ID within the current tenant.
-      tags: [Admin]
+      description: |
+        Retrieves a transfer by ID within the current tenant, including all line items
+        and status information.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: Transfer retrieved
@@ -2336,8 +3632,12 @@ paths:
       summary: Mark transfer as received
       description: |
         Completes a transfer by marking it received, committing source reservations,
-        and adding inventory to destination location.
-      tags: [Admin]
+        and adding inventory to destination location. Idempotent operation.
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+        **Audit Logging:** All transfers are logged for inventory audit trail
+      tags: [Inventory, Admin]
       responses:
         '200':
           description: Transfer received successfully
@@ -2365,7 +3665,11 @@ paths:
       description: |
         Records a manual inventory adjustment with reason code for audit trail.
         Used for cycle counts, damages, returns, shrinkage, etc.
-      tags: [Admin]
+
+        **Authentication:** Admin role required
+        **Tenant Isolation:** Automatic via TenantContext
+        **Audit Logging:** All adjustments are logged with reason and user context
+      tags: [Inventory, Admin]
       requestBody:
         required: true
         content:
@@ -2477,23 +3781,28 @@ components:
         Keys are hashed in database (bcrypt). Store securely, never commit to version control.
 
     oauthClientCredentials:
-      type: http
-      scheme: basic
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /api/v1/oauth/token
+          scopes:
+            catalog:read: Read product catalog
+            cart:read: Read cart contents
+            cart:write: Modify cart (add/update/remove items)
+            orders:read: Read order history
+            orders:write: Create and update orders
       description: |
         OAuth 2.0 Client Credentials flow for headless API access.
 
         **Authentication:**
-        Use HTTP Basic Authentication with client_id as username and client_secret as password:
+        Obtain access token via POST to `/api/v1/oauth/token` with client credentials:
         ```
+        POST /api/v1/oauth/token
         Authorization: Basic base64(client_id:client_secret)
-        ```
+        Content-Type: application/x-www-form-urlencoded
 
-        **Scopes:**
-        - `catalog:read` - Read product catalog
-        - `cart:read` - Read cart contents
-        - `cart:write` - Modify cart (add/update/remove items)
-        - `orders:read` - Read order history
-        - `orders:write` - Create and update orders
+        grant_type=client_credentials&scope=catalog:read cart:read
+        ```
 
         **Rate Limits:**
         Default: 5000 requests/minute per client_id (configurable per OAuth client)
@@ -2984,6 +4293,202 @@ components:
           example:
             color: "Red"
             size: "Large"
+
+    VariantOptionAxis:
+      type: object
+      required: [name, values]
+      properties:
+        name:
+          type: string
+          description: Option name (e.g., color, size)
+        values:
+          type: array
+          items:
+            type: string
+          description: Distinct values for this option
+
+    VariantMatrixEntry:
+      type: object
+      required: [variantId, sku, options, price, available]
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        available:
+          type: boolean
+        options:
+          type: object
+          additionalProperties:
+            type: string
+
+    VariantMatrix:
+      type: object
+      required: [productId, optionAxes, variants]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        optionAxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantOptionAxis'
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantMatrixEntry'
+
+    Category:
+      type: object
+      required:
+        - code
+        - name
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+        code:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        displayOrder:
+          type: integer
+        status:
+          type: string
+          enum: [draft, active, archived, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Collection:
+      type: object
+      required:
+        - code
+        - name
+        - collectionType
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        displayOrder:
+          type: integer
+        collectionType:
+          type: string
+          enum: [manual, automatic]
+        selectionRules:
+          type: string
+          description: JSON rule payload
+        published:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [draft, active, archived, deleted]
+        seoTitle:
+          type: string
+        seoDescription:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CatalogImportRequest:
+      type: object
+      required:
+        - fileLocation
+      properties:
+        fileLocation:
+          type: string
+          description: S3 path or URL to the CSV file containing catalog data
+          example: "s3://tenant-uploads/catalog-import-2026-01-09.csv"
+        requestedBy:
+          type: string
+          description: Username or email of the person requesting the import
+          default: "admin"
+          example: "admin@storename.com"
+        options:
+          type: object
+          additionalProperties:
+            type: string
+          description: Import options (e.g., skipValidation, updateExisting)
+          example:
+            updateExisting: "true"
+            skipValidation: "false"
+
+    CatalogExportRequest:
+      type: object
+      properties:
+        requestedBy:
+          type: string
+          description: Username or email of the person requesting the export
+          default: "admin"
+          example: "admin@storename.com"
+        format:
+          type: string
+          description: Export format
+          enum: [csv, json]
+          default: "csv"
+        filters:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional filters (e.g., categoryCode, status)
+          example:
+            status: "active"
+            categoryCode: "electronics"
+
+    JobResponse:
+      type: object
+      required:
+        - jobId
+        - status
+        - message
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Background job UUID for tracking
+        status:
+          type: string
+          description: Job status
+          enum: [enqueued, processing, completed, failed]
+          example: "enqueued"
+        message:
+          type: string
+          description: Human-readable status message
+          example: "Catalog import job enqueued successfully"
 
     Cart:
       type: object
@@ -3875,6 +5380,217 @@ components:
           format: date
           description: Estimated delivery date
 
+    OrderSummary:
+      type: object
+      required:
+        - orderId
+        - orderNumber
+        - status
+        - total
+        - createdAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+          description: Human-readable order number
+          example: "ORD-2026-00042"
+        status:
+          type: string
+          enum: [pending_payment, processing, shipped, delivered, cancelled, refunded]
+        customerEmail:
+          type: string
+          format: email
+        total:
+          $ref: '#/components/schemas/Money'
+        itemCount:
+          type: integer
+          description: Total number of items in the order
+          example: 3
+        createdAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        shippedAt:
+          type: string
+          format: date-time
+          nullable: true
+      description: |
+        Lightweight order summary for list views. Use `GET /orders/{orderId}` for full details.
+
+    OrderDetail:
+      type: object
+      required:
+        - orderId
+        - orderNumber
+        - status
+        - lineItems
+        - subtotal
+        - tax
+        - shipping
+        - total
+        - currency
+        - createdAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+          example: "ORD-2026-00042"
+        status:
+          type: string
+          enum: [pending_payment, processing, shipped, delivered, cancelled, refunded]
+        customerEmail:
+          type: string
+          format: email
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        billingAddress:
+          $ref: '#/components/schemas/Address'
+        lineItems:
+          type: array
+          items:
+            type: object
+            required:
+              - lineItemId
+              - productName
+              - variantName
+              - sku
+              - quantity
+              - unitPrice
+              - lineTotal
+            properties:
+              lineItemId:
+                type: string
+                format: uuid
+              productName:
+                type: string
+                example: "Classic T-Shirt"
+              variantName:
+                type: string
+                example: "Medium / Blue"
+              sku:
+                type: string
+                example: "TSHIRT-M-BLU"
+              quantity:
+                type: integer
+                minimum: 1
+              unitPrice:
+                $ref: '#/components/schemas/Money'
+              lineTotal:
+                $ref: '#/components/schemas/Money'
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        discounts:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              amount:
+                $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        shipping:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
+        currency:
+          type: string
+          example: "USD"
+        paymentIntent:
+          type: object
+          nullable: true
+          properties:
+            paymentIntentId:
+              type: string
+              description: Stripe payment intent ID
+            status:
+              type: string
+              enum: [pending, succeeded, failed, refunded]
+            amount:
+              $ref: '#/components/schemas/Money'
+        shipments:
+          type: array
+          items:
+            type: object
+            properties:
+              shipmentId:
+                type: string
+                format: uuid
+              trackingNumber:
+                type: string
+              carrier:
+                type: string
+              status:
+                type: string
+                enum: [pending, in_transit, delivered, exception]
+              shippedAt:
+                type: string
+                format: date-time
+              deliveredAt:
+                type: string
+                format: date-time
+                nullable: true
+        notes:
+          type: string
+          description: Admin notes (only visible to staff)
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+          description: Order tags for organization
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        shippedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+      description: |
+        Complete order details including line items, payment, shipment tracking, and admin metadata.
+
+    UpdateOrderRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending_payment, processing, shipped, delivered, cancelled, refunded]
+          description: New order status (some transitions may be restricted)
+        notes:
+          type: string
+          description: Admin notes
+        tags:
+          type: array
+          items:
+            type: string
+          description: Order tags
+      description: |
+        Partial update request for order properties. Only provided fields are updated.
+        Use dedicated endpoints for cancellation and refunds.
+
     # --------------------------------------------------------------------------
     # Shared/Utility Schemas
     # --------------------------------------------------------------------------
@@ -4449,3 +6165,344 @@ components:
         - `conflict`: Resource conflict (409)
         - `rate-limit-exceeded`: Too many requests (429)
         - `internal-error`: Unexpected server error (500)
+
+    # Shipping Schemas (Task I3.T4)
+
+    ShippingRateRequest:
+      type: object
+      required:
+        - origin
+        - destination
+        - packageInfo
+        - serviceLevels
+      properties:
+        origin:
+          $ref: '#/components/schemas/ShippingAddress'
+        destination:
+          $ref: '#/components/schemas/ShippingAddress'
+        packageInfo:
+          $ref: '#/components/schemas/PackageInfo'
+        serviceLevels:
+          type: array
+          items:
+            type: string
+            enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
+          description: Service levels to fetch rates for
+          example: [GROUND, PRIORITY]
+
+    ShippingAddress:
+      type: object
+      required:
+        - street1
+        - city
+        - state
+        - postalCode
+        - country
+      properties:
+        street1:
+          type: string
+          maxLength: 100
+          example: "123 Main St"
+        street2:
+          type: string
+          maxLength: 100
+          example: "Apt 4B"
+        city:
+          type: string
+          maxLength: 50
+          example: "San Francisco"
+        state:
+          type: string
+          maxLength: 2
+          example: "CA"
+        postalCode:
+          type: string
+          maxLength: 10
+          example: "94102"
+        country:
+          type: string
+          maxLength: 2
+          example: "US"
+        residential:
+          type: boolean
+          default: false
+          description: Whether this is a residential address
+
+    PackageInfo:
+      type: object
+      required:
+        - weightOz
+      properties:
+        weightOz:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 16.5
+          description: Package weight in ounces
+        lengthIn:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 10
+        widthIn:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 8
+        heightIn:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 6
+        declaredValue:
+          type: number
+          format: decimal
+          minimum: 0
+          example: 100.00
+          description: Declared value for insurance
+        description:
+          type: string
+          maxLength: 200
+          example: "Books and magazines"
+
+    ShippingRateResponse:
+      type: object
+      required:
+        - rates
+        - fallbackUsed
+      properties:
+        rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShippingRate'
+        fallbackUsed:
+          type: boolean
+          description: True if fallback table rates were used (carriers unavailable)
+        fallbackReason:
+          type: string
+          description: Reason for fallback (if applicable)
+          example: "Carriers unavailable, using fallback rates"
+
+    ShippingRate:
+      type: object
+      required:
+        - carrierCode
+        - serviceLevel
+        - serviceName
+        - cost
+        - currency
+      properties:
+        carrierCode:
+          type: string
+          example: "USPS"
+        serviceLevel:
+          type: string
+          enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
+          example: "PRIORITY"
+        serviceName:
+          type: string
+          example: "USPS Priority Mail"
+        cost:
+          type: number
+          format: decimal
+          example: 7.50
+        currency:
+          type: string
+          maxLength: 3
+          example: "USD"
+        estimatedDays:
+          type: integer
+          minimum: 0
+          example: 3
+        estimatedDelivery:
+          type: string
+          format: date-time
+          example: "2026-01-11T17:00:00Z"
+
+    ShippingProfileRequest:
+      type: object
+      required:
+        - name
+        - enabledCarriers
+        - originAddress
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "Default Fulfillment"
+        isDefault:
+          type: boolean
+          description: Set to true to make this the default profile
+        enabledCarriers:
+          type: array
+          description: Carrier codes enabled for rate shopping
+          items:
+            type: string
+            example: "USPS"
+        originAddress:
+          $ref: '#/components/schemas/Address'
+        carrierCredentials:
+          type: object
+          description: Carrier-specific credentials/settings
+          additionalProperties: true
+          default: {}
+        metadata:
+          type: object
+          description: Additional profile configuration metadata
+          additionalProperties: true
+          default: {}
+        active:
+          type: boolean
+          default: true
+
+    ShippingProfile:
+      type: object
+      required:
+        - id
+        - name
+        - enabledCarriers
+        - originAddress
+        - isDefault
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        isDefault:
+          type: boolean
+        active:
+          type: boolean
+        enabledCarriers:
+          type: array
+          items:
+            type: string
+        originAddress:
+          $ref: '#/components/schemas/Address'
+        carrierCredentials:
+          type: object
+          additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AddressValidationRequest:
+      type: object
+      required:
+        - street1
+        - city
+        - state
+        - postalCode
+        - country
+      properties:
+        street1:
+          type: string
+          maxLength: 100
+        street2:
+          type: string
+          maxLength: 100
+        city:
+          type: string
+          maxLength: 50
+        state:
+          type: string
+          maxLength: 2
+        postalCode:
+          type: string
+          maxLength: 10
+        country:
+          type: string
+          maxLength: 2
+
+    AddressValidationResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [VALID, CORRECTED, INVALID, PROVIDER_UNAVAILABLE]
+          example: "VALID"
+        normalizedAddress:
+          $ref: '#/components/schemas/ShippingAddress'
+        warnings:
+          type: array
+          items:
+            type: string
+          example: ["Secondary address not verified"]
+        errorMessage:
+          type: string
+          example: "All carriers unavailable"
+
+    LabelCreateRequest:
+      type: object
+      required:
+        - orderId
+        - carrierCode
+        - serviceLevel
+        - origin
+        - destination
+        - packageInfo
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        carrierCode:
+          type: string
+          enum: [USPS, UPS, FEDEX]
+          example: "USPS"
+        serviceLevel:
+          type: string
+          enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
+          example: "PRIORITY"
+        origin:
+          $ref: '#/components/schemas/ShippingAddress'
+        destination:
+          $ref: '#/components/schemas/ShippingAddress'
+        packageInfo:
+          $ref: '#/components/schemas/PackageInfo'
+        returnAddress:
+          type: string
+          maxLength: 500
+          description: Return address (optional)
+
+    LabelResponse:
+      type: object
+      required:
+        - labelId
+        - trackingNumber
+        - labelUrl
+        - cost
+        - currency
+      properties:
+        labelId:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+          example: "9400100000000000000000"
+        labelUrl:
+          type: string
+          format: uri
+          example: "https://cdn.usps.com/labels/9400100000000000000000.pdf"
+        cost:
+          type: number
+          format: decimal
+          example: 7.50
+        currency:
+          type: string
+          maxLength: 3
+          example: "USD"
+        estimatedDelivery:
+          type: string
+          format: date-time
+          example: "2026-01-11T17:00:00Z"

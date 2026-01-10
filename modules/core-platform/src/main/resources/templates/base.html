@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="{locale ?: 'en'}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    {#if seoTitle}
+    <title>{seoTitle} - {tenantName}</title>
+    {#else}
+    <title>{pageTitle ?: 'Home'} - {tenantName}</title>
+    {/if}
+
+    {#if seoDescription}
+    <meta name="description" content="{seoDescription}">
+    {/if}
+
+    {#if canonicalUrl}
+    <link rel="canonical" href="{canonicalUrl}">
+    {/if}
+    {#if tenantSubdomain}
+    <meta name="tenant-subdomain" content="{tenantSubdomain}">
+    {/if}
+
+    <!-- Tenant-specific theme CSS variables -->
+    <style>
+        {#include storefront/_theme.css themeTokens=themeTokens /}
+    </style>
+
+    <!-- Tailwind CSS - generated during build with tenant overrides -->
+    <link rel="stylesheet" href="/static/css/tailwind.css">
+
+    <!-- PrimeUI CSS for enhanced components -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/primeui@1.0.0/dist/primeui.min.css">
+
+    {#insert head /}
+</head>
+<body class="bg-neutral-50 text-neutral-900 antialiased">
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded">
+        {msg.skipToContent}
+    </a>
+
+    <!-- Header Navigation -->
+    {#include components/header.html /}
+
+    <!-- Main Content -->
+    <main id="main-content" class="min-h-screen">
+        {#insert content /}
+    </main>
+
+    <!-- Footer -->
+    {#include components/footer.html /}
+
+    <!-- PrimeUI JavaScript for progressive enhancement -->
+    <script src="https://cdn.jsdelivr.net/npm/primeui@1.0.0/dist/primeui.min.js" defer></script>
+
+    {#insert scripts /}
+</body>
+</html>

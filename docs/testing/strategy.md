@@ -66,7 +66,7 @@ Village Storefront employs a multi-layered testing strategy designed to ensure:
 
 **Location**:
 - Backend: `src/test/java/villagecompute/storefront/`
-- Admin SPA: `src/main/webui/src/**/__tests__/`
+- Admin SPA: `modules/core-platform/src/main/webui/src/**/__tests__/`
 
 ### 2. Integration Tests
 

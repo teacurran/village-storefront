@@ -16,6 +16,13 @@ const path = require('path');
 const fs = require('fs');
 
 /**
+ * Get project root directory
+ */
+function getProjectRoot() {
+  return path.resolve(__dirname, '..');
+}
+
+/**
  * Get the Maven wrapper command based on platform
  */
 function getMavenCommand() {
@@ -30,7 +37,7 @@ function runInstall() {
   try {
     execSync('node tools/install.cjs', {
       stdio: 'ignore',
-      cwd: path.resolve(__dirname, '..')
+      cwd: getProjectRoot()
     });
     return true;
   } catch (error) {
@@ -40,7 +47,7 @@ function runInstall() {
 }
 
 /**
- * Parse Spotless error output and convert to JSON format
+ * Parse Spotless error output and convert to standardized JSON format
  */
 function parseSpotlessOutput(output) {
   const errors = [];
@@ -52,50 +59,65 @@ function parseSpotlessOutput(output) {
   // Split by lines and look for file references
   const lines = output.split('\n');
   let currentFile = null;
+  let currentMessage = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
-    // Look for file paths (typically starts with path separators or contains .java)
-    if (line.includes('.java') || line.includes('.xml')) {
+    // Look for file paths (typically starts with path separators or contains .java/.xml)
+    if (line.includes('.java') || line.includes('.xml') || line.includes('pom.xml')) {
       // Try to extract file path
       const fileMatch = line.match(/([^\s]+\.(?:java|xml))/);
       if (fileMatch) {
         currentFile = fileMatch[1];
 
         // Extract relative path from project root
-        const projectRoot = path.resolve(__dirname, '..');
+        const projectRoot = getProjectRoot();
         if (currentFile.startsWith(projectRoot)) {
           currentFile = path.relative(projectRoot, currentFile);
         }
 
+        // Normalize path separators for cross-platform compatibility
+        currentFile = currentFile.replace(/\\/g, '/');
+
+        // Create error entry
         errors.push({
           type: 'formatting',
           path: currentFile,
           obj: '',
           message: 'Code formatting violation detected by Spotless',
-          line: 0,
-          column: 0
+          line: '0',
+          column: '0'
         });
+        currentMessage = null;
       }
-    } else if (line.includes('[ERROR]') && currentFile) {
+    } else if (line.includes('[ERROR]')) {
       // Extract error details if available
       const errorMsg = line.replace('[ERROR]', '').trim();
-      if (errorMsg && errorMsg.length > 0) {
-        errors[errors.length - 1].message = errorMsg;
+      if (errorMsg && errorMsg.length > 0 && !errorMsg.includes('BUILD FAILURE')) {
+        currentMessage = errorMsg;
+        if (errors.length > 0 && currentMessage) {
+          errors[errors.length - 1].message = currentMessage;
+        }
+      }
+    } else if (line.includes('Run \'mvnw spotless:apply\' to fix') ||
+               line.includes('./mvnw spotless:apply')) {
+      // Found suggestion to fix
+      if (errors.length > 0) {
+        errors[errors.length - 1].message += ' (Run ./mvnw spotless:apply to fix)';
       }
     }
   }
 
   // If no specific files found but there was an error, add a general error
-  if (errors.length === 0 && output.includes('[ERROR]')) {
+  if (errors.length === 0 && (output.includes('[ERROR]') || output.includes('BUILD FAILURE'))) {
     errors.push({
       type: 'formatting',
       path: '',
       obj: '',
       message: 'Code formatting violations detected. Run ./mvnw spotless:apply to fix.',
-      line: 0,
-      column: 0
+      line: '0',
+      column: '0'
     });
   }
 
@@ -111,13 +133,12 @@ function runSpotlessCheck() {
   try {
     // Run Spotless check
     // -B: batch mode (non-interactive)
-    // -q: quiet mode (reduce output)
     const result = spawnSync(
       mvnCmd,
       ['spotless:check', '-B'],
       {
         encoding: 'utf8',
-        cwd: path.resolve(__dirname, '..'),
+        cwd: getProjectRoot(),
         shell: process.platform === 'win32'
       }
     );
@@ -129,9 +150,9 @@ function runSpotlessCheck() {
       return 0;
     } else {
       // Parse output and convert to JSON
-      const output = result.stdout + '\n' + result.stderr;
+      const output = (result.stdout || '') + '\n' + (result.stderr || '');
       const errors = parseSpotlessOutput(output);
-      console.log(JSON.stringify(errors));
+      console.log(JSON.stringify(errors, null, 0));
       return 1;
     }
   } catch (error) {
@@ -141,10 +162,10 @@ function runSpotlessCheck() {
       path: '',
       obj: '',
       message: `Failed to run linting: ${error.message}`,
-      line: 0,
-      column: 0
+      line: '0',
+      column: '0'
     }];
-    console.log(JSON.stringify(errors));
+    console.log(JSON.stringify(errors, null, 0));
     return 1;
   }
 }
@@ -160,10 +181,10 @@ function main() {
       path: '',
       obj: '',
       message: 'Failed to set up environment',
-      line: 0,
-      column: 0
+      line: '0',
+      column: '0'
     }];
-    console.log(JSON.stringify(errors));
+    console.log(JSON.stringify(errors, null, 0));
     process.exit(1);
   }
 
@@ -177,4 +198,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { runSpotlessCheck, parseSpotlessOutput };
+module.exports = { runSpotlessCheck, parseSpotlessOutput, getProjectRoot };

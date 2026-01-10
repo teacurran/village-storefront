@@ -1,15 +1,10 @@
--- Sample Catalog Data Loader Script
---
--- Populates development database with sample tenants, categories, products, variants, and inventory.
--- Designed to match the baseline schema from V20260102__baseline_schema.sql migration.
---
 -- Usage:
 --   psql -h localhost -U postgres -d village_storefront -f tools/scripts/sample_catalog_loader.sql
 --
--- References:
---   - ERD: docs/diagrams/datamodel_erd.puml
---   - Migration: migrations/V20260102__baseline_schema.sql
---   - Task: I2.T1 (Catalog domain implementation)
+
+-- Ensure required extensions exist (for password hashing, UUID helpers)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================================
 -- TENANTS
@@ -38,6 +33,72 @@ VALUES (
     NOW(),
     NOW()
 ) ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- ROLES (Tenant Admin/Staff permissions)
+-- ============================================================================
+
+INSERT INTO roles (id, tenant_id, name, description, permissions, created_at, updated_at)
+VALUES
+    ('f0000000-0000-0000-0000-000000000001'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'Store Owner', 'Full access to tenant admin features', '["*"]'::jsonb, NOW(), NOW()),
+    ('f0000000-0000-0000-0000-000000000002'::uuid, 'a0000000-0000-0000-0000-000000000002'::uuid, 'Store Owner', 'Full access to tenant admin features', '["*"]'::jsonb, NOW(), NOW()),
+    ('f0000000-0000-0000-0000-000000000003'::uuid, 'a0000000-0000-0000-0000-000000000001'::uuid, 'Staff', 'Scoped to catalog/order/inventory management', '["catalog:*","orders:*","inventory:*"]'::jsonb, NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- STAFF USERS (Tenant Admin + Staff sample accounts)
+-- ============================================================================
+
+INSERT INTO users (id, tenant_id, email, password_hash, status, first_name, last_name, email_verified, created_at, updated_at)
+VALUES
+    (
+        'e0000000-0000-0000-0000-000000000001'::uuid,
+        'a0000000-0000-0000-0000-000000000001'::uuid,
+        'owner@techgadgets.local',
+        crypt('changeme123!', gen_salt('bf')),
+        'active',
+        'Tessa',
+        'Gadget',
+        TRUE,
+        NOW(),
+        NOW()
+    ),
+    (
+        'e0000000-0000-0000-0000-000000000002'::uuid,
+        'a0000000-0000-0000-0000-000000000002'::uuid,
+        'owner@artisancrafts.local',
+        crypt('changeme123!', gen_salt('bf')),
+        'active',
+        'Aria',
+        'Craft',
+        TRUE,
+        NOW(),
+        NOW()
+    ),
+    (
+        'e0000000-0000-0000-0000-000000000003'::uuid,
+        'a0000000-0000-0000-0000-000000000001'::uuid,
+        'staff@techgadgets.local',
+        crypt('changeme123!', gen_salt('bf')),
+        'active',
+        'Sam',
+        'Fulfillment',
+        TRUE,
+        NOW(),
+        NOW()
+    )
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- USER ROLE ASSIGNMENTS
+-- ============================================================================
+
+INSERT INTO user_roles (tenant_id, user_id, role_id, assigned_at, created_at, updated_at)
+VALUES
+    ('a0000000-0000-0000-0000-000000000001'::uuid, 'e0000000-0000-0000-0000-000000000001'::uuid, 'f0000000-0000-0000-0000-000000000001'::uuid, NOW(), NOW(), NOW()),
+    ('a0000000-0000-0000-0000-000000000002'::uuid, 'e0000000-0000-0000-0000-000000000002'::uuid, 'f0000000-0000-0000-0000-000000000002'::uuid, NOW(), NOW(), NOW()),
+    ('a0000000-0000-0000-0000-000000000001'::uuid, 'e0000000-0000-0000-0000-000000000003'::uuid, 'f0000000-0000-0000-0000-000000000003'::uuid, NOW(), NOW(), NOW())
+ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- CATEGORIES (Tenant 1: Tech Gadgets)
@@ -195,10 +256,15 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 
 \echo 'Sample catalog data loaded successfully!'
-\echo 'Loaded: 2 tenants, 4 categories, 3 products, 7 variants, 8 inventory records'
+\echo 'Loaded: 2 tenants, role + staff records, 4 categories, 3 products, 7 variants, 8 inventory records'
 \echo ''
 \echo 'Test tenant credentials:'
 \echo '  - Subdomain: techgadgets.localhost'
 \echo '  - Tenant ID: a0000000-0000-0000-0000-000000000001'
 \echo ''
-\echo 'Verify with: SELECT * FROM products WHERE tenant_id = ''a0000000-0000-0000-0000-000000000001''::uuid;'
+\echo 'Default staff accounts (password: changeme123!):'
+\echo '  - owner@techgadgets.local  (Store Owner)'
+\echo '  - staff@techgadgets.local  (Staff role)'
+\echo '  - owner@artisancrafts.local (Store Owner)'
+\echo ''
+\echo 'Verify catalog: SELECT * FROM products WHERE tenant_id = ''a0000000-0000-0000-0000-000000000001''::uuid;'

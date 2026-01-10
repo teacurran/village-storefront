@@ -77,6 +77,100 @@ export class PlatformConsolePage extends BasePage {
     await this.waitForNavigation();
   }
 
+  /**
+   * Get tenant health metrics
+   * @param tenantIndex Index of tenant in list
+   * @returns Health metrics object
+   */
+  async getTenantHealth(tenantIndex: number): Promise<{
+    status: string;
+    orderCount: number;
+    revenue: number;
+  }> {
+    const rows = await this.tenantList.locator('[data-test="tenant-row"]').all();
+
+    if (!rows[tenantIndex]) {
+      throw new Error(`Tenant at index ${tenantIndex} not found`);
+    }
+
+    const row = rows[tenantIndex];
+    const status =
+      (await row.locator('[data-test="tenant-status"]').textContent()) || 'UNKNOWN';
+    const orderCountText =
+      (await row.locator('[data-test="tenant-order-count"]').textContent()) || '0';
+    const revenueText =
+      (await row.locator('[data-test="tenant-revenue"]').textContent()) || '$0';
+
+    const orderCount = parseInt(orderCountText.replace(/\D/g, '')) || 0;
+    const revenueMatch = revenueText.match(/\$?([\d,]+\.?\d*)/);
+    const revenue = revenueMatch ? parseFloat(revenueMatch[1].replace(/,/g, '')) : 0;
+
+    return {
+      status: status.trim(),
+      orderCount,
+      revenue,
+    };
+  }
+
+  /**
+   * Verify impersonation audit trail entry
+   * @param reason Impersonation reason
+   * @returns true if audit entry found, false otherwise
+   */
+  async verifyImpersonationAuditTrail(reason: string): Promise<boolean> {
+    await this.navigateToAuditLog();
+
+    const auditTable = this.page.locator('[data-test="audit-log-table"]');
+    await auditTable.waitFor({ state: 'visible' });
+
+    const entries = await auditTable.locator('[data-test="audit-row"]').all();
+
+    for (const entry of entries) {
+      const action = await entry.locator('[data-test="audit-action"]').textContent();
+      const details = await entry.locator('[data-test="audit-details"]').textContent();
+
+      if (
+        action?.includes('IMPERSONATION_START') &&
+        details?.includes(reason)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get impersonation session TTL
+   * @returns TTL in seconds
+   */
+  async getImpersonationTTL(): Promise<number> {
+    if (!(await this.isImpersonating())) {
+      return 0;
+    }
+
+    const ttlText = await this.impersonationBanner
+      .locator('[data-test="impersonation-ttl"]')
+      .textContent();
+
+    if (!ttlText) {
+      return 0;
+    }
+
+    // Extract TTL from text like "Session expires in 3600s" or "30:00 remaining"
+    const secondsMatch = ttlText.match(/(\d+)s/);
+    if (secondsMatch) {
+      return parseInt(secondsMatch[1]);
+    }
+
+    const minutesMatch = ttlText.match(/(\d+):(\d+)/);
+    if (minutesMatch) {
+      return parseInt(minutesMatch[1]) * 60 + parseInt(minutesMatch[2]);
+    }
+
+    return 0;
+  }
+
   async createTenant(tenantData: {
     name: string;
     subdomain: string;

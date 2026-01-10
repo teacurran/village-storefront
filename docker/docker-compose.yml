@@ -1,0 +1,170 @@
+# Village Storefront Local Development Services
+#
+# Start all services: docker compose up -d
+# Stop all services: docker compose down
+# View logs: docker compose logs -f [service-name]
+#
+# Services:
+# - postgres: PostgreSQL 17 database
+# - minio: S3-compatible object storage (R2 simulation)
+# - mailhog: Email testing server with web UI
+# - jaeger: OpenTelemetry tracing (optional)
+# - stripe-cli: Stripe CLI webhook forwarder (requires login, optional)
+# - usps-mock: USPS Web Tools API mock server
+# - ups-mock: UPS API mock server
+# - fedex-mock: FedEx API mock server
+
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: village-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-storefront_dev}
+      POSTGRES_USER: ${DB_USER:-appuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-apppass}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-appuser} -d ${DB_NAME:-storefront_dev}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - village-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: village-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${R2_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${R2_SECRET_KEY:-minioadmin}
+      MINIO_REGION: ${R2_REGION:-auto}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"      # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"  # Web Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - village-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: village-mailhog
+    ports:
+      - "${SMTP_PORT:-1025}:1025"      # SMTP server
+      - "${MAILHOG_UI_PORT:-8025}:8025"  # Web UI
+    networks:
+      - village-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: village-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    networks:
+      - village-network
+    profiles:
+      - observability  # Only start with: docker compose --profile observability up
+
+  # ===========================================================================
+  # PAYMENT & SHIPPING MOCKS (For Development & QA)
+  # ===========================================================================
+
+  stripe-cli:
+    image: stripe/stripe-cli:latest
+    container_name: village-stripe-cli
+    command: listen --forward-to ${STRIPE_FORWARD_URL:-http://host.docker.internal:8080/api/webhooks/stripe} --skip-verify --api-key ${STRIPE_SECRET_KEY}
+    environment:
+      STRIPE_API_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_DEVICE_NAME: village-dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - village-network
+    profiles:
+      - payments  # Only start with: docker compose --profile payments up
+      # NOTE: Requires 'stripe login' to be run first. See README for setup.
+
+  usps-mock:
+    build:
+      context: ./mocks/shipping
+      dockerfile: Dockerfile
+    image: village-usps-mock:latest
+    container_name: village-usps-mock
+    command: ["node", "usps-mock.js"]
+    environment:
+      USPS_MOCK_PORT: 9100
+    ports:
+      - "${USPS_MOCK_PORT:-9100}:9100"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9100/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); });"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - village-network
+
+  ups-mock:
+    build:
+      context: ./mocks/shipping
+      dockerfile: Dockerfile
+    image: village-ups-mock:latest
+    container_name: village-ups-mock
+    command: ["node", "ups-mock.js"]
+    environment:
+      UPS_MOCK_PORT: 9101
+    ports:
+      - "${UPS_MOCK_PORT:-9101}:9101"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9101/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); });"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - village-network
+
+  fedex-mock:
+    build:
+      context: ./mocks/shipping
+      dockerfile: Dockerfile
+    image: village-fedex-mock:latest
+    container_name: village-fedex-mock
+    command: ["node", "fedex-mock.js"]
+    environment:
+      FEDEX_MOCK_PORT: 9102
+    ports:
+      - "${FEDEX_MOCK_PORT:-9102}:9102"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9102/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); });"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - village-network
+
+volumes:
+  postgres_data:
+    name: village_postgres_data
+  minio_data:
+    name: village_minio_data
+
+networks:
+  village-network:
+    name: village-network
+    driver: bridge

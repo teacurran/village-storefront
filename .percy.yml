@@ -1,0 +1,66 @@
+version: 2
+
+# Percy configuration for Village Storefront visual regression testing
+# See: https://docs.percy.io/docs/cli-configuration
+
+snapshot:
+  # Capture snapshots at multiple widths for responsive testing
+  widths:
+    - 375   # Mobile (iPhone SE)
+    - 768   # Tablet (iPad)
+    - 1280  # Desktop (default)
+    - 1920  # Large desktop
+
+  # Minimum height to capture for each snapshot
+  min-height: 1024
+
+  # Enable JavaScript for dynamic content
+  enable-javascript: true
+
+  # Percy CSS to hide dynamic content that changes between runs
+  percy-css: |
+    /* Hide elements that change frequently */
+    [data-percy-hide] { display: none !important; }
+
+    /* Hide dynamic timestamps and session data */
+    [data-timestamp],
+    [data-session-id],
+    [data-csrf-token] { opacity: 0 !important; }
+
+    /* Disable animations for consistent snapshots */
+    *, *::before, *::after {
+      animation-duration: 0s !important;
+      animation-delay: 0s !important;
+      transition-duration: 0s !important;
+      transition-delay: 0s !important;
+    }
+
+# Discovery configuration (for static sites - not used with SDK)
+static:
+  include: '**/*.html'
+  exclude:
+    - '**/node_modules/**'
+    - '**/target/**'
+    - '**/_*'
+
+# Discovery options
+discovery:
+  # Allow list of network request patterns
+  allowed-hostnames:
+    - localhost
+    - 127.0.0.1
+    - cdn.jsdelivr.net  # PrimeUI CDN
+
+  # Disable resource cache for fresh snapshots
+  disable-cache: false
+
+  # Network idle timeout (ms)
+  network-idle-timeout: 750
+
+# Comparison options
+comparison:
+  # Threshold for considering pixels different (0-1)
+  threshold: 0.1
+
+  # Include Playwright test metadata in Percy builds
+  include-playwright-test-names: true

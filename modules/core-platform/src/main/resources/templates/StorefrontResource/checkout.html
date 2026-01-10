@@ -1,0 +1,342 @@
+{#include base.html}
+
+{#head}
+<meta name="description" content="{msg.checkout_meta_description}">
+<meta name="robots" content="noindex,nofollow">
+{/head}
+
+{#content}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Progress Tracker -->
+    <div class="mb-12">
+        <nav aria-label="{msg.checkout_progress}">
+            <ol class="flex items-center justify-center gap-2 md:gap-8">
+                <li class="flex items-center gap-2">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-primary-600 text-white text-sm font-medium">1</span>
+                    <span class="hidden md:inline text-sm font-medium text-primary-900">{msg.shipping}</span>
+                </li>
+                <svg class="w-6 h-6 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                <li class="flex items-center gap-2">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-neutral-200 text-neutral-600 text-sm font-medium">2</span>
+                    <span class="hidden md:inline text-sm text-neutral-600">{msg.payment}</span>
+                </li>
+                <svg class="w-6 h-6 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                <li class="flex items-center gap-2">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-neutral-200 text-neutral-600 text-sm font-medium">3</span>
+                    <span class="hidden md:inline text-sm text-neutral-600">{msg.review}</span>
+                </li>
+            </ol>
+        </nav>
+    </div>
+
+    <form id="checkout-form" class="grid grid-cols-1 lg:grid-cols-3 gap-8" data-test="checkout-form">
+        <input type="hidden" name="cart-id" value="{cartId ?: ''}" data-cart-id>
+        <!-- Main Checkout Form -->
+        <div class="lg:col-span-2 space-y-8">
+            <!-- Contact Information -->
+            <section class="bg-white rounded-lg shadow-soft p-6">
+                <h2 class="text-xl font-semibold text-neutral-900 mb-6">{msg.contact_information}</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.email_address} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="email"
+                               id="email"
+                               name="email"
+                               required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                               placeholder="you@example.com">
+                    </div>
+                    <div class="flex items-center">
+                        <input type="checkbox"
+                               id="email-offers"
+                               name="email-offers"
+                               class="w-4 h-4 text-primary-600 border-neutral-300 rounded focus:ring-primary-500">
+                        <label for="email-offers" class="ml-2 text-sm text-neutral-700">
+                            {msg.subscribe_to_offers}
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shipping Address -->
+            <section class="bg-white rounded-lg shadow-soft p-6">
+                <h2 class="text-xl font-semibold text-neutral-900 mb-6">{msg.shipping_address}</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="first-name" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.first_name} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="text" id="first-name" name="first-name" required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label for="last-name" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.last_name} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="text" id="last-name" name="last-name" required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="address1" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.address} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="text" id="address1" name="address1" required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="address2" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.address_line_2}
+                        </label>
+                        <input type="text" id="address2" name="address2"
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label for="city" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.city} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="text" id="city" name="city" required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label for="state" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.state_province} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="text" id="state" name="state" required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label for="postal-code" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.postal_code} <span class="text-error-600">*</span>
+                        </label>
+                        <input type="text" id="postal-code" name="postal-code" required
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label for="country" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.country} <span class="text-error-600">*</span>
+                        </label>
+                        <select id="country" name="country" required
+                                class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                            <option value="US">United States</option>
+                            <option value="CA">Canada</option>
+                            <option value="MX">Mexico</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="phone" class="block text-sm font-medium text-neutral-700 mb-2">
+                            {msg.phone}
+                        </label>
+                        <input type="tel" id="phone" name="phone"
+                               class="w-full border border-neutral-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Shipping Method -->
+            <section class="bg-white rounded-lg shadow-soft p-6">
+                <h2 class="text-xl font-semibold text-neutral-900 mb-6">{msg.shipping_method}</h2>
+                <div class="space-y-3" role="radiogroup" aria-label="{msg.shipping_method}">
+                    {#if shippingRates && shippingRates.size > 0}
+                    {#for rate in shippingRates}
+                    <label class="flex items-center justify-between p-4 border-2 border-neutral-300 rounded-lg cursor-pointer hover:border-primary-500 transition-colors has-[:checked]:border-primary-600 has-[:checked]:bg-primary-50">
+                        <div class="flex items-center gap-3">
+                            <input type="radio"
+                                   name="shipping-method"
+                                   value="{rate.id}"
+                                   {#if rate.selected}checked{/if}
+                                   class="w-4 h-4 text-primary-600 border-neutral-300 focus:ring-primary-500">
+                            <div>
+                                <p class="font-medium text-neutral-900">{rate.name}</p>
+                                <p class="text-sm text-neutral-600">{rate.deliveryTime}</p>
+                            </div>
+                        </div>
+                        <span class="font-semibold text-neutral-900">{rate.price}</span>
+                    </label>
+                    {/for}
+                    {#else}
+                    <p class="text-sm text-neutral-600">{msg.enter_address_for_shipping}</p>
+                    {/if}
+                </div>
+            </section>
+
+            <!-- Payment Method -->
+            <section class="bg-white rounded-lg shadow-soft p-6">
+                <h2 class="text-xl font-semibold text-neutral-900 mb-6">{msg.payment_method}</h2>
+                <div id="payment-element" class="mb-4">
+                    <!-- Stripe Payment Element will be inserted here -->
+                </div>
+                <p class="text-xs text-neutral-500">{msg.secure_payment_notice}</p>
+            </section>
+        </div>
+
+        <!-- Order Summary Sidebar -->
+        <div class="lg:col-span-1">
+            <div class="bg-white rounded-lg shadow-soft p-6 sticky top-4">
+                <h2 class="text-lg font-semibold text-neutral-900 mb-4">{msg.order_summary}</h2>
+
+                <!-- Cart Items -->
+                <div class="space-y-4 mb-6 pb-6 border-b border-neutral-200">
+                    {#if cartItems && cartItems.size > 0}
+                    {#for item in cartItems}
+                    <div class="flex gap-3">
+                        <div class="relative w-16 h-16 bg-neutral-100 rounded flex-shrink-0 overflow-hidden">
+                            {#if item.imageUrl}
+                            <img src="{item.imageUrl}" alt="{item.name}" class="w-full h-full object-cover">
+                            {#else}
+                            <div class="w-full h-full flex items-center justify-center text-2xl">📦</div>
+                            {/if}
+                            <span class="absolute -top-2 -right-2 w-6 h-6 bg-neutral-700 text-white text-xs font-medium rounded-full flex items-center justify-center">
+                                {item.quantity}
+                            </span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-sm font-medium text-neutral-900 truncate">{item.name}</h3>
+                            {#if item.variantTitle && item.variantTitle != 'Default'}
+                            <p class="text-xs text-neutral-600">{item.variantTitle}</p>
+                            {/if}
+                            <p class="text-sm font-semibold text-neutral-900 mt-1">{item.price}</p>
+                        </div>
+                    </div>
+                    {/for}
+                    {/if}
+                </div>
+
+                <!-- Summary Totals -->
+                <div class="space-y-3 mb-6">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-neutral-600">{msg.subtotal}</span>
+                        <span class="font-medium text-neutral-900">{cartSubtotal ?: '$0.00'}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-neutral-600">{msg.shipping}</span>
+                        <span class="font-medium text-neutral-900">{selectedShippingRate ?: msg.calculated_next}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-neutral-600">{msg.tax}</span>
+                        <span class="font-medium text-neutral-900">{cartTax ?: msg.calculated_next}</span>
+                    </div>
+                    <div class="pt-3 border-t border-neutral-200 flex justify-between">
+                        <span class="text-base font-semibold text-neutral-900">{msg.total}</span>
+                        <span class="text-xl font-bold text-neutral-900">{cartTotal ?: '$0.00'}</span>
+                    </div>
+                </div>
+
+                <!-- Place Order Button -->
+                <button type="submit"
+                        class="w-full bg-primary-600 text-white font-medium py-4 px-6 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        data-place-order>
+                    {msg.place_order}
+                </button>
+
+                <!-- Security Badge -->
+                <div class="mt-4 flex items-center justify-center gap-2 text-xs text-neutral-500">
+                    <svg class="w-4 h-4 text-success-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>{msg.secure_checkout_badge}</span>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+{/content}
+
+{#scripts}
+<script src="https://js.stripe.com/v3/" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('checkout-form');
+    const cartIdInput = document.querySelector('[data-cart-id]');
+    const placeOrderBtn = document.querySelector('[data-place-order]');
+    const checkoutErrorMessage = '{msg.checkout_error}';
+
+    const buildAddressBlock = (formData) => {
+        const addressParts = [
+            `${formData.get('first-name') || ''} ${formData.get('last-name') || ''}`.trim(),
+            formData.get('address1') || '',
+            formData.get('address2') || '',
+            `${formData.get('city') || ''}, ${formData.get('state') || ''} ${formData.get('postal-code') || ''}`.trim(),
+            formData.get('country') || ''
+        ].filter(Boolean);
+        return addressParts.join('\n');
+    };
+
+    const getIdempotencyKey = () => {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        return `checkout-${Date.now()}`;
+    };
+
+    if (form) {
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            if (placeOrderBtn) {
+                placeOrderBtn.disabled = true;
+                placeOrderBtn.textContent = '{msg.processing}...';
+            }
+
+            const formData = new FormData(form);
+            const payload = {
+                cartId: (cartIdInput?.value || '').trim(),
+                customerEmail: formData.get('email') || '',
+                shippingAddress: buildAddressBlock(formData),
+                billingAddress: buildAddressBlock(formData),
+                shippingAmount: 8.50,
+                taxAmount: 9.54,
+                currency: 'USD',
+                paymentMethodId: 'pm_mock_card'
+            };
+
+            try {
+                await fetch('/api/v1/checkout/commit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Idempotency-Key': getIdempotencyKey()
+                    },
+                    body: JSON.stringify(payload)
+                }).then(response => {
+                    if (!response.ok) {
+                        throw new Error('Checkout API error');
+                    }
+                    return response.json().catch(() => null);
+                });
+
+                window.location.href = '/account';
+            } catch (error) {
+                console.error(error);
+                alert(checkoutErrorMessage);
+            } finally {
+                if (placeOrderBtn) {
+                    placeOrderBtn.disabled = false;
+                    placeOrderBtn.textContent = '{msg.place_order}';
+                }
+            }
+        });
+    }
+
+    // Address validation on blur
+    const addressFields = ['address1', 'city', 'state', 'postal-code'];
+    addressFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('blur', function() {
+                // TODO: Trigger address validation and shipping rate fetch
+                console.log('Validate address and fetch shipping rates');
+            });
+        }
+    });
+});
+</script>
+{/scripts}
+
+{/include}

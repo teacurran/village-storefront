@@ -1,141 +1,98 @@
 <!-- anchor: iteration-5-plan -->
-### Iteration 5: Admin Experience, Platform Ops, Observability & Launch Readiness
+### Iteration 5: Loyalty, Reporting, Platform Admin & Headless APIs
 
 *   **Iteration ID:** `I5`
-*   **Goal:** Finalize admin UI modules, platform governance console, deployment/observability artifacts, and verification strategy needed for GA.
-*   **Prerequisites:** `I1`, `I2`, `I3`, `I4`
-*   **Retrospective Carryover:**
-    - Bake post-iteration learnings into PR templates (anchor checklist, manifest updates, doc references).
-    - Align release toggles with feature flag governance doc before writing code.
-    - Keep ops + support in loop for new dashboards/runbooks; schedule reviews ahead of time.
-*   **Iteration Milestones & Exit Criteria:**
-    1. Admin SPA modules (orders, inventory, reporting, notifications, loyalty) wired to APIs with RBAC + feature flags.
-    2. Platform admin console (SaaS governance, impersonation audit, system health) fully functional with audit logging.
-    3. Deployment diagram + Kustomize overlays + GitHub Actions release workflow documented and validated.
-    4. Observability stack dashboards (Prometheus/Grafana/Jaeger) with KPIs defined, runbooks updated.
-    5. Verification suite (Playwright/Cypress + load tests + manifest-driven retrieval) automated in CI.
-    6. Compliance automation (privacy exports/deletes, archival jobs) completed and documented.
+*   **Goal:** Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.
+*   **Prerequisites:** `I1`–`I4`
+*   **Tasks:**
 
 <!-- anchor: task-i5-t1 -->
 *   **Task 5.1:**
     *   **Task ID:** `I5.T1`
-    *   **Description:** Complete admin SPA modules for orders, inventory, reporting, loyalty, notifications using Vue + PrimeVue; wire data tables, filters, detail panels, inline actions, SSE notifications, feature flags.
-    *   **Agent Type Hint:** `FrontendAgent`
-    *   **Inputs:** Backend APIs from prior iterations, design tokens, UX guidelines.
-    *   **Input Files:** [`src/main/webui/admin-spa/src/modules/**`, `api/v1/openapi.yaml`, `tailwind.config.js`, `docs/notifications/playbook.md`]
-    *   **Target Files:** [`src/main/webui/admin-spa/src/modules/orders/**`, `.../inventory/**`, `.../reporting/**`, `.../loyalty/**`, `.../notifications/**`, `tests/admin/OrdersDashboard.spec.ts`, `tests/admin/ReportingDashboard.spec.ts`]
-    *   **Deliverables:** Feature-complete admin modules with RBAC gating, SSE-driven alerts, localization, Storybook stories, e2e tests.
-    *   **Acceptance Criteria:** Modules compile, RBAC enforced, feature flags hide beta features, e2e tests green, Storybook updated, docs show usage.
-    *   **Testing Guidance:** Cypress suites covering CRUD, filters, impersonation banners; Storybook visual diffs; performance budgets (TTI <2.5s) recorded.
-    *   **Observability Hooks:** Instrument SPA with analytics events (view_* and action_*), log SSE connection health.
-    *   **Dependencies:** `I2.T3`, `I3` outputs, `I4` flows.
-    *   **Parallelizable:** Yes.
+    *   **Description:** Build Loyalty module (ledger, tier definitions, accrual/redemption services, nightly jobs, OpenAPI endpoints) plus integration into checkout + admin UI.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Loyalty requirements, checkout orchestration.
+    *   **Input Files:** [`modules/loyalty/src/main/java/...`, `modules/checkout-orders/src/main/java/...`, `api/storefront-admin-platform.yaml`]
+    *   **Target Files:** [`migrations/mybatis/20240713_loyalty.sql`, `modules/loyalty/src/main/java/.../LoyaltyLedgerEntity.java`, `LoyaltyService.java`, `TierService.java`, `modules/loyalty/src/test/java/...`, `modules/checkout-orders/src/main/java/.../CheckoutOrchestrator.java`, `src/main/webui/src/views/Loyalty/*`] 
+    *   **Deliverables:** Ledger schema, accrual/reservation logic, nightly job (Quartz/Scheduler) releasing expired reservations, APIs for admin + customer, UI components (earn/redeem), tests verifying two-phase commit.
+    *   **Acceptance Criteria:** Points accrue/reserve/refund flows tested; checkout integration toggled via feature flag; Admin UI displays tier progress; metrics exported for loyalty KPIs.
+    *   **Dependencies:** `I3.T1`, `I4.T2`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i5-t2 -->
 *   **Task 5.2:**
     *   **Task ID:** `I5.T2`
-    *   **Description:** Build platform admin console: store directory, impersonation control, health dashboards, support tooling, audit log viewer; integrate RBAC + MFA + audit logging.
-    *   **Agent Type Hint:** `FullStackAgent`
-    *   **Inputs:** Platform requirements, audit schema, impersonation ADR.
-    *   **Input Files:** [`src/main/java/com/village/platformops/**`, `src/main/webui/admin-spa/src/modules/platform/**`, `docs/adr/ADR-001-tenancy.md`, `docs/adr/ADR-004-consignment-payouts.md`]
-    *   **Target Files:** [`src/main/java/com/village/platformops/**`, `tests/backend/PlatformAdminIT.java`, `tests/admin/PlatformConsole.spec.ts`, `docs/platform/console.md`]
-    *   **Deliverables:** APIs + UI modules for platform governance, impersonation banner, audit log viewer, system health charts, documentation.
-    *   **Acceptance Criteria:** Platform console enforces RBAC, impersonation requires reason + ticket, system health pulls Prometheus summaries, audit viewer paginates w/ filters.
-    *   **Testing Guidance:** Integration tests verifying RBAC, impersonation start/stop, audit logging; UI tests for dashboards.
-    *   **Observability Hooks:** Record platform console actions to `PlatformCommand` table, metrics for impersonation count/duration.
-    *   **Dependencies:** `I1.T5`, `I3.T3`, `I4.T1`.
-    *   **Parallelizable:** Limited.
+    *   **Description:** Implement Reporting & Retention pipeline (domain_events poller, aggregate tables, scheduled exports, archival to R2 JSONL, retention doc updates).
+    *   **Agent Type Hint:** `DataEngineeringAgent`
+    *   **Inputs:** Domain events, ERD, Section 5 data governance.
+    *   **Input Files:** [`modules/reporting/src/main/java/...`, `docs/architecture/data/reporting-retention.md`, `docs/architecture/async/job-catalog.md`]
+    *   **Target Files:** [`modules/reporting/src/main/java/.../ProjectionWorker.java`, `AggregateRepository.java`, `ReportExportJob.java`, `modules/reporting/src/test/java/...`, `docs/architecture/data/reporting-retention.md`, `docs/architecture/async/job-catalog.md`]
+    *   **Deliverables:** Worker to transform domain events into aggregates (sales KPI, inventory, loyalty, consignment), export job + API, retention doc describing partition + archive steps.
+    *   **Acceptance Criteria:** Worker processes backlog idempotently; exports upload to R2 with manifest; doc lists retention windows + automation schedule; Prometheus metrics for job lag.
+    *   **Dependencies:** `I3.T1` events, `I4.T6` UI scaffolding.
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i5-t3 -->
 *   **Task 5.3:**
     *   **Task ID:** `I5.T3`
-    *   **Description:** Finalize deployment artifacts: PlantUML deployment diagram, Kustomize overlays per env, GitHub Actions release workflow (build, push, deploy), blue/green strategy doc, secrets management notes.
-    *   **Agent Type Hint:** `DevOpsAgent`
-    *   **Inputs:** Architecture overview, Kubernetes manifests, CI pipeline.
-    *   **Input Files:** [`docs/diagrams/component_overview.puml`, `k8s/base/**`, `k8s/overlays/**`, `.github/workflows/ci.yml`]
-    *   **Target Files:** [`docs/diagrams/deployment_k8s.puml`, `k8s/overlays/dev|staging|prod/**`, `.github/workflows/release.yml`, `docs/operations/deployment.md`]
-    *   **Deliverables:** Deployment diagram, overlays with resource limits/HPAs/PDBs, release workflow, doc describing promotion + rollback steps.
-    *   **Acceptance Criteria:** Diagrams render, overlays deploy via `kubectl apply`, release workflow runs blue/green, documentation lists manual verification + rollback steps.
-    *   **Testing Guidance:** Run dry-run deployments on staging, capture outputs; include automated smoke tests post-deploy.
-    *   **Observability Hooks:** Document release metrics (deployment duration, success/failure) and integrate notifications to Slack/Ops.
-    *   **Dependencies:** `I1.T6`, `I3.T6`, `I4.T3`.
+    *   **Description:** Deliver Platform Admin console backend + UI (store list, plan/billing, impersonation approvals, health metrics, audit exports) plus impersonation logging enhancements.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Platform admin requirements, audit schema.
+    *   **Input Files:** [`modules/platform-ops/src/main/java/...`, `src/main/webui/src/views/Platform`, `api/storefront-admin-platform.yaml`, `docs/architecture/governance/feature-flags.md`]
+    *   **Target Files:** [`modules/platform-ops/src/main/java/.../PlatformStoreResource.java`, `ImpersonationController.java`, `AuditExportResource.java`, `src/main/webui/src/views/Platform/Overview.vue`, `StoreDirectory.vue`, `ImpersonationLogs.vue`, `stores/platform.ts`, `modules/platform-ops/src/test/java/...`]
+    *   **Deliverables:** APIs (store listing, impersonation start/stop, audit exports, health metrics), UI dashboard with KPIs + filters, impersonation banner + session log, feature flag controls, tests verifying RBAC.
+    *   **Acceptance Criteria:** Platform scope tokens enforce access; impersonation workflow logs reason/ticket, TTL, SSE notifications; UI displays store health cards; export job statuses show.
+    *   **Dependencies:** `I3.T5`, `I4.T2`, `I4.T6`.
     *   **Parallelizable:** No.
 
 <!-- anchor: task-i5-t4 -->
 *   **Task 5.4:**
     *   **Task ID:** `I5.T4`
-    *   **Description:** Establish observability dashboards + alerts: configure Prometheus/Grafana dashboards for KPIs, Jaeger traces, logging pipeline, alert catalog; integrate with Platform console.
-    *   **Agent Type Hint:** `SREAgent`
-    *   **Inputs:** Section 6 verification strategy, metrics emitted from previous iterations.
-    *   **Input Files:** [`docs/operations/job_runbook.md`, `docs/media/pipeline.md`, `docs/checkout/saga.md`, `k8s/base/prometheus.yaml`]
-    *   **Target Files:** [`docs/operations/observability.md`, `monitoring/grafana-dashboards/*.json`, `monitoring/prometheus-rules/*.yaml`, `docs/operations/alert_catalog.md`]
-    *   **Deliverables:** Dashboard JSON, alert rules, doc describing KPIs + ownership, integration instructions for Platform console widgets.
-    *   **Acceptance Criteria:** Dashboards cover KPIs per Section 4 component KPIs, alert rules tested, doc lists runbooks and escalate matrix.
-    *   **Testing Guidance:** Use `promtool` to validate rules, simulate alerts via metric injection, record Grafana screenshots.
-    *   **Observability Hooks:** Link dashboards to instrumentation fields, ensure correlation IDs appear in logs/traces.
-    *   **Dependencies:** `I3.T3`, `I4.T1`-`I4.T7` outputs.
+    *   **Description:** Implement Headless API + OAuth client credential management (tenant-level clients, scopes, rate limiting, documentation portal) plus sample integration.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** API spec, Identity service.
+    *   **Input Files:** [`modules/core-platform/src/main/java/.../OAuthClientService.java`, `api/storefront-admin-platform.yaml`, `docs/architecture/governance/feature-flags.md`]
+    *   **Target Files:** [`migrations/mybatis/20240713_oauth_clients.sql`, `modules/core-platform/src/main/java/.../OAuthClientEntity.java`, `OAuthClientResource.java`, `modules/core-platform/src/test/java/...`, `docs/architecture/ops/headless-guide.md`, `src/main/webui/src/views/Settings/Headless.vue`]
+    *   **Deliverables:** OAuth client issuance UI + API, scopes (catalog:read, cart:write, orders:read), rate limit enforcement (token bucket), docs describing usage + sample calls, sample Next.js script.
+    *   **Acceptance Criteria:** Token issuance/resv validated; rate limiting returns 429 with ProblemDetails; docs include curl + JS examples; integration test ensures headless order flows function.
+    *   **Dependencies:** `I1.T5`, `I1.T6`, `I3.T1`.
     *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i5-t5 -->
 *   **Task 5.5:**
     *   **Task ID:** `I5.T5`
-    *   **Description:** Build verification suite: Playwright end-to-end (storefront checkout, admin flows, platform console), Cypress POS offline scenarios, k6 load tests (checkout, media uploads), manifest-driven retrieval tests.
-    *   **Agent Type Hint:** `QualityAgent`
-    *   **Inputs:** APIs, UI modules, manifest anchors.
-    *   **Input Files:** [`tests/e2e/playwright/**`, `tests/admin`, `tests/storefront`, `docs/plan_manifest_template.md`]
-    *   **Target Files:** [`tests/e2e/playwright/*.ts`, `tests/load/k6/checkout.js`, `tests/manifest/anchor_validation.py`, `.github/workflows/test_suite.yml`, `docs/testing/strategy.md`]
-    *   **Deliverables:** Full verification plan, scripts, CI workflow, docs describing smoke/regression cadence.
-    *   **Acceptance Criteria:** Tests run in CI, results archived, load tests hit target throughput, manifest validation ensures anchors resolvable.
-    *   **Testing Guidance:** Run nightly scheduled jobs for e2e, gather metrics, document flake triage process.
-    *   **Observability Hooks:** Report metrics from tests to Grafana (pass/fail counts, duration) and add PR comments summarizing results.
-    *   **Dependencies:** All prior tasks delivering surfaces.
-    *   **Parallelizable:** Limited (depends on surfaces availability).
+    *   **Description:** Launch Gift card + Store credit services (entities, APIs, checkout integration, admin UI, reporting) with compliance logging.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Requirements (gift card/store credit), checkout + loyalty integration.
+    *   **Input Files:** [`modules/payments/src/main/java/...`, `modules/checkout-orders/src/main/java/...`, `api/storefront-admin-platform.yaml`, `src/main/webui/src/views/Customers`]
+    *   **Target Files:** [`migrations/mybatis/20240713_giftcards.sql`, `modules/payments/src/main/java/.../GiftCardService.java`, `StoreCreditService.java`, `modules/payments/src/test/java/...`, `modules/checkout-orders/src/main/java/.../CheckoutOrchestrator.java`, `src/main/webui/src/views/GiftCards.vue`, `AccountBalance.vue`]
+    *   **Deliverables:** Gift card issuance/redemption, store credit ledger, checkout logic stacking rules, admin UI for management, reporting aggregator entries.
+    *   **Acceptance Criteria:** API tests for issuance/redeem/refund; checkout ensures gift card + loyalty stacking rules enforced; UI surfaces balances; events recorded for reporting.
+    *   **Dependencies:** `I3.T1`, `I5.T1` (loyalty), `I3.T3` (payments).
+    *   **Parallelizable:** Yes.
 
 <!-- anchor: task-i5-t6 -->
 *   **Task 5.6:**
     *   **Task ID:** `I5.T6`
-    *   **Description:** Automate compliance workflows: privacy export/delete, archival job verification, consent management, audit export UI; integrate with platform console + docs.
+    *   **Description:** Automate consignment payouts (Stripe Connect Express integration, payout scheduling job, statements, emails, portal updates).
     *   **Agent Type Hint:** `BackendAgent`
-    *   **Inputs:** Requirements (privacy, audit), reporting module, archival pipeline.
-    *   **Input Files:** [`docs/data_governance.md`, `src/main/java/com/village/reporting/**`, `src/main/java/com/village/platformops/**`, `docs/operations/observability.md`]
-    *   **Target Files:** [`src/main/java/com/village/compliance/**`, `tests/backend/ComplianceIT.java`, `docs/compliance/privacy.md`, `docs/operations/archive_runbook.md`]
-    *   **Deliverables:** APIs + jobs for export/delete, audit log for actions, docs covering process + retention.
-    *   **Acceptance Criteria:** Requests queue + notify, exports zipped JSONL to R2, delete workflow soft-deletes then purges after retention, docs describe manual review.
-    *   **Testing Guidance:** Integration tests using sample tenant data, verify exports zipped + hashed, run manual Drills.
-    *   **Observability Hooks:** Metrics for export queue, deletion backlog, audit logs referencing platform command IDs.
-    *   **Dependencies:** `I3.T3`, `I5.T2`.
-    *   **Parallelizable:** Yes.
+    *   **Inputs:** Consignment ledger, Stripe provider.
+    *   **Input Files:** [`modules/consignment/src/main/java/...`, `modules/payments/src/main/java/.../StripePaymentProvider.java`, `docs/architecture/async/job-catalog.md`]
+    *   **Target Files:** [`modules/consignment/src/main/java/.../PayoutScheduler.java`, `StripeConnectService.java`, `modules/consignment/src/test/java/...`, `src/main/webui/src/views/Consignors/Payouts.vue`, `docs/architecture/async/job-catalog.md`, `src/main/resources/templates/emails/consignor-payout.html`]
+    *   **Deliverables:** Scheduled job moving pending→available balances, Stripe payout creation, statements stored to R2, portal + email updates.
+    *   **Acceptance Criteria:** Jobs respects configurable windows, handles refunds/chargebacks, logs audit trail; UI shows payout status; notifications sent; tests with Stripe mocks.
+    *   **Dependencies:** `I3.T5`, `I3.T3`, `I4.T5`.
+    *   **Parallelizable:** No.
 
 <!-- anchor: task-i5-t7 -->
 *   **Task 5.7:**
     *   **Task ID:** `I5.T7`
-    *   **Description:** Finalize feature flag governance + release process: create governance doc, dashboards, automation for stale flag detection, CLI for toggles, integration with platform console.
-    *   **Agent Type Hint:** `DevOpsAgent`
-    *   **Inputs:** Section 3 enforcement playbooks, feature flag service, platform console.
-    *   **Input Files:** [`docs/architecture_overview.md`, `docs/operations/observability.md`, `src/main/java/com/village/featureflag/**`, `src/main/webui/admin-spa/src/modules/platform/**`]
-    *   **Target Files:** [`docs/feature_flags/governance.md`, `tools/featureflag-cli/`, `monitoring/grafana-dashboards/feature_flags.json`]
-    *   **Deliverables:** Governance doc w/ owner/expiry fields, CLI for toggles + audits, dashboard tracking adoption, automation hooking to PR template.
-    *   **Acceptance Criteria:** CLI lists flags + toggles states, stale flags flagged via job, doc explains process + rollback.
-    *   **Testing Guidance:** Unit tests for CLI, integration test hitting API, manual dry-run toggling sample flag.
-    *   **Observability Hooks:** Dashboard showing enablement progress, alerts for expired flags, log entries for CLI actions.
-    *   **Dependencies:** `I1.T5`, `I2.T3`, `I5.T2`.
+    *   **Description:** Enhance structured logging, audit exports, and observability dashboards (Grafana/Jaeger) for loyalty, payments, consignment, headless APIs; update runbooks.
+    *   **Agent Type Hint:** `ObservabilityAgent`
+    *   **Inputs:** Modules implemented in this iteration.
+    *   **Input Files:** [`modules/*/src/main/java`, `docs/architecture/ops/*`, `infra/k8s/base/*`]
+    *   **Target Files:** [`modules/loyalty/src/main/java/.../LoyaltyMetrics.java`, `modules/payments/src/main/java/.../PaymentTelemetry.java`, `modules/consignment/src/main/java/.../ConsignmentTelemetry.java`, `docs/architecture/ops/runbooks/*.md`, `infra/k8s/base/prometheus-rules.yaml`]
+    *   **Deliverables:** Additional metrics/loggers, Grafana dashboards, alert rules for loyalty/consignment/payout/Headless API anomalies, runbook updates referencing new metrics.
+    *   **Acceptance Criteria:** Metrics exported with tenant/tier labels; alert rules defined; runbooks detail KPIs + troubleshooting; Jaeger traces show end-to-end flows.
+    *   **Dependencies:** `I5.T1-T6`.
     *   **Parallelizable:** Yes.
-
-*   **Iteration KPIs & Validation Strategy:**
-    - Admin modules achieve >90% route coverage with e2e tests and meet performance budgets.
-    - Platform console impersonation logs show 100% reason coverage; audit exports respond <5s for 90-day ranges.
-    - Release workflow executes blue/green within 15 minutes; rollback instructions tested.
-    - Observability dashboards published with owners + SLA targets; alerts tested via simulated events.
-    - Verification suite runs nightly and before releases; failure triage SLA <24h.
-    - Compliance jobs process export/delete requests within SLA (export <24h, delete <30 days) and log metrics.
-*   **Iteration Risk Log & Mitigations:**
-    - *Scope creep:* Admin UI might absorb extra modules; mitigation—lock backlog, defer non-blocking features.
-    - *Release automation errors:* Mitigate via staged dry-runs + manual checkpoints.
-    - *Alert fatigue:* Mitigate by prioritizing severity + mapping ownership.
-    - *Compliance gaps:* Mitigate by involving legal/security reviewers.
-    - *Flag governance drift:* Mitigate via automation (Task 5.7) with weekly review.
-*   **Iteration Backlog & Follow-ups:**
-    - Prepare GA readiness checklist summarizing all artifacts.
-    - Plan customer beta rollout schedule with ops.
-    - Outline Phase 2/3 roadmap transitions (subscriptions, services, marketplace) referencing plan outcomes.
-    - Create knowledge base for support referencing platform console + compliance tools.

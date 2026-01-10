@@ -1,4 +1,4 @@
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, FrameLocator } from '@playwright/test';
 import { BasePage } from './BasePage';
 
 /**
@@ -14,7 +14,7 @@ export class CheckoutPage extends BasePage {
   readonly zipInput: Locator;
   readonly phoneInput: Locator;
   readonly shippingMethodSelect: Locator;
-  readonly paymentFrame: Locator;
+  readonly paymentFrame: FrameLocator;
   readonly placeOrderButton: Locator;
   readonly orderSummary: Locator;
   readonly giftCardInput: Locator;
@@ -99,8 +99,11 @@ export class CheckoutPage extends BasePage {
     await this.page.waitForURL('**/order-confirmation/**', { timeout: 15000 });
   }
 
-  async getOrderTotal(): Promise<string> {
+  async getOrderTotal(): Promise<number> {
     const totalElement = this.orderSummary.locator('[data-test="total-amount"]');
-    return await this.getText(totalElement);
+    const totalText = await this.getText(totalElement);
+    // Extract numeric value from total text like "$125.50" or "125.50"
+    const match = totalText.match(/\$?([\d,]+\.?\d*)/);
+    return match ? parseFloat(match[1].replace(/,/g, '')) : 0;
   }
 }

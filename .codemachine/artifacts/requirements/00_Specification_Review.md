@@ -1,6 +1,6 @@
-# Specification Review & Recommendations: Village Storefront SaaS Platform
+# Specification Review & Recommendations: Village Storefront - Multi-Tenant SaaS Ecommerce Platform
 
-**Date:** 2026-01-02
+**Date:** 2026-01-09
 **Status:** Awaiting Specification Enhancement
 
 ### **1.0 Executive Summary**
@@ -13,89 +13,89 @@ This document is an automated analysis of the provided project specifications. I
 
 *Based on the provided data, the core project objective is to engineer a system that:*
 
-Delivers a multi-tenant SaaS ecommerce platform enabling merchants to operate independent online stores with consignment vendor management, leveraging Java 21/Quarkus for backend services, Qute templates for customer-facing storefronts, and Vue.js for administrative interfaces, all deployed as GraalVM native images on Kubernetes infrastructure.
+Delivers a multi-tenant SaaS ecommerce platform enabling small-to-medium merchants (including consignment-based businesses) to operate independent online stores with subdomain/custom domain access, full inventory management, integrated payment processing via Stripe Connect, and comprehensive consignment vendor management with automated payouts. The system architecture mandates Java 21 + Quarkus with GraalVM native compilation, PostgreSQL database, Qute templates for customer-facing storefronts, and Vue.js 3 admin dashboards.
 
 ### **3.0 Critical Assertions & Required Clarifications**
 
 ---
 
-#### **Assertion 1: Platform Super-User Access Strategy & Data Access Boundaries**
+#### **Assertion 1: Tenant Isolation RLS Implementation Strategy**
 
-*   **Observation:** The specification defines platform admin capabilities including store suspension, analytics access, and impersonation features, but does not clarify the architectural isolation model between platform-level operations and tenant-level data access.
-*   **Architectural Impact:** This is a security-critical decision affecting database access patterns, audit logging depth, regulatory compliance posture, and the design of the multi-tenant data isolation layer.
-    *   **Path A (Shared Isolation Layer):** Platform admins access tenant data through the same RLS/Panache filter mechanisms as regular users, with context overrides for impersonation. Simpler implementation, but requires careful audit trail architecture.
-    *   **Path B (Separate Access Plane):** Platform admin operations use dedicated database roles with explicit cross-tenant query capabilities, bypassing RLS entirely. More complex, but provides clearer security boundaries and compliance audit separation.
-    *   **Path C (API-Mediated):** Platform admins never query tenant tables directly; all cross-tenant operations proxied through dedicated service layer with explicit authorization checks. Maximum auditability, highest development overhead.
-*   **Default Assumption & Required Action:** To balance security and development velocity, the system will assume **Path A (Shared Isolation Layer)** with mandatory impersonation audit logging to separate tables outside RLS scope. **The specification must be updated** to explicitly define the platform admin data access model, required audit granularity for compliance, and any regulatory frameworks the platform must satisfy (SOC2, GDPR, etc.).
-
----
-
-#### **Assertion 2: Custom Domain SSL Certificate Provisioning & Renewal Architecture**
-
-*   **Observation:** The specification states "automatic SSL via Let's Encrypt (ACME HTTP-01 challenge)" for custom domains but does not define the certificate storage strategy, renewal orchestration, or ingress controller integration model.
-*   **Architectural Impact:** This decision fundamentally affects infrastructure dependencies, certificate lifecycle management complexity, and the coupling between application logic and Kubernetes ingress configuration.
-    *   **Path A (Application-Managed):** Quarkus application performs ACME challenges, stores certificates in database, programmatically updates Kubernetes Ingress/TLS secrets. Tightly coupled, requires elevated RBAC permissions for pods.
-    *   **Path B (Operator-Delegated):** External cert-manager operator handles ACME challenges and certificate lifecycle, application only registers domain records. Loosely coupled, standard k8s pattern, but adds infrastructure dependency.
-    *   **Path C (Cloudflare Proxy):** All custom domains proxied through Cloudflare with Universal SSL, application only manages DNS CNAME records. Simplest implementation, vendor lock-in, requires Cloudflare paid plan for multiple domains.
-*   **Default Assumption & Required Action:** The architecture will assume **Path B (Operator-Delegated)** using cert-manager with HTTP-01 challenges, as it aligns with Kubernetes best practices and minimizes application security surface. **The specification must be updated** to define the acceptable infrastructure dependencies, certificate storage requirements, and whether vendor-managed SSL (Cloudflare) is architecturally permissible.
+*   **Observation:** The specification declares "Application-Primary with RLS Safety Net" but provides conflicting technical details. It mandates Panache entity filtering as primary enforcement while stating RLS policies check `current_setting('app.tenant_id')` - yet also claims "no session variable management" for simpler connection pooling. These constraints are mutually exclusive.
+*   **Architectural Impact:** This is a foundational security decision affecting database connection architecture, query performance, and data breach risk surface.
+    *   **Path A (Pure Application-Layer):** Panache base class applies tenant filters exclusively; RLS policies disabled or nonexistent. Simplest connection pooling, but single filter bypass bug exposes cross-tenant data.
+    *   **Path B (True Hybrid with Session Variables):** Connection filter sets PostgreSQL session variable on checkout from pool; RLS policies enforce tenant isolation as defense-in-depth. Requires connection pool lifecycle hooks but provides genuine safety net.
+    *   **Path C (RLS-Primary):** PostgreSQL RLS policies as sole enforcement mechanism; application trusts database to filter all queries. Maximum security guarantee, moderate connection management complexity.
+*   **Default Assumption & Required Action:** The architecture will assume **Path A (Pure Application-Layer)** with comprehensive integration test coverage of tenant isolation to mitigate bypass risk. **The specification must be updated** to explicitly define the RLS implementation strategy, including whether PostgreSQL session variables will be used and the specific lifecycle hooks for setting `app.tenant_id` if Path B is chosen.
 
 ---
 
-#### **Assertion 3: Multi-Currency Settlement & Exchange Rate Authority**
+#### **Assertion 2: Multi-Location Inventory Data Model & Concurrency Control**
 
-*   **Observation:** The specification mandates "multi-currency display with real-time or daily exchange rates" but does not specify the authoritative exchange rate source, settlement currency conversion strategy, or handling of rate fluctuations between display and payment capture.
-*   **Architectural Impact:** This variable affects payment processor integration complexity, revenue recognition accuracy, merchant financial reporting, and potential forex risk exposure.
-    *   **Path A (Display-Only Conversion):** Exchange rates used solely for customer-facing price display; all transactions settled in store base currency at Stripe's market rate at time of charge. Simple, zero forex risk for platform, rate mismatch potential between display and charge.
-    *   **Path B (Locked Rate Conversion):** Exchange rate locked at cart creation, stored with order, settlement uses locked rate. Accurate customer experience, requires manual reconciliation with Stripe settlement amounts, forex risk absorbed by merchant.
-    *   **Path C (Stripe Multi-Currency):** Leverage Stripe's presentment currency feature to charge customer in display currency, auto-settle to merchant base currency. Stripe handles conversion, fees applied, cleanest UX, highest transaction cost.
-*   **Default Assumption & Required Action:** The system will implement **Path A (Display-Only Conversion)** using a daily-refreshed exchange rate cache from a free API (e.g., exchangerate-api.com), with prominent disclaimer that final charge is in base currency. **The specification must be updated** to define the acceptable exchange rate source, tolerance for display/settlement variance, and whether Stripe multi-currency fees are acceptable for premium merchants.
-
----
-
-#### **Assertion 4: Consignment Vendor Payout Timing & Platform Fee Collection Point**
-
-*   **Observation:** The specification describes Stripe Connect for vendor payouts with "platform fee collection" but does not define whether fees are deducted at point-of-sale or at payout, the timing of vendor balance settlement, or handling of refunds/chargebacks affecting vendor commissions.
-*   **Architectural Impact:** This decision affects cash flow modeling, vendor portal balance accuracy, accounting complexity, and the implementation of the commission calculation engine.
-    *   **Path A (POS Fee Deduction):** Platform fee deducted from each transaction via Stripe Connect application fee at charge time; vendor balance credited with net commission immediately. Real-time vendor balance accuracy, but complicates partial refunds and chargeback reconciliation.
-    *   **Path B (Payout Fee Deduction):** Vendor credited full commission on sale; platform fee deducted during payout generation. Simpler refund handling, but vendor sees inflated balance until payout, requires separate fee accounting.
-    *   **Path C (Hybrid Settlement):** Commission tracked as pending until order fulfillment confirmed, then settled to vendor balance; platform fee deducted at confirmed settlement. Accurate for refund scenarios, highest complexity, delayed vendor visibility.
-*   **Default Assumption & Required Action:** The architecture will assume **Path A (POS Fee Deduction)** with a deferred commission model where vendor balance only increments after the order's refund window expires (e.g., 30 days post-fulfillment). **The specification must be updated** to define the merchant's preferred vendor payout timing, acceptable delay between sale and vendor credit, and policy for handling chargebacks affecting consignor earnings.
+*   **Observation:** The specification requires "Multi-location inventory: Track stock across warehouses, stores, suppliers" and "Stock transfers: Move inventory between locations" but provides no data model, no concurrency strategy for simultaneous sales/transfers, and no definition of location hierarchy or transfer workflows.
+*   **Architectural Impact:** This variable dictates database schema complexity, transaction isolation requirements, and the feasibility of real-time inventory accuracy across locations.
+    *   **Tier 1 (Simple Location Ledger):** Single `inventory_ledger` table with `(product_variant_id, location_id, quantity)` composite key. Transfers are two-row updates (decrement source, increment destination) in single transaction. No historical tracking. Suitable for <5 locations with low transfer volume.
+    *   **Tier 2 (Event-Sourced Inventory):** All inventory changes (sales, transfers, adjustments) modeled as immutable events in `inventory_events` table; current stock computed via aggregation. Full audit trail, supports complex workflows (multi-stage transfers, approvals), but requires materialized views for query performance.
+    *   **Tier 3 (Reserved Quantity Model):** Separate columns for `physical_quantity`, `reserved_quantity`, `available_quantity`. Orders reserve stock before payment; fulfillment decrements physical. Prevents overselling but adds complexity to transfer logic.
+*   **Default Assumption & Required Action:** The system will implement **Tier 2 (Event-Sourced Inventory)** to satisfy audit requirements and support consignment accounting complexity. **The specification must be updated** to define: (1) maximum expected locations per tenant, (2) transfer approval workflow requirements, (3) whether "available to promise" logic (reservations) is required for multi-location scenarios.
 
 ---
 
-#### **Assertion 5: Session Activity Log Query Performance & Reporting Scope**
+#### **Assertion 3: Consignment Vendor Balance Settlement & Chargeback Risk Model**
 
-*   **Observation:** The specification mandates comprehensive session logging with 90-day hot storage and archival to R2, but does not define the query patterns for session reports, the indexing strategy for high-cardinality searches, or the performance SLA for admin-facing analytics.
-*   **Architectural Impact:** This variable dictates table partitioning strategy, index overhead, archive query implementation complexity, and whether a separate OLAP datastore is required.
-    *   **Tier 1 (Transactional Queries Only):** Session logs optimized for real-time operational queries (e.g., "show active sessions for user X"), minimal indexing, reports pre-aggregated via scheduled jobs. Low index overhead, limited ad-hoc reporting flexibility.
-    *   **Tier 2 (Moderate Analytics):** Full-text and composite indexes on session logs for admin-initiated searches (e.g., "sessions from IP range Y in last 30 days"), archive queries delegated to manual export. Balanced performance, some query latency on complex filters.
-    *   **Tier 3 (Advanced Analytics):** Session data replicated to columnar store (e.g., Parquet on R2 + DuckDB queries) for complex analytics, transactional DB used only for operational lookups. Highest query flexibility, requires ETL pipeline and additional infrastructure.
-*   **Default Assumption & Required Action:** The system will implement **Tier 1 (Transactional Queries Only)** with monthly pre-aggregated session reports stored as materialized views, and a CSV export tool for ad-hoc archive analysis. **The specification must be updated** to define the required session report types, acceptable query response times for admin dashboards, and whether real-time cross-tenant session analytics are a platform admin requirement.
-
----
-
-#### **Assertion 6: Video Transcoding Resource Allocation & Processing SLA**
-
-*   **Observation:** The specification describes FFmpeg-based video transcoding within application pods with a 10-minute timeout, but does not specify the expected video upload volume, concurrent processing limits, or pod resource reservations required to prevent transcode jobs from starving application requests.
-*   **Architectural Impact:** This decision affects Kubernetes resource quotas, pod autoscaling configuration, job queue priority implementation, and whether video processing should be architecturally separated from the main application.
-    *   **Path A (In-Process Processing):** Video transcodes executed within web application pods using DelayedJob, resource limits enforced via JVM heap constraints. Simplest deployment, risk of OOM under high upload volume, limits horizontal scaling efficiency.
-    *   **Path B (Dedicated Worker Pods):** Separate Deployment for video processing workers consuming DelayedJob queue, isolated resource quotas. Clean separation, requires additional pod orchestration, increases infrastructure complexity.
-    *   **Path C (External Processing Service):** Offload transcoding to external service (e.g., AWS MediaConvert, Cloudflare Stream). Zero in-cluster resource impact, introduces external dependency and per-minute processing costs.
-*   **Default Assumption & Required Action:** The architecture will assume **Path B (Dedicated Worker Pods)** with a separate Deployment for media workers (CPU-optimized pods) consuming the DelayedJob CRITICAL priority queue, auto-scaling based on queue depth. **The specification must be updated** to define expected peak video upload volume, acceptable transcode completion SLA (e.g., "95% of videos processed within 15 minutes"), and budget constraints for external processing services.
+*   **Observation:** The specification defines a two-phase balance model (`pending_balance` → `available_balance` after 30 days) and states chargebacks deduct from `available_balance`, flagging negative balances for "merchant resolution." The mechanism for this resolution and liability allocation between platform, store, and vendor are undefined.
+*   **Architectural Impact:** This decision determines financial risk distribution, cash flow timing, and potential platform loss exposure in fraud scenarios.
+    *   **Path A (Vendor Liability):** Negative vendor balances are vendor debt; future sales credits apply until balance positive. Store is made whole by platform. Requires platform reserve fund for chargebacks.
+    *   **Path B (Store Liability):** Negative vendor balances are store debt; store must either clawback from vendor externally or absorb loss. Platform remains neutral intermediary. Requires store-level reserve or escrow mechanism.
+    *   **Path C (Shared Liability Pool):** Platform, store, and vendor each absorb percentage of chargeback loss per configurable policy. Complex accounting but distributes risk.
+*   **Default Assumption & Required Action:** The architecture will assume **Path B (Store Liability)** to minimize platform capital requirements and align with Stripe Connect's liability model where platform fees are store responsibility. **The specification must be updated** to explicitly define: (1) chargeback liability party, (2) negative balance resolution workflow and timeline, (3) whether platform will hold reserve funds or escrow for chargeback risk.
 
 ---
 
-#### **Assertion 7: Loyalty Points Redemption Mechanics & Discount Interaction Model**
+#### **Assertion 4: Custom Domain SSL Certificate Lifecycle & Failure States**
 
-*   **Observation:** The specification describes a points-based loyalty program with "convert points to discount at checkout" but does not define the redemption granularity, interaction with other promotions, or handling of partial refunds affecting redeemed points.
-*   **Architectural Impact:** This decision affects checkout calculation logic complexity, promotion stacking rules engine design, and order adjustment/refund workflows.
-    *   **Path A (Fixed Redemption Tiers):** Points redeemable only in fixed increments (e.g., 100 points = $5 discount), applied as order-level discount code, stackable with one other promotion. Simple implementation, limited customer flexibility.
-    *   **Path B (Flexible Point Currency):** Points converted to store credit at dynamic rate (e.g., 1 point = $0.01), applied as payment method, combinable with all discounts. Maximum flexibility, requires separate payment method handling and refund complexity.
-    *   **Path C (Product-Level Redemption):** Points redeemable for specific reward products or percentage discounts on eligible items, non-stackable with sales. Gamification-friendly, highest promotional control, requires reward catalog management.
-*   **Default Assumption & Required Action:** The system will implement **Path A (Fixed Redemption Tiers)** with points-to-discount codes generated at 100-point increments, exclusive with automatic promotions but stackable with manually-entered coupon codes. **The specification must be updated** to define the desired loyalty program mechanics, acceptable redemption constraints for merchants, and policy for points reinstatement on partial/full refunds.
+*   **Observation:** The specification mandates "Merchant-Managed DNS with HTTP-01" and outlines the happy-path workflow (CNAME validation → cert-manager issuance), but does not define certificate renewal failure handling, domain removal workflows, or the behavior when a merchant's CNAME is deleted after initial setup.
+*   **Architectural Impact:** Unhandled certificate expiration or DNS misconfiguration results in customer-facing HTTPS errors, directly impacting merchant revenue and platform reputation.
+    *   **Scenario A (Passive Monitoring):** System monitors certificate expiration dates; emails merchant at 14 days and 3 days before expiry. If renewal fails, custom domain automatically disabled and traffic falls back to subdomain. Merchant must re-verify.
+    *   **Scenario B (Active Remediation):** System detects CNAME removal or validation failure; automatically retries HTTP-01 challenge every 6 hours for 72 hours. If unsuccessful, domain marked "degraded" but remains active with warning banner in admin. Merchant has 7 days to fix before forced fallback.
+    *   **Scenario C (Fail-Secure with Grace Period):** Certificate expiration triggers immediate fallback to subdomain with merchant notification. Grace period (48 hours) allows re-verification without customer disruption. After grace period, custom domain entry deleted and requires full re-setup.
+*   **Default Assumption & Required Action:** The system will implement **Scenario A (Passive Monitoring)** with automatic fallback to minimize platform operational burden. **The specification must be updated** to define: (1) renewal failure SLA and fallback behavior, (2) whether active retry attempts are required, (3) merchant notification cadence and escalation policy for certificate issues.
+
+---
+
+#### **Assertion 5: Platform Admin Impersonation Session Boundaries & Action Scope**
+
+*   **Observation:** The specification requires impersonation of store admins and customers with audit logging, but does not define whether impersonated sessions inherit full admin privileges, whether certain sensitive actions (refunds, user deletion, Stripe disconnect) are restricted during impersonation, or whether impersonation sessions can span multiple stores in a single session.
+*   **Architectural Impact:** This variable determines authorization complexity, audit log schema design, and the potential for platform admin abuse or accidental destructive actions.
+    *   **Path A (Full Privilege Inheritance):** Impersonated session has identical permissions to target user. Platform admin can perform any action the user could perform, including financial transactions. All actions logged but not restricted. Simplest implementation, highest risk.
+    *   **Path B (Read-Only Impersonation):** Impersonated session has view-only access; no write operations allowed. Platform admin must exit impersonation to take corrective action in their own capacity. Safest but least operationally useful for customer service.
+    *   **Path C (Restricted Write Impersonation):** Impersonated session allows most actions but blocks high-risk operations (refunds >$X, user account deletion, payment config changes). Blocked actions require explicit platform admin override with additional audit justification field.
+*   **Default Assumption & Required Action:** The system will implement **Path C (Restricted Write Impersonation)** with thresholds configurable per platform admin role. **The specification must be updated** to define: (1) explicit list of actions restricted during impersonation, (2) whether multi-store impersonation (switching tenants within a single session) is permitted, (3) maximum impersonation session duration and idle timeout.
+
+---
+
+#### **Assertion 6: Media Processing Queue Isolation & Resource Starvation Prevention**
+
+*   **Observation:** The specification describes a DelayedJob-based queue system with priority tiers (CRITICAL, HIGH, DEFAULT, LOW, BULK) and suggests video processing runs on separate worker pods, but does not define the queue assignment logic for media jobs, whether image processing shares queues with transactional jobs (emails, webhooks), or the autoscaling trigger thresholds.
+*   **Architectural Impact:** Improper queue isolation results in video transcoding jobs starving time-sensitive operations like order confirmation emails or low-stock alerts, directly degrading customer experience.
+    *   **Tier 1 (Shared Queue with Priority):** All jobs (media, email, webhooks) use same queue with priority ordering. Video jobs are LOW priority. Risk: large video uploads can delay email delivery if queue depth exceeds worker capacity.
+    *   **Tier 2 (Dedicated Media Queue):** CRITICAL queue exclusively for video transcoding; HIGH/DEFAULT for transactional jobs; BULK for analytics. Separate pod pools subscribe to different queues. Clean isolation but requires more infrastructure planning.
+    *   **Tier 3 (External Media Processing):** Video transcoding offloaded to external service (AWS MediaConvert, Cloudflare Stream). Application only uploads source files and polls for completion. Highest reliability but adds vendor dependency and cost.
+*   **Default Assumption & Required Action:** The system will implement **Tier 2 (Dedicated Media Queue)** with video processing isolated to CRITICAL queue and dedicated worker pods. **The specification must be updated** to define: (1) queue assignment matrix (which job types use which priority tier), (2) HPA thresholds for each worker pod type (queue depth, CPU, memory), (3) whether image resizing uses asynchronous queues or synchronous in-process execution.
+
+---
+
+#### **Assertion 7: Session & Audit Log Archival Format & Historical Query Performance**
+
+*   **Observation:** The specification mandates 90-day hot storage in PostgreSQL with JSONL+gzip archival to R2, and describes a CSV export tool for archived data. However, the query patterns for historical data (date range filters, user ID lookups, action type filtering) and whether pre-aggregated summaries are required for compliance reporting are undefined.
+*   **Architectural Impact:** Without indexed summary tables or queryable archive format, generating compliance reports (e.g., "all impersonation sessions in Q4 2025") requires full archive decompression and linear scan, potentially taking hours for large tenants.
+    *   **Path A (Raw Archive with Export Tool):** JSONL archives are opaque; all historical queries require full export to CSV for manual analysis. Simple to implement but painful for compliance audits. Suitable if queries are rare (<1/month).
+    *   **Path B (Indexed Summary Tables):** Scheduled job pre-aggregates audit logs into summary tables (daily session counts, action type breakdowns, impersonation index) retained indefinitely. Archives remain JSONL but summaries provide fast reporting. Moderate complexity, excellent query performance.
+    *   **Path C (Queryable Archive Layer):** Archives stored in Parquet format (columnar, compressed) on R2; external query engine (DuckDB, Athena) allows SQL queries against archives without import. High setup cost but unlimited historical analysis capability.
+*   **Default Assumption & Required Action:** The system will implement **Path B (Indexed Summary Tables)** to balance compliance requirements with implementation complexity. **The specification must be updated** to define: (1) specific audit report types required (session duration histograms, action frequency by user role, etc.), (2) query SLA for archived data (seconds, minutes, hours), (3) whether GDPR "right to erasure" requires selective deletion from archives or archive regeneration.
 
 ---
 
 ### **4.0 Next Steps**
 
-Upon the user's update of the original specification document, the development process will be unblocked and can proceed to the architectural design phase.
+Upon the user's update of the original specification document, the development process will be unblocked and can proceed to the architectural design phase. Each assertion above requires an explicit resolution statement in the updated specification, referencing the chosen path or tier and providing the requested clarification details.

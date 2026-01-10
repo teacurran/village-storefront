@@ -83,12 +83,12 @@ Deployment_Node(k3s, "k3s Cluster", "Kubernetes 1.28+") {
         Deployment_Node(workerPods, "Background Workers", "2-20 replicas (HPA)") {
             Container(workers, "Standard Workers", "Quarkus Native", "DelayedJob executor (DEFAULT, BULK priorities)")
             Container(criticalWorkers, "Critical Workers", "Quarkus Native", "DelayedJob executor (CRITICAL, HIGH priorities)")
+            Container(mediaWorkers, "Media Workers", "Quarkus Native + FFmpeg", "Media processing (IMAGE_VARIANT, VIDEO_TRANSCODE jobs)")
 
             note right of workerPods
                 **Standard Workers:**
                 - Email delivery
                 - Report generation
-                - Media processing (FFmpeg)
                 - Webhook delivery
 
                 **Critical Workers:**
@@ -96,6 +96,15 @@ Deployment_Node(k3s, "k3s Cluster", "Kubernetes 1.28+") {
                 - Order confirmations
                 - Inventory updates
                 - PriorityClass: high-priority
+
+                **Media Workers (Task I4.T4):**
+                - Image resizing (Thumbnailator)
+                - Video transcoding (FFmpeg → HLS)
+                - Poster frame extraction
+                - Requires FFmpeg binary in container
+                - EmptyDir volume: /tmp/media_processing
+                - HPA metric: media.queue.depth
+                - Resource: 1000m-4000m CPU (transcoding)
             end note
         }
 
@@ -171,15 +180,21 @@ Deployment_Node(dataExternal, "External Data Tier", "Managed Services") {
         Container(mediaBucket, "Media Buckets", "R2", "Product images, video variants, PDF receipts")
 
         note right of mediaBucket
+            **Storage Structure (Task I4.T4):**
+            {tenantId}/media/{assetType}/{assetId}/original/
+            {tenantId}/media/{assetType}/{assetId}/derivatives/
+
             **Lifecycle:**
             - Original uploads retained 90 days
             - Derivatives cached indefinitely
-            - Signed URLs (15-min expiry)
+            - Upload URLs: 15-min expiry (presigned PUT)
+            - Download URLs: 24hr expiry (presigned GET)
 
             **Processing:**
-            - FFmpeg workers transcode video
-            - ImageMagick resizes images
-            - Results uploaded to R2
+            - Media workers transcode video (FFmpeg → HLS)
+            - Thumbnailator resizes images (4 sizes)
+            - Results uploaded to R2 (tenant-scoped keys)
+            - Quota: 10GB default per tenant
         end note
     }
 }
@@ -246,7 +261,9 @@ Rel(workers, postgres, "DelayedJob queue polling", "JDBC")
 Rel(criticalWorkers, postgres, "CRITICAL job claims", "JDBC")
 
 Rel(workers, mediaBucket, "Upload processed media", "S3 API / HTTPS")
+Rel(mediaWorkers, mediaBucket, "Download original, upload derivatives", "S3 API / HTTPS")
 Rel(catalog, mediaBucket, "Signed URL generation", "S3 API / HTTPS")
+Rel(gateway, mediaBucket, "Presigned upload URL negotiation", "S3 API / HTTPS")
 
 Rel(gateway, configMap, "Load bucket names, mailer config", "K8s API")
 Rel(gateway, secrets, "Inject DB/R2/Stripe credentials", "K8s API")
@@ -268,6 +285,7 @@ Rel(catalog, prometheus, "Expose /q/metrics", "HTTP scrape")
 Rel(checkout, prometheus, "Expose /q/metrics", "HTTP scrape")
 Rel(workers, prometheus, "Expose /q/metrics", "HTTP scrape")
 Rel(criticalWorkers, prometheus, "Expose /q/metrics", "HTTP scrape")
+Rel(mediaWorkers, prometheus, "Expose media.job.* metrics", "HTTP scrape")
 
 Rel(gateway, jaeger, "Export OpenTelemetry traces", "gRPC/HTTP")
 Rel(catalog, jaeger, "Export traces", "gRPC/HTTP")
@@ -292,6 +310,7 @@ note as DeploymentNotes
     - Catalog/Checkout: 250m-1000m CPU, 512Mi-2Gi RAM
     - Workers: 250m-1000m CPU, 512Mi-2Gi RAM
     - Critical Workers: 500m-2000m CPU, 1Gi-4Gi RAM
+    - Media Workers: 1000m-4000m CPU, 1Gi-4Gi RAM + /tmp emptyDir volume
 
     **Network Policies:**
     - Gateway: ingress from ingress-controller

@@ -1,0 +1,297 @@
+{#include base.html}
+
+{#head}
+<meta name="description" content="{seoDescription ?: msg.catalog_meta_description}">
+{/head}
+
+{#content}
+<!-- Breadcrumbs -->
+{#if breadcrumbs && breadcrumbs.size > 0}
+<nav aria-label="Breadcrumb" class="bg-white border-b border-neutral-200">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <ol class="flex items-center space-x-2 text-sm">
+            <li>
+                <a href="/" class="text-neutral-500 hover:text-neutral-700">
+                    {msg.home}
+                </a>
+            </li>
+            {#for crumb in breadcrumbs}
+            <li class="flex items-center">
+                <svg class="w-4 h-4 text-neutral-400 mx-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                </svg>
+                {#if crumb.isLast}
+                <span class="text-neutral-900 font-medium" aria-current="page">
+                    {crumb.name}
+                </span>
+                {#else}
+                <a href="{crumb.url}" class="text-neutral-500 hover:text-neutral-700">
+                    {crumb.name}
+                </a>
+                {/if}
+            </li>
+            {/for}
+        </ol>
+    </div>
+</nav>
+{/if}
+
+<!-- Catalog Header -->
+<section class="bg-white border-b border-neutral-200">
+    <div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-neutral-900 mb-2">
+                    {categoryName ?: msg.all_products}
+                </h1>
+                {#if categoryDescription}
+                <p class="text-neutral-600 max-w-3xl">
+                    {categoryDescription}
+                </p>
+                {/if}
+            </div>
+
+            <!-- Mobile filter toggle -->
+            <button type="button"
+                    class="md:hidden mt-4 inline-flex items-center px-4 py-2 border border-neutral-300 rounded-lg bg-white text-neutral-700 hover:bg-neutral-50"
+                    data-filter-toggle
+                    aria-label="{msg.toggle_filters}">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                </svg>
+                {msg.filters}
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- Main Catalog Layout -->
+<div class="max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+
+        <!-- Filter Sidebar -->
+        <aside class="lg:col-span-1" data-filter-panel data-test="filters">
+            {#include components/filters.html filters=filters activeFilters=activeFilters /}
+        </aside>
+
+        <!-- Product Grid -->
+        <div class="lg:col-span-3">
+            <!-- Results header with sort -->
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 pb-4 border-b border-neutral-200">
+                <p class="text-sm text-neutral-600 mb-3 sm:mb-0">
+                    {msg.showing_results_count count=totalProducts}
+                </p>
+
+                <div class="flex items-center gap-2">
+                    <label for="sort-select" class="text-sm text-neutral-700 font-medium">
+                        {msg.sort_by}:
+                    </label>
+                    <select id="sort-select"
+                            name="sort"
+                            class="border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            data-sort-select>
+                        <option value="relevance" {#if sortBy == 'relevance'}selected{/if}>
+                            {msg.sort_relevance}
+                        </option>
+                        <option value="price-asc" {#if sortBy == 'price-asc'}selected{/if}>
+                            {msg.price_low_high}
+                        </option>
+                        <option value="price-desc" {#if sortBy == 'price-desc'}selected{/if}>
+                            {msg.price_high_low}
+                        </option>
+                        <option value="newest" {#if sortBy == 'newest'}selected{/if}>
+                            {msg.newest_first}
+                        </option>
+                        <option value="best-sellers" {#if sortBy == 'best-sellers'}selected{/if}>
+                            {msg.best_sellers}
+                        </option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Active Filters Pills -->
+            {#if activeFilters && activeFilters.size > 0}
+            <div class="mb-6">
+                <div class="flex items-center flex-wrap gap-2">
+                    <span class="text-sm font-medium text-neutral-700">{msg.active_filters}:</span>
+                    {#for filter in activeFilters}
+                    <button type="button"
+                            class="inline-flex items-center gap-2 px-3 py-1 bg-primary-50 text-primary-700 rounded-full text-sm hover:bg-primary-100 transition-colors"
+                            data-remove-filter="{filter.key}:{filter.value}">
+                        {filter.label}
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                    {/for}
+                    <button type="button"
+                            class="text-sm text-primary-600 hover:text-primary-700 font-medium ml-2"
+                            data-clear-filters>
+                        {msg.clear_all}
+                    </button>
+                </div>
+            </div>
+            {/if}
+
+            <!-- Product Grid -->
+            {#if products && products.size > 0}
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3" role="list">
+                {#for product in products}
+                {#include components/product-card.html product=product /}
+                {/for}
+            </div>
+
+            <!-- Pagination -->
+            {#if totalPages > 1}
+            <nav aria-label="{msg.pagination}" class="mt-12">
+                <div class="flex items-center justify-between border-t border-neutral-200 pt-6">
+                    <!-- Previous button -->
+                    <div class="flex-1 flex justify-start">
+                        {#if currentPage > 0}
+                        <a href="?page={currentPage - 1}{sortParam}{filterParams}"
+                           class="inline-flex items-center px-4 py-2 border border-neutral-300 rounded-lg bg-white text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                            {msg.previous}
+                        </a>
+                        {/if}
+                    </div>
+
+                    <!-- Page numbers -->
+                    <div class="hidden md:flex items-center gap-2">
+                        {#for page in pageNumbers}
+                        {#if page == currentPage}
+                        <span class="inline-flex items-center justify-center w-10 h-10 bg-primary-600 text-white font-medium rounded-lg">
+                            {page + 1}
+                        </span>
+                        {#else if page == -1}
+                        <span class="inline-flex items-center justify-center w-10 h-10 text-neutral-500">
+                            ...
+                        </span>
+                        {#else}
+                        <a href="?page={page}{sortParam}{filterParams}"
+                           class="inline-flex items-center justify-center w-10 h-10 border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50 rounded-lg">
+                            {page + 1}
+                        </a>
+                        {/if}
+                        {/for}
+                    </div>
+
+                    <!-- Page info (mobile) -->
+                    <div class="flex md:hidden">
+                        <span class="text-sm text-neutral-700">
+                            {msg.page_of current=currentPageDisplay total=totalPagesDisplay}
+                        </span>
+                    </div>
+
+                    <!-- Next button -->
+                    <div class="flex-1 flex justify-end">
+                        {#if currentPage < totalPages - 1}
+                        <a href="?page={currentPage + 1}{sortParam}{filterParams}"
+                           class="inline-flex items-center px-4 py-2 border border-neutral-300 rounded-lg bg-white text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+                            {msg.next}
+                            <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </a>
+                        {/if}
+                    </div>
+                </div>
+            </nav>
+            {/if}
+
+            {#else}
+            <!-- Empty State -->
+            <div class="text-center py-16">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-neutral-100 rounded-full mb-4">
+                    <svg class="w-10 h-10 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-neutral-900 mb-2">
+                    {msg.no_products_found}
+                </h3>
+                <p class="text-neutral-600 mb-6">
+                    {msg.no_products_found_desc}
+                </p>
+                {#if activeFilters && activeFilters.size > 0}
+                <button type="button"
+                        class="inline-flex items-center px-6 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                        data-clear-filters>
+                    {msg.clear_filters}
+                </button>
+                {#else}
+                <a href="/"
+                   class="inline-flex items-center px-6 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors">
+                    {msg.continue_shopping}
+                </a>
+                {/if}
+            </div>
+            {/if}
+        </div>
+    </div>
+</div>
+
+{/content}
+
+{#scripts}
+<script>
+// Progressive enhancement for filter panel toggle on mobile
+document.addEventListener('DOMContentLoaded', function() {
+    const filterToggle = document.querySelector('[data-filter-toggle]');
+    const filterPanel = document.querySelector('[data-filter-panel]');
+
+    if (filterToggle && filterPanel) {
+        // Initially hide on mobile
+        if (window.innerWidth < 1024) {
+            filterPanel.classList.add('hidden');
+        }
+
+        filterToggle.addEventListener('click', function() {
+            filterPanel.classList.toggle('hidden');
+        });
+    }
+
+    // Sort select handler
+    const sortSelect = document.querySelector('[data-sort-select]');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+            const url = new URL(window.location);
+            url.searchParams.set('sort', this.value);
+            url.searchParams.delete('page'); // Reset to first page on sort
+            window.location.href = url.toString();
+        });
+    }
+
+    // Filter removal handlers
+    document.querySelectorAll('[data-remove-filter]').forEach(button => {
+        button.addEventListener('click', function() {
+            const filterValue = this.dataset.removeFilter;
+            const url = new URL(window.location);
+            const [key, value] = filterValue.split(':');
+
+            // Remove the filter parameter
+            const currentValues = url.searchParams.getAll(key);
+            url.searchParams.delete(key);
+            currentValues.filter(v => v !== value).forEach(v => url.searchParams.append(key, v));
+            url.searchParams.delete('page'); // Reset to first page
+
+            window.location.href = url.toString();
+        });
+    });
+
+    // Clear all filters
+    const clearFilters = document.querySelectorAll('[data-clear-filters]');
+    clearFilters.forEach(button => {
+        button.addEventListener('click', function() {
+            const url = new URL(window.location);
+            // Keep only category/collection path, remove all query params
+            window.location.href = url.pathname;
+        });
+    });
+});
+</script>
+{/scripts}
+
+{/include}

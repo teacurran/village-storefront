@@ -2,40 +2,29 @@
   {
     "task_id": "I1.T1",
     "iteration_id": "I1",
-    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
-    "description": "Audit existing repo assets, ingest `docs/java-project-standards.adoc` + competitor research, and craft `docs/architecture_overview.md` overview plus ADR-001 describing layered modular monolith + tenancy approach; include risk register + decision log template.",
-    "agent_type_hint": "ArchitectureAgent",
-    "inputs": "Requirements brief, standards doc, competitor research notes.",
-    "target_files": [
-      "docs/architecture_overview.md",
-      "docs/adr/ADR-001-tenancy.md"
-    ],
-    "input_files": [
-      "docs/java-project-standards.adoc",
-      ".codemachine/inputs/competitor-research.md"
-    ],
-    "deliverables": "Updated overview doc linking sections 1-3, ADR covering tenancy + TenantContext contract, decision log template snippet.",
-    "acceptance_criteria": "Documents cite constraints, reference sections, include decision/rationale/implications; cross-link anchors inserted for manifest; reviewers can trace requirements to architecture choices.",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Initialize Maven multi-module workspace (`pom.xml`, module folders) plus baseline GitHub Actions pipeline and Spotless/JaCoCo configuration aligned to `docs/java-project-standards.adoc`.",
+    "agent_type_hint": "SetupAgent",
+    "inputs": "Foundation blueprint, java standards doc, repo README expectations.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "Maven parent + modules, CI workflow covering Spotless + JaCoCo + native build smoke, updated README explaining build targets.",
+    "acceptance_criteria": "Build passes `mvn -pl modules/core-platform clean verify`; CI workflow triggers on PR and enforces Spotless & coverage ≥80%; README includes quickstart for Maven + Quarkus dev mode.",
     "dependencies": [],
-    "parallelizable": true,
+    "parallelizable": false,
     "done": true
   },
   {
     "task_id": "I1.T2",
     "iteration_id": "I1",
-    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
-    "description": "Bootstrap spec-first OpenAPI baseline (`api/v1/openapi.yaml`) covering tenant resolution, auth, catalog placeholder, checkout placeholder, and platform admin endpoints; include reusable schemas (Money, Address, Pagination) and security schemes.",
-    "agent_type_hint": "APIDesignAgent",
-    "inputs": "Requirements (sections on APIs, auth, headless), ADR-001 decisions.",
-    "target_files": [
-      "api/v1/openapi.yaml"
-    ],
-    "input_files": [
-      "docs/architecture_overview.md",
-      ".codemachine/inputs/competitor-research.md"
-    ],
-    "deliverables": "Valid OpenAPI 3.0 YAML passing `spectral` lint (document lint command inline), with section comments linking planned endpoints.",
-    "acceptance_criteria": "Lints cleanly, defines tagging strategy (Storefront, Admin, Headless, Platform), enumerates auth flows + idempotency headers, includes placeholder schemas for core entities.",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Author PlantUML System Context + Container + Component diagrams describing actors, Quarkus modules, worker pods, and adapters; document diagram intent.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Requirements brief, Section 2 Core Architecture.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "Three diagrams plus Markdown commentary linking modules to deployment/integration concerns.",
+    "acceptance_criteria": "PlantUML renders without errors; diagrams include all actors (merchants, staff, consignors, platform admins, headless partners) and integrations (Stripe, R2, carriers, DNS, FFmpeg); Markdown summarises responsibilities + links to diagram anchors.",
     "dependencies": [
       "I1.T1"
     ],
@@ -45,19 +34,14 @@
   {
     "task_id": "I1.T3",
     "iteration_id": "I1",
-    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
-    "description": "Produce PlantUML component diagram (`docs/diagrams/component_overview.puml`) showing bounded contexts, adapters, queues, and external services; embed legend + anchor references for major flows.",
-    "agent_type_hint": "DiagrammingAgent",
-    "inputs": "ADR-001, architecture overview, requirements components.",
-    "target_files": [
-      "docs/diagrams/component_overview.puml"
-    ],
-    "input_files": [
-      "docs/architecture_overview.md",
-      "docs/adr/ADR-001-tenancy.md"
-    ],
-    "deliverables": "PlantUML diagram renderable via CLI with annotation of Quarkus modules, background workers, integrations.",
-    "acceptance_criteria": "Diagram compiles, contains all key modules from Section 2, indicates planned PlantUML include library, exports PNG for review (document command), matches textual description.",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Produce Mermaid ERD capturing multi-tenant schema (Tenant, StoreUser, Customer, SessionLog, FeatureFlag, Product, Variant, Inventory, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, Shipment, Return, LoyaltyLedger, GiftCard, StoreCredit, BackgroundJob, WebhookEvent, AuditEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket) with RLS annotations.",
+    "agent_type_hint": "DatabaseAgent",
+    "inputs": "Requirements data model, Section 2.1 artifacts list.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "ERD source, short narrative describing tenancy columns, indices, partition strategy.",
+    "acceptance_criteria": "Mermaid renders; each table includes tenant_id + metadata; doc explains RLS policy template, partitioned tables, archival approach; reviewed with Identity + Reporting stakeholders.",
     "dependencies": [
       "I1.T1"
     ],
@@ -67,48 +51,33 @@
   {
     "task_id": "I1.T4",
     "iteration_id": "I1",
-    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
-    "description": "Draft PlantUML ERD + initial MyBatis migration scaffolding; define schema for tenant, user, product, variant, catalog taxonomy, carts/orders/payments, consignment, loyalty, audit tables with tenant_id + metadata columns.",
-    "agent_type_hint": "DatabaseAgent",
-    "inputs": "OpenAPI baseline, component diagram, requirements (data model, tenancy, RLS, retention).",
-    "target_files": [
-      "docs/diagrams/datamodel_erd.puml",
-      "src/main/resources/db/migrations/V20260102__baseline_schema.sql"
-    ],
-    "input_files": [
-      "api/v1/openapi.yaml",
-      "docs/diagrams/component_overview.puml"
-    ],
-    "deliverables": "ERD diagram + SQL migration with tables, indexes, constraints placeholders, comments for RLS to be added later.",
-    "acceptance_criteria": "Diagram renders, migration applies cleanly against dev PostgreSQL, includes tenant_id + audit columns, sets up `flyway_schema_history` equivalent per standards, cross-references Section 5 contract.",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Draft OpenAPI 3.0 skeleton covering versioning, security schemes (JWT + OAuth client credentials), shared components (Money, Address, Pagination, Problem Details), and stub paths for tenants, auth, catalog, checkout, headless, platform admin; integrate with Quarkus and set up lint.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Requirements list, architecture plan, API contract style.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "Validated OpenAPI (passes `spectral lint` or equivalent), Quarkus config pointing to spec for code generation, README snippet on spec workflow.",
+    "acceptance_criteria": "`npm run lint:openapi` (or Maven plugin) succeeds; spec defines servers, tags, security schemes, base schemas; CI ensures spec diff check.",
     "dependencies": [
-      "I1.T2",
-      "I1.T3"
+      "I1.T1"
     ],
-    "parallelizable": false,
+    "parallelizable": true,
     "done": true
   },
   {
     "task_id": "I1.T5",
     "iteration_id": "I1",
-    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
-    "description": "Prototype Tenant Access Gateway + FeatureToggle skeleton (Quarkus filter, Caffeine cache) and capture tenant-routing sequence diagram; include smoke tests verifying host parsing, custom domain lookup, and context propagation.",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Implement TenantContext, TenantResolver (subdomain/custom domain), Request filter, and baseline MyBatis migrations for Tenant + StoreUser tables including RLS policies; add Caffeine caching shim.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "ADR-001, ERD (tenant/custom_domains tables), OpenAPI security sections.",
-    "target_files": [
-      "src/main/java/com/village/tenant/TenantFilter.java",
-      "src/main/java/com/village/tenant/TenantContext.java",
-      "docs/diagrams/sequence_tenant_routing.mmd",
-      "tests/backend/TenantFilterTest.java"
-    ],
-    "input_files": [
-      "docs/adr/ADR-001-tenancy.md",
-      "docs/diagrams/datamodel_erd.puml"
-    ],
-    "deliverables": "Minimal but compiling Quarkus filter + context bean, Caffeine config stub, unit tests for host parsing, Mermaid diagram of routing path.",
-    "acceptance_criteria": "Quarkus dev mode builds filter, tests cover subdomain/custom domain, diagram outlines host parsing\u2192TenantContext\u2192FeatureToggle; comments referencing Section 2/5 anchors.",
+    "inputs": "Requirements (multi-tenancy & SSL), ERD.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "Request filter populating TenantContext, Caffeine caching for host lookups, migrations creating tenants/store_users with RLS policies, unit/integration tests hitting dev Postgres profile.",
+    "acceptance_criteria": "Multi-tenant filter enforces 404 on unknown domain, populates feature flag placeholder; integration test using Quarkus dev service demonstrates RLS preventing cross-tenant selection; migration rollbacks tested; lint passes.",
     "dependencies": [
-      "I1.T4"
+      "I1.T3"
     ],
     "parallelizable": false,
     "done": true
@@ -116,28 +85,34 @@
   {
     "task_id": "I1.T6",
     "iteration_id": "I1",
-    "iteration_goal": "Produce authoritative specs (OpenAPI seed, component diagram, ERD, tenant routing flow), initial ADRs, and CI/quality scaffolding so downstream iterations can build confidently.",
-    "description": "Establish CI/CD scaffolding: GitHub Actions workflow running Maven (Spotless, tests, JaCoCo), npm lint/test for admin SPA, OpenAPI lint, PlantUML check; add `.github/workflows/ci.yml`, configure JaCoCo 80% rule, document pipeline in README + ADR-002 (quality gates).",
-    "agent_type_hint": "DevOpsAgent",
-    "inputs": "Standards doc, existing pom, iteration artifacts (OpenAPI, diagrams) for validation.",
-    "target_files": [
-      ".github/workflows/ci.yml",
-      "pom.xml",
-      "package.json",
-      "docs/adr/ADR-002-quality-gates.md",
-      "README.md"
-    ],
-    "input_files": [
-      "docs/java-project-standards.adoc",
-      "pom.xml",
-      "package.json"
-    ],
-    "deliverables": "Workflow file with matrix (JVM + native), npm scripts invoked, code coverage enforcement, README CI badge + instructions; ADR describing guardrails.",
-    "acceptance_criteria": "Workflow references correct commands, fails on formatting/coverage, README documents usage, ADR records trade-offs.",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Create Feature Flag governance matrix + README guidance; implement FeatureToggle service skeleton referencing PostgreSQL storage + Caffeine; include emergency kill switches for checkout/media/impersonation.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Section 4 directives, requirements.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "Governance doc (owner, rollout, expiry fields), service + repository stub, tests verifying cache + override precedence.",
+    "acceptance_criteria": "Service resolves platform default + tenant override + emergency flags; governance doc lists initial kill switches; README references process.",
     "dependencies": [
-      "I1.T2",
-      "I1.T3",
-      "I1.T4"
+      "I1.T5"
+    ],
+    "parallelizable": true,
+    "done": true
+  },
+  {
+    "task_id": "I1.T7",
+    "iteration_id": "I1",
+    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+    "description": "Provision local development tooling: docker-compose for Postgres, MinIO (S3), Mailhog, FFmpeg dependency validation; scripts for migrations and DelayedJob tables; update README quickstart.",
+    "agent_type_hint": "DevExAgent",
+    "inputs": "Requirements (local dev), docker instructions from blueprint.",
+    "target_files": [],
+    "input_files": [],
+    "deliverables": "Compose stack wired to Quarkus dev profile, helper script running migrations + seeding sample tenants, docs for FFmpeg install.",
+    "acceptance_criteria": "`docker compose up` starts dependencies, bootstrap script seeds tenant + staff; README outlines steps; Quarkus dev mode connects via `.env` variables.",
+    "dependencies": [
+      "I1.T1",
+      "I1.T5"
     ],
     "parallelizable": true,
     "done": true

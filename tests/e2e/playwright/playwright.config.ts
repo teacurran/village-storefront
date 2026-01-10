@@ -9,7 +9,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 4 : undefined, // Parallel execution for 20min limit
+  timeout: 60 * 1000, // 60 seconds per test
   reporter: process.env.CI
     ? [
         ['html', { outputFolder: '../../../target/playwright-report' }],
@@ -21,7 +22,8 @@ export default defineConfig({
     baseURL: process.env.BASE_URL || 'http://localhost:8080',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: 'on', // Always record video for debugging
+    actionTimeout: 15 * 1000, // 15 seconds for individual actions
   },
   projects: [
     {

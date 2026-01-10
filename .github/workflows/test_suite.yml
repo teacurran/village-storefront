@@ -74,6 +74,13 @@ jobs:
           npm ci
           npx playwright install --with-deps
 
+      - name: Configure multi-tenant DNS
+        run: |
+          echo "127.0.0.1 tenant-a.test.local" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 tenant-b.test.local" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 tenant-c.test.local" | sudo tee -a /etc/hosts
+          cat /etc/hosts
+
       - name: Start application
         run: |
           ./mvnw quarkus:dev &
@@ -81,6 +88,13 @@ jobs:
           timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/live; do sleep 2; done'
         env:
           MAVEN_OPTS: -Xmx2g
+
+      - name: Seed E2E test data
+        working-directory: tests/e2e/playwright
+        run: npm run seed:e2e
+        env:
+          DATABASE_URL: postgresql://storefront:storefront@localhost:5432/storefront
+          API_BASE_URL: http://localhost:8080
 
       - name: Run Playwright tests
         id: run-playwright
@@ -99,12 +113,12 @@ jobs:
           retention-days: 14
 
       - name: Upload Playwright videos
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-videos
           path: target/playwright-videos/
-          retention-days: 7
+          retention-days: 14
 
       - name: Upload Playwright screenshots
         if: failure()

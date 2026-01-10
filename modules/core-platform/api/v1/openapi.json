@@ -1,0 +1,5796 @@
+{
+  "openapi" : "3.1.0",
+  "components" : {
+    "schemas" : {
+      "AddToCartRequest" : {
+        "type" : "object",
+        "required" : [ "variantId", "quantity" ],
+        "properties" : {
+          "variantId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "quantity" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          }
+        }
+      },
+      "AddressDTO" : {
+        "type" : "object",
+        "properties" : {
+          "street1" : {
+            "type" : "string"
+          },
+          "street2" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "postalCode" : {
+            "type" : "string"
+          },
+          "country" : {
+            "type" : "string"
+          },
+          "residential" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "AddressValidationRequestDTO" : {
+        "type" : "object",
+        "properties" : {
+          "street1" : {
+            "type" : "string"
+          },
+          "street2" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          },
+          "postalCode" : {
+            "type" : "string"
+          },
+          "country" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AdjustPointsRequest" : {
+        "type" : "object",
+        "required" : [ "points", "reason" ],
+        "properties" : {
+          "points" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AdjustStoreCreditRequest" : {
+        "type" : "object",
+        "required" : [ "amount", "reason" ],
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "reason" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          }
+        }
+      },
+      "ApplyPromotionRequest" : {
+        "type" : "object",
+        "required" : [ "promoCode" ],
+        "properties" : {
+          "promoCode" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 50
+          }
+        }
+      },
+      "ApprovePrivacyRequestRequest" : {
+        "type" : "object",
+        "properties" : {
+          "approverEmail" : {
+            "type" : "string"
+          },
+          "approvalNotes" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CartDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "userId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "sessionId" : {
+            "type" : "string"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CartItemDto"
+            }
+          },
+          "subtotal" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "itemCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "expiresAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "createdAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "updatedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "loyalty" : {
+            "$ref" : "#/components/schemas/CartLoyaltySummary"
+          }
+        }
+      },
+      "CartItemDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "variantId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "productName" : {
+            "type" : "string"
+          },
+          "variantName" : {
+            "type" : "string"
+          },
+          "sku" : {
+            "type" : "string"
+          },
+          "quantity" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "unitPrice" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "lineTotal" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "createdAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "updatedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "CartLoyaltySummary" : {
+        "type" : "object",
+        "properties" : {
+          "programEnabled" : {
+            "type" : "boolean"
+          },
+          "programId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "memberPointsBalance" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedPointsEarned" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedRewardValue" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "availableRedemptionValue" : {
+            "$ref" : "#/components/schemas/Money"
+          },
+          "currentTier" : {
+            "type" : "string"
+          },
+          "dataFreshnessTimestamp" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "CategoryDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "parentId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "code" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 50
+          },
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 255
+          },
+          "slug" : {
+            "type" : "string",
+            "pattern" : "^[a-z0-9-]+$",
+            "maxLength" : 255
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 5000
+          },
+          "displayOrder" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "type" : "string",
+            "pattern" : "^(draft|active|archived|deleted)$"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "updatedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        },
+        "required" : [ "code", "name", "status" ]
+      },
+      "CheckGiftCardBalanceRequest" : {
+        "type" : "object",
+        "required" : [ "code" ],
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          }
+        }
+      },
+      "CheckoutCommitRequest" : {
+        "type" : "object",
+        "required" : [ "cartId", "customerEmail", "shippingAddress", "billingAddress", "paymentMethodId" ],
+        "properties" : {
+          "cartId" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "customerEmail" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "shippingAddress" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "billingAddress" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "shippingAmount" : {
+            "type" : "number"
+          },
+          "taxAmount" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "paymentMethodId" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "giftCardCodes" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "useStoreCredit" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "CheckoutResponse" : {
+        "type" : "object",
+        "properties" : {
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "orderNumber" : {
+            "type" : "string"
+          },
+          "paymentIntentId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalAmount" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "paidAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "CollectionDto" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "code" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 50
+          },
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 255
+          },
+          "slug" : {
+            "type" : "string",
+            "pattern" : "^[a-z0-9-]+$",
+            "maxLength" : 255
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 5000
+          },
+          "imageUrl" : {
+            "type" : "string",
+            "maxLength" : 500
+          },
+          "displayOrder" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "collectionType" : {
+            "type" : "string",
+            "pattern" : "^(manual|automatic)$"
+          },
+          "selectionRules" : {
+            "type" : "string"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "publishedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "status" : {
+            "type" : "string",
+            "pattern" : "^(draft|active|archived|deleted)$"
+          },
+          "seoTitle" : {
+            "type" : "string",
+            "maxLength" : 255
+          },
+          "seoDescription" : {
+            "type" : "string",
+            "maxLength" : 1000
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "updatedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        },
+        "required" : [ "code", "name", "collectionType", "status" ]
+      },
+      "CompletePairingRequest" : {
+        "type" : "object",
+        "properties" : {
+          "pairingCode" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ConvertGiftCardRequest" : {
+        "type" : "object",
+        "required" : [ "giftCardId", "userId" ],
+        "properties" : {
+          "giftCardId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "userId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "reason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateConsignmentItemRequest" : {
+        "type" : "object",
+        "required" : [ "productId", "commissionRate" ],
+        "properties" : {
+          "productId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "consignorId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "commissionRate" : {
+            "type" : "number",
+            "maximum" : 100.00,
+            "minimum" : 0.00
+          }
+        }
+      },
+      "CreateConsignorRequest" : {
+        "type" : "object",
+        "required" : [ "name" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "contactInfo" : {
+            "type" : "string"
+          },
+          "payoutSettings" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateInventoryAdjustmentRequest" : {
+        "type" : "object",
+        "required" : [ "variantId", "locationId", "quantityChange", "reason", "adjustedBy" ],
+        "properties" : {
+          "variantId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "locationId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "quantityChange" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reason" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "adjustedBy" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "notes" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateInventoryLocationRequest" : {
+        "type" : "object",
+        "required" : [ "code", "name" ],
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 100
+          },
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 255
+          },
+          "type" : {
+            "type" : "string",
+            "maxLength" : 50
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "active" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "CreateInventoryTransferRequest" : {
+        "type" : "object",
+        "required" : [ "sourceLocationId", "destinationLocationId", "lines" ],
+        "properties" : {
+          "sourceLocationId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "destinationLocationId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "initiatedBy" : {
+            "type" : "string"
+          },
+          "expectedArrivalDate" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "carrier" : {
+            "type" : "string"
+          },
+          "trackingNumber" : {
+            "type" : "string"
+          },
+          "shippingCost" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "lines" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/TransferLineRequest"
+            },
+            "minItems" : 1
+          }
+        }
+      },
+      "CreateOAuthClientRequest" : {
+        "type" : "object",
+        "required" : [ "name", "scopes" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 255
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 2000
+          },
+          "scopes" : {
+            "type" : "array",
+            "uniqueItems" : true,
+            "items" : {
+              "type" : "string"
+            },
+            "minItems" : 1
+          },
+          "rateLimitPerMinute" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 100
+          }
+        }
+      },
+      "CspReport" : {
+        "type" : "object",
+        "properties" : {
+          "document-uri" : {
+            "type" : "string"
+          },
+          "violated-directive" : {
+            "type" : "string"
+          },
+          "effective-directive" : {
+            "type" : "string"
+          },
+          "original-policy" : {
+            "type" : "string"
+          },
+          "blocked-uri" : {
+            "type" : "string"
+          },
+          "referrer" : {
+            "type" : "string"
+          },
+          "status-code" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "source-file" : {
+            "type" : "string"
+          },
+          "line-number" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "column-number" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "CspViolationReport" : {
+        "type" : "object",
+        "properties" : {
+          "csp-report" : {
+            "$ref" : "#/components/schemas/CspReport"
+          }
+        }
+      },
+      "DevicePairingRequest" : {
+        "type" : "object",
+        "properties" : {
+          "deviceIdentifier" : {
+            "type" : "string"
+          },
+          "deviceName" : {
+            "type" : "string"
+          },
+          "locationName" : {
+            "type" : "string"
+          },
+          "hardwareModel" : {
+            "type" : "string"
+          }
+        }
+      },
+      "HealthResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ImpersonationRequest" : {
+        "type" : "object",
+        "properties" : {
+          "targetTenantId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "targetUserId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "ticketNumber" : {
+            "type" : "string"
+          }
+        }
+      },
+      "InvalidateFeatureFlagRequest" : {
+        "type" : "object",
+        "properties" : {
+          "reason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "IssueGiftCardRequest" : {
+        "type" : "object",
+        "required" : [ "initialBalance" ],
+        "properties" : {
+          "initialBalance" : {
+            "type" : "number",
+            "minimum" : 0.01
+          },
+          "currency" : {
+            "type" : "string",
+            "minLength" : 3,
+            "maxLength" : 3
+          },
+          "purchaserUserId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "purchaserEmail" : {
+            "type" : "string"
+          },
+          "recipientEmail" : {
+            "type" : "string"
+          },
+          "recipientName" : {
+            "type" : "string"
+          },
+          "personalMessage" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "sourceOrderId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "LabelRequestDTO" : {
+        "type" : "object",
+        "properties" : {
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "carrierCode" : {
+            "type" : "string"
+          },
+          "serviceLevel" : {
+            "type" : "string"
+          },
+          "origin" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "destination" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "packageInfo" : {
+            "$ref" : "#/components/schemas/PackageDTO"
+          },
+          "returnAddress" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LoyaltyTierConfigRequest" : {
+        "type" : "object",
+        "required" : [ "name" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "minPoints" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "multiplier" : {
+            "type" : "number",
+            "exclusiveMinimum" : 0.0
+          }
+        }
+      },
+      "MediaUploadCompleteRequest" : {
+        "type" : "object",
+        "properties" : {
+          "checksumSha256" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MediaUploadNegotiationRequest" : {
+        "type" : "object",
+        "required" : [ "filename", "contentType", "fileSize", "assetType" ],
+        "properties" : {
+          "filename" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "contentType" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "fileSize" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "assetType" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "maxDownloadAttempts" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          }
+        }
+      },
+      "Money" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : "string"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "amountAsDecimal" : {
+            "type" : "number"
+          }
+        }
+      },
+      "OfflineBatchUploadRequest" : {
+        "type" : "object",
+        "properties" : {
+          "deviceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "firmwareVersion" : {
+            "type" : "string"
+          },
+          "transactions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/OfflineTransactionUpload"
+            }
+          }
+        }
+      },
+      "OfflineTransactionUpload" : {
+        "type" : "object",
+        "properties" : {
+          "localTransactionId" : {
+            "type" : "string"
+          },
+          "encryptedPayload" : {
+            "type" : "string"
+          },
+          "encryptionIv" : {
+            "type" : "string"
+          },
+          "encryptionKeyVersion" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "transactionTimestamp" : {
+            "type" : "string"
+          },
+          "transactionAmount" : {
+            "type" : "number"
+          },
+          "idempotencyKey" : {
+            "type" : "string"
+          },
+          "priority" : {
+            "type" : "string"
+          }
+        }
+      },
+      "OffsetDateTime" : {
+        "type" : "string",
+        "format" : "date-time",
+        "examples" : [ "2022-03-10T12:15:50-04:00" ]
+      },
+      "PackageDTO" : {
+        "type" : "object",
+        "properties" : {
+          "weightOz" : {
+            "type" : "number"
+          },
+          "lengthIn" : {
+            "type" : "number"
+          },
+          "widthIn" : {
+            "type" : "number"
+          },
+          "heightIn" : {
+            "type" : "number"
+          },
+          "declaredValue" : {
+            "type" : "number"
+          },
+          "description" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PlatformEvent" : {
+        "type" : "object"
+      },
+      "RateRequestDTO" : {
+        "type" : "object",
+        "properties" : {
+          "origin" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "destination" : {
+            "$ref" : "#/components/schemas/AddressDTO"
+          },
+          "packageInfo" : {
+            "$ref" : "#/components/schemas/PackageDTO"
+          },
+          "serviceLevels" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "RecordConsentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "customerId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "channel" : {
+            "type" : "string"
+          },
+          "consented" : {
+            "type" : "boolean"
+          },
+          "consentSource" : {
+            "type" : "string"
+          },
+          "consentMethod" : {
+            "type" : "string"
+          },
+          "ipAddress" : {
+            "type" : "string"
+          },
+          "userAgent" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RedeemGiftCardRequest" : {
+        "type" : "object",
+        "required" : [ "code", "amount" ],
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "amount" : {
+            "type" : "number",
+            "minimum" : 0.01
+          },
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "idempotencyKey" : {
+            "type" : "string"
+          },
+          "posDeviceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "offlineSyncedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "RedeemPointsRequest" : {
+        "type" : "object",
+        "required" : [ "pointsToRedeem" ],
+        "properties" : {
+          "pointsToRedeem" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          },
+          "idempotencyKey" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RedeemStoreCreditRequest" : {
+        "type" : "object",
+        "required" : [ "amount" ],
+        "properties" : {
+          "amount" : {
+            "type" : "number",
+            "minimum" : 0.01
+          },
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "idempotencyKey" : {
+            "type" : "string"
+          },
+          "posDeviceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "offlineSyncedAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "ShippingProfileRequest" : {
+        "type" : "object",
+        "required" : [ "name", "enabledCarriers", "originAddress" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "isDefault" : {
+            "type" : "boolean"
+          },
+          "enabledCarriers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "pattern" : "\\S"
+            },
+            "minItems" : 1
+          },
+          "originAddress" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "carrierCredentials" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "metadata" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          },
+          "active" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "SubmitPrivacyRequestRequest" : {
+        "type" : "object",
+        "properties" : {
+          "requestType" : {
+            "type" : "string"
+          },
+          "requesterEmail" : {
+            "type" : "string"
+          },
+          "subjectEmail" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "ticketNumber" : {
+            "type" : "string"
+          }
+        }
+      },
+      "TransferLineRequest" : {
+        "type" : "object",
+        "required" : [ "variantId", "quantity" ],
+        "properties" : {
+          "variantId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "quantity" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "notes" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UUID" : {
+        "type" : "string",
+        "format" : "uuid",
+        "pattern" : "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+      },
+      "UpdateCartItemRequest" : {
+        "type" : "object",
+        "required" : [ "quantity" ],
+        "properties" : {
+          "quantity" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          }
+        }
+      },
+      "UpdateFeatureFlagRequest" : {
+        "type" : "object",
+        "properties" : {
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "owner" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "reviewCadenceDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "expiryDate" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "rollbackInstructions" : {
+            "type" : "string"
+          },
+          "markReviewed" : {
+            "type" : "boolean"
+          },
+          "reason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpdateGiftCardRequest" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "$ref" : "#/components/schemas/OffsetDateTime"
+          },
+          "reason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpdateOrderRequest" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "tags" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "UpsertLoyaltyProgramRequest" : {
+        "type" : "object",
+        "required" : [ "name", "pointsPerDollar", "redemptionValuePerPoint", "minRedemptionPoints", "tiers" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "pointsPerDollar" : {
+            "type" : "number",
+            "exclusiveMinimum" : 0.0
+          },
+          "redemptionValuePerPoint" : {
+            "type" : "number",
+            "exclusiveMinimum" : 0.0
+          },
+          "minRedemptionPoints" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          },
+          "maxRedemptionPoints" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "pointsExpirationDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "tiers" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LoyaltyTierConfigRequest"
+            },
+            "minItems" : 1
+          },
+          "metadata" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          }
+        }
+      }
+    }
+  },
+  "paths" : {
+    "/" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "lang",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Index",
+        "tags" : [ "Storefront Resource" ]
+      }
+    },
+    "/account" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "lang",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Account",
+        "tags" : [ "Storefront Resource" ]
+      }
+    },
+    "/api/pos/devices" : {
+      "get" : {
+        "summary" : "List POS devices",
+        "description" : "Get all active POS devices for current tenant",
+        "tags" : [ "POS Offline" ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/pos/devices/complete-pairing" : {
+      "post" : {
+        "summary" : "Complete device pairing",
+        "description" : "Activate device using pairing code",
+        "tags" : [ "POS Offline" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CompletePairingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/pos/devices/pair" : {
+      "post" : {
+        "summary" : "Initiate device pairing",
+        "description" : "Generate pairing code for new POS device",
+        "tags" : [ "POS Offline" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DevicePairingRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/pos/devices/{deviceId}/terminal/token" : {
+      "post" : {
+        "summary" : "Create Stripe Terminal connection token",
+        "description" : "Request a new connection token for an active POS device",
+        "tags" : [ "POS Offline" ],
+        "parameters" : [ {
+          "name" : "deviceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/pos/offline/status/{deviceId}" : {
+      "get" : {
+        "summary" : "Get offline sync status",
+        "description" : "Check sync queue status for device",
+        "tags" : [ "POS Offline" ],
+        "parameters" : [ {
+          "name" : "deviceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/pos/offline/upload" : {
+      "post" : {
+        "summary" : "Upload offline batch",
+        "description" : "Upload encrypted offline transactions for sync",
+        "tags" : [ "POS Offline" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/OfflineBatchUploadRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/admin/catalog/categories" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Categories",
+        "tags" : [ "Catalog Admin Resource" ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CategoryDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Category",
+        "tags" : [ "Catalog Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/catalog/categories/{categoryId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "categoryId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CategoryDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Category",
+        "tags" : [ "Catalog Admin Resource" ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "categoryId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Category",
+        "tags" : [ "Catalog Admin Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "categoryId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete Category",
+        "tags" : [ "Catalog Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/catalog/collections" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Collections",
+        "tags" : [ "Catalog Admin Resource" ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CollectionDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Collection",
+        "tags" : [ "Catalog Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/catalog/collections/{collectionId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "collectionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CollectionDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Collection",
+        "tags" : [ "Catalog Admin Resource" ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "collectionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Collection",
+        "tags" : [ "Catalog Admin Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "collectionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete Collection",
+        "tags" : [ "Catalog Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/catalog/export" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Export Catalog",
+        "tags" : [ "Catalog Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/catalog/import" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Import Catalog",
+        "tags" : [ "Catalog Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/consignors" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Consignors",
+        "tags" : [ "Consignment Resource" ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateConsignorRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Consignor",
+        "tags" : [ "Consignment Resource" ]
+      }
+    },
+    "/api/v1/admin/consignors/{consignorId}/items" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "consignorId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Consignment Items",
+        "tags" : [ "Consignment Resource" ]
+      },
+      "post" : {
+        "parameters" : [ {
+          "name" : "consignorId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateConsignmentItemRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Consignment Item",
+        "tags" : [ "Consignment Resource" ]
+      }
+    },
+    "/api/v1/admin/consignors/{consignorId}/payouts" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "consignorId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Payout Batches",
+        "tags" : [ "Consignment Resource" ]
+      },
+      "post" : {
+        "parameters" : [ {
+          "name" : "consignorId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "periodEnd",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "periodStart",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Create Payout Batch",
+        "tags" : [ "Consignment Resource" ]
+      }
+    },
+    "/api/v1/admin/consignors/{id}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateConsignorRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Consignor",
+        "tags" : [ "Consignment Resource" ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Consignor",
+        "tags" : [ "Consignment Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete Consignor",
+        "tags" : [ "Consignment Resource" ]
+      }
+    },
+    "/api/v1/admin/gift-cards" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Gift Cards",
+        "tags" : [ "Gift Card Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/IssueGiftCardRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Issue Gift Card",
+        "tags" : [ "Gift Card Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/gift-cards/{giftCardId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "giftCardId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateGiftCardRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Gift Card",
+        "tags" : [ "Gift Card Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "giftCardId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Gift Card",
+        "tags" : [ "Gift Card Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/inventory/adjustments" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateInventoryAdjustmentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Adjustment",
+        "tags" : [ "Inventory Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/inventory/locations" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Locations",
+        "tags" : [ "Inventory Admin Resource" ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateInventoryLocationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Location",
+        "tags" : [ "Inventory Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/inventory/transfers" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Transfers",
+        "tags" : [ "Inventory Admin Resource" ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateInventoryTransferRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Transfer",
+        "tags" : [ "Inventory Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/inventory/transfers/{transferId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "transferId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Transfer",
+        "tags" : [ "Inventory Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/inventory/transfers/{transferId}/receive" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "transferId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Receive Transfer",
+        "tags" : [ "Inventory Admin Resource" ]
+      }
+    },
+    "/api/v1/admin/loyalty/adjust/{userId}" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AdjustPointsRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Adjust Points",
+        "tags" : [ "Loyalty Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/loyalty/program" : {
+      "put" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpsertLoyaltyProgramRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Upsert Program",
+        "tags" : [ "Loyalty Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Program Admin",
+        "tags" : [ "Loyalty Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Clients",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateOAuthClientRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients/{clientId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateOAuthClientRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients/{clientId}/regenerate-secret" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Regenerate Secret",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients/{clientId}/revoke" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Revoke Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/orders" : {
+      "get" : {
+        "summary" : "List all tenant orders (Admin)",
+        "description" : "Returns a paginated list of all orders for the current tenant with advanced filtering,\nsearching, and sorting capabilities. Admin-only endpoint.\n\n**Authentication:** Requires admin role.\n**Filtering:** Filter by order status (pending_payment, processing, shipped, delivered, cancelled, refunded).\n**Search:** Search by order number or customer email.\n**Sorting:** Sort by order number, customer email, status, total amount, or created date.\n",
+        "tags" : [ "Admin" ],
+        "parameters" : [ {
+          "description" : "Page number (1-indexed)",
+          "example" : 1,
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "description" : "Items per page (max 100)",
+          "example" : 20,
+          "name" : "pageSize",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "description" : "Search by order number or customer email",
+          "example" : "ORD-2026-00042",
+          "name" : "search",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Field to sort by",
+          "example" : "createdAt",
+          "name" : "sortBy",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Sort direction (asc or desc)",
+          "example" : "desc",
+          "name" : "sortOrder",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "description" : "Filter by order status",
+          "example" : "processing",
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Orders retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderListResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid filter or sort parameters",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/{orderId}" : {
+      "patch" : {
+        "summary" : "Update order (Admin)",
+        "description" : "Updates order status, admin notes, or tags. Partial update - only provided fields are modified.\n\n**Authentication:** Requires admin role.\n**Status Transitions:** Some status changes may be restricted (see OrderService for state machine rules).\n**Optimistic Locking:** Returns HTTP 409 if order was modified concurrently.\n\nUse dedicated endpoints for cancellation (/cancel) and refunds (/refund).\n",
+        "tags" : [ "Admin" ],
+        "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
+          "name" : "orderId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateOrderRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Order updated successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (invalid status, illegal state transition)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Optimistic lock exception (order was modified concurrently)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      },
+      "get" : {
+        "summary" : "Get order details (Admin)",
+        "description" : "Returns complete order details including all fields visible to admins\n(notes, tags, internal metadata).\n\n**Authentication:** Requires admin role.\n**Tenant isolation:** Returns 404 if order belongs to different tenant.\n",
+        "tags" : [ "Admin" ],
+        "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
+          "name" : "orderId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Order retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/{orderId}/cancel" : {
+      "post" : {
+        "summary" : "Cancel order (Admin)",
+        "description" : "Cancels an order with a required reason. Optionally triggers refund if payment was captured.\n\n**Authentication:** Requires admin role.\n**State Machine:** Only certain order statuses can be cancelled (see OrderService rules).\n**Inventory:** Cancelled orders should restore inventory (future enhancement).\n",
+        "tags" : [ "Admin" ],
+        "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
+          "name" : "orderId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Order cancelled successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (missing reason, illegal state for cancellation)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/{orderId}/refund" : {
+      "post" : {
+        "summary" : "Refund order (Admin)",
+        "description" : "Issues a refund for an order via the payment provider (Stripe). Supports partial or full refunds.\n\n**Authentication:** Requires admin role.\n**Idempotent:** Requires X-Idempotency-Key header to prevent duplicate refunds.\n**Payment Provider:** Integrates with Stripe Refunds API.\n**Status:** Currently returns placeholder response (full implementation pending in I3.T3).\n",
+        "tags" : [ "Admin" ],
+        "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
+          "name" : "orderId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "description" : "Idempotency key (UUID v4) for safe retries",
+          "required" : true,
+          "name" : "X-Idempotency-Key",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Refund initiated successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RefundResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (missing idempotency key, invalid refund amount)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Order not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/reports/aggregates/consignment-payouts" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "consignorId",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "endDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "startDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Consignment Payout Aggregates",
+        "tags" : [ "Reports Resource" ]
+      }
+    },
+    "/api/v1/admin/reports/aggregates/inventory-aging" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "locationId",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "minDays",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Inventory Aging Aggregates",
+        "tags" : [ "Reports Resource" ]
+      }
+    },
+    "/api/v1/admin/reports/aggregates/sales" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "endDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "startDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Sales Aggregates",
+        "tags" : [ "Reports Resource" ]
+      }
+    },
+    "/api/v1/admin/reports/jobs" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Export Jobs",
+        "tags" : [ "Reports Resource" ]
+      }
+    },
+    "/api/v1/admin/reports/jobs/{jobId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Export Job Status",
+        "tags" : [ "Reports Resource" ]
+      }
+    },
+    "/api/v1/admin/reports/{reportType}/export" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "reportType",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Request Export",
+        "tags" : [ "Reports Resource" ]
+      }
+    },
+    "/api/v1/admin/store-credit/accounts" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Accounts",
+        "tags" : [ "Store Credit Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/store-credit/adjust/{userId}" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AdjustStoreCreditRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Adjust",
+        "tags" : [ "Store Credit Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/store-credit/convert-gift-card" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ConvertGiftCardRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Convert Gift Card",
+        "tags" : [ "Store Credit Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/cart" : {
+      "get" : {
+        "summary" : "Get current user's cart",
+        "description" : "Returns the active cart for the authenticated user or guest session.\nIncludes all line items with calculated totals.\n\n**Authentication:** Optional - guest carts tracked via session, user carts via JWT.\nProvide the X-Session-Id header (or rely on the vs_session cookie issued by the API) to continue a guest cart.\n",
+        "tags" : [ "Storefront" ],
+        "responses" : {
+          "200" : {
+            "description" : "Cart retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartDto"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "No active cart found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "summary" : "Clear all items from cart",
+        "description" : "Removes all line items from the cart. The cart entity itself remains\nand can be reused for future items.\n",
+        "tags" : [ "Storefront" ],
+        "responses" : {
+          "204" : {
+            "description" : "Cart cleared successfully"
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/items" : {
+      "post" : {
+        "summary" : "Add item to cart",
+        "description" : "Adds a product variant to the cart with specified quantity.\nIf the variant already exists in the cart, the quantities are merged.\n\n**Price Snapshot:** The current variant price is captured at add-to-cart\ntime to prevent cart total changes when product prices are updated.\n\n**Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie to add to the same anonymous cart.\n",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AddToCartRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Item added to cart successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartItemDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Validation error (invalid variant, negative quantity, etc.)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Product variant not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Optimistic lock exception (concurrent modification detected)",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/items/{itemId}" : {
+      "patch" : {
+        "summary" : "Update cart item quantity",
+        "description" : "Updates the quantity of a specific cart line item.\n\n**Optimistic Locking:** Returns HTTP 409 if concurrent modification detected.\n",
+        "tags" : [ "Storefront" ],
+        "parameters" : [ {
+          "description" : "Cart item UUID",
+          "required" : true,
+          "name" : "itemId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateCartItemRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Cart item updated successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartItemDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Validation error (negative quantity, etc.)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart item not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Optimistic lock exception (concurrent modification detected)",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "summary" : "Remove item from cart",
+        "description" : "Removes a specific line item from the cart.",
+        "tags" : [ "Storefront" ],
+        "parameters" : [ {
+          "description" : "Cart item UUID",
+          "required" : true,
+          "name" : "itemId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Cart item removed successfully"
+          },
+          "404" : {
+            "description" : "Cart item not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/promotions" : {
+      "delete" : {
+        "summary" : "Remove promotion from cart",
+        "description" : "Removes the applied discount code from the cart and recalculates totals.\n\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie.\n",
+        "operationId" : "removePromotion",
+        "tags" : [ "Storefront" ],
+        "responses" : {
+          "200" : {
+            "description" : "Promotion removed successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartDto"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      },
+      "post" : {
+        "summary" : "Apply promotion code to cart",
+        "description" : "Applies a discount code to the current cart. Validates the promotion code against\nexpiry dates, usage limits, and minimum order requirements.\n\n**Validation:**\n- Promotion must be active and not expired\n- Usage limits (global and per-customer) enforced\n- Minimum order amount validated (if configured)\n- Only one promotion per cart (replaces existing)\n\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie.\n",
+        "operationId" : "applyPromotion",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApplyPromotionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Promotion applied successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CartDto"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid promotion code (expired, usage limit exceeded, minimum not met)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart or promotion not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/totals" : {
+      "get" : {
+        "summary" : "Get cart totals",
+        "description" : "Returns a breakdown of cart pricing including subtotal, applied discounts,\nestimated tax (if configured), and grand total.\n\n**Note:** Tax and shipping are not calculated until checkout.\nThis endpoint provides subtotal and discount only.\n\n**Guest Session:** Provide X-Session-Id or use the vs_session cookie.\n",
+        "operationId" : "getCartTotals",
+        "tags" : [ "Storefront" ],
+        "responses" : {
+          "200" : {
+            "description" : "Cart totals retrieved successfully",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/products" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "category",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "collection",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "search",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Products",
+        "tags" : [ "Product Resource" ]
+      }
+    },
+    "/api/v1/catalog/products/{productId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "productId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Product",
+        "tags" : [ "Product Resource" ]
+      }
+    },
+    "/api/v1/catalog/products/{productId}/variant-matrix" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "productId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Variant Matrix",
+        "tags" : [ "Product Resource" ]
+      }
+    },
+    "/api/v1/checkout/commit" : {
+      "post" : {
+        "summary" : "Complete checkout and create order",
+        "description" : "Atomically:\n1. Validates cart and inventory availability\n2. Creates order record\n3. Processes payment via Stripe\n4. Reduces inventory\n5. Clears cart\n\n**Idempotent:** Uses X-Idempotency-Key header to prevent duplicate orders.\n**Requires authentication:** Must be logged-in customer or use valid API key.\n",
+        "tags" : [ "Storefront" ],
+        "parameters" : [ {
+          "description" : "Idempotency key (UUID v4) for safe retries",
+          "required" : true,
+          "name" : "X-Idempotency-Key",
+          "in" : "header",
+          "schema" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CheckoutCommitRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Order successfully created and payment charged",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CheckoutResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (validation errors, out of stock, etc.)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "402" : {
+            "description" : "Payment required (payment method declined)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Duplicate idempotency key (order already created or in-flight request)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "503" : {
+            "description" : "Service unavailable (checkout feature disabled)",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/checkout/shipping-rates" : {
+      "post" : {
+        "summary" : "Get shipping rate quotes",
+        "description" : "Returns available shipping options (Standard, Express, Overnight) with calculated\nrates based on cart weight, dimensions, and destination address.\n\n**Use Case:** Call this during checkout step 2 (after address validation) to display shipping options.\n**Provider:** Uses configured shipping provider (Shippo, EasyPost, etc.).\n**Authentication:** Optional - supports both guest and authenticated sessions.\n\n**Note:** Rates are estimates and may change at order creation time.\n",
+        "operationId" : "getShippingRates",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : { }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Shipping rates calculated successfully",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request (missing cart ID, invalid address)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Cart not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/checkout/validate-address" : {
+      "post" : {
+        "summary" : "Validate shipping address",
+        "description" : "Validates a shipping address using USPS or Lob API. Returns normalized address\nif valid, or validation errors if invalid.\n\n**Use Case:** Call this during checkout step 1 to verify address before proceeding.\n**Feature Flag:** Respects `checkout.address-validation.enabled` flag.\n**Authentication:** Optional - supports both guest and authenticated sessions.\n",
+        "operationId" : "validateAddress",
+        "tags" : [ "Storefront" ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Address validation completed (may contain errors)",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request format",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/csp-report" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CspViolationReport"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Report Violation",
+        "tags" : [ "Csp Report Resource" ]
+      }
+    },
+    "/api/v1/gift-cards/check-balance" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CheckGiftCardBalanceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Check Balance",
+        "tags" : [ "Gift Card Resource" ]
+      }
+    },
+    "/api/v1/gift-cards/redeem" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Idempotency-Key",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RedeemGiftCardRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Redeem",
+        "tags" : [ "Gift Card Resource" ]
+      }
+    },
+    "/api/v1/gift-cards/transactions/{giftCardId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "giftCardId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Transactions",
+        "tags" : [ "Gift Card Resource" ]
+      }
+    },
+    "/api/v1/headless/cart" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "X-Session-Id",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Cart",
+        "tags" : [ "Headless Cart Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "X-Session-Id",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Clear Cart",
+        "tags" : [ "Headless Cart Resource" ]
+      }
+    },
+    "/api/v1/headless/cart/items" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Session-Id",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AddToCartRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Add To Cart",
+        "tags" : [ "Headless Cart Resource" ]
+      }
+    },
+    "/api/v1/headless/cart/items/{itemId}" : {
+      "patch" : {
+        "parameters" : [ {
+          "name" : "itemId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Session-Id",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateCartItemRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Update Cart Item",
+        "tags" : [ "Headless Cart Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "itemId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Session-Id",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Remove Cart Item",
+        "tags" : [ "Headless Cart Resource" ]
+      }
+    },
+    "/api/v1/headless/catalog/products" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "search",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Products",
+        "tags" : [ "Headless Catalog Resource" ]
+      }
+    },
+    "/api/v1/headless/catalog/products/{productId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "productId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Product",
+        "tags" : [ "Headless Catalog Resource" ]
+      }
+    },
+    "/api/v1/health" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Health Check",
+        "tags" : [ "Health Resource" ]
+      }
+    },
+    "/api/v1/loyalty/enroll/{userId}" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Enroll Member",
+        "tags" : [ "Loyalty Resource" ]
+      }
+    },
+    "/api/v1/loyalty/member/{userId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Member",
+        "tags" : [ "Loyalty Resource" ]
+      }
+    },
+    "/api/v1/loyalty/program" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Program",
+        "tags" : [ "Loyalty Resource" ]
+      }
+    },
+    "/api/v1/loyalty/redeem/{userId}" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Idempotency-Key",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RedeemPointsRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Redeem Points",
+        "tags" : [ "Loyalty Resource" ]
+      }
+    },
+    "/api/v1/loyalty/transactions/{userId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Transaction History",
+        "tags" : [ "Loyalty Resource" ]
+      }
+    },
+    "/api/v1/media" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "type",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Assets",
+        "tags" : [ "Media Resource" ]
+      }
+    },
+    "/api/v1/media/upload/negotiate" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MediaUploadNegotiationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Negotiate Upload",
+        "tags" : [ "Media Resource" ]
+      }
+    },
+    "/api/v1/media/{assetId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "assetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Asset",
+        "tags" : [ "Media Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "assetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete Asset",
+        "tags" : [ "Media Resource" ]
+      }
+    },
+    "/api/v1/media/{assetId}/complete" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "assetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MediaUploadCompleteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Complete Upload",
+        "tags" : [ "Media Resource" ]
+      }
+    },
+    "/api/v1/media/{assetId}/download" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "assetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "derivativeType",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Signed Download",
+        "tags" : [ "Media Resource" ]
+      }
+    },
+    "/api/v1/orders" : {
+      "get" : {
+        "summary" : "List customer orders",
+        "description" : "Returns a paginated list of orders for the authenticated customer.\nResults are sorted by creation date (newest first).\n\n**Authentication:** Required - returns orders for the authenticated user only.\n**Pagination:** Default page size is 20, maximum is 100.\n",
+        "tags" : [ "Storefront" ],
+        "parameters" : [ {
+          "description" : "Page number (1-indexed)",
+          "example" : 1,
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "description" : "Items per page (max 100)",
+          "example" : 20,
+          "name" : "pageSize",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "description" : "Filter by order status",
+          "example" : "shipped",
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Orders retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderListResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid status filter",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{orderId}" : {
+      "get" : {
+        "summary" : "Get order details",
+        "description" : "Returns complete order details including line items, payment status, shipping address,\nand fulfillment tracking information.\n\n**Authentication:** Required - customers can only access their own orders.\n**Admin users:** Can access all orders within their tenant.\n",
+        "tags" : [ "Storefront" ],
+        "parameters" : [ {
+          "description" : "Order UUID",
+          "required" : true,
+          "name" : "orderId",
+          "in" : "path",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Order retrieved successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/OrderDetail"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Order not found or belongs to different tenant",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Internal server error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/audit" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "action",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "actorId",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "endDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "startDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "targetType",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Query Audit Logs",
+        "tags" : [ "Audit Log Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/audit/export" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "action",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "actorId",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "endDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "startDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "targetType",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Export Audit Logs",
+        "tags" : [ "Audit Log Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/audit/stats" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "days",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Audit Stats",
+        "tags" : [ "Audit Log Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/marketing-consents" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RecordConsentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Record Consent",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/marketing-consents/customer/{customerId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "customerId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Customer Consents",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/metrics" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Metrics",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/privacy-requests" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "type",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Privacy Requests",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/privacy-requests/delete" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SubmitPrivacyRequestRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Submit Delete Request",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/privacy-requests/export" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SubmitPrivacyRequestRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Submit Export Request",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/privacy-requests/{requestId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Privacy Request",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/compliance/privacy-requests/{requestId}/approve" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApprovePrivacyRequestRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Approve Privacy Request",
+        "tags" : [ "Compliance Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/events" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PlatformEvent"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Stream Events",
+        "tags" : [ "Platform Events Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/feature-flags" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "stale_only",
+          "in" : "query",
+          "schema" : {
+            "type" : "boolean"
+          }
+        }, {
+          "name" : "tenant_id",
+          "in" : "query",
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Flags",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      }
+    },
+    "/api/v1/platform/feature-flags/stale-report" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Stale Flag Report",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      }
+    },
+    "/api/v1/platform/feature-flags/{id}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateFeatureFlagRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Flag",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Flag",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Delete Flag",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      }
+    },
+    "/api/v1/platform/feature-flags/{id}/history" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Flag History",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      }
+    },
+    "/api/v1/platform/feature-flags/{id}/invalidate" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InvalidateFeatureFlagRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Invalidate Flag",
+        "tags" : [ "Feature Flag Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "manage_feature_flags" ]
+        } ]
+      }
+    },
+    "/api/v1/platform/health" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get System Health",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/impersonate" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "User-Agent",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "X-Forwarded-For",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ImpersonationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Start Impersonation",
+        "tags" : [ "Impersonation Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "User-Agent",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "X-Forwarded-For",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "End Impersonation",
+        "tags" : [ "Impersonation Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/impersonate/current" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Current Impersonation",
+        "tags" : [ "Impersonation Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/stores" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "search",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Store Directory",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/stores/{storeId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "storeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Store Details",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/stores/{storeId}/reactivate" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "storeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Reactivate Store",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/stores/{storeId}/suspend" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "storeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : {
+                  "type" : "string"
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Suspend Store",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/shipping/labels" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LabelRequestDTO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Label",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/shipping/labels/{labelId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "labelId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Label",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/shipping/profiles" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Profiles",
+        "tags" : [ "Shipping Profile Resource" ]
+      },
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ShippingProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      }
+    },
+    "/api/v1/shipping/profiles/{profileId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ShippingProfileRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      },
+      "delete" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete Profile",
+        "tags" : [ "Shipping Profile Resource" ]
+      }
+    },
+    "/api/v1/shipping/profiles/{profileId}/default" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "profileId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Set Default",
+        "tags" : [ "Shipping Profile Resource" ]
+      }
+    },
+    "/api/v1/shipping/rates" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RateRequestDTO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Get Rates",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/shipping/validate-address" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "X-Correlation-ID",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AddressValidationRequestDTO"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Validate Address",
+        "tags" : [ "Shipping Resource" ]
+      }
+    },
+    "/api/v1/store-credit/balance/{userId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Get Balance",
+        "tags" : [ "Store Credit Resource" ]
+      }
+    },
+    "/api/v1/store-credit/redeem/{userId}" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "X-Idempotency-Key",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RedeemStoreCreditRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Redeem",
+        "tags" : [ "Store Credit Resource" ]
+      }
+    },
+    "/api/v1/store-credit/transactions/{userId}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "userId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "List Transactions",
+        "tags" : [ "Store Credit Resource" ]
+      }
+    },
+    "/api/v1/vendor/portal/items" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Items",
+        "tags" : [ "Vendor Portal Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "vendor" ]
+        } ]
+      }
+    },
+    "/api/v1/vendor/portal/payouts" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Payouts",
+        "tags" : [ "Vendor Portal Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "vendor" ]
+        } ]
+      }
+    },
+    "/api/v1/vendor/portal/profile" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Profile",
+        "tags" : [ "Vendor Portal Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "vendor" ]
+        } ]
+      }
+    },
+    "/api/webhooks/payments/health" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Health Check",
+        "tags" : [ "Payment Webhook Resource" ]
+      }
+    },
+    "/api/webhooks/payments/stripe" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "Stripe-Event-Id",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "Stripe-Signature",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        },
+        "summary" : "Handle Stripe Webhook",
+        "tags" : [ "Payment Webhook Resource" ]
+      }
+    },
+    "/cart" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "lang",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Cart",
+        "tags" : [ "Storefront Resource" ]
+      }
+    },
+    "/category/{slug}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "slug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "lang",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 12
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "schema" : {
+            "type" : "string",
+            "default" : "relevance"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Catalog",
+        "tags" : [ "Storefront Resource" ]
+      }
+    },
+    "/checkout" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "lang",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Checkout",
+        "tags" : [ "Storefront Resource" ]
+      }
+    },
+    "/product/{slug}" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "slug",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "lang",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/html" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "summary" : "Product",
+        "tags" : [ "Storefront Resource" ]
+      }
+    }
+  },
+  "tags" : [ {
+    "name" : "Admin",
+    "description" : "Store administration operations"
+  }, {
+    "name" : "POS Offline",
+    "description" : "POS device management and offline transaction sync"
+  }, {
+    "name" : "Storefront",
+    "description" : "Customer-facing order operations"
+  } ],
+  "info" : {
+    "title" : "Village Storefront API",
+    "version" : "1.0.0",
+    "description" : "Multi-tenant SaaS ecommerce platform API"
+  },
+  "servers" : [ {
+    "url" : "http://localhost:8080",
+    "description" : "Auto generated value"
+  }, {
+    "url" : "http://0.0.0.0:8080",
+    "description" : "Auto generated value"
+  } ]
+}

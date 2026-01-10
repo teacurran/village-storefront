@@ -1,0 +1,66 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: village-storefront-ingress
+  labels:
+    app: village-storefront
+  annotations:
+    # cert-manager annotations for automatic ACME TLS certificate provisioning
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    acme.cert-manager.io/http01-edit-in-place: "true"
+
+    # Ingress controller configuration (nginx)
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Rate limiting to prevent abuse
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+
+    # Proxy timeouts for long-running requests (video uploads)
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+
+    # Request body size limit (50MB for media uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # Enable sticky sessions for tenant context
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "village-storefront-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+spec:
+  ingressClassName: nginx
+
+  # TLS configuration with wildcard certificate
+  tls:
+  - hosts:
+    - "*.villagecompute.com"
+    - "villagecompute.com"
+    secretName: village-storefront-tls
+
+  rules:
+  # Wildcard rule for multi-tenant subdomain routing
+  - host: "*.villagecompute.com"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-gateway
+            port:
+              number: 8080
+
+  # Apex domain rule
+  - host: "villagecompute.com"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-gateway
+            port:
+              number: 8080

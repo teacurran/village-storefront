@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Capture job start time
         run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
@@ -55,7 +57,13 @@ jobs:
           npm run lint --silent | tee artifacts/lint/spotless.json
 
       - name: Lint OpenAPI specification
-        run: npm run openapi:lint
+        run: npm run lint:openapi
+
+      - name: Check OpenAPI diff vs base
+        if: github.event_name == 'pull_request'
+        env:
+          OPENAPI_DIFF_BASE_REF: origin/${{ github.base_ref }}
+        run: npm run openapi:diff
 
       - name: Validate PlantUML diagrams
         run: npm run diagrams:check
@@ -75,6 +83,81 @@ jobs:
           duration=$((end - JOB_START))
           echo "⏱️ validate duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
+  security-scan:
+    name: Security Scan (OWASP + Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run OWASP Dependency-Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          ./mvnw -B org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7
+
+      - name: Upload Dependency-Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            target/dependency-check-report.html
+            modules/*/target/dependency-check-report.html
+          retention-days: 30
+
+      - name: Build Docker image for Trivy scan
+        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+        run: |
+          ./mvnw -B -pl modules/core-platform clean package -DskipTests
+          docker build -t village-storefront:${{ github.sha }} .
+
+      - name: Run Trivy container scan
+        if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'village-storefront:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy results to GitHub Security
+        if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Upload Trivy report
+        if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'pull_request')
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results
+          path: trivy-results.sarif
+          retention-days: 30
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ security-scan duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
   test:
     name: Test (${{ matrix.runtime }})
     runs-on: ubuntu-latest
@@ -89,6 +172,32 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Start shipping mock services (Task I3.T7)
+        if: matrix.runtime == 'jvm'
+        run: |
+          cd docker
+          docker compose up -d usps-mock ups-mock fedex-mock
+          docker compose ps
+
+      - name: Wait for shipping mocks to be healthy
+        if: matrix.runtime == 'jvm'
+        run: |
+          echo "Waiting for USPS mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9100/health 2>/dev/null; do sleep 1; done'
+          echo "✅ USPS mock is healthy"
+
+          echo "Waiting for UPS mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9101/health 2>/dev/null; do sleep 1; done'
+          echo "✅ UPS mock is healthy"
+
+          echo "Waiting for FedEx mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9102/health 2>/dev/null; do sleep 1; done'
+          echo "✅ FedEx mock is healthy"
+
+          echo "All shipping mock services are ready"
 
       - name: Capture job start time
         run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
@@ -124,6 +233,10 @@ jobs:
 
       - name: Run JVM tests via npm (Spotless + JaCoCo enforced)
         if: matrix.runtime == 'jvm'
+        env:
+          USPS_MOCK_URL: http://localhost:9100/ShippingAPI.dll
+          UPS_MOCK_URL: http://localhost:9101/api/rating/v1
+          FEDEX_MOCK_URL: http://localhost:9102/rate/v1
         run: npm run test
 
       - name: Upload coverage reports
@@ -132,8 +245,8 @@ jobs:
         with:
           name: coverage-reports-jvm
           path: |
-            target/site/jacoco/
-            target/jacoco.exec
+            modules/core-platform/target/site/jacoco/
+            modules/core-platform/target/jacoco.exec
           retention-days: 30
 
       - name: Upload test results
@@ -141,17 +254,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-jvm
-          path: target/surefire-reports/
+          path: modules/core-platform/target/surefire-reports/
           retention-days: 30
 
       - name: Publish coverage summary
         if: matrix.runtime == 'jvm'
         run: |
-          if [ -f target/site/jacoco/jacoco.csv ]; then
+          if [ -f modules/core-platform/target/site/jacoco/jacoco.csv ]; then
             echo "## JVM Coverage Summary" >> $GITHUB_STEP_SUMMARY
             echo "| Package | Instruction % | Branch % | Line % |" >> $GITHUB_STEP_SUMMARY
             echo "|---------|---------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
-            tail -n +2 target/site/jacoco/jacoco.csv | while IFS=, read -r group package class inst_missed inst_covered branch_missed branch_covered line_missed line_covered rest; do
+            tail -n +2 modules/core-platform/target/site/jacoco/jacoco.csv | while IFS=, read -r group package class inst_missed inst_covered branch_missed branch_covered line_missed line_covered rest; do
               inst_total=$((inst_missed + inst_covered))
               branch_total=$((branch_missed + branch_covered))
               line_total=$((line_missed + line_covered))
@@ -180,7 +293,7 @@ jobs:
 
       - name: Run native verify
         if: matrix.runtime == 'native'
-        run: ./mvnw -B verify -Pnative -DskipITs=false
+        run: ./mvnw -B -pl modules/core-platform verify -Pnative -DskipITs=false
 
       - name: Upload native executable info
         if: matrix.runtime == 'native'
@@ -188,9 +301,16 @@ jobs:
         with:
           name: native-build-info
           path: |
-            target/*-runner
-            target/quarkus-artifact.properties
+            modules/core-platform/target/*-runner
+            modules/core-platform/target/quarkus-artifact.properties
           retention-days: 7
+
+      - name: Stop shipping mock services
+        if: always() && matrix.runtime == 'jvm'
+        run: |
+          cd docker
+          docker compose down usps-mock ups-mock fedex-mock || true
+          docker compose logs usps-mock ups-mock fedex-mock || true
 
       - name: Record job duration
         if: always()
@@ -198,6 +318,167 @@ jobs:
           end=$(date +%s)
           duration=$((end - JOB_START))
           echo "⏱️ test-${{ matrix.runtime }} duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
+  e2e-visual:
+    name: E2E Visual Regression (Percy)
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: villagestore_test
+          POSTGRES_USER: villagestore
+          POSTGRES_PASSWORD: dev_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install root npm dependencies
+        run: npm ci
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e/playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build and start Quarkus application
+        run: |
+          ./mvnw -B -pl modules/core-platform clean package -DskipTests
+          nohup java -jar modules/core-platform/target/quarkus-app/quarkus-run.jar > quarkus.log 2>&1 &
+          echo "Waiting for Quarkus to start..."
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/ready 2>/dev/null; do sleep 2; done'
+          echo "✅ Quarkus is ready"
+
+      - name: Run Percy visual regression tests
+        working-directory: tests/e2e/playwright
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
+        run: npm run test:visual
+
+      - name: Upload Quarkus logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-logs-visual
+          path: quarkus.log
+          retention-days: 7
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ e2e-visual duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
+  lighthouse-performance:
+    name: Lighthouse Performance (LCP < 2s)
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: villagestore_test
+          POSTGRES_USER: villagestore
+          POSTGRES_PASSWORD: dev_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build and start Quarkus application
+        run: |
+          ./mvnw -B -pl modules/core-platform clean package -DskipTests
+          nohup java -jar modules/core-platform/target/quarkus-app/quarkus-run.jar > quarkus.log 2>&1 &
+          echo "Waiting for Quarkus to start..."
+          timeout 120 bash -c 'until curl -f http://localhost:8080/q/health/ready 2>/dev/null; do sleep 2; done'
+          echo "✅ Quarkus is ready"
+
+      - name: Run Lighthouse CI
+        run: npm run test:lighthouse
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 14
+
+      - name: Upload Quarkus logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-logs-lighthouse
+          path: quarkus.log
+          retention-days: 7
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ lighthouse-performance duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
   admin-spa:
     name: Admin SPA (Lint & Test)
@@ -215,7 +496,7 @@ jobs:
       - name: Detect admin SPA workspace
         id: spa
         run: |
-          if [ -f "src/main/webui/package.json" ]; then
+          if [ -f "modules/core-platform/src/main/webui/package.json" ]; then
             echo "present=true" >> $GITHUB_OUTPUT
           else
             echo "present=false" >> $GITHUB_OUTPUT
@@ -228,21 +509,21 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: src/main/webui/package-lock.json
+          cache-dependency-path: modules/core-platform/src/main/webui/package-lock.json
 
       - name: Install SPA dependencies
         if: steps.spa.outputs.present == 'true'
-        working-directory: src/main/webui
+        working-directory: modules/core-platform/src/main/webui
         run: npm ci
 
       - name: Run SPA lint
         if: steps.spa.outputs.present == 'true'
-        working-directory: src/main/webui
+        working-directory: modules/core-platform/src/main/webui
         run: npm run lint
 
       - name: Run SPA tests
         if: steps.spa.outputs.present == 'true'
-        working-directory: src/main/webui
+        working-directory: modules/core-platform/src/main/webui
         run: npm test -- --runInBand
 
       - name: Record job duration
@@ -252,10 +533,184 @@ jobs:
           duration=$((end - JOB_START))
           echo "⏱️ admin-spa duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
+  performance-test:
+    name: Performance & Load Testing (k6 + Lighthouse)
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 45
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: villagestore_test
+          POSTGRES_USER: villagestore
+          POSTGRES_PASSWORD: dev_password_123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+          - 9001:9001
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Build application (JVM mode for faster iteration)
+        run: ./mvnw -B -pl modules/core-platform clean package -DskipTests
+
+      - name: Start Quarkus application (migrations run automatically at startup)
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/villagestore_test
+          DB_USER: villagestore
+          DB_PASSWORD: dev_password_123
+          R2_ENDPOINT: http://localhost:9000
+          R2_ACCESS_KEY: minioadmin
+          R2_SECRET_KEY: minioadmin
+        run: |
+          nohup java -jar modules/core-platform/target/quarkus-app/quarkus-run.jar > quarkus.log 2>&1 &
+          echo "Waiting for Quarkus to start..."
+          timeout 180 bash -c 'until curl -f http://localhost:8080/q/health/ready 2>/dev/null; do sleep 2; done'
+          echo "✅ Quarkus is ready"
+
+      - name: Create artifacts directory
+        run: mkdir -p artifacts/metrics
+
+      - name: Run k6 load test - Checkout flow
+        env:
+          BASE_URL: http://localhost:8080
+        run: |
+          echo "## k6 Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Checkout Flow" >> $GITHUB_STEP_SUMMARY
+          k6 run --out json=artifacts/k6-checkout-results.json tests/load/k6/checkout.js | tee -a $GITHUB_STEP_SUMMARY || exit 1
+
+      - name: Run k6 load test - Media upload
+        env:
+          BASE_URL: http://localhost:8080
+        continue-on-error: true
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Media Upload" >> $GITHUB_STEP_SUMMARY
+          k6 run --out json=artifacts/k6-media-results.json tests/load/k6/media-upload.js | tee -a $GITHUB_STEP_SUMMARY
+
+      - name: Run k6 load test - Admin dashboard
+        env:
+          BASE_URL: http://localhost:8080
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Admin Dashboard" >> $GITHUB_STEP_SUMMARY
+          k6 run --out json=artifacts/k6-admin-results.json tests/load/k6/admin.js | tee -a $GITHUB_STEP_SUMMARY || exit 1
+
+      - name: Run k6 load test - POS operations
+        env:
+          BASE_URL: http://localhost:8080
+        continue-on-error: true
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### POS Operations" >> $GITHUB_STEP_SUMMARY
+          k6 run --out json=artifacts/k6-pos-results.json tests/load/k6/pos.js | tee -a $GITHUB_STEP_SUMMARY
+
+      - name: Run k6 load test - Storefront browsing
+        env:
+          BASE_URL: http://localhost:8080
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Storefront Browsing" >> $GITHUB_STEP_SUMMARY
+          k6 run --out json=artifacts/k6-storefront-results.json tests/load/k6/storefront.js | tee -a $GITHUB_STEP_SUMMARY || exit 1
+
+      - name: Collect Prometheus metrics
+        if: always()
+        run: |
+          curl -s http://localhost:8080/q/metrics > artifacts/metrics/prometheus-metrics.txt || echo "Failed to collect metrics"
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Application Metrics (Prometheus)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E "^(http_server_requests|jvm_memory|system_cpu)" artifacts/metrics/prometheus-metrics.txt | head -20 >> $GITHUB_STEP_SUMMARY || echo "No metrics found"
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Lighthouse CI for performance budgets
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Lighthouse Performance Budgets" >> $GITHUB_STEP_SUMMARY
+          npm run test:lighthouse | tee -a $GITHUB_STEP_SUMMARY || exit 1
+
+      - name: Upload performance test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-test-results
+          path: |
+            artifacts/
+            .lighthouseci/
+          retention-days: 30
+
+      - name: Upload Quarkus logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarkus-logs-performance
+          path: quarkus.log
+          retention-days: 7
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⏱️ performance-test duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Performance testing completed. Review results above for KPI compliance." >> $GITHUB_STEP_SUMMARY
+
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: [test, admin-spa]
+    needs: [test, admin-spa, e2e-visual, lighthouse-performance, performance-test]
     timeout-minutes: 25
 
     steps:
@@ -286,15 +741,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          ./mvnw -B verify -DskipITs=false
+          ./mvnw -B -pl modules/core-platform verify -DskipITs=false
           if [ -n "$SONAR_TOKEN" ]; then
-            ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            ./mvnw -B -pl modules/core-platform org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
               -Dsonar.projectKey=teacurran_village-storefront \
               -Dsonar.organization=appi \
               -Dsonar.host.url=https://sonarcloud.io \
               -Dsonar.qualitygate.wait=true \
-              -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-              -Dsonar.java.binaries=target/classes \
+              -Dsonar.coverage.jacoco.xmlReportPaths=modules/core-platform/target/site/jacoco/jacoco.xml \
+              -Dsonar.java.binaries=modules/core-platform/target/classes \
               -Dsonar.java.source=21
           else
             echo "SONAR_TOKEN not configured, skipping SonarCloud analysis"
@@ -307,12 +762,62 @@ jobs:
           duration=$((end - JOB_START))
           echo "⏱️ sonarcloud duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Validate dev overlay
+        run: |
+          echo "Validating dev environment manifests..."
+          kustomize build k8s/overlays/dev | kubectl apply --dry-run=client -f -
+
+      - name: Validate staging overlay
+        run: |
+          echo "Validating staging environment manifests..."
+          kustomize build k8s/overlays/staging | kubectl apply --dry-run=client -f -
+
+      - name: Validate production overlay
+        run: |
+          echo "Validating production environment manifests..."
+          kustomize build k8s/overlays/prod | kubectl apply --dry-run=client -f -
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ validate-manifests duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All Kubernetes manifests validated successfully" >> $GITHUB_STEP_SUMMARY
+
   docker-build:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
     needs: sonarcloud
     if: github.event_name == 'push' && vars.DOCKER_ENABLED == 'true'
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # Required for cosign keyless signing
 
     steps:
       - name: Checkout code
@@ -321,17 +826,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: docker.io/${{ secrets.DOCKER_USERNAME }}/village-storefront
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
@@ -349,7 +855,33 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Output image tags
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image with keyless signing
+        env:
+          COSIGN_EXPERIMENTAL: 1
         run: |
-          echo "Docker image built and pushed:"
-          echo "${{ steps.meta.outputs.tags }}"
+          echo "Signing container images..."
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            echo "Signing: ${tag}"
+            cosign sign --yes "${tag}"
+          done
+
+      - name: Output image tags and signatures
+        run: |
+          echo "## Docker Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** GitHub Container Registry (GHCR)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Signature:** Signed with cosign keyless signing (GitHub OIDC)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Verification:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "cosign verify --certificate-identity-regexp=github ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

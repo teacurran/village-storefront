@@ -1,0 +1,270 @@
+%% POS Offline Operations Sequence Diagram
+%% Task: I3.T6
+%% References: docs/pos/offline.md, Architecture §3.19.10, §3.2.9
+%%
+%% This diagram shows the complete POS offline flow from transaction capture
+%% through encryption, queue storage, sync trigger, server replay, and audit logging.
+
+sequenceDiagram
+    actor Staff
+    participant POS as POS Client
+    participant SW as Service Worker
+    participant IDB as IndexedDB
+    participant API as Backend API
+    participant Queue as POS Job Queue
+    participant Worker as Background Worker
+    participant Checkout as CheckoutService
+    participant Payment as PaymentProvider
+    participant Audit as Audit Log
+    participant DB as PostgreSQL
+
+    %% === PHASE 1: Device Pairing (Prerequisites) ===
+    Note over Staff,DB: Phase 1: Device Pairing (One-time Setup)
+
+    Staff->>+API: POST /admin/api/pos/devices<br/>{name, location, model}
+    API->>DB: Create device record, generate pairing code
+    Note right of DB: 8-char code, 15min expiry
+    API-->>-Staff: {pairingCode, expiresAt}
+
+    Staff->>+POS: Enter pairing code in POS Settings
+    POS->>+API: POST /api/pos/devices/pair<br/>{pairingCode}
+    API->>DB: Validate code, generate AES-256 key
+    Note right of DB: Key version increments,<br/>SHA-256 hash stored
+    API->>API: Generate Stripe Terminal token (24h TTL)
+    API-->>-POS: {deviceId, encryptionKey, terminalToken, keyVersion}
+    POS->>IDB: Store encryptionKey in IndexedDB
+    Note right of IDB: Key never sent to server<br/>after initial pairing
+    POS-->>-Staff: Device paired successfully
+
+    %% === PHASE 2: Offline Detection ===
+    Note over POS,SW: Phase 2: Offline Detection & Activation
+
+    POS->>+SW: Register background sync<br/>(pos-sw.js)
+    SW->>SW: Monitor network connectivity
+    Note right of SW: Triggers on:<br/>- navigator.onLine=false<br/>- fetch() timeout >10s
+
+    alt Network offline
+        SW-->>POS: offline event
+        POS->>POS: Activate offline mode
+        Note over POS: UI changes:<br/>- Header badge → orange "Offline"<br/>- Pulsing animation<br/>- Queue count visible
+        POS->>Staff: Toast: "Network offline - transactions queued"
+    end
+
+    %% === PHASE 3: Offline Transaction Capture ===
+    Note over Staff,IDB: Phase 3: Offline Transaction Capture & Encryption
+
+    Staff->>+POS: Process sale<br/>(scan items, apply discounts, select payment)
+    POS->>POS: Generate idempotency key<br/>{deviceId}:{localTxId (UUID)}
+    Note right of POS: localTxId collision probability:<br/>1 in 2^122 (UUIDs)
+
+    POS->>IDB: Retrieve encryptionKey & keyVersion
+
+    POS->>+POS: Encrypt transaction payload
+    Note over POS: AES-256-GCM encryption:<br/>- IV: 12 bytes random per transaction<br/>- Encrypted fields: cart, payment, customer PII<br/>- Plaintext: amount (metrics), idempotencyKey (dedup)
+    POS-->>-POS: {encryptedPayload, iv, keyVersion}
+
+    POS->>IDB: INSERT INTO offline_queue<br/>{idempotencyKey, encryptedPayload, iv, keyVersion, timestamp, amount, status=Queued}
+    Note right of IDB: Storage limit: 50MB<br/>Alert at 100 transactions
+    POS-->>-Staff: "Sale queued for sync"<br/>Print receipt with "PENDING SYNC" watermark
+
+    %% === PHASE 4: Queue Visibility ===
+    Note over Staff,IDB: Staff Queue Management (Optional)
+
+    Staff->>+POS: Navigate to POS → Offline Queue
+    POS->>IDB: SELECT * FROM offline_queue<br/>ORDER BY timestamp ASC
+    IDB-->>POS: Queue entries with status
+    POS-->>-Staff: Display list:<br/>- Local TX ID, timestamp, amount, staff initials<br/>- Status: Queued (orange), Syncing (blue), Failed (red)
+
+    %% === PHASE 5: Network Restoration & Sync Trigger ===
+    Note over SW,API: Phase 5: Network Restoration & Sync Trigger
+
+    SW->>SW: Detect network restored
+    Note right of SW: Triggers:<br/>- navigator.onLine=true<br/>- fetch() success<br/>- Manual "Sync Now" button<br/>- Scheduled background sync (5min)
+    SW->>+POS: online event
+
+    POS->>POS: Update UI: "Syncing X of Y transactions"
+    Note over POS: Progress bar in header
+
+    POS->>IDB: SELECT * FROM offline_queue<br/>WHERE status=Queued
+    IDB-->>POS: Batch of encrypted transactions
+
+    loop For each transaction in batch
+        POS->>IDB: UPDATE status=Syncing<br/>WHERE idempotencyKey={key}
+    end
+
+    POS->>+API: POST /api/pos/offline/upload<br/>{deviceId, transactions: [{idempotencyKey, encryptedPayload, iv, keyVersion}]}
+    Note right of API: Batch upload endpoint
+
+    %% === PHASE 6: Server-side Queue & Background Job ===
+    Note over API,Queue: Phase 6: Server-side Enqueue
+
+    API->>DB: Validate deviceId & tenant authorization
+    API->>DB: Check idempotency keys for duplicates
+    Note right of DB: pos_offline_queue table
+
+    alt Duplicate detected
+        API-->>POS: {status=skipped, reason="Already processed"}
+        POS->>IDB: UPDATE status=Skipped<br/>Mark as "Already Synced"
+    else New transaction
+        API->>DB: INSERT INTO pos_offline_queue<br/>{deviceId, idempotencyKey, encryptedPayload, iv, keyVersion, status=pending}
+        API->>Queue: Enqueue background job<br/>Priority: DEFAULT
+        Note right of Queue: pos.offline_sync queue<br/>Dispatch interval: 3s
+        API-->>-POS: {status=accepted}
+        POS->>IDB: Keep status=Syncing until job confirms
+        POS-->>-SW: Batch upload complete
+    end
+
+    %% === PHASE 7: Background Decryption & Replay ===
+    Note over Worker,Payment: Phase 7: Background Job Processing
+
+    Worker->>+Queue: Poll for next job
+    Queue-->>Worker: POSOfflineSyncJobPayload
+    deactivate Queue
+
+    Worker->>DB: SELECT device encryption key hash<br/>WHERE device_id={deviceId}
+    Worker->>DB: SELECT encryptedPayload, iv, keyVersion<br/>FROM pos_offline_queue
+
+    Worker->>+Worker: Decrypt payload using device key
+    Note right of Worker: AES-256-GCM decryption:<br/>- Verify auth tag<br/>- Extract cart, payment, customer
+    Worker-->>-Worker: Decrypted transaction data
+
+    Worker->>+Checkout: createOrder(cart, customer, tenantId)
+    Note right of Checkout: Standard checkout flow:<br/>- Inventory reservation<br/>- Tax calculation<br/>- Order creation
+    Checkout->>DB: INSERT INTO orders<br/>{tenantId, customerId, totalAmount, status=pending}
+    Checkout-->>-Worker: {orderId, orderNumber}
+
+    Worker->>+Payment: capturePayment(orderId, paymentMethodId, amount)<br/>Idempotency-Key: {idempotencyKey}
+    Note right of Payment: Stripe API call with<br/>idempotency key prevents<br/>duplicate charges
+
+    alt Payment success
+        Payment-->>Worker: {chargeId, status=succeeded}
+        Worker->>DB: UPDATE orders SET status=completed<br/>WHERE order_id={orderId}
+        Worker->>DB: UPDATE pos_offline_queue<br/>SET status=synced, synced_at=NOW()
+        Worker->>+Audit: Log sync success
+        Audit->>DB: INSERT INTO pos_offline_transactions<br/>{deviceId, orderId, idempotencyKey, syncedAt}
+        Audit->>DB: INSERT INTO pos_activity_log<br/>{deviceId, action=sync_success, tenantId}
+        Audit-->>-Worker: Audit complete
+
+        Worker->>Queue: Mark job complete
+        Note right of Worker: Metrics:<br/>pos.offline_sync.sync.success{device,tenant}
+
+    else Payment failure
+        Payment--xWorker: PaymentException<br/>(declined, insufficient funds, etc.)
+        Worker->>Queue: Retry with exponential backoff<br/>(1s, 2s, 4s) - max 3 attempts
+
+        alt Max retries exceeded
+            Worker->>DB: UPDATE pos_offline_queue<br/>SET status=failed, error_message={details}
+            Worker->>+Queue: Move to DeadLetterQueue
+            Queue->>DB: INSERT INTO dead_letter_queue<br/>owning_module='pos.offline_sync'
+            Queue-->>-Worker: DLQ acknowledged
+            Note right of Worker: Metric:<br/>pos.offline_sync.sync.failed{error_type}
+
+            Worker->>+Audit: Log sync failure
+            Audit->>DB: INSERT INTO pos_activity_log<br/>{deviceId, action=sync_failed, error}
+            Audit-->>-Worker: Audit complete
+        end
+    end
+    deactivate Payment
+
+    %% === PHASE 8: Client Notification & Cleanup ===
+    Note over POS,IDB: Phase 8: Client Notification & Cleanup
+
+    API->>+POS: Server-sent event or webhook<br/>{idempotencyKey, status, orderId}
+    Note right of API: Real-time update via SSE or polling
+
+    alt Status: Synced
+        POS->>IDB: UPDATE status=Synced<br/>WHERE idempotencyKey={key}
+        POS->>POS: Show green checkmark
+        POS->>Staff: Toast: "Transaction synced successfully"
+        POS->>IDB: DELETE FROM offline_queue<br/>WHERE status=Synced AND synced_at < NOW() - 5 minutes
+        Note right of IDB: Auto-cleanup after 5min
+
+    else Status: Failed
+        POS->>IDB: UPDATE status=Failed, error={message}
+        POS->>POS: Show red error icon
+        POS->>Staff: Toast: "Sync failed - review queue"
+        Note over Staff: Staff can:<br/>- Retry sync<br/>- Export for support<br/>- Contact support
+    end
+
+    POS->>POS: Update header indicator<br/>"Online - All synced"
+    POS-->>-Staff: Sync complete
+
+    %% === PHASE 9: Staff Export (Troubleshooting) ===
+    Note over Staff,IDB: Phase 9: Staff Export for Support (Optional)
+
+    opt Queue stuck or errors
+        Staff->>+POS: Click "Export Queue"
+        POS->>IDB: SELECT * FROM offline_queue
+        IDB-->>POS: All queue entries (encrypted)
+        POS->>POS: Generate JSON export<br/>offline-queue-[timestamp].json
+        POS-->>-Staff: Download file
+        Note over Staff: Warning: Contains encrypted<br/>payment data - handle securely
+    end
+
+    %% === FUTURE IMPLEMENTATION: Offline Resume & CRM Tie-ins ===
+    Note over POS,Worker: Planned reconciliation ensures<br/>queued transactions refresh downstream ledgers
+
+    POS->>+API: POST /api/pos/offline/reconcile<br/>{deviceId, lastSyncedAt}
+    API->>Queue: Enqueue reconciliation job<br/>Priority: LOW (planned)
+    Note right of Queue: Queue (planned): pos.offline_reconcile<br/>Dispatch interval: 10s<br/>Flag: pos.offline_reconcile.enabled
+
+    Queue-->>Worker: POSOfflineReconcileJobPayload
+    Worker->>DB: SELECT orders synced after {lastSyncedAt}<br/>WITH offline flag
+    Worker->>+Checkout: PATCH /admin/api/checkout/orders/{orderId}<br/>statusHints
+    Worker->>+Audit: Emit POSOfflineReconciled event<br/>for CRM timeline & staff notification
+    Note over Checkout,Audit: Metrics (planned):<br/>pos.offline_reconcile.job.duration<br/>pos.offline_reconcile.job.failed
+    Worker-->>Queue: Job complete<br/>Alert if duration >5m (P2)
+
+    %% === ERROR SCENARIOS ===
+    Note over Worker,Audit: Error Scenarios & Alerts
+
+    alt Encryption key lost/rotated
+        Worker->>Worker: Decryption fails (wrong key version)
+        Worker->>DB: UPDATE status=failed<br/>error="Key version mismatch - re-pair device"
+        Worker->>Audit: Log key rotation issue
+        Note right of Worker: Staff must re-pair device<br/>Old queue cannot be decrypted
+    end
+
+    alt Queue capacity exceeded
+        POS->>IDB: Check storage quota
+        alt Quota > 80%
+            POS->>Staff: Critical alert:<br/>"Queue near capacity - sync required"
+            Note right of POS: Metric: pos.offline_queue.depth{device}>100
+        end
+
+        alt Quota full (50MB)
+            POS->>Staff: Error: "Cannot queue - storage full"
+            POS->>POS: Suspend offline mode
+            Note right of POS: Emergency fallback:<br/>Manual credit card terminal
+        end
+    end
+
+    alt Device not paired
+        Staff->>POS: Attempt offline transaction
+        POS->>IDB: Check for encryptionKey
+        alt Key not found
+            POS-->>Staff: Error: "Device not paired"<br/>Navigate to Settings → Device Pairing
+        end
+    end
+
+    %% === KILL SWITCH & FEATURE FLAGS ===
+    Note over API,Worker: Kill Switch via Feature Flags
+
+    opt Kill switch activated
+        API->>DB: Check FeatureToggle("pos.offline.enabled")
+        alt Flag disabled
+            API-->>POS: HTTP 503 Service Unavailable<br/>"POS offline mode temporarily disabled"
+            POS->>Staff: Toast: "Offline mode unavailable"
+        end
+
+        Worker->>DB: Check FeatureToggle("pos.offline_sync.enabled")
+        alt Flag disabled
+            Worker->>Worker: Skip job processing, requeue
+            Note right of Worker: Stops sync without failing jobs
+        end
+    end
+
+    %% === MONITORING ANNOTATIONS ===
+    Note over Queue,Audit: Key Metrics & Alerts
+
+    Note right of Queue: Metrics:<br/>- pos.offline_queue.depth{device_id}<br/>- pos.offline_sync.sync.success{device,tenant}<br/>- pos.offline_sync.sync.failed{error_type}<br/>- pos.offline_sync.job.duration (p95)<br/><br/>Alerts:<br/>- Queue depth >100 for 10min (P2)<br/>- Sync failure rate >10% for 5min (P2)<br/>- Device offline >4 hours (P3)<br/>- Queue capacity >80% (P1)

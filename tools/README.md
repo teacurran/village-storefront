@@ -2,10 +2,12 @@
 
 This directory contains cross-platform Node.js automation scripts for the Village Storefront project (Java/Maven/Quarkus).
 
+> **📖 For detailed documentation**, see [AUTOMATION_SCRIPTS.md](./AUTOMATION_SCRIPTS.md)
+
 ## Prerequisites
 
-- **Node.js** (any recent version)
-- **Java 21** or higher
+- **Node.js** 18.0.0+ (for running automation scripts)
+- **Java 21** or higher (LTS)
 - **Maven** (Maven wrapper included in project)
 
 ## Scripts
@@ -22,14 +24,18 @@ node tools/install.cjs
 **What it does:**
 1. Checks Java 21+ is installed
 2. Verifies Maven availability (wrapper or system)
-3. Resolves all Maven dependencies
+3. Resolves all Maven dependencies (main and test)
 4. Compiles the project
 
 **Exit codes:**
 - `0` - Success
 - `1` - Error (missing prerequisites or build failure)
 
-**Idempotent:** Yes - can be run multiple times safely
+**Features:**
+- **Idempotent**: Can be run multiple times safely
+- **Smart caching**: Only updates dependencies when pom.xml changes
+- **Multi-module aware**: Handles parent/child module structure
+- **Cross-platform**: Automatic platform detection
 
 ---
 
@@ -111,19 +117,22 @@ node tools/test.cjs
 
 **What it does:**
 1. Runs `install.cjs` to ensure environment is ready
-2. Executes all tests (`mvnw test`)
-3. Generates JaCoCo coverage report
-4. Checks against 80% coverage threshold (warning only)
+2. Executes all tests with Maven verify lifecycle
+3. Generates JaCoCo coverage reports (HTML and XML)
+4. Validates coverage meets 80% threshold
 
 **Exit codes:**
-- `0` - All tests passed
-- `Non-zero` - Tests failed or error occurred
+- `0` - All tests passed and coverage threshold met
+- `Non-zero` - Tests failed or coverage below threshold
 
 **Coverage report location:**
-- HTML: `target/site/jacoco/index.html`
-- XML: `target/site/jacoco/jacoco.xml`
+- Multi-module: `modules/core-platform/target/site/jacoco/index.html`
+- Single module: `target/site/jacoco/index.html`
 
-**Coverage threshold:** 80% line and branch coverage (enforced by SonarCloud)
+**Features:**
+- **Parallel execution**: 1 thread per CPU core
+- **Native support**: Use `--native` flag for native tests
+- **Coverage enforcement**: 80% line and branch coverage (enforced by JaCoCo and SonarCloud)
 
 ---
 
@@ -136,13 +145,27 @@ All scripts are designed to work on:
 
 Platform detection is automatic based on `process.platform`.
 
+## npm Integration
+
+These scripts are integrated with npm for convenience:
+
+```bash
+npm install    # Run install.cjs
+npm run dev    # Run run.cjs
+npm run lint   # Run lint.cjs
+npm test       # Run test.cjs
+npm run format # Apply code formatting
+```
+
+See `package.json` for all available scripts.
+
 ## Integration with Build Tools
 
 These scripts can be integrated with:
-- CI/CD pipelines
-- Git hooks
-- IDE run configurations
-- npm scripts (if you add a package.json)
+- **CI/CD pipelines** (GitHub Actions, GitLab CI, etc.)
+- **Git hooks** (pre-commit, pre-push)
+- **IDE run configurations** (VS Code, IntelliJ)
+- **npm scripts** (see package.json)
 
 ## Troubleshooting
 
