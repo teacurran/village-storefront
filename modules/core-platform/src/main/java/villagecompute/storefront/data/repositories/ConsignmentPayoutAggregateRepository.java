@@ -91,4 +91,23 @@ public class ConsignmentPayoutAggregateRepository implements PanacheRepositoryBa
         return find(QUERY_FIND_EXACT, Parameters.with("tenantId", tenantId).and("consignorId", consignorId)
                 .and("start", periodStart).and("end", periodEnd)).firstResultOptional();
     }
+
+    /**
+     * Find aggregate for specific tenant, consignor, and period (for aggregators).
+     *
+     * @param tenantId
+     *            tenant UUID
+     * @param consignorId
+     *            consignor UUID
+     * @param periodStart
+     *            period start date
+     * @param periodEnd
+     *            period end date
+     * @return aggregate or null
+     */
+    public ConsignmentPayoutAggregate findByTenantConsignorPeriod(UUID tenantId, UUID consignorId,
+            LocalDate periodStart, LocalDate periodEnd) {
+        return find(QUERY_FIND_EXACT, Parameters.with("tenantId", tenantId).and("consignorId", consignorId)
+                .and("start", periodStart).and("end", periodEnd)).firstResult();
+    }
 }

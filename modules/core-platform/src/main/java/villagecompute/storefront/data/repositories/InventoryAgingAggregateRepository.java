@@ -100,4 +100,21 @@ public class InventoryAgingAggregateRepository implements PanacheRepositoryBase<
                 Parameters.with("tenantId", tenantId).and("variantId", variantId).and("locationId", locationId))
                 .firstResultOptional();
     }
+
+    /**
+     * Find aggregate for specific tenant, variant, and location (for aggregators).
+     *
+     * @param tenantId
+     *            tenant UUID
+     * @param variantId
+     *            variant UUID
+     * @param locationId
+     *            location UUID
+     * @return aggregate or null
+     */
+    public InventoryAgingAggregate findByTenantVariantLocation(UUID tenantId, UUID variantId, UUID locationId) {
+        return find(QUERY_FIND_EXACT,
+                Parameters.with("tenantId", tenantId).and("variantId", variantId).and("locationId", locationId))
+                .firstResult();
+    }
 }

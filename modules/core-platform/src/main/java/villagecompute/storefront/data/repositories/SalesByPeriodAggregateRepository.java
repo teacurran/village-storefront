@@ -75,4 +75,20 @@ public class SalesByPeriodAggregateRepository implements PanacheRepositoryBase<S
                 Parameters.with("tenantId", tenantId).and("start", periodStart).and("end", periodEnd))
                 .firstResultOptional();
     }
+
+    /**
+     * Find aggregate for exact period and specific tenant (for aggregators).
+     *
+     * @param tenantId
+     *            tenant UUID
+     * @param periodStart
+     *            period start date
+     * @param periodEnd
+     *            period end date
+     * @return aggregate or null
+     */
+    public SalesByPeriodAggregate findByTenantAndPeriod(UUID tenantId, LocalDate periodStart, LocalDate periodEnd) {
+        return find(QUERY_FIND_EXACT_PERIOD,
+                Parameters.with("tenantId", tenantId).and("start", periodStart).and("end", periodEnd)).firstResult();
+    }
 }

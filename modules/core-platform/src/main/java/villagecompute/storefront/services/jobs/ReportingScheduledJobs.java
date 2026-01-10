@@ -37,6 +37,9 @@ public class ReportingScheduledJobs {
     @Inject
     ReportingJobService reportingJobService;
 
+    @Inject
+    villagecompute.storefront.reporting.DomainEventProcessor domainEventProcessor;
+
     /**
      * Refresh sales aggregates every 15 minutes.
      *
@@ -198,6 +201,30 @@ public class ReportingScheduledJobs {
 
         } catch (Exception e) {
             LOG.error("Failed to process export queue", e);
+        }
+    }
+
+    /**
+     * Process domain events for aggregate updates every 5 minutes.
+     *
+     * <p>
+     * Polls domain_events table and updates reporting aggregates (sales, inventory, loyalty, consignment).
+     */
+    @Scheduled(
+            cron = "0 */5 * * * ?",
+            identity = "process-domain-events")
+    public void processDomainEvents() {
+        LOG.info("Starting domain event processing");
+
+        try {
+            int processed = domainEventProcessor.processEvents();
+
+            if (processed > 0) {
+                LOG.infof("Processed %d domain events", processed);
+            }
+
+        } catch (Exception e) {
+            LOG.error("Failed to process domain events", e);
         }
     }
 }
