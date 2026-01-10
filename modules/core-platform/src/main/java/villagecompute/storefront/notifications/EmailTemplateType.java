@@ -1,16 +1,17 @@
 package villagecompute.storefront.notifications;
 
 /**
- * Enumeration of email notification template types for the consignment lifecycle.
+ * Enumeration of email notification template types for consignment lifecycle and order notifications.
  *
  * <p>
- * Each type corresponds to a Qute template under {@code src/main/resources/templates/email/consignment/} and is gated
- * by a feature flag.
+ * Each type corresponds to a Qute template under {@code src/main/resources/templates/email/} and is gated by a feature
+ * flag.
  *
  * <p>
  * References:
  * <ul>
- * <li>Task I3.T5: Notification service and email templates</li>
+ * <li>Task I3.T5: Notification service and email templates (consignment)</li>
+ * <li>Task I4.T5: Order email templates and localization</li>
  * <li>Architecture Overview: Notifications module boundaries</li>
  * </ul>
  */
@@ -54,7 +55,47 @@ public enum EmailTemplateType {
      * <p>
      * Feature flag: {@code notifications.consignor.expiration}
      */
-    EXPIRATION_ALERT("email/consignment/expiration-alert.html", "notifications.consignor.expiration");
+    EXPIRATION_ALERT("email/consignment/expiration-alert.html", "notifications.consignor.expiration"),
+
+    /**
+     * Sent when an order is successfully placed and payment confirmed.
+     *
+     * <p>
+     * Template: {@code email/order/order-confirmation.html}
+     * <p>
+     * Feature flag: {@code notifications.order.confirmation}
+     */
+    ORDER_CONFIRMATION("email/order/order-confirmation.html", "notifications.order.confirmation"),
+
+    /**
+     * Sent when an order has been shipped.
+     *
+     * <p>
+     * Template: {@code email/order/order-shipped.html}
+     * <p>
+     * Feature flag: {@code notifications.order.shipped}
+     */
+    ORDER_SHIPPED("email/order/order-shipped.html", "notifications.order.shipped"),
+
+    /**
+     * Sent when an order has been delivered.
+     *
+     * <p>
+     * Template: {@code email/order/order-delivered.html}
+     * <p>
+     * Feature flag: {@code notifications.order.delivered}
+     */
+    ORDER_DELIVERED("email/order/order-delivered.html", "notifications.order.delivered"),
+
+    /**
+     * Sent when an order is cancelled.
+     *
+     * <p>
+     * Template: {@code email/order/order-cancelled.html}
+     * <p>
+     * Feature flag: {@code notifications.order.cancelled}
+     */
+    ORDER_CANCELLED("email/order/order-cancelled.html", "notifications.order.cancelled");
 
     private final String templatePath;
     private final String featureFlagKey;

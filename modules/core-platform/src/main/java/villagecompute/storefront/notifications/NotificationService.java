@@ -20,20 +20,20 @@ import io.quarkus.qute.Location;
 import io.quarkus.qute.Template;
 
 /**
- * Service layer for consignment lifecycle notifications.
+ * Service layer for consignment and order lifecycle notifications.
  *
  * <p>
- * Orchestrates email notification dispatch for consignor events: intake confirmation, sale notification, payout
- * summary, and expiration alerts. All notifications are:
+ * Orchestrates email notification dispatch for consignor and customer events. All notifications are:
  * <ul>
  * <li>Tenant-scoped for isolation</li>
  * <li>Gated by feature flags</li>
  * <li>Localized (EN/ES)</li>
+ * <li>Domain-filtered in staging (prevents sending to real customers)</li>
  * <li>Instrumented with metrics and structured logs</li>
  * </ul>
  *
  * <p>
- * Usage example:
+ * Usage example (consignment):
  *
  * <pre>{@code
  * NotificationContext ctx = NotificationContext.builder().tenantId(tenantId).consignorId(consignorId)
@@ -43,9 +43,20 @@ import io.quarkus.qute.Template;
  * }</pre>
  *
  * <p>
+ * Usage example (order):
+ *
+ * <pre>{@code
+ * NotificationContext ctx = NotificationContext.builder().tenantId(tenantId).customerId(customerId)
+ *         .customerName("John Smith").customerEmail("john@example.com").locale("en")
+ *         .templateData(Map.of("orderNumber", "ORD-12345", "orderDate", "2026-01-10")).build();
+ * notificationService.sendOrderConfirmation(ctx);
+ * }</pre>
+ *
+ * <p>
  * References:
  * <ul>
- * <li>Task I3.T5: Notification service and email templates</li>
+ * <li>Task I3.T5: Notification service and email templates (consignment)</li>
+ * <li>Task I4.T5: Order email templates and domain filtering</li>
  * <li>Architecture Overview: Notifications module boundaries</li>
  * <li>ADR-001: Tenant-scoped services</li>
  * </ul>
@@ -71,6 +82,9 @@ public class NotificationService {
     NotificationJobQueue notificationJobQueue;
 
     @Inject
+    DomainFilterService domainFilterService;
+
+    @Inject
     @Location("email/consignment/intake-confirmation.html")
     Template intakeConfirmationTemplate;
 
@@ -85,6 +99,22 @@ public class NotificationService {
     @Inject
     @Location("email/consignment/expiration-alert.html")
     Template expirationAlertTemplate;
+
+    @Inject
+    @Location("email/order/order-confirmation.html")
+    Template orderConfirmationTemplate;
+
+    @Inject
+    @Location("email/order/order-shipped.html")
+    Template orderShippedTemplate;
+
+    @Inject
+    @Location("email/order/order-delivered.html")
+    Template orderDeliveredTemplate;
+
+    @Inject
+    @Location("email/order/order-cancelled.html")
+    Template orderCancelledTemplate;
 
     /**
      * Send intake confirmation notification to consignor.
@@ -161,12 +191,96 @@ public class NotificationService {
     }
 
     /**
+     * Send order confirmation notification to customer after successful payment.
+     *
+     * <p>
+     * Expected template data keys:
+     * <ul>
+     * <li>{@code orderNumber}: order number (e.g., "ORD-12345")</li>
+     * <li>{@code orderDate}: order placement date</li>
+     * <li>{@code lineItems}: list of order line items (productName, quantity, unitPrice, lineTotal)</li>
+     * <li>{@code subtotal}: order subtotal (formatted Money)</li>
+     * <li>{@code shipping}: shipping cost (formatted Money)</li>
+     * <li>{@code tax}: tax amount (formatted Money)</li>
+     * <li>{@code total}: order total (formatted Money)</li>
+     * <li>{@code shippingAddress}: map with name, line1, line2, city, state, postalCode, country</li>
+     * </ul>
+     *
+     * @param context
+     *            notification context with customer and template data
+     */
+    public void sendOrderConfirmation(NotificationContext context) {
+        enqueueNotification(EmailTemplateType.ORDER_CONFIRMATION, context);
+    }
+
+    /**
+     * Send order shipped notification to customer.
+     *
+     * <p>
+     * Expected template data keys:
+     * <ul>
+     * <li>{@code orderNumber}: order number</li>
+     * <li>{@code shippedDate}: shipment date</li>
+     * <li>{@code trackingNumber}: carrier tracking number (optional)</li>
+     * <li>{@code carrier}: carrier name (optional)</li>
+     * <li>{@code trackingUrl}: tracking URL (optional)</li>
+     * <li>{@code estimatedDelivery}: estimated delivery date (optional)</li>
+     * <li>{@code shippingAddress}: map with name, line1, line2, city, state, postalCode, country</li>
+     * </ul>
+     *
+     * @param context
+     *            notification context with customer and template data
+     */
+    public void sendOrderShipped(NotificationContext context) {
+        enqueueNotification(EmailTemplateType.ORDER_SHIPPED, context);
+    }
+
+    /**
+     * Send order delivered notification to customer.
+     *
+     * <p>
+     * Expected template data keys:
+     * <ul>
+     * <li>{@code orderNumber}: order number</li>
+     * <li>{@code deliveredDate}: delivery date</li>
+     * <li>{@code deliveryLocation}: delivery location description (optional, e.g., "Front Porch")</li>
+     * <li>{@code shippingAddress}: map with name, line1, line2, city, state, postalCode, country</li>
+     * </ul>
+     *
+     * @param context
+     *            notification context with customer and template data
+     */
+    public void sendOrderDelivered(NotificationContext context) {
+        enqueueNotification(EmailTemplateType.ORDER_DELIVERED, context);
+    }
+
+    /**
+     * Send order cancelled notification to customer.
+     *
+     * <p>
+     * Expected template data keys:
+     * <ul>
+     * <li>{@code orderNumber}: order number</li>
+     * <li>{@code cancelledDate}: cancellation date</li>
+     * <li>{@code cancellationReason}: reason for cancellation (optional)</li>
+     * <li>{@code refundAmount}: refund amount (formatted Money, optional)</li>
+     * </ul>
+     *
+     * @param context
+     *            notification context with customer and template data
+     */
+    public void sendOrderCancelled(NotificationContext context) {
+        enqueueNotification(EmailTemplateType.ORDER_CANCELLED, context);
+    }
+
+    /**
      * Queue notification job if feature flag is enabled. Actual email rendering/sending occurs asynchronously via
      * {@link NotificationJobProcessor}.
      */
     private void enqueueNotification(EmailTemplateType type, NotificationContext context) {
         UUID tenantId = context.getTenantId();
-        UUID consignorId = context.getConsignorId();
+        UUID recipientId = context.getRecipientId();
+        String recipientEmail = context.getRecipientEmail();
         String featureFlagKey = type.getFeatureFlagKey();
 
         // Verify tenant context matches
@@ -180,8 +294,8 @@ public class NotificationService {
         // Check feature flag
         if (!featureToggle.isEnabled(tenantId, featureFlagKey)) {
             LOG.infof(
-                    "Notification skipped (feature flag disabled) - tenantId=%s, consignorId=%s, notification=%s, flag=%s",
-                    tenantId, consignorId, type, featureFlagKey);
+                    "Notification skipped (feature flag disabled) - tenantId=%s, recipientId=%s, notification=%s, flag=%s",
+                    tenantId, recipientId, type, featureFlagKey);
             meterRegistry.counter("notifications.skipped", "tenant_id", tenantId.toString(), "type", type.name(),
                     "reason", "feature_flag_disabled").increment();
             return;
@@ -189,11 +303,11 @@ public class NotificationService {
 
         NotificationJobPayload payload = NotificationJobPayload.create(type, context);
         notificationJobQueue.enqueue(payload);
-        LOG.infof("Notification enqueued - jobId=%s, tenantId=%s, consignorId=%s, email=%s, notification=%s",
-                payload.getJobId(), tenantId, consignorId, context.getConsignorEmail(), type);
+        LOG.infof("Notification enqueued - jobId=%s, tenantId=%s, recipientId=%s, email=%s, notification=%s",
+                payload.getJobId(), tenantId, recipientId, recipientEmail, type);
 
-        meterRegistry.counter("notifications.enqueued", "tenant_id", tenantId.toString(), "consignor_id",
-                consignorId.toString(), "type", type.name(), "locale", context.getLocale()).increment();
+        meterRegistry.counter("notifications.enqueued", "tenant_id", tenantId.toString(), "recipient_id",
+                recipientId.toString(), "type", type.name(), "locale", context.getLocale()).increment();
     }
 
     /**
@@ -206,40 +320,70 @@ public class NotificationService {
     void processJob(NotificationJobPayload payload) {
         EmailTemplateType type = payload.getTemplateType();
         UUID tenantId = payload.getTenantId();
+        String recipientEmail = payload.getRecipientEmail();
 
-        LOG.infof("Sending notification - jobId=%s, tenantId=%s, consignorId=%s, email=%s, notification=%s, locale=%s",
-                payload.getJobId(), tenantId, payload.getConsignorId(), payload.getConsignorEmail(), type,
-                payload.getLocale());
+        LOG.infof("Sending notification - jobId=%s, tenantId=%s, recipientId=%s, email=%s, notification=%s, locale=%s",
+                payload.getJobId(), tenantId, payload.getRecipientId(), recipientEmail, type, payload.getLocale());
 
         try {
+            // Check domain filter (staging environment protection)
+            if (!domainFilterService.isAllowed(recipientEmail)) {
+                LOG.warnf(
+                        "Notification blocked by domain filter - jobId=%s, tenantId=%s, recipientId=%s, email=%s, notification=%s",
+                        payload.getJobId(), tenantId, payload.getRecipientId(), recipientEmail, type);
+                meterRegistry.counter("notifications.blocked", "tenant_id", tenantId.toString(), "type", type.name(),
+                        "reason", "domain_filter").increment();
+                return; // Silently skip sending
+            }
+
             Map<String, String> messages = localizationService.loadMessages(payload.getLocale());
 
             Map<String, Object> data = new HashMap<>(payload.getTemplateData());
-            data.put("consignorName", payload.getConsignorName());
+            // Add recipient name (for both consignor and customer templates)
+            data.put("consignorName", payload.getRecipientName());
+            data.put("customerName", payload.getRecipientName());
             data.put("msg", messages);
             data.put("locale", payload.getLocale());
 
             Template template = templateFor(type);
             String htmlBody = template.data(data).render();
 
-            String subjectKey = "email.consignment." + type.name().toLowerCase() + ".subject";
-            String subject = messages.getOrDefault(subjectKey, "Consignment Notification");
+            // Determine subject key based on template type
+            String subjectKey = getSubjectKey(type);
+            String subject = messages.getOrDefault(subjectKey, "Notification");
 
-            mailer.send(Mail.withHtml(payload.getConsignorEmail(), subject, htmlBody));
+            mailer.send(Mail.withHtml(recipientEmail, subject, htmlBody));
 
-            LOG.infof("Notification sent successfully - jobId=%s, tenantId=%s, consignorId=%s, notification=%s",
-                    payload.getJobId(), tenantId, payload.getConsignorId(), type);
+            LOG.infof("Notification sent successfully - jobId=%s, tenantId=%s, recipientId=%s, notification=%s",
+                    payload.getJobId(), tenantId, payload.getRecipientId(), type);
             meterRegistry
-                    .counter("notifications.sent", "tenant_id", tenantId.toString(), "consignor_id",
-                            payload.getConsignorId().toString(), "type", type.name(), "locale", payload.getLocale())
+                    .counter("notifications.sent", "tenant_id", tenantId.toString(), "recipient_id",
+                            payload.getRecipientId().toString(), "type", type.name(), "locale", payload.getLocale())
                     .increment();
 
         } catch (Exception e) {
-            LOG.errorf(e, "Failed to send notification - jobId=%s, tenantId=%s, consignorId=%s, notification=%s",
-                    payload.getJobId(), tenantId, payload.getConsignorId(), type);
+            LOG.errorf(e, "Failed to send notification - jobId=%s, tenantId=%s, recipientId=%s, notification=%s",
+                    payload.getJobId(), tenantId, payload.getRecipientId(), type);
             meterRegistry.counter("notifications.failed", "tenant_id", tenantId.toString(), "type", type.name(),
                     "error", e.getClass().getSimpleName()).increment();
             throw new RuntimeException("Failed to send notification: " + type, e);
+        }
+    }
+
+    private String getSubjectKey(EmailTemplateType type) {
+        switch (type) {
+            case INTAKE_CONFIRMATION :
+            case SALE_NOTIFICATION :
+            case PAYOUT_SUMMARY :
+            case EXPIRATION_ALERT :
+                return "email.consignment." + type.name().toLowerCase() + ".subject";
+            case ORDER_CONFIRMATION :
+            case ORDER_SHIPPED :
+            case ORDER_DELIVERED :
+            case ORDER_CANCELLED :
+                return "email.order." + type.name().toLowerCase() + ".subject";
+            default :
+                return "email.notification.subject";
         }
     }
 
@@ -253,6 +397,14 @@ public class NotificationService {
                 return payoutSummaryTemplate;
             case EXPIRATION_ALERT :
                 return expirationAlertTemplate;
+            case ORDER_CONFIRMATION :
+                return orderConfirmationTemplate;
+            case ORDER_SHIPPED :
+                return orderShippedTemplate;
+            case ORDER_DELIVERED :
+                return orderDeliveredTemplate;
+            case ORDER_CANCELLED :
+                return orderCancelledTemplate;
             default :
                 throw new IllegalArgumentException("Unknown notification type: " + type);
         }

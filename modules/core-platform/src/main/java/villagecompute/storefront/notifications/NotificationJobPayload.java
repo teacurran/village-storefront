@@ -7,10 +7,10 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Immutable payload representing a queued consignment notification job.
+ * Immutable payload representing a queued notification job (consignment or order).
  *
  * <p>
- * Captures the template type plus tenant/consignor metadata so the async worker can render the template and send the
+ * Captures the template type plus tenant/recipient metadata so the async worker can render the template and send the
  * email without reaching back into the request thread.
  */
 public final class NotificationJobPayload {
@@ -18,22 +18,22 @@ public final class NotificationJobPayload {
     private final UUID jobId;
     private final EmailTemplateType templateType;
     private final UUID tenantId;
-    private final UUID consignorId;
-    private final String consignorName;
-    private final String consignorEmail;
+    private final UUID recipientId; // consignorId or customerId
+    private final String recipientName; // consignorName or customerName
+    private final String recipientEmail; // consignorEmail or customerEmail
     private final String locale;
     private final Map<String, Object> templateData;
     private final OffsetDateTime enqueuedAt;
 
-    private NotificationJobPayload(UUID jobId, EmailTemplateType templateType, UUID tenantId, UUID consignorId,
-            String consignorName, String consignorEmail, String locale, Map<String, Object> templateData,
+    private NotificationJobPayload(UUID jobId, EmailTemplateType templateType, UUID tenantId, UUID recipientId,
+            String recipientName, String recipientEmail, String locale, Map<String, Object> templateData,
             OffsetDateTime enqueuedAt) {
         this.jobId = jobId;
         this.templateType = templateType;
         this.tenantId = tenantId;
-        this.consignorId = consignorId;
-        this.consignorName = consignorName;
-        this.consignorEmail = consignorEmail;
+        this.recipientId = recipientId;
+        this.recipientName = recipientName;
+        this.recipientEmail = recipientEmail;
         this.locale = locale;
         this.templateData = Collections.unmodifiableMap(new HashMap<>(templateData));
         this.enqueuedAt = enqueuedAt;
@@ -52,8 +52,8 @@ public final class NotificationJobPayload {
         UUID jobId = UUID.randomUUID();
         OffsetDateTime enqueuedAt = OffsetDateTime.now();
 
-        return new NotificationJobPayload(jobId, type, context.getTenantId(), context.getConsignorId(),
-                context.getConsignorName(), context.getConsignorEmail(), context.getLocale(), context.getTemplateData(),
+        return new NotificationJobPayload(jobId, type, context.getTenantId(), context.getRecipientId(),
+                context.getRecipientName(), context.getRecipientEmail(), context.getLocale(), context.getTemplateData(),
                 enqueuedAt);
     }
 
@@ -69,16 +69,34 @@ public final class NotificationJobPayload {
         return tenantId;
     }
 
+    /** @deprecated Use {@link #getRecipientId()} instead */
+    @Deprecated
     public UUID getConsignorId() {
-        return consignorId;
+        return recipientId;
     }
 
+    public UUID getRecipientId() {
+        return recipientId;
+    }
+
+    /** @deprecated Use {@link #getRecipientName()} instead */
+    @Deprecated
     public String getConsignorName() {
-        return consignorName;
+        return recipientName;
     }
 
+    public String getRecipientName() {
+        return recipientName;
+    }
+
+    /** @deprecated Use {@link #getRecipientEmail()} instead */
+    @Deprecated
     public String getConsignorEmail() {
-        return consignorEmail;
+        return recipientEmail;
+    }
+
+    public String getRecipientEmail() {
+        return recipientEmail;
     }
 
     public String getLocale() {

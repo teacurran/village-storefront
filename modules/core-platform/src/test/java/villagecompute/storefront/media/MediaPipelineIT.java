@@ -29,9 +29,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import villagecompute.storefront.data.models.MediaAsset;
 import villagecompute.storefront.data.repositories.MediaAssetRepository;
-import villagecompute.storefront.services.jobs.config.JobPriority;
 import villagecompute.storefront.services.MediaJobService;
 import villagecompute.storefront.services.MediaService;
+import villagecompute.storefront.services.jobs.config.JobPriority;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.Counter;
