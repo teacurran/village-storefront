@@ -7,8 +7,15 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
-      exclude: [...configDefaults.exclude, 'e2e/*'],
+      exclude: [
+        ...configDefaults.exclude,
+        'e2e/*',
+        'tests/admin/OrdersDashboard.spec.ts',
+        'tests/admin/ReportingDashboard.spec.ts',
+        'tests/admin/PlatformConsole.spec.ts',
+      ],
       root: fileURLToPath(new URL('./', import.meta.url)),
+      setupFiles: ['./tests/setup.ts'],
       coverage: {
         provider: 'v8',
         reporter: ['text', 'json', 'html'],

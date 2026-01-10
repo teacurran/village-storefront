@@ -61,8 +61,8 @@ defineProps<{
 
 defineEmits<{
   select: [id: string]
-  selectAll: []
-  viewDetail: [id: string]
+  'select-all': []
+  'view-detail': [id: string]
 }>()
 
 const { t } = useI18n()

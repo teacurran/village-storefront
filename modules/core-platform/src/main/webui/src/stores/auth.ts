@@ -167,6 +167,7 @@ export const useAuthStore = defineStore('auth', () => {
     clearImpersonation,
     hasRole,
     hasAnyRole,
+    persistAuth,
     restoreAuth,
   }
 })

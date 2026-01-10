@@ -1,32 +1,11 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BaseButton from '@/components/base/BaseButton.vue'
 import BaseInput from '@/components/base/BaseInput.vue'
 import BaseSelect from '@/components/base/BaseSelect.vue'
 import InlineAlert from '@/components/base/InlineAlert.vue'
 import MetricsCard from '@/components/base/MetricsCard.vue'
-
-class ResizeObserverMock {
-  observe() {
-    return null
-  }
-  unobserve() {
-    return null
-  }
-  disconnect() {
-    return null
-  }
-}
-
-beforeAll(() => {
-  // PrimeVue Dropdown relies on ResizeObserver which JSDOM does not implement
-  if (typeof window !== 'undefined') {
-    ;(window as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver =
-      ResizeObserverMock
-  }
-  ;(globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver =
-    ResizeObserverMock
-})
+import { getGlobalPlugins } from '../helpers'
 
 describe('Base atoms snapshots', () => {
   it('BaseButton default', () => {
@@ -45,6 +24,9 @@ describe('Base atoms snapshots', () => {
         modelValue: 'admin@example.com',
         hint: 'We never share your email.',
       },
+      global: {
+        plugins: getGlobalPlugins(),
+      },
     })
     expect(wrapper.html()).toMatchSnapshot()
   })
@@ -58,6 +40,9 @@ describe('Base atoms snapshots', () => {
           { label: 'Published', value: 'published' },
         ],
         modelValue: 'draft',
+      },
+      global: {
+        plugins: getGlobalPlugins(),
       },
     })
     expect(wrapper.html()).toMatchSnapshot()

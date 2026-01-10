@@ -9,11 +9,12 @@
  * - Task I4.T7: Service Worker for offline sync
  */
 
-const CACHE_NAME = 'pos-offline-v1'
+// Cache name for future use when implementing offline caching
+// const CACHE_NAME = 'pos-offline-v1'
 const SYNC_TAG = 'pos-offline-sync'
 
 // Install event
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   console.log('[POS SW] Installing service worker...')
   self.skipWaiting() // Activate immediately
 })

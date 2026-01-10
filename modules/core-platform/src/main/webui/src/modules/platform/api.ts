@@ -23,13 +23,6 @@ import type {
 
 const BASE_PATH = '/api/v1/platform'
 
-interface PaginatedResponse<T> {
-  items: T[]
-  page: number
-  size: number
-  totalCount: number
-}
-
 interface StoreDirectoryResponse {
   stores: StoreDirectoryEntry[]
   page: number

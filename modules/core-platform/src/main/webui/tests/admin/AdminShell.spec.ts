@@ -5,7 +5,7 @@
  * per acceptance criteria.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
@@ -14,6 +14,7 @@ import DefaultLayout from '@/layouts/DefaultLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTenantStore } from '@/stores/tenant'
+import { getGlobalPlugins } from '../helpers'
 
 describe('AdminShell', () => {
   beforeEach(() => {
@@ -33,18 +34,36 @@ describe('AdminShell', () => {
             path: '/',
             component: DefaultLayout,
             meta: { requiresAuth: true },
+            children: [
+              {
+                path: '',
+                name: 'dashboard',
+                component: { template: '<div>Dashboard</div>' },
+              },
+            ],
           },
           {
             path: '/login',
+            name: 'login',
             component: LoginView,
             meta: { requiresAuth: false },
           },
         ],
       })
 
-      const wrapper = mount(App, {
+      // Add the auth guard logic
+      router.beforeEach((to, _from, next) => {
+        const authStore = useAuthStore()
+        if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+          next({ name: 'login' })
+          return
+        }
+        next()
+      })
+
+      mount(App, {
         global: {
-          plugins: [router, createPinia()],
+          plugins: [router, createPinia(), ...getGlobalPlugins()],
         },
       })
 
@@ -76,13 +95,35 @@ describe('AdminShell', () => {
             path: '/',
             component: DefaultLayout,
             meta: { requiresAuth: true },
+            children: [
+              {
+                path: '',
+                name: 'dashboard',
+                component: { template: '<div>Dashboard</div>' },
+              },
+            ],
           },
           {
             path: '/login',
+            name: 'login',
             component: LoginView,
             meta: { requiresAuth: false },
           },
         ],
+      })
+
+      // Add the auth guard logic
+      router.beforeEach((to, _from, next) => {
+        const authStore = useAuthStore()
+        if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+          next({ name: 'login' })
+          return
+        }
+        if (to.name === 'login' && authStore.isAuthenticated) {
+          next({ name: 'dashboard' })
+          return
+        }
+        next()
       })
 
       await router.push('/')
@@ -103,6 +144,7 @@ describe('AdminShell', () => {
               routes: [{ path: '/', component: { template: '<div>Test</div>' } }],
             }),
             createPinia(),
+            ...getGlobalPlugins(),
           ],
         },
       })

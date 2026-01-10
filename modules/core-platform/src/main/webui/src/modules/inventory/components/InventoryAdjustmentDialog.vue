@@ -46,7 +46,7 @@ import InputNumber from 'primevue/inputnumber'
 import Textarea from 'primevue/textarea'
 import { useI18n } from '@/composables/useI18n'
 
-const props = defineProps<{ visible: boolean }>()
+defineProps<{ visible: boolean }>()
 
 const emit = defineEmits<{
   close: []

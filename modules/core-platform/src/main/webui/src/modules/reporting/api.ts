@@ -1,5 +1,4 @@
 import { apiClient } from '@/api/client'
-import type { Money } from '@/api/types'
 
 export interface SalesAggregate {
   id: string
