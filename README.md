@@ -18,6 +18,23 @@ Village Storefront is a multi-tenant ecommerce platform that allows merchants to
 - **Admin dashboard** (Vue.js 3 SPA)
 - **Customer-facing storefront** (Qute templates with Tailwind CSS)
 
+### Platform Capabilities
+
+The platform provides comprehensive SaaS ecommerce capabilities:
+
+- **🏢 Multi-Tenant SaaS:** Subdomain/custom-domain routing, tenant-scoped data isolation via PostgreSQL RLS, automated tenant provisioning, and comprehensive audit trails
+- **🛍️ Commerce Primitives:** Product catalog with variants, categories, collections, multi-location inventory management, shopping carts, checkout orchestration, order management, shipping integration, returns processing, loyalty programs, POS system, gift cards, store credit, and sales reports
+- **💳 Payment Processing:** Stripe Connect for cards and digital wallets, platform fee management, automated payouts, webhook idempotency, and PaymentProvider abstraction for future payment rails
+- **🎨 Dual Frontends:** Qute/Tailwind/PrimeUI storefront for customers plus Vue 3/PrimeVue admin SPA (with POS shell and consignor portal), all internationalization-ready (EN/ES) and themeable per tenant
+- **📦 Consignment Management:** Vendor onboarding, commission-based pricing, automated payout calculations with double-entry ledger, approval workflows, and comprehensive audit logging
+- **📸 Media Pipeline:** Cloudflare R2 storage, FFmpeg video transcoding, image optimization with Thumbnailator, signed URLs for access control, and background job processing via DelayedJob queues
+- **🔌 Headless APIs:** OpenAPI spec-first REST APIs, OAuth 2.0 scopes, rate limiting, signed media URLs, enabling embedded storefronts or partner channel integrations
+- **📊 Observability & Compliance:** OpenTelemetry tracing, Prometheus metrics, Grafana dashboards, structured logging, feature flags for progressive rollout, impersonation governance, and automated data retention/archival pipelines
+
+**👉 For New Developers:** Start with the [Developer Guide](docs/architecture/developer-guide.md) for setup, coding standards, and contribution guidelines.
+
+**👉 For Operations:** See the [Runbook Index](docs/architecture/ops/runbook-index.md) for incident response procedures and the [Hypercare Plan](docs/architecture/ops/hypercare-plan.md) for post-launch monitoring.
+
 ## Continuous Integration & Quality Gates
 
 The GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push/PR and enforces the engineering guardrails mandated in `docs/java-project-standards.adoc`. The pipeline is fully parallelized and publishes lint/test artifacts plus job timing metrics so we can continuously harden the runtime.
@@ -1025,13 +1042,41 @@ mvn migration:up -Dmigration.env=development
 
 ## Documentation
 
-- **Architecture Overview:** `docs/architecture_overview.md`
-- **ADRs:** `docs/adr/` (Architecture Decision Records)
-- **Java Standards:** `docs/java-project-standards.adoc`
-- **Storefront Theming:** `docs/storefront-theming.md` (Tailwind, design tokens, localization)
-- **Feature Flag Governance:** `docs/feature_flags/governance.md` (Kill switches, rollout process, flag lifecycle)
-- **API Spec:** `api/v1/openapi.yaml`
-- **Diagrams:** `docs/diagrams/` (PlantUML source files)
+### For Developers
+
+- **[Developer Guide](docs/architecture/developer-guide.md)** - Setup, project structure, coding standards, testing strategy, debugging
+- **[Java Standards](docs/java-project-standards.adoc)** - Technology stack, build system, code quality requirements
+- **[ADR Index](docs/adr/ADR-README.md)** - Architectural Decision Records registry and template
+  - [ADR-001: Multi-Tenancy](docs/adr/ADR-001-tenancy.md)
+  - [ADR-002: CI/CD Quality Gates](docs/adr/ADR-002-quality-gates.md)
+  - [ADR-003: Checkout Saga](docs/adr/ADR-003-checkout-saga.md)
+  - [ADR-004: Consignment Payouts](docs/adr/ADR-004-consignment-payouts.md)
+
+### For Operations
+
+- **[Runbook Index](docs/architecture/ops/runbook-index.md)** - Central directory of all operational runbooks
+- **[Hypercare Plan](docs/architecture/ops/hypercare-plan.md)** - First 30 days post-launch monitoring and incident response
+- **[Observability Dashboard Guide](docs/architecture/ops/observability-dashboard.md)** - Using Grafana, Prometheus, Jaeger for monitoring and debugging
+- **[Observability Framework](docs/operations/observability.md)** - Implementation details for logging, tracing, metrics
+- **[Deployment Architecture](docs/architecture/ops/deployment-architecture.md)** - Kubernetes setup, networking, infrastructure
+- **[Release Runbook](docs/architecture/ops/release-runbook.md)** - Release process, feature flags, rollback procedures
+
+### Component-Specific Runbooks
+
+- **[Catalog & Inventory](docs/operations/catalog_inventory_runbook.md)** - Product catalog, inventory management
+- **[Payments](docs/operations/payments_runbook.md)** - Stripe integration, refunds, webhooks
+- **[Consignment](docs/operations/consignment_runbook.md)** - Vendor payouts, ledger reconciliation
+- **[Media Pipeline](docs/operations/media_runbook.md)** - FFmpeg transcoding, R2 storage
+- **[Background Jobs](docs/operations/job_runbook.md)** - Job queue management, delayed job processing
+- **[Disaster Recovery](docs/operations/dr_playbook.md)** - Backup/restore, PITR, catastrophic failure recovery
+
+### Architecture & Design
+
+- **[Architecture Overview](docs/architecture_overview.md)** - System design, data model, deployment architecture
+- **[Storefront Theming](docs/storefront-theming.md)** - Tailwind, design tokens, localization
+- **[Feature Flag Governance](docs/feature_flags/governance.md)** - Kill switches, rollout process, flag lifecycle
+- **[API Spec](api/v1/openapi.yaml)** - OpenAPI specification
+- **[Diagrams](docs/diagrams/)** - PlantUML source files (system context, containers, components, ERD)
 
 ## License
 
