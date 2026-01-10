@@ -194,7 +194,7 @@ groups:
       action: "Review import job logs, check CSV validation errors, verify file format and encoding"
       dashboard: "https://grafana.villagecompute.com/d/component-kpis?panelId=6"
 
-- name: consignment-module
+- name: consignment-payouts
   interval: 30s
   rules:
   - alert: ConsignmentIntakeLatencyHigh
@@ -211,19 +211,71 @@ groups:
       runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
       reference: "ADR-004 Consignment Payouts"
 
-  - alert: ConsignmentPayoutClosureSlow
+  - alert: ConsignmentPayoutReconciliationDelayed
     expr: |
-      histogram_quantile(0.95, sum(rate(consignment_payout_close_duration_bucket[5m])) by (le)) > 300
+      time() - consignment_payout_reconciliation_last_success_timestamp > 86400
+    for: 1h
+    labels:
+      severity: warning
+      component: consignment
+      kpi: payout-reconciliation
+    annotations:
+      summary: "Consignment payout reconciliation job delayed beyond daily window"
+      description: "Last successful reconciliation was {{ $value | humanizeDuration }} ago (Sev2 alert per Architecture §3.20.2)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
+
+  - alert: ConsignmentPayoutBatchProcessingSlow
+    expr: |
+      histogram_quantile(0.95, sum(rate(consignment_payout_batch_duration_bucket[5m])) by (le, tenant_id)) > 300
     for: 15m
     labels:
       severity: warning
       component: consignment
-      kpi: payout-close
+      kpi: payout-batch-processing
     annotations:
-      summary: "Consignment payout batch close exceeds 5-minute SLA"
-      description: "Payout close p95 is {{ $value | humanizeDuration }} (target: <5 minutes per Section 4)"
+      summary: "Consignment payout batch processing p95 exceeds 5-minute target"
+      description: "Batch processing p95 is {{ $value | humanizeDuration }} for tenant {{ $labels.tenant_id }} (target: <5 minutes per Section 4)"
       runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
-      reference: "docs/adr/ADR-004-consignment-payouts.md"
+
+  - alert: ConsignmentPayoutFailureRateHigh
+    expr: |
+      sum(rate(consignment_payout_failed[5m])) by (tenant_id) / sum(rate(consignment_payout_created[5m])) by (tenant_id) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: consignment
+      kpi: payout-failure-rate
+    annotations:
+      summary: "Consignment payout failure rate exceeds 5%"
+      description: "Payout failure rate is {{ $value | humanizePercentage }} for tenant {{ $labels.tenant_id }}, reason: {{ $labels.reason }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
+
+  - alert: ConsignmentLedgerDiscrepancy
+    expr: |
+      consignment_ledger_discrepancy > 0
+    for: 30m
+    labels:
+      severity: critical
+      component: consignment
+      kpi: ledger-integrity
+    annotations:
+      summary: "Consignment ledger reconciliation discrepancy detected"
+      description: "Discrepancy of ${{ $value }} detected for vendor {{ $labels.vendor_id }} in tenant {{ $labels.tenant_id }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
+      escalation: "Contact finance team immediately"
+
+  - alert: ConsignmentSettlementDurationHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(consignment_ledger_settlement_duration_bucket[5m])) by (le, tenant_id)) > 10
+    for: 10m
+    labels:
+      severity: warning
+      component: consignment
+      kpi: settlement-duration
+    annotations:
+      summary: "Consignment settlement duration p95 exceeds 10-second target"
+      description: "Settlement p95 is {{ $value | humanizeDuration }} for tenant {{ $labels.tenant_id }} (pending→available)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/consignment"
 
 - name: checkout-orchestrator
   interval: 30s
@@ -314,9 +366,23 @@ groups:
 - name: payment-layer
   interval: 30s
   rules:
+  - alert: StripeWebhookFailureRateHigh
+    expr: |
+      sum(rate(payment_webhook_failed[5m])) / sum(rate(payment_webhook_received[5m])) > 0.05
+    for: 5m
+    labels:
+      severity: critical
+      component: payment
+      kpi: webhook-failure-rate
+    annotations:
+      summary: "Stripe webhook failure rate >5% across all event types"
+      description: "Webhook failure rate is {{ $value | humanizePercentage }} (Sev1 threshold per Architecture §3.20.1)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payments"
+      action: "Check Stripe dashboard, verify signature validation, inspect webhook_events table for error codes"
+
   - alert: StripeWebhookIdempotencyViolation
     expr: |
-      rate(stripe_webhook_duplicate_total[5m]) / rate(stripe_webhook_received_total[5m]) > 0.5
+      rate(stripe_webhook_duplicate_total[5m]) / rate(payment_webhook_received[5m]) > 0.5
     for: 10m
     labels:
       severity: warning
@@ -325,7 +391,33 @@ groups:
     annotations:
       summary: "High duplicate webhook rate indicates idempotency issue"
       description: "Duplicate rate is {{ $value | humanizePercentage }} (expected: minimal duplicates)"
-      runbook_url: "https://docs.villagecompute.com/runbooks/payment"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payments"
+
+  - alert: PaymentTransactionLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(payment_transaction_duration_bucket[5m])) by (le, tenant_id)) > 0.300
+    for: 5m
+    labels:
+      severity: warning
+      component: payment
+      kpi: transaction-latency
+    annotations:
+      summary: "Payment transaction p95 >300ms (checkout KPI impact)"
+      description: "Payment p95 is {{ $value | humanizeDuration }} for tenant {{ $labels.tenant_id }} (target: <300ms per Architecture §3.12)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payments"
+
+  - alert: StripeConnectOnboardingFailureRateHigh
+    expr: |
+      sum(rate(payment_connect_onboarding_failed[24h])) / sum(rate(payment_connect_onboarding_completed[24h]) + rate(payment_connect_onboarding_failed[24h])) < 0.95
+    for: 1h
+    labels:
+      severity: warning
+      component: payment
+      kpi: connect-onboarding
+    annotations:
+      summary: "Stripe Connect onboarding completion rate drops below 95% over 24 hours"
+      description: "Onboarding success rate is {{ $value | humanizePercentage }} (Sev2 threshold per Architecture §3.20.2)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payments"
 
   - alert: PayoutReconciliationDiscrepancy
     expr: |
@@ -338,7 +430,7 @@ groups:
     annotations:
       summary: "Unresolved payout discrepancies detected"
       description: "{{ $value }} unresolved discrepancies after daily reconciliation cycle"
-      runbook_url: "https://docs.villagecompute.com/runbooks/payment"
+      runbook_url: "https://docs.villagecompute.com/runbooks/payments"
       escalation: "Contact finance team immediately"
 
 - name: loyalty-rewards
@@ -346,28 +438,54 @@ groups:
   rules:
   - alert: LoyaltyPointsAccrualOverhead
     expr: |
-      histogram_quantile(0.95, sum(rate(loyalty_points_accrual_duration_bucket[5m])) by (le)) > 0.020
+      histogram_quantile(0.95, sum(rate(loyalty_accrual_duration_bucket[5m])) by (le)) > 0.100
     for: 10m
     labels:
       severity: warning
       component: loyalty
       kpi: accrual-overhead
     annotations:
-      summary: "Points accrual p95 overhead exceeds 20ms target"
-      description: "Accrual overhead is {{ $value | humanizeDuration }} (target: <20ms per Section 4)"
+      summary: "Points accrual p95 overhead exceeds 100ms target"
+      description: "Accrual overhead is {{ $value | humanizeDuration }} (target: <100ms per Architecture §3.12)"
       runbook_url: "https://docs.villagecompute.com/runbooks/loyalty"
 
   - alert: LoyaltyTierRecalculationSlow
     expr: |
-      loyalty_tier_recalc_job_duration_seconds > 600
+      max(loyalty_tier_recalculation_duration_bucket) > 900
     for: 5m
     labels:
       severity: warning
       component: loyalty
       kpi: tier-recalc
     annotations:
-      summary: "Tier recalculation job exceeds 10-minute target"
-      description: "Recalculation took {{ $value | humanizeDuration }} (target: <10 minutes nightly)"
+      summary: "Tier recalculation job exceeding 15 minutes runtime"
+      description: "Recalculation duration is {{ $value | humanizeDuration }} (target: <15m per Architecture §3.20.2)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/loyalty"
+
+  - alert: LoyaltyRedemptionExceedsAccrual
+    expr: |
+      sum(increase(loyalty_points_redeemed[1d])) by (tenant_id) / sum(increase(loyalty_points_accrued[1d])) by (tenant_id) > 1.0
+    for: 3d
+    labels:
+      severity: info
+      component: loyalty
+      kpi: redemption-anomaly
+    annotations:
+      summary: "Loyalty redemption exceeding accrual for more than 3 consecutive days"
+      description: "Potential fraud indicator for tenant {{ $labels.tenant_id }} - redemption/accrual ratio: {{ $value }} (Info alert per Architecture §3.20.3)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/loyalty"
+
+  - alert: LoyaltyQueueBacklogHigh
+    expr: |
+      loyalty_queue_depth > 50
+    for: 15m
+    labels:
+      severity: warning
+      component: loyalty
+      kpi: queue-backlog
+    annotations:
+      summary: "Loyalty processing queue backlog high"
+      description: "Queue depth is {{ $value }} for tenant {{ $labels.tenant_id }} (monitor per Architecture §3.12)"
       runbook_url: "https://docs.villagecompute.com/runbooks/loyalty"
 
 - name: pos-offline
@@ -417,6 +535,74 @@ groups:
       summary: "Global store list query p95 exceeds 300ms target"
       description: "Query latency is {{ $value | humanizeDuration }} (target: <300ms with pagination)"
       runbook_url: "https://docs.villagecompute.com/runbooks/platform-admin"
+
+- name: headless-api
+  interval: 30s
+  rules:
+  - alert: HeadlessOAuthTokenIssuanceErrorRateHigh
+    expr: |
+      sum(rate(headless_oauth_token_failed[5m])) by (tenant_id) / (sum(rate(headless_oauth_token_issued[5m])) by (tenant_id) + sum(rate(headless_oauth_token_failed[5m])) by (tenant_id)) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: headless-api
+      kpi: token-issuance-errors
+    annotations:
+      summary: "OAuth client credential issuance errors >5% during partner onboarding week"
+      description: "Token issuance error rate is {{ $value | humanizePercentage }} for tenant {{ $labels.tenant_id }} (Sev2 threshold per Architecture §3.20.2)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/headless_api"
+
+  - alert: HeadlessApiRateLimitHitRateHigh
+    expr: |
+      sum(rate(headless_api_rate_limit_hit[5m])) by (tenant_id, client_id) > 10
+    for: 5m
+    labels:
+      severity: info
+      component: headless-api
+      kpi: rate-limit-hits
+    annotations:
+      summary: "High rate limit hit rate for OAuth client"
+      description: "Client {{ $labels.client_id }} hitting rate limits at {{ $value }}/sec for tenant {{ $labels.tenant_id }} (tune limits per Architecture §3.20.2)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/headless_api"
+
+  - alert: HeadlessApiRequestLatencyHigh
+    expr: |
+      histogram_quantile(0.95, sum(rate(headless_api_request_duration_bucket[5m])) by (le, tenant_id, endpoint)) > 0.500
+    for: 10m
+    labels:
+      severity: warning
+      component: headless-api
+      kpi: request-latency
+    annotations:
+      summary: "Headless API request p95 exceeds 500ms target"
+      description: "Endpoint {{ $labels.endpoint }} p95 is {{ $value | humanizeDuration }} for tenant {{ $labels.tenant_id }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/headless_api"
+
+  - alert: HeadlessApiErrorRateHigh
+    expr: |
+      sum(rate(headless_api_request_error[5m])) by (tenant_id, endpoint) / sum(rate(headless_api_request[5m])) by (tenant_id, endpoint) > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      component: headless-api
+      kpi: error-rate
+    annotations:
+      summary: "Headless API error rate exceeds 5% for endpoint"
+      description: "Endpoint {{ $labels.endpoint }} error rate is {{ $value | humanizePercentage }} for tenant {{ $labels.tenant_id }}"
+      runbook_url: "https://docs.villagecompute.com/runbooks/headless_api"
+
+  - alert: HeadlessOAuthClientCredentialIssuanceError
+    expr: |
+      rate(headless_oauth_client_credential_issuance_error[5m]) > 0.01
+    for: 5m
+    labels:
+      severity: warning
+      component: headless-api
+      kpi: credential-issuance
+    annotations:
+      summary: "OAuth client credential issuance errors detected"
+      description: "Credential issuance errors at {{ $value }}/sec, error_type: {{ $labels.error_type }} (Sev2 monitoring per Architecture §3.20.2)"
+      runbook_url: "https://docs.villagecompute.com/runbooks/headless_api"
 
 - name: integration-adapters
   interval: 30s
