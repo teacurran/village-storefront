@@ -333,7 +333,136 @@ All errors follow **RFC 7807 Problem Details** format:
 
 ## Code Examples
 
-### JavaScript (Node.js)
+### JavaScript/TypeScript (Fetch API)
+
+Modern JavaScript/TypeScript using native Fetch API with rate limit handling:
+
+```typescript
+const STOREFRONT_URL = 'https://yourstore.villagecompute.com'
+const CLIENT_ID = process.env.OAUTH_CLIENT_ID
+const CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET
+
+// Build HTTP Basic Auth header
+const authHeader = 'Basic ' + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64')
+
+interface ApiOptions {
+  method?: string
+  body?: any
+  headers?: Record<string, string>
+  retryOn429?: boolean
+}
+
+async function apiRequest<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { method = 'GET', body, headers = {}, retryOn429 = true } = options
+
+  const response = await fetch(`${STOREFRONT_URL}${path}`, {
+    method,
+    headers: {
+      'Authorization': authHeader,
+      'Content-Type': 'application/json',
+      ...headers
+    },
+    body: body ? JSON.stringify(body) : undefined
+  })
+
+  // Handle rate limiting with automatic retry
+  if (response.status === 429 && retryOn429) {
+    const retryAfter = response.headers.get('Retry-After') || '5'
+    const delay = parseInt(retryAfter) * 1000
+
+    console.warn(`Rate limited. Retrying after ${delay}ms`)
+    await new Promise(resolve => setTimeout(resolve, delay))
+
+    // Retry once
+    return apiRequest<T>(path, { ...options, retryOn429: false })
+  }
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || `API error: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// List products
+async function getProducts(search?: string, page = 1, pageSize = 20) {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    pageSize: pageSize.toString(),
+    ...(search && { search })
+  })
+
+  return apiRequest<{
+    products: Product[]
+    pagination: { page: number, pageSize: number, totalItems: number, totalPages: number }
+  }>(`/api/v1/headless/catalog/products?${params}`)
+}
+
+// Add to cart
+async function addToCart(sessionId: string, variantId: string, quantity: number) {
+  return apiRequest<CartItem>('/api/v1/headless/cart/items', {
+    method: 'POST',
+    body: { variantId, quantity },
+    headers: { 'X-Session-Id': sessionId }
+  })
+}
+```
+
+### TypeScript Types
+
+Full TypeScript type definitions for API responses:
+
+```typescript
+export interface Product {
+  id: string
+  sku: string
+  name: string
+  slug: string
+  description?: string
+  price: string
+  imageUrl?: string
+  status: 'active' | 'draft' | 'archived'
+  variants: ProductVariant[]
+}
+
+export interface ProductVariant {
+  id: string
+  sku: string
+  name: string
+  price: string
+  inventoryQuantity: number
+  status: 'active' | 'inactive'
+}
+
+export interface Cart {
+  id: string
+  items: CartItem[]
+  subtotal: string
+  tax: string
+  total: string
+}
+
+export interface CartItem {
+  id: string
+  variantId: string
+  productName: string
+  variantName: string
+  quantity: number
+  price: string
+  total: string
+}
+
+export interface ApiError {
+  type: string
+  title: string
+  status: number
+  detail: string
+  instance: string
+}
+```
+
+### JavaScript (Node.js with Axios)
 
 ```javascript
 const axios = require('axios');
@@ -427,6 +556,63 @@ curl -X POST "$BASE_URL/cart/items" \
   -H "X-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -d '{"variantId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "quantity": 2}'
+```
+
+---
+
+## Next.js Integration Example
+
+A complete Next.js example application is available in `examples/nextjs-headless/`. This demonstrates:
+
+- Server-side rendering with Next.js App Router
+- OAuth client credentials authentication
+- Rate limit handling with automatic retry
+- Product listing with search and pagination
+- TypeScript types for all API responses
+- Production-ready error handling
+
+### Quick Start
+
+```bash
+cd examples/nextjs-headless
+
+# Create .env.local with your credentials
+STOREFRONT_URL=https://yourstore.villagecompute.com
+OAUTH_CLIENT_ID=oauth_abc123...
+OAUTH_CLIENT_SECRET=your-secret-here...
+
+# Install and run
+npm install
+npm run dev
+```
+
+See `examples/nextjs-headless/README.md` for full documentation.
+
+### API Client Implementation
+
+The example includes a reusable API client (`lib/storefront-api.ts`) with:
+
+- Automatic OAuth authentication
+- Rate limit detection and retry with exponential backoff
+- Request caching (Next.js `cache()` wrapper)
+- TypeScript types
+- Error handling
+
+```typescript
+import { getProducts, addToCart } from '@/lib/storefront-api'
+
+// Server component
+export default async function ProductsPage() {
+  const { products } = await getProducts('shoes', 1, 20)
+
+  return (
+    <div>
+      {products.map(product => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+    </div>
+  )
+}
 ```
 
 ---

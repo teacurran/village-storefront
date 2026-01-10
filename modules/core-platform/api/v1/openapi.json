@@ -558,6 +558,34 @@
           }
         }
       },
+      "CreateOAuthClientRequest" : {
+        "type" : "object",
+        "required" : [ "name", "scopes" ],
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "pattern" : "\\S",
+            "maxLength" : 255
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 2000
+          },
+          "scopes" : {
+            "type" : "array",
+            "uniqueItems" : true,
+            "items" : {
+              "type" : "string"
+            },
+            "minItems" : 1
+          },
+          "rateLimitPerMinute" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 100
+          }
+        }
+      },
       "DevicePairingRequest" : {
         "type" : "object",
         "properties" : {
@@ -2234,6 +2262,180 @@
         },
         "summary" : "Get Program Admin",
         "tags" : [ "Loyalty Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "List Clients",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateOAuthClientRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Create Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients/{clientId}" : {
+      "put" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateOAuthClientRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Update Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      },
+      "get" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients/{clientId}/regenerate-secret" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Regenerate Secret",
+        "tags" : [ "O Auth Client Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ "admin" ]
+        } ]
+      }
+    },
+    "/api/v1/admin/oauth-clients/{clientId}/revoke" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "clientId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Revoke Client",
+        "tags" : [ "O Auth Client Admin Resource" ],
         "security" : [ {
           "SecurityScheme" : [ "admin" ]
         } ]
