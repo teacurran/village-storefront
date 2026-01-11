@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Covers storefront checkout, admin flows, and platform console
  */
 export default defineConfig({
-  testDir: './',
+  testDir: '../',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

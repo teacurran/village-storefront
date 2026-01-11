@@ -16,6 +16,9 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+process.env.QUARKUS_AWS_DEVSERVICES_LOCALSTACK_ENABLED = 'false';
+process.env.QUARKUS_AMAZON_S3_DEVSERVICES_ENABLED = 'false';
+
 const MODULES = ['modules/core-platform'];
 
 function getModuleSelector() {

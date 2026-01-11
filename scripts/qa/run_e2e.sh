@@ -31,7 +31,7 @@
 #   BASE_URL      - Application URL to test against (default: http://localhost:8080)
 #   HEADLESS      - Run browsers in headless mode (default: true)
 #   CI            - CI environment flag, auto-detected (uses npm ci when true)
-#   E2E_PLACEHOLDER_CMD - Override placeholder stub command logged before suites run
+#   SEED_DATA     - Seed deterministic catalog/inventory data (default: true)
 #
 # OUTPUT ARTIFACTS:
 #   target/playwright-report/index.html  - HTML test report (browsable)
@@ -81,8 +81,8 @@ RESULTS_JSON="target/playwright-results.json"
 JUNIT_XML="target/playwright-junit.xml"
 TRACE_DIR="target/playwright-traces"
 
-# Placeholder command proves CI wiring until Cypress + expanded Playwright suites land
-E2E_PLACEHOLDER_CMD="${E2E_PLACEHOLDER_CMD:-"echo '[stub] TODO(I2.T8/I3.T8): wire Playwright + Cypress suites via scripts/qa/run_e2e.sh'"}"
+# Seed tenant data for deterministic E2E test scenarios
+SEED_DATA="${SEED_DATA:-true}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -113,10 +113,32 @@ check_command() {
     fi
 }
 
-run_placeholder_stub() {
-    log_warn "Executing placeholder E2E command (replace when suites are wired): $E2E_PLACEHOLDER_CMD"
-    bash -c "$E2E_PLACEHOLDER_CMD"
-    log_warn "Placeholder command completed; proceeding to Playwright orchestration."
+seed_test_data() {
+    log_info "Seeding test data for deterministic E2E scenarios..."
+
+    # Execute tenant seed script with catalog data
+    if [ -f "./scripts/dev/tenant_seed.sh" ]; then
+        ./scripts/dev/tenant_seed.sh --catalog || {
+            log_error "Failed to seed test data"
+            return 1
+        }
+        log_info "Test data seeded successfully"
+    else
+        log_warn "Seed script not found, skipping data seeding"
+    fi
+}
+
+run_rest_assured_contracts() {
+    log_info "Running REST-assured API contract tests..."
+
+    # Run integration tests that validate OpenAPI contract
+    # Note: These tests use QuarkusTest and will start embedded server
+    ./mvnw -pl modules/core-platform test -Dtest=CatalogContractIT || {
+        log_error "REST-assured contract tests failed"
+        return 1
+    }
+
+    log_info "API contract tests passed"
 }
 
 # -----------------------------------------------------------------------------
@@ -152,10 +174,23 @@ log_info "Prerequisites OK"
 log_info ""
 
 # -----------------------------------------------------------------------------
-# Placeholder (TODO wiring for Cypress + additional suites)
+# Seed Test Data
 # -----------------------------------------------------------------------------
 
-run_placeholder_stub
+if [ "$SEED_DATA" = "true" ]; then
+    seed_test_data || exit 1
+    log_info ""
+else
+    log_warn "Skipping test data seeding (SEED_DATA=false)"
+    log_info ""
+fi
+
+# -----------------------------------------------------------------------------
+# REST-assured API Contract Tests
+# -----------------------------------------------------------------------------
+
+run_rest_assured_contracts || exit 1
+log_info ""
 
 # -----------------------------------------------------------------------------
 # Dependency Installation

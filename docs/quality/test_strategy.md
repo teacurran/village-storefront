@@ -449,7 +449,7 @@ Reliable test data management is critical for deterministic test execution acros
 
 - Canonical seed entry point: `tests/fixtures/seed-e2e-data.js`, which hydrates tenants defined in `tests/fixtures/tenants.ts` (tenant-a/b/c). It provisions platform admin accounts plus tenant users, catalog content, loyalty programs, and OAuth clients against the REST API so data matches production traffic paths.
 - Run seeding prior to E2E execution: `npm --prefix tests/e2e/playwright run seed:e2e`. The command is idempotent and can be re-run mid-suite to repair data drifts.
-- `scripts/qa/run_e2e.sh` documents the seeding requirement today and exposes `E2E_PLACEHOLDER_CMD` so CI can prove the wiring until `TODO(I2.T8)` integrates an automated `seed:e2e` call directly into the runner.
+- `scripts/qa/run_e2e.sh` automatically seeds catalog data via `scripts/dev/tenant_seed.sh --catalog` before executing Playwright and REST-assured contract tests. Seeding can be disabled with `SEED_DATA=false` environment variable.
 
 ##### Isolation & Refresh Policy
 
@@ -603,14 +603,17 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) enforces the following 
     - `BASE_URL` (default: `http://localhost:8080`) - Application URL to test against
     - `HEADLESS` (default: `true`) - Run browsers in headless mode
     - `CI` (auto-detected) - Uses `npm ci` instead of `npm install` when `CI=true`
-    - `E2E_PLACEHOLDER_CMD` (default: `echo '[stub] TODO(I2.T8/I3.T8): wire Playwright + Cypress suites'`) - Placeholder command proving the future Cypress/Playwright orchestration hook
+    - `SEED_DATA` (default: `true`) - Seed deterministic catalog/inventory data via `tenant_seed.sh --catalog`
   - **Prerequisites:** Node 18+, npm, Playwright browsers
   - **Output Artifacts:**
     - HTML Report: `target/playwright-report/index.html`
     - JSON Results: `target/playwright-results.json`
     - JUnit XML: `target/playwright-junit.xml`
     - Traces: `target/playwright-traces/` (on failure)
-  - **Placeholder Stub:** Until `I2.T8` adds automated seed + Cypress orchestration, the runner executes the configured placeholder command (logs TODO message) before invoking Playwright so CI history documents the missing suites.
+  - **Test Execution Flow (I2.T8):**
+    1. Seeds deterministic catalog/inventory data via `tenant_seed.sh --catalog`
+    2. Runs REST-assured API contract tests validating OpenAPI compliance (`modules/core-platform/src/test/java/villagecompute/storefront/api/contract/CatalogContractIT.java`)
+    3. Executes Playwright storefront catalog tests with visual snapshots (`tests/e2e/storefront/catalog.spec.ts`)
   - **Retry Logic:** 2 retries on failure (configured in `playwright.config.ts`)
   - **Timeout:** 20 minutes total (4 parallel workers)
   - **CI Usage:** GitHub Actions runs with `CI=true HEADLESS=true BASE_URL=http://localhost:8080`
@@ -750,8 +753,11 @@ The test strategy is delivered incrementally across iterations I1-I5. Each itera
   - SKU generation edge cases
   - Category tree traversal tests
 - **I2.T4:** Catalog import/export job handlers (already implemented, target: maintain existing coverage)
-- **I2.T8:** Integration test suite expansion
-  - REST-assured OpenAPI schema validation for all endpoints
+- **I2.T8:** Integration test suite expansion (completed)
+  - REST-assured contract tests (`modules/core-platform/src/test/java/villagecompute/storefront/api/contract/CatalogContractIT.java`) validating catalog endpoints against OpenAPI spec
+  - Playwright storefront tests (`tests/e2e/storefront/catalog.spec.ts`) covering home, category browsing, product detail, cart add, theme tokens, visual snapshots
+  - Automated seeding via `tenant_seed.sh --catalog` providing deterministic techgadgets/artisancrafts catalog data
+  - E2E runner script (`scripts/qa/run_e2e.sh`) orchestrates seed → REST-assured → Playwright execution flow
   - Testcontainers PostgreSQL with RLS verification
   - Tenant isolation negative tests
 - **Cumulative Coverage Target:** ≥60% overall (identity + catalog + tenant modules fully tested)
