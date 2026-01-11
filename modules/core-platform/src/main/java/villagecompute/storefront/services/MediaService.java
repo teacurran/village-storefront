@@ -143,6 +143,8 @@ public class MediaService {
             throw new IllegalArgumentException("Unsupported asset type: " + request.assetType());
         }
 
+        validateMimeType(normalizedType, request.contentType());
+
         if (!mediaQuotaRepository.hasAvailableQuota(request.fileSize())) {
             long remaining = mediaQuotaRepository.getRemainingQuota();
             meterRegistry.counter("media.quota.exceeded", "tenant", currentTenantId().toString()).increment();
@@ -347,6 +349,25 @@ public class MediaService {
         }
         if (request.assetType() == null || request.assetType().isBlank()) {
             throw new IllegalArgumentException("assetType required");
+        }
+    }
+
+    private void validateMimeType(String assetType, String contentType) {
+        if (contentType == null) {
+            throw new IllegalArgumentException("contentType required");
+        }
+
+        String normalizedContentType = contentType.trim().toLowerCase(Locale.ROOT);
+        if (!normalizedContentType.contains("/")) {
+            throw new IllegalArgumentException("contentType must be a valid MIME type (type/subtype)");
+        }
+
+        if ("image".equals(assetType) && !normalizedContentType.startsWith("image/")) {
+            throw new IllegalArgumentException("contentType must be image/* for assetType image");
+        }
+
+        if ("video".equals(assetType) && !normalizedContentType.startsWith("video/")) {
+            throw new IllegalArgumentException("contentType must be video/* for assetType video");
         }
     }
 

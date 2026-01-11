@@ -710,6 +710,231 @@ The seed script reads configuration from your `.env` file:
 - `psql` (PostgreSQL client) - Install via `brew install postgresql` (macOS) or `apt install postgresql-client` (Ubuntu)
 - Docker Compose (for running PostgreSQL)
 
+### Local Media Pipeline Flow
+
+The platform includes a complete media ingestion and processing pipeline for images and videos. In local development, this uses MinIO (S3-compatible storage) and processes media asynchronously via background jobs.
+
+#### Architecture Overview
+
+```
+Upload Request → Presigned URL → Client Upload → Completion Hook → Background Job → Derivatives
+     ↓              ↓                  ↓                ↓                  ↓              ↓
+ Negotiate     Generate URL      Direct to S3    Persist metadata   FFmpeg/Thumbnailator  Store variants
+   Quota         (15 min TTL)      (bypass app)    + Enqueue job    (resize, transcode)   Update quota
+```
+
+#### Local Development Stack
+
+**Storage:** MinIO (started via `docker/docker-compose.yaml`)
+- Endpoint: `http://localhost:9000`
+- Console: `http://localhost:9001` (credentials in `.env`)
+- Bucket: `village-storefront-media` (auto-created by bootstrap script)
+
+**Processing:**
+- **Images:** Thumbnailator generates 4 derivatives (thumbnail 150px, small 400px, medium 800px, large 1600px)
+- **Videos:** FFmpeg creates HLS variants (720p, 480p, 360p) + poster frame (requires FFmpeg binary installed)
+
+#### Media Upload Flow (End-to-End)
+
+**1. Upload Negotiation (POST `/api/v1/media/upload/negotiate`)**
+
+Client requests presigned upload URL:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/media/upload/negotiate \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: a0000000-0000-0000-0000-000000000001" \
+  -d '{
+    "filename": "product-photo.jpg",
+    "contentType": "image/jpeg",
+    "fileSize": 524288,
+    "assetType": "image"
+  }'
+```
+
+Response includes:
+- `assetId`: UUID for tracking
+- `storageKey`: Tenant-scoped path (`{tenant}/media/image/{assetId}/original/{hash}_{filename}`)
+- `presignedUrl`: Direct upload URL (valid 15 minutes)
+- `expiresAt`: URL expiration timestamp
+- `remainingQuotaBytes`: Tenant quota remaining
+
+**Security Enforcements:**
+- Tenant ID prefix in storage key (prevents cross-tenant access)
+- Hashed filename component (SHA-256 truncated to 12 chars for cache-busting)
+- Size validation (rejects zero/negative sizes)
+- MIME type validation (only `image/*` and `video/*` allowed)
+- Quota enforcement (returns 413 if tenant quota exceeded)
+
+**2. Client Upload to Presigned URL (PUT to S3)**
+
+Client uploads directly to MinIO/R2 (bypasses application server):
+
+```bash
+curl -X PUT "{presignedUrl}" \
+  -H "Content-Type: image/jpeg" \
+  --upload-file product-photo.jpg
+```
+
+**3. Upload Completion (POST `/api/v1/media/{assetId}/complete`)**
+
+Client notifies platform that upload succeeded:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/media/{assetId}/complete \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: a0000000-0000-0000-0000-000000000001" \
+  -d '{"checksumSha256": "abc123..."}'
+```
+
+This triggers:
+- Metadata persistence (`MediaAsset` record created with status `pending`)
+- Quota usage tracking (original file size added to tenant quota)
+- Background job enqueue (`MediaJobService.enqueueProcessingJob()`)
+- Priority assignment (DEFAULT for images, LOW for videos)
+
+**4. Background Processing (`MediaJobService` scheduled dispatcher)**
+
+Workers poll the queue every 3 seconds (configurable via `media.processing.dispatch-interval`):
+
+```
+Job Dispatcher → Download from S3 → Process (FFmpeg/Thumbnailator) → Upload derivatives → Update status
+     ↓                ↓                        ↓                              ↓                  ↓
+Poll queue      Temp file            Generate variants            S3 PUT (hashed keys)    Mark 'ready'
+(priority)    (cleanup on fail)     (width/height/duration)     (quotas updated)        (emit metrics)
+```
+
+**Processing Details:**
+- **Images:** 4 JPEG derivatives, metadata extraction (width/height), WebP conversion (future)
+- **Videos:** HLS master playlist + 3 variants (720p/480p/360p), MPEG-TS segments, poster frame JPEG
+- **Quotas:** Derivative sizes added to tenant usage
+- **Failures:** Asset marked `failed`, error logged, retry via DelayedJob pattern
+
+**5. Signed Download URLs (GET `/api/v1/media/{assetId}/download`)**
+
+Client requests time-limited download URL:
+
+```bash
+curl http://localhost:8080/api/v1/media/{assetId}/download \
+  -H "X-Tenant-ID: a0000000-0000-0000-0000-000000000001"
+```
+
+Response:
+- `url`: Presigned download URL (valid 24 hours, configurable via `media.signed-url.expiry-hours`)
+- `expiresAt`: URL expiration timestamp
+- `remainingAttempts`: Download attempts left (default 5, configurable via `media.signed-url.max-download-attempts`)
+
+**Security Features:**
+- Download attempt tracking (prevents abuse)
+- Access logging (`MediaAccessLog` table with signature version)
+- Tenant isolation (cannot generate URLs for other tenants' assets)
+- TTL enforcement (URLs auto-expire)
+
+#### Queue Priority Logic
+
+Media jobs use differentiated priorities based on asset type and tenant needs:
+
+| Asset Type | Default Priority | Rationale | Target SLA |
+|------------|-----------------|-----------|------------|
+| Image | DEFAULT | Interactive use (product photos), moderate processing time (~5-15s) | < 30s |
+| Video | LOW | Batch workload, heavy processing time (5-30+ min for HLS transcoding) | < 5m |
+| Critical Override | CRITICAL | Urgent assets (homepage hero images, flash sales) via manual API flag | < 1s |
+
+**Configuration:**
+- Queue capacities: CRITICAL (50), HIGH (200), DEFAULT (500), LOW (250)
+- Retry policies: CRITICAL (aggressive), others (default exponential backoff)
+- Worker scaling: Independent HPA per priority via `media_processing_queue_depth` metric
+
+#### Monitoring & Metrics
+
+**Prometheus Metrics (emitted by `MediaService` and `MediaJobService`):**
+
+| Metric | Type | Tags | Description |
+|--------|------|------|-------------|
+| `media.upload.negotiate` | Counter | tenant, type | Upload negotiation requests |
+| `media.upload.completed` | Counter | tenant, type | Successful upload completions |
+| `media.quota.exceeded` | Counter | tenant | Quota enforcement rejections |
+| `media.job.enqueued` | Counter | tenant, priority | Jobs added to queue |
+| `media.job.success` | Counter | tenant, type | Successful processing jobs |
+| `media.job.failed` | Counter | tenant, type | Failed processing jobs |
+| `media.download.issued` | Counter | tenant, type | Signed download URLs generated |
+| `media_processing_queue_depth` | Gauge | priority | Current queue depth per priority |
+
+**Example Queries:**
+
+```promql
+# Upload success rate (last 5 minutes)
+rate(media.upload.completed[5m]) / rate(media.upload.negotiate[5m])
+
+# Queue depth by priority
+media_processing_queue_depth{priority="default"}
+
+# Processing failure rate
+rate(media.job.failed[5m]) / rate(media.job.success[5m] + media.job.failed[5m])
+```
+
+#### Local Testing Tips
+
+**1. Verify MinIO Connectivity:**
+```bash
+# List buckets (should include village-storefront-media)
+aws --endpoint-url=http://localhost:9000 s3 ls
+
+# Inspect media objects
+aws --endpoint-url=http://localhost:9000 s3 ls s3://village-storefront-media/
+```
+
+**2. Trigger Manual Processing:**
+```bash
+# Complete an upload, then drain queue synchronously
+curl -X POST http://localhost:8080/api/v1/media/{assetId}/complete \
+  -H "X-Tenant-ID: {tenant}" -d '{}'
+
+# Check asset status (should be 'pending' → 'processing' → 'ready')
+curl http://localhost:8080/api/v1/media/{assetId} -H "X-Tenant-ID: {tenant}"
+```
+
+**3. Inspect Job Logs:**
+```bash
+# Watch processing logs
+./mvnw quarkus:dev | grep "Processing media job"
+
+# Check for errors
+./mvnw quarkus:dev | grep "Failed to process media asset"
+```
+
+**4. Test Quota Enforcement:**
+```bash
+# Set low quota for tenant via psql
+psql -h localhost -U appuser -d storefront_dev -c \
+  "UPDATE media_quotas SET quota_bytes = 1024 WHERE tenant_id = '{tenant}';"
+
+# Attempt oversized upload (should return 413)
+curl -X POST http://localhost:8080/api/v1/media/upload/negotiate \
+  -H "X-Tenant-ID: {tenant}" -d '{"filename":"huge.mp4","contentType":"video/mp4","fileSize":1048576,"assetType":"video"}'
+```
+
+#### Production Differences
+
+When deploying to production with Cloudflare R2:
+
+1. **Storage Client:** `R2MediaStorageClient` replaces `StubMediaStorageClient` (auto-wired via Quarkus profile)
+2. **Signed URLs:** Use Cloudflare R2 presigned URL format (S3-compatible with auth v4 signatures)
+3. **Worker Pods:** Separate Kubernetes deployments per priority queue with HPAs watching `media_processing_queue_depth`
+4. **FFmpeg:** Containerized with resource limits (CPU/memory quotas prevent runaway transcoding)
+5. **Monitoring:** Grafana dashboards track queue depth, SLA compliance, quota usage trends
+
+**Environment Variables (`.env` → Kubernetes ConfigMap):**
+```bash
+R2_ENDPOINT_URL=https://{account_id}.r2.cloudflarestorage.com
+R2_ACCESS_KEY={cloudflare_r2_access_key}
+R2_SECRET_KEY={cloudflare_r2_secret_key}
+R2_BUCKET_NAME=village-storefront-media
+R2_REGION=auto
+```
+
+See `docs/architecture/background_jobs.md` for queue architecture details and `docs/operations/media_runbook.md` for production incident response procedures.
+
 #### Troubleshooting
 
 **Error: "psql: connection refused"**
