@@ -117,6 +117,8 @@ DROP TABLE IF EXISTS collections CASCADE;
 
 \echo '   c) Reverting inventory_levels extensions...'
 ALTER TABLE inventory_levels DROP COLUMN IF EXISTS version;
+ALTER TABLE inventory_levels DROP COLUMN IF EXISTS safety_stock;
+ALTER TABLE inventory_levels DROP COLUMN IF EXISTS low_stock_threshold;
 \echo '   Inventory level version column removed ✓'
 \echo ''
 

@@ -31,6 +31,7 @@ public class InventoryLevelRepository implements PanacheRepositoryBase<Inventory
     private static final String QUERY_FIND_BY_VARIANT = "tenant.id = :tenantId and variant.id = :variantId";
     private static final String QUERY_FIND_BY_VARIANT_AND_LOCATION = "tenant.id = :tenantId and variant.id = :variantId and location = :location";
     private static final String QUERY_FIND_BY_LOCATION = "tenant.id = :tenantId and location = :location";
+    private static final String QUERY_FIND_LOW_STOCK = "tenant.id = :tenantId and lowStockThreshold > 0 and (quantity - reserved) <= lowStockThreshold";
 
     /**
      * Find all inventory levels for a variant across all locations.
@@ -81,5 +82,36 @@ public class InventoryLevelRepository implements PanacheRepositoryBase<Inventory
      */
     public int getTotalAvailableQuantity(UUID variantId) {
         return findByVariant(variantId).stream().mapToInt(InventoryLevel::getAvailableQuantity).sum();
+    }
+
+    /**
+     * Find all inventory levels that are below their configured low stock threshold.
+     *
+     * <p>
+     * Only returns levels where lowStockThreshold is configured (> 0) and current quantity is at or below that
+     * threshold. Used by the low stock alert scheduler to identify items needing attention.
+     *
+     * @return list of low stock inventory levels
+     */
+    public List<InventoryLevel> findLowStockItems() {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return list(QUERY_FIND_LOW_STOCK, Parameters.with("tenantId", tenantId));
+    }
+
+    /**
+     * Count total inventory levels for current tenant.
+     *
+     * @return count of inventory levels
+     */
+    public int countForTenant() {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return (int) count("tenant.id", tenantId);
+    }
+
+    /**
+     * Clear the underlying persistence context. Used by retry logic when optimistic locking conflicts occur.
+     */
+    public void clear() {
+        getEntityManager().clear();
     }
 }

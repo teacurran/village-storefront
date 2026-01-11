@@ -3,10 +3,12 @@ package villagecompute.storefront.services;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import jakarta.persistence.OptimisticLockException;
 
 import org.jboss.logging.Logger;
 
@@ -17,6 +19,8 @@ import villagecompute.storefront.tenant.TenantContext;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
+import io.quarkus.arc.ArcUndeclaredThrowableException;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 
 /**
  * Service layer for inventory management operations.
@@ -42,6 +46,9 @@ public class InventoryService {
 
     @Inject
     InventoryMetrics inventoryMetrics;
+
+    @Inject
+    InventoryService self;
 
     /**
      * Create or update inventory level for a variant at a location.
@@ -101,9 +108,19 @@ public class InventoryService {
      *            quantity adjustment (positive or negative)
      * @return updated inventory level
      */
+    public InventoryLevel adjustInventory(UUID variantId, String location, int adjustment) {
+        return executeWithOptimisticRetry(() -> {
+            if (QuarkusTransaction.isActive()) {
+                return self.adjustInventoryInternal(variantId, location, adjustment);
+            }
+            return QuarkusTransaction.requiringNew()
+                    .call(() -> self.adjustInventoryInternal(variantId, location, adjustment));
+        });
+    }
+
     @Transactional
     @WithSpan("InventoryService.adjustInventory")
-    public InventoryLevel adjustInventory(UUID variantId, String location, int adjustment) {
+    InventoryLevel adjustInventoryInternal(UUID variantId, String location, int adjustment) {
         UUID tenantId = TenantContext.getCurrentTenantId();
 
         // Add OpenTelemetry span attributes
@@ -291,5 +308,39 @@ public class InventoryService {
      */
     public boolean isInStock(UUID variantId) {
         return getTotalAvailableQuantity(variantId) > 0;
+    }
+
+    private InventoryLevel executeWithOptimisticRetry(Supplier<InventoryLevel> action) {
+        int attempt = 0;
+        while (true) {
+            try {
+                return action.get();
+            } catch (RuntimeException e) {
+                OptimisticLockException ole = findOptimisticLock(e);
+                if (ole == null) {
+                    throw e;
+                }
+                attempt++;
+                if (attempt >= 3) {
+                    throw ole;
+                }
+                LOG.warnf("Optimistic locking conflict updating inventory - retrying attempt %d/3", attempt);
+            }
+        }
+    }
+
+    private OptimisticLockException findOptimisticLock(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof OptimisticLockException ole) {
+                return ole;
+            }
+            if (current instanceof ArcUndeclaredThrowableException && current.getCause() != null) {
+                current = current.getCause();
+            } else {
+                current = current.getCause();
+            }
+        }
+        return null;
     }
 }

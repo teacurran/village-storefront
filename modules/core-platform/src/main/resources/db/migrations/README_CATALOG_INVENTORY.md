@@ -107,6 +107,17 @@ Physical or virtual locations where inventory is tracked (warehouses, retail sto
 
 **RLS Policy:** `inventory_locations_isolation_policy` restricts access to the tenant derived from `current_setting('app.tenant_id')`
 
+### Inventory Levels
+
+**Table:** `inventory_levels`
+
+Tracks `(tenant, variant, location)` stock positions. Baseline schema provides `quantity`, `reserved`, timestamps, and the optimistic locking `version` column. Task `I2.T2` extends the table with:
+
+- `safety_stock` (INTEGER, default `0`): Buffer that triggers replenishment workflows before the location reaches zero available stock.
+- `low_stock_threshold` (INTEGER, default `0`): Threshold evaluated by the low-stock alert scheduler (`quantity - reserved <= threshold`). When configured (> 0), falling below the threshold raises alerts (currently logs + queue entries, future work will deliver email/webhook notifications).
+
+The columns are introduced via `V20260128__inventory_low_stock_thresholds.sql`, ensuring the scheduler stub and SLA instrumentation can reason about configured safety buffers without bespoke joins.
+
 ### Inventory Adjustments
 
 **Table:** `inventory_adjustments`

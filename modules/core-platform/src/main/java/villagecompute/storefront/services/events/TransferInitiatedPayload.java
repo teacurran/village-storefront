@@ -24,11 +24,11 @@ import villagecompute.storefront.data.models.TransferStatus;
  *            UUID of the InventoryTransfer
  * @param sourceLocationId
  *            UUID of source location
- * @param sourceLocationCode
+ * @param sourceLocation
  *            code of source location
  * @param destinationLocationId
  *            UUID of destination location
- * @param destinationLocationCode
+ * @param destinationLocation
  *            code of destination location
  * @param status
  *            initial status of the transfer
@@ -41,8 +41,8 @@ import villagecompute.storefront.data.models.TransferStatus;
  * @param notes
  *            optional transfer notes
  */
-public record TransferInitiatedPayload(UUID transferId, UUID sourceLocationId, String sourceLocationCode,
-        UUID destinationLocationId, String destinationLocationCode, TransferStatus status,
+public record TransferInitiatedPayload(UUID transferId, UUID sourceLocationId, String sourceLocation,
+        UUID destinationLocationId, String destinationLocation, TransferStatus status,
         List<TransferLineItem> lineItems, String initiatedBy, OffsetDateTime expectedArrivalDate, String notes) {
 
     /**

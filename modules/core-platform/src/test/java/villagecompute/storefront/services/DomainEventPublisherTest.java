@@ -288,8 +288,8 @@ class DomainEventPublisherTest {
         // Verify payload structure
         JsonNode payloadNode = objectMapper.readTree(event.payload);
         assertEquals(created.id.toString(), payloadNode.get("transferId").asText());
-        assertEquals("warehouse-test", payloadNode.get("sourceLocationCode").asText());
-        assertEquals("store-001", payloadNode.get("destinationLocationCode").asText());
+        assertEquals("warehouse-test", payloadNode.get("sourceLocation").asText());
+        assertEquals("store-001", payloadNode.get("destinationLocation").asText());
         assertEquals("PENDING", payloadNode.get("status").asText());
         assertTrue(payloadNode.has("lineItems"));
         assertEquals(1, payloadNode.get("lineItems").size());

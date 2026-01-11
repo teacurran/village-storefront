@@ -2,6 +2,7 @@ package villagecompute.storefront.services;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -23,6 +24,7 @@ import villagecompute.storefront.data.repositories.InventoryLevelRepository;
 import villagecompute.storefront.data.repositories.InventoryLocationRepository;
 import villagecompute.storefront.data.repositories.InventoryTransferRepository;
 import villagecompute.storefront.data.repositories.ProductVariantRepository;
+import villagecompute.storefront.notifications.InventoryNotificationService;
 import villagecompute.storefront.services.events.InventoryAdjustedPayload;
 import villagecompute.storefront.services.events.TransferInitiatedPayload;
 import villagecompute.storefront.services.events.TransferReceivedPayload;
@@ -78,6 +80,12 @@ public class InventoryTransferService {
 
     @Inject
     DomainEventPublisher eventPublisher;
+
+    @Inject
+    AuditLogService auditLogService;
+
+    @Inject
+    InventoryNotificationService inventoryNotificationService;
 
     /**
      * Create a new inventory transfer between locations.
@@ -181,6 +189,12 @@ public class InventoryTransferService {
 
         eventPublisher.publish("INVENTORY_TRANSFER", transfer.id, "TRANSFER_INITIATED", eventPayload);
 
+        auditLogService.recordInventoryAction("inventory_transfer_created", "InventoryTransfer", transfer.id,
+                Map.of("sourceLocation", source.code, "destinationLocation", destination.code, "lineCount",
+                        transfer.lines.size(), "initiatedBy", String.valueOf(transfer.initiatedBy), "barcodeJobId",
+                        String.valueOf(transfer.barcodeJobId), "status", transfer.status.name()));
+        inventoryNotificationService.enqueueTransferInitiated(transfer);
+
         LOG.infof("Transfer created - tenantId=%s, transferId=%s, jobId=%s", tenantId, transfer.id, jobId);
 
         return transfer;
@@ -244,6 +258,11 @@ public class InventoryTransferService {
                 OffsetDateTime.now());
 
         eventPublisher.publish("INVENTORY_TRANSFER", transfer.id, "TRANSFER_RECEIVED", eventPayload);
+
+        auditLogService.recordInventoryAction("inventory_transfer_received", "InventoryTransfer", transfer.id,
+                Map.of("sourceLocation", sourceCode, "destinationLocation", destCode, "lineCount", transfer.lines.size(),
+                        "status", transfer.status.name()));
+        inventoryNotificationService.enqueueTransferReceived(transfer);
 
         LOG.infof("Transfer received - tenantId=%s, transferId=%s", tenantId, transferId);
 
@@ -327,6 +346,11 @@ public class InventoryTransferService {
                 quantityAfter, quantityChange, reason, adjustedBy, notes, adjustment.id);
 
         eventPublisher.publish("INVENTORY_LEVEL", level.id, "INVENTORY_ADJUSTED", eventPayload);
+
+        auditLogService.recordInventoryAction("inventory_adjustment_recorded", "InventoryAdjustment", adjustment.id,
+                Map.of("variantId", variantId.toString(), "locationCode", location.code, "quantityChange",
+                        quantityChange, "quantityBefore", quantityBefore, "quantityAfter", quantityAfter, "reason",
+                        reason.name(), "adjustedBy", adjustedBy));
 
         LOG.infof("Adjustment recorded - tenantId=%s, adjustmentId=%s, before=%d, after=%d", tenantId, adjustment.id,
                 quantityBefore, quantityAfter);

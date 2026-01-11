@@ -19,16 +19,16 @@ import java.util.UUID;
  *
  * @param transferId
  *            UUID of the InventoryTransfer
- * @param sourceLocationCode
+ * @param sourceLocation
  *            code of source location
- * @param destinationLocationCode
+ * @param destinationLocation
  *            code of destination location
  * @param lineItems
  *            list of received items with quantities
  * @param receivedAt
  *            timestamp when transfer was marked received
  */
-public record TransferReceivedPayload(UUID transferId, String sourceLocationCode, String destinationLocationCode,
+public record TransferReceivedPayload(UUID transferId, String sourceLocation, String destinationLocation,
         List<ReceivedLineItem> lineItems, OffsetDateTime receivedAt) {
 
     /**

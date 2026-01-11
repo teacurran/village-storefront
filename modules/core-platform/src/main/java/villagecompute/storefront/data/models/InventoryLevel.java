@@ -75,6 +75,14 @@ public class InventoryLevel extends PanacheEntityBase {
             nullable = false)
     public Integer reserved = 0;
 
+    @Column(
+            name = "safety_stock")
+    public Integer safetyStock = 0;
+
+    @Column(
+            name = "low_stock_threshold")
+    public Integer lowStockThreshold = 0;
+
     @Version
     @Column(
             name = "version")
@@ -114,5 +122,17 @@ public class InventoryLevel extends PanacheEntityBase {
      */
     public int getAvailableQuantity() {
         return Math.max(0, quantity - reserved);
+    }
+
+    /**
+     * Check if current inventory level is below the configured low stock threshold.
+     *
+     * @return true if quantity is below low stock threshold and threshold is configured
+     */
+    public boolean isLowStock() {
+        if (lowStockThreshold == null || lowStockThreshold <= 0) {
+            return false;
+        }
+        return getAvailableQuantity() <= lowStockThreshold;
     }
 }

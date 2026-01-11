@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.data.models.AdjustmentReason;
+import villagecompute.storefront.data.models.AuditLogEntry;
 import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.InventoryAdjustment;
 import villagecompute.storefront.data.models.InventoryLevel;
@@ -34,12 +35,17 @@ import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.TransferStatus;
+import villagecompute.storefront.data.repositories.AuditLogRepository;
 import villagecompute.storefront.data.repositories.InventoryAdjustmentRepository;
 import villagecompute.storefront.data.repositories.InventoryLevelRepository;
 import villagecompute.storefront.data.repositories.InventoryLocationRepository;
+import villagecompute.storefront.notifications.InventoryNotificationPayload;
+import villagecompute.storefront.notifications.InventoryNotificationQueue;
+import villagecompute.storefront.notifications.InventoryNotificationType;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 
 /**
@@ -77,6 +83,15 @@ class InventoryTransferIT {
     @Inject
     EntityManager entityManager;
 
+    @Inject
+    villagecompute.storefront.services.jobs.LowStockAlertScheduler lowStockAlertScheduler;
+
+    @Inject
+    AuditLogRepository auditLogRepository;
+
+    @Inject
+    InventoryNotificationQueue inventoryNotificationQueue;
+
     private UUID tenant1Id;
     private UUID tenant2Id;
     private UUID variantId;
@@ -86,7 +101,10 @@ class InventoryTransferIT {
     @BeforeEach
     @Transactional
     void setUp() {
+        inventoryNotificationQueue.clear();
+
         // Clean up existing data
+        clearAuditLogsIfPresent();
         entityManager.createQuery("DELETE FROM DomainEvent").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
@@ -184,6 +202,16 @@ class InventoryTransferIT {
         return location;
     }
 
+    private void clearAuditLogsIfPresent() {
+        Number tableCount = (Number) entityManager
+                .createNativeQuery(
+                        "SELECT COUNT(*) FROM information_schema.tables WHERE lower(table_name) = 'audit_log_entries'")
+                .getSingleResult();
+        if (tableCount != null && tableCount.intValue() > 0) {
+            entityManager.createQuery("DELETE FROM AuditLogEntry").executeUpdate();
+        }
+    }
+
     @Test
     @Transactional
     void createTransfer_shouldReserveInventoryAtSource() {
@@ -212,6 +240,15 @@ class InventoryTransferIT {
         assertEquals(100, sourceLevel.quantity);
         assertEquals(30, sourceLevel.reserved);
         assertEquals(70, sourceLevel.getAvailableQuantity());
+
+        assertEquals(1,
+                auditLogRepository.findByEntityAndAction(created.id, "inventory_transfer_created").size(),
+                "Transfer creation should record audit entry");
+
+        InventoryNotificationPayload payload = inventoryNotificationQueue.poll();
+        assertNotNull(payload, "Notification payload should be enqueued");
+        assertEquals(InventoryNotificationType.TRANSFER_INITIATED, payload.getType());
+        assertEquals(created.id, payload.getTransferId());
     }
 
     @Test
@@ -337,6 +374,7 @@ class InventoryTransferIT {
         transfer.addLine(line);
 
         InventoryTransfer created = transferService.createTransfer(transfer);
+        inventoryNotificationQueue.poll(); // Drain creation notification
 
         // Act - receive transfer
         InventoryTransfer received = transferService.receiveTransfer(created.id);
@@ -353,6 +391,14 @@ class InventoryTransferIT {
         // Verify destination inventory increased
         InventoryLevel destLevel = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse2.code).get();
         assertEquals(40, destLevel.quantity, "Destination should have 0 + 40 = 40");
+
+        assertEquals(1,
+                auditLogRepository.findByEntityAndAction(created.id, "inventory_transfer_received").size(),
+                "Receiving transfer should record audit entry");
+        InventoryNotificationPayload receivePayload = inventoryNotificationQueue.poll();
+        assertNotNull(receivePayload);
+        assertEquals(InventoryNotificationType.TRANSFER_RECEIVED, receivePayload.getType());
+        assertEquals(created.id, receivePayload.getTransferId());
     }
 
     @Test
@@ -374,6 +420,10 @@ class InventoryTransferIT {
         // Verify adjustment persisted
         List<InventoryAdjustment> adjustments = adjustmentRepository.findByVariant(variantId);
         assertEquals(1, adjustments.size());
+
+        assertEquals(1,
+                auditLogRepository.findByEntityAndAction(adjustment.id, "inventory_adjustment_recorded").size(),
+                "Adjustment should produce audit entry");
     }
 
     @Test
@@ -424,6 +474,9 @@ class InventoryTransferIT {
         List<InventoryAdjustment> cycleCountAdjustments = adjustmentRepository
                 .findByReason(AdjustmentReason.CYCLE_COUNT);
         assertEquals(1, cycleCountAdjustments.size());
+
+        assertEquals(3, auditLogRepository.findByAction("inventory_adjustment_recorded").size(),
+                "Every adjustment should produce audit entry");
     }
 
     @Test
@@ -457,6 +510,7 @@ class InventoryTransferIT {
         CompletableFuture.allOf(future1, future2).join();
 
         // Verify: Final quantity should be 130 (100 + 10 + 20)
+        entityManager.clear();
         InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code)
                 .orElseThrow();
         assertEquals(130, level.quantity, "Both adjustments should be applied");
@@ -640,5 +694,168 @@ class InventoryTransferIT {
         assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.SHRINKAGE).size());
         assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.FOUND).size());
         assertEquals(1, adjustmentRepository.findByReason(AdjustmentReason.OTHER).size());
+    }
+
+    @Test
+    @Transactional
+    void inventoryLevel_shouldSupportSafetyStockAndLowStockThreshold() {
+        // Arrange
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+
+        // Act - set safety stock and threshold
+        level.safetyStock = 20;
+        level.lowStockThreshold = 30;
+        inventoryLevelRepository.persist(level);
+        entityManager.flush();
+
+        // Refresh and verify
+        InventoryLevel refreshed = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+        assertEquals(20, refreshed.safetyStock);
+        assertEquals(30, refreshed.lowStockThreshold);
+    }
+
+    @Test
+    @Transactional
+    void inventoryLevel_isLowStock_shouldDetectLowStock() {
+        // Arrange
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+        level.quantity = 5;
+        level.lowStockThreshold = 10;
+        inventoryLevelRepository.persist(level);
+        entityManager.flush();
+
+        // Act
+        InventoryLevel refreshed = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+
+        // Assert
+        assertTrue(refreshed.isLowStock(), "Should be low stock when quantity (5) <= threshold (10)");
+    }
+
+    @Test
+    @Transactional
+    void inventoryLevelRepository_findLowStockItems_shouldReturnLowStockItems() {
+        // Arrange - set inventory below threshold
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+        level.quantity = 8;
+        level.lowStockThreshold = 10;
+        inventoryLevelRepository.persist(level);
+        entityManager.flush();
+
+        // Act
+        List<InventoryLevel> lowStockItems = inventoryLevelRepository.findLowStockItems();
+
+        // Assert
+        assertEquals(1, lowStockItems.size());
+        assertEquals(variantId, lowStockItems.get(0).variant.id);
+        assertEquals(8, lowStockItems.get(0).quantity);
+    }
+
+    @Test
+    @Transactional
+    void inventoryLevelRepository_findLowStockItems_shouldExcludeItemsAboveThreshold() {
+        // Arrange - set inventory above threshold
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+        level.quantity = 50;
+        level.lowStockThreshold = 10;
+        inventoryLevelRepository.persist(level);
+        entityManager.flush();
+
+        // Act
+        List<InventoryLevel> lowStockItems = inventoryLevelRepository.findLowStockItems();
+
+        // Assert
+        assertTrue(lowStockItems.isEmpty(), "Should not return items above threshold");
+    }
+
+    @Test
+    @Transactional
+    void inventoryLevelRepository_findLowStockItems_shouldExcludeItemsWithoutThreshold() {
+        // Arrange - set quantity low but no threshold configured
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+        level.quantity = 5;
+        level.lowStockThreshold = 0; // Threshold not configured
+        inventoryLevelRepository.persist(level);
+        entityManager.flush();
+
+        // Act
+        List<InventoryLevel> lowStockItems = inventoryLevelRepository.findLowStockItems();
+
+        // Assert
+        assertTrue(lowStockItems.isEmpty(), "Should not return items without configured threshold");
+    }
+
+    @Test
+    @Transactional
+    void inventoryLevelRepository_findLowStockItems_shouldConsiderReservations() {
+        InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+        level.quantity = 50;
+        level.reserved = 45;
+        level.lowStockThreshold = 10;
+        inventoryLevelRepository.persist(level);
+        entityManager.flush();
+
+        List<InventoryLevel> lowStockItems = inventoryLevelRepository.findLowStockItems();
+        assertEquals(1, lowStockItems.size(), "Reserved quantity should reduce availability for low stock detection");
+        assertEquals(variantId, lowStockItems.get(0).variant.id);
+    }
+
+    @Test
+    void lowStockAlertScheduler_shouldRespectFeatureFlag() {
+        // This test validates that the scheduler can be disabled via feature flag
+        // Integration test verifies the scheduler respects lowStockAlertsEnabled property
+
+        // Arrange
+        lowStockAlertScheduler.setLowStockAlertsEnabled(false);
+        lowStockAlertScheduler.setLowStockAlertEmailsEnabled(true); // even if emails enabled, overall flag wins
+
+        // Act - scheduler should skip processing when disabled
+        lowStockAlertScheduler.scanForLowStockAlerts();
+
+        // Assert - no exceptions thrown, scheduler respects flag
+        // (Log output would show "Low stock alerts disabled via feature flag")
+        assertEquals(0, inventoryNotificationQueue.getQueueDepth(),
+                "Notifications should not be enqueued when scheduler disabled");
+    }
+
+    @Test
+    void lowStockAlertScheduler_shouldProcessLowStockAlerts() {
+        // Arrange - create low stock situation
+        QuarkusTransaction.run(() -> {
+            InventoryLevel level = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code).get();
+            level.quantity = 5;
+            level.lowStockThreshold = 10;
+            inventoryLevelRepository.persist(level);
+            entityManager.flush();
+
+            InventoryLevel refreshed = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse1.code)
+                    .get();
+            assertEquals(10, refreshed.lowStockThreshold);
+            assertTrue(refreshed.isLowStock());
+            assertEquals(1, inventoryLevelRepository.findLowStockItems().size());
+
+            // Simulate scheduler tenant switching
+            Tenant tenant1 = Tenant.findById(tenant1Id);
+            Tenant tenant2 = Tenant.findById(tenant2Id);
+            TenantContext.clear();
+            TenantContext.setCurrentTenant(new TenantInfo(tenant2.id, tenant2.subdomain, tenant2.name, tenant2.status));
+            assertTrue(inventoryLevelRepository.findLowStockItems().isEmpty());
+            TenantContext.setCurrentTenant(new TenantInfo(tenant1.id, tenant1.subdomain, tenant1.name, tenant1.status));
+            assertEquals(1, inventoryLevelRepository.findLowStockItems().size());
+        });
+
+        // Enable scheduler
+        lowStockAlertScheduler.setLowStockAlertsEnabled(true);
+        lowStockAlertScheduler.setLowStockAlertEmailsEnabled(true);
+
+        // Act
+        lowStockAlertScheduler.scanForLowStockAlerts();
+
+        // Assert - scheduler runs without exceptions and processes alert
+        // (Logs should show "LOW STOCK ALERT" warning for this item)
+        // Metrics would be incremented via MeterRegistry
+        InventoryNotificationPayload alertPayload = inventoryNotificationQueue.poll();
+        assertNotNull(alertPayload);
+        assertEquals(InventoryNotificationType.LOW_STOCK_ALERT, alertPayload.getType());
+        assertEquals(variantId, alertPayload.getVariantId());
     }
 }
