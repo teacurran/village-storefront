@@ -53,10 +53,8 @@ public class InventoryNotificationService {
 
     public UUID enqueueLowStockAlert(InventoryLevel level) {
         UUID tenantId = TenantContext.getCurrentTenantId();
-        InventoryNotificationPayload payload = InventoryNotificationPayload.lowStockPayload(tenantId,
-                level.variant.id, level.location, level.quantity, level.lowStockThreshold != null
-                        ? level.lowStockThreshold
-                        : 0);
+        InventoryNotificationPayload payload = InventoryNotificationPayload.lowStockPayload(tenantId, level.variant.id,
+                level.location, level.quantity, level.lowStockThreshold != null ? level.lowStockThreshold : 0);
         queue.enqueue(payload);
         meterRegistry.counter("inventory.notifications.enqueued", "type", "low_stock_alert").increment();
         LOG.infof("Low stock notification queued - tenantId=%s, variantId=%s, location=%s, quantity=%d, threshold=%d",

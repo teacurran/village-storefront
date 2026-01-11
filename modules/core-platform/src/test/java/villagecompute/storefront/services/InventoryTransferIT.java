@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.data.models.AdjustmentReason;
-import villagecompute.storefront.data.models.AuditLogEntry;
 import villagecompute.storefront.data.models.DomainEvent;
 import villagecompute.storefront.data.models.InventoryAdjustment;
 import villagecompute.storefront.data.models.InventoryLevel;
@@ -241,8 +240,7 @@ class InventoryTransferIT {
         assertEquals(30, sourceLevel.reserved);
         assertEquals(70, sourceLevel.getAvailableQuantity());
 
-        assertEquals(1,
-                auditLogRepository.findByEntityAndAction(created.id, "inventory_transfer_created").size(),
+        assertEquals(1, auditLogRepository.findByEntityAndAction(created.id, "inventory_transfer_created").size(),
                 "Transfer creation should record audit entry");
 
         InventoryNotificationPayload payload = inventoryNotificationQueue.poll();
@@ -392,8 +390,7 @@ class InventoryTransferIT {
         InventoryLevel destLevel = inventoryLevelRepository.findByVariantAndLocation(variantId, warehouse2.code).get();
         assertEquals(40, destLevel.quantity, "Destination should have 0 + 40 = 40");
 
-        assertEquals(1,
-                auditLogRepository.findByEntityAndAction(created.id, "inventory_transfer_received").size(),
+        assertEquals(1, auditLogRepository.findByEntityAndAction(created.id, "inventory_transfer_received").size(),
                 "Receiving transfer should record audit entry");
         InventoryNotificationPayload receivePayload = inventoryNotificationQueue.poll();
         assertNotNull(receivePayload);
@@ -421,8 +418,7 @@ class InventoryTransferIT {
         List<InventoryAdjustment> adjustments = adjustmentRepository.findByVariant(variantId);
         assertEquals(1, adjustments.size());
 
-        assertEquals(1,
-                auditLogRepository.findByEntityAndAction(adjustment.id, "inventory_adjustment_recorded").size(),
+        assertEquals(1, auditLogRepository.findByEntityAndAction(adjustment.id, "inventory_adjustment_recorded").size(),
                 "Adjustment should produce audit entry");
     }
 

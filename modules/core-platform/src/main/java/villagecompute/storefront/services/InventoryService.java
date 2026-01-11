@@ -7,8 +7,8 @@ import java.util.function.Supplier;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 import jakarta.persistence.OptimisticLockException;
+import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
 

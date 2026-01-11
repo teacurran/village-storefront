@@ -45,8 +45,7 @@ class LowStockAlertSchedulerTest {
 
         // Act & Assert - scheduler should execute without exceptions
         assertDoesNotThrow(() -> scheduler.scanForLowStockAlerts());
-        assertEquals(0, inventoryNotificationQueue.getQueueDepth(),
-                "No notifications expected in empty dataset");
+        assertEquals(0, inventoryNotificationQueue.getQueueDepth(), "No notifications expected in empty dataset");
     }
 
     @Test

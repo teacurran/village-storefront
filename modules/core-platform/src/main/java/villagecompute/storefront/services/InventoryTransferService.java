@@ -260,8 +260,8 @@ public class InventoryTransferService {
         eventPublisher.publish("INVENTORY_TRANSFER", transfer.id, "TRANSFER_RECEIVED", eventPayload);
 
         auditLogService.recordInventoryAction("inventory_transfer_received", "InventoryTransfer", transfer.id,
-                Map.of("sourceLocation", sourceCode, "destinationLocation", destCode, "lineCount", transfer.lines.size(),
-                        "status", transfer.status.name()));
+                Map.of("sourceLocation", sourceCode, "destinationLocation", destCode, "lineCount",
+                        transfer.lines.size(), "status", transfer.status.name()));
         inventoryNotificationService.enqueueTransferReceived(transfer);
 
         LOG.infof("Transfer received - tenantId=%s, transferId=%s", tenantId, transferId);

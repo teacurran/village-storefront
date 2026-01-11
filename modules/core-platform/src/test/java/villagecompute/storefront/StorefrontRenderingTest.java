@@ -2,12 +2,20 @@ package villagecompute.storefront;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 
+import java.time.OffsetDateTime;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import jakarta.transaction.Transactional;
+
 import io.quarkus.test.junit.QuarkusTest;
+import villagecompute.storefront.data.models.CustomDomain;
+import villagecompute.storefront.data.models.Tenant;
 
 /**
  * Integration tests for storefront rendering, theming, and localization.
@@ -35,6 +43,12 @@ public class StorefrontRenderingTest {
 
     private static final String TEST_TENANT_HOST = "example-store.localhost";
     private static final String DEFAULT_TENANT_HOST = "localhost";
+
+    @BeforeEach
+    @Transactional
+    void ensureDefaultTenantDomain() {
+        provisionTenantDomain("default", DEFAULT_TENANT_HOST);
+    }
 
     @Test
     @DisplayName("Homepage should render with hero banner")
@@ -71,6 +85,28 @@ public class StorefrontRenderingTest {
     }
 
     @Test
+    @DisplayName("Setting lang parameter stores visitor locale cookie")
+    public void testVisitorLocaleCookieSetFromLangParam() {
+        given().header("Host", DEFAULT_TENANT_HOST).when().get("/?lang=es").then().statusCode(200)
+                .header("Set-Cookie", containsString("visitor_locale=es")).header("Content-Language", equalTo("es"));
+    }
+
+    @Test
+    @DisplayName("Custom domain renders tenant-specific branding tokens")
+    public void testTenantSpecificBrandingForCustomDomain() {
+        provisionTenantDomain("example-store", TEST_TENANT_HOST);
+
+        given().header("Host", TEST_TENANT_HOST).when().get("/").then().statusCode(200)
+                .body(containsString("#4f46e5")); // example-store primary600 color
+    }
+
+    @Test
+    @DisplayName("Unknown tenant host returns 404")
+    public void testUnknownTenantReturns404() {
+        given().header("Host", "missing.villagecompute.com").when().get("/").then().statusCode(404);
+    }
+
+    @Test
     @DisplayName("English translations should render correctly")
     public void testEnglishTranslations() {
         given().header("Host", DEFAULT_TENANT_HOST).header("Accept-Language", "en-US").when().get("/").then()
@@ -104,5 +140,30 @@ public class StorefrontRenderingTest {
     public void testSeoMetaTags() {
         given().header("Host", DEFAULT_TENANT_HOST).when().get("/").then().statusCode(200).body(containsString("<meta"))
                 .body(containsString("description"));
+    }
+
+    @Transactional
+    void provisionTenantDomain(String subdomain, String domain) {
+        Tenant tenant = Tenant.find("subdomain", subdomain).firstResult();
+        if (tenant == null) {
+            tenant = new Tenant();
+            tenant.subdomain = subdomain;
+            tenant.name = "Example Storefront";
+            tenant.status = "active";
+            tenant.createdAt = OffsetDateTime.now();
+            tenant.updatedAt = tenant.createdAt;
+            tenant.persist();
+        }
+
+        CustomDomain customDomain = CustomDomain.find("domain", domain).firstResult();
+        if (customDomain == null) {
+            customDomain = new CustomDomain();
+            customDomain.tenant = tenant;
+            customDomain.domain = domain;
+            customDomain.verified = true;
+            customDomain.createdAt = OffsetDateTime.now();
+            customDomain.updatedAt = customDomain.createdAt;
+            customDomain.persist();
+        }
     }
 }

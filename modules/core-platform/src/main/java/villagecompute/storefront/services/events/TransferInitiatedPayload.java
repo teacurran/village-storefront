@@ -42,8 +42,8 @@ import villagecompute.storefront.data.models.TransferStatus;
  *            optional transfer notes
  */
 public record TransferInitiatedPayload(UUID transferId, UUID sourceLocationId, String sourceLocation,
-        UUID destinationLocationId, String destinationLocation, TransferStatus status,
-        List<TransferLineItem> lineItems, String initiatedBy, OffsetDateTime expectedArrivalDate, String notes) {
+        UUID destinationLocationId, String destinationLocation, TransferStatus status, List<TransferLineItem> lineItems,
+        String initiatedBy, OffsetDateTime expectedArrivalDate, String notes) {
 
     /**
      * Line item within a transfer.

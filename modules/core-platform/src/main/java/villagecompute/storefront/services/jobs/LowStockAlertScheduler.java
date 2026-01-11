@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -20,7 +21,6 @@ import villagecompute.storefront.tenant.TenantInfo;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.scheduler.Scheduled;
-import jakarta.transaction.Transactional;
 
 /**
  * Scheduled job for low stock alerting.
