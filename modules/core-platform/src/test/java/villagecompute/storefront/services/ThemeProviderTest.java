@@ -16,8 +16,9 @@ import org.junit.jupiter.api.Test;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.quarkus.test.junit.QuarkusTest;
 import villagecompute.storefront.services.events.TenantThemeUpdated;
+
+import io.quarkus.test.junit.QuarkusTest;
 
 /**
  * Unit tests for ThemeProvider service.

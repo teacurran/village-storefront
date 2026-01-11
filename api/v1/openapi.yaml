@@ -67,6 +67,46 @@ info:
     - `X-RateLimit-Remaining`: Remaining requests in window
     - `X-RateLimit-Reset`: Unix timestamp when window resets
 
+    ## Custom Extensions
+
+    This specification uses custom `x-*` extensions to document additional metadata:
+
+    **x-tenant-scope** - Indicates tenant context requirement:
+    - `none`: No tenant context required (system health checks)
+    - `required`: Tenant must be resolved from Host header
+    - `optional`: Tenant context optional (platform admin endpoints)
+
+    **x-feature-flags** - Array of feature flag keys that must be enabled. Empty array means no flags required.
+
+    Example: `x-feature-flags: ["headless.api.enabled", "advanced_inventory.enabled"]`
+
+    **x-rate-limit** - Rate limit configuration:
+    - `limit`: Maximum requests per window
+    - `window`: Time window (e.g., "60s", "1h")
+    - `scope`: Rate limit scope (ip, user, client)
+    - `note`: Optional explanation for non-standard limits
+
+    Example:
+    ```yaml
+    x-rate-limit:
+      limit: 1000
+      window: 60s
+      scope: user
+    ```
+
+    **x-required-scopes** - OAuth/permission scopes that must be granted to call the operation.
+    Declare scopes for OAuth client credentials (`catalog:read`) or JWT role-based permissions
+    (`admin.catalog:write`). Empty array means no scopes required (public endpoint).
+
+    Example:
+    ```yaml
+    x-required-scopes:
+      - catalog:read
+      - orders:write
+    ```
+
+    These extensions are used for generating rate-limit middleware configuration and documenting feature flag dependencies.
+
   contact:
     name: VillageCompute API Support
     url: https://docs.villagecompute.com
@@ -143,6 +183,12 @@ tags:
       description: Inventory domain architecture
       url: https://github.com/villagecompute/village-storefront/blob/main/docs/architecture_overview.md#section-4-blueprint
 
+  - name: Shipping
+    description: |
+      Carrier rate shopping, label purchase, and address validation endpoints for storefront
+      checkout and fulfillment services. Requires tenant-scoped authentication and rate
+      limit coordination with carrier APIs.
+
 security:
   - bearerAuth: []
   - apiKeyAuth: []
@@ -161,6 +207,12 @@ paths:
         No authentication required.
       tags: [System]
       security: []  # Public endpoint
+      x-tenant-scope: none
+      x-feature-flags: []
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: ip
       responses:
         '200':
           description: Service is healthy and ready to accept requests
@@ -195,6 +247,13 @@ paths:
         All login attempts are logged to the database for audit/compliance purposes.
       tags: [Authentication]
       security: []  # No auth required for login
+      x-tenant-scope: required
+      x-feature-flags: []
+      x-rate-limit:
+        limit: 20
+        window: 60s
+        scope: ip
+        note: "Strict rate limit to prevent brute-force attacks"
       requestBody:
         required: true
         content:
@@ -241,6 +300,12 @@ paths:
         Refresh tokens are single-use; the old refresh token is invalidated upon successful refresh.
       tags: [Authentication]
       security: []  # Refresh token passed in request body, not header
+      x-tenant-scope: required
+      x-feature-flags: []
+      x-rate-limit:
+        limit: 100
+        window: 60s
+        scope: ip
       requestBody:
         required: true
         content:
@@ -275,6 +340,17 @@ paths:
         Logs out the current user by invalidating the refresh token.
         Access tokens cannot be invalidated (stateless JWT), but expire in 15 minutes.
       tags: [Authentication]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags: []
+      x-rate-limit:
+        limit: 50
+        window: 60s
+        scope: user
+        note: "Protects refresh token rotation endpoint"
+      x-required-scopes:
+        - session:terminate
       responses:
         '204':
           description: Logout successful, refresh token invalidated
@@ -300,6 +376,13 @@ paths:
         **No authentication required** - tenant resolution happens before authentication.
       tags: [Platform]
       security: []  # Public endpoint
+      x-tenant-scope: required
+      x-feature-flags: []
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: ip
+      x-required-scopes: []
       responses:
         '200':
           description: Tenant successfully resolved
@@ -309,6 +392,354 @@ paths:
                 $ref: '#/components/schemas/TenantMetadata'
         '404':
           description: No tenant found for this domain/subdomain
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================================
+  # THEME ENDPOINTS
+  # ============================================================================
+
+  /theme/tokens:
+    get:
+      operationId: getThemeTokens
+      summary: Get current theme design tokens
+      description: |
+        Returns the active theme configuration including colors, typography, spacing, and other design tokens.
+        Used by storefront templates (Qute) and headless clients to maintain brand consistency.
+
+        **Caching:** This endpoint includes aggressive caching headers (24h). Changes to theme require cache invalidation.
+      tags: [Storefront]
+      security: []  # Public endpoint - theme is visible to all visitors
+      x-tenant-scope: required
+      x-feature-flags:
+        - theme.tokens.public
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: ip
+      x-required-scopes: []
+      responses:
+        '200':
+          description: Theme tokens successfully retrieved
+          headers:
+            Cache-Control:
+              description: Caching directive
+              schema:
+                type: string
+                example: "public, max-age=86400"
+            ETag:
+              description: Entity tag for cache validation
+              schema:
+                type: string
+                example: "\"theme-v1-abc123\""
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThemeTokens'
+        '404':
+          description: No theme configured for this tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/theme:
+    get:
+      operationId: getThemeConfig
+      summary: Get full theme configuration (admin)
+      description: |
+        Returns complete theme configuration including metadata, versioning, and design tokens.
+        Admin-only endpoint for theme management interface.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - theme.editor.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - theme:read
+      responses:
+        '200':
+          description: Theme configuration retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThemeConfig'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    patch:
+      operationId: updateThemeTokens
+      summary: Update theme design tokens
+      description: |
+        Partially updates theme tokens (colors, typography, spacing, etc.).
+        Only specified fields are updated; omitted fields remain unchanged.
+
+        **Side effects:**
+        - Increments theme version number
+        - Triggers cache invalidation for `/theme/tokens` endpoint
+        - Logs audit event with actor and changes
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - theme.editor.enabled
+      x-rate-limit:
+        limit: 100
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - theme:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateThemeTokensRequest'
+      responses:
+        '200':
+          description: Theme tokens updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThemeConfig'
+        '400':
+          description: Invalid theme token values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  # ============================================================================
+  # INVENTORY LEVEL ENDPOINTS
+  # ============================================================================
+
+  /admin/inventory/levels:
+    get:
+      operationId: listInventoryLevels
+      summary: List inventory levels with filtering
+      description: |
+        Returns paginated list of inventory levels across all locations.
+        Supports filtering by variant, location, or low-stock status.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - inventory.multi_location.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - inventory:read
+      parameters:
+        - name: variantId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by variant ID
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by location ID
+        - name: lowStock
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter to items below low-stock threshold
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Inventory levels retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InventoryLevel'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /admin/inventory/levels/{variantId}/summary:
+    get:
+      operationId: getInventoryLevelSummary
+      summary: Get aggregated inventory summary for variant
+      description: |
+        Returns total inventory across all locations for a specific variant,
+        including breakdown by location.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - inventory.multi_location.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - inventory:read
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Variant ID to summarize
+      responses:
+        '200':
+          description: Inventory summary retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLevelSummary'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Variant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/inventory/levels/{variantId}/locations/{locationId}:
+    get:
+      operationId: getInventoryLevel
+      summary: Get inventory level for variant at specific location
+      description: |
+        Returns detailed inventory level for a variant at a specific location.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - inventory.multi_location.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - inventory:read
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Inventory level retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLevel'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Inventory level not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+    patch:
+      operationId: updateInventoryLevel
+      summary: Update inventory level quantities
+      description: |
+        Updates inventory quantities for a variant at a specific location.
+        Used for corrections, cycle counts, and threshold adjustments.
+
+        **Audit trail:** All adjustments are logged with reason and actor.
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - inventory.multi_location.enabled
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - inventory:write
+      parameters:
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInventoryLevelRequest'
+      responses:
+        '200':
+          description: Inventory level updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryLevel'
+        '400':
+          description: Invalid update request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Inventory level not found
           content:
             application/json:
               schema:
@@ -339,6 +770,17 @@ paths:
         - {}  # Optional auth
         - bearerAuth: []
         - apiKeyAuth: []
+        - oauthClientCredentials: [catalog:read]
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.search.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+        note: "Anonymous requests clamped to 100/min per IP"
+      x-required-scopes:
+        - catalog:read
       parameters:
         - $ref: '#/components/parameters/PageNumber'
         - $ref: '#/components/parameters/PageSize'
@@ -409,7 +851,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
+                $ref: '#/components/schemas/FeatureFlagError'
+        '429':
+          description: Rate limit exceeded for catalog listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
 
   /catalog/products/{productId}:
     get:
@@ -425,6 +873,16 @@ paths:
         - {}  # Optional auth
         - bearerAuth: []
         - apiKeyAuth: []
+        - oauthClientCredentials: [catalog:read]
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.search.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:read
       parameters:
         - name: productId
           in: path
@@ -467,6 +925,17 @@ paths:
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.management.enabled
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:read
+      parameters:
+        - $ref: '#/components/parameters/TenantDomain'
       responses:
         '200':
           description: Category list
@@ -479,10 +948,20 @@ paths:
     post:
       operationId: createCategory
       summary: Create category
+      description: Create a new catalog category for the tenant.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.management.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:write
       requestBody:
         required: true
         content:
@@ -521,10 +1000,20 @@ paths:
     get:
       operationId: getCategory
       summary: Get category
+      description: Retrieve the full definition of a single category.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.management.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:read
       responses:
         '200':
           description: Category retrieved
@@ -541,10 +1030,20 @@ paths:
     put:
       operationId: updateCategory
       summary: Update category
+      description: Replace category fields (name, codes, hierarchy metadata).
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.management.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:write
       requestBody:
         required: true
         content:
@@ -573,10 +1072,20 @@ paths:
     delete:
       operationId: deleteCategory
       summary: Delete category
+      description: Soft-delete a category and hide it from storefront navigation.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.management.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:write
       responses:
         '204':
           description: Category deleted
@@ -591,10 +1100,20 @@ paths:
     get:
       operationId: listCollections
       summary: List collections
+      description: List collections with optional status filtering and pagination.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.collections.enabled
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:read
       parameters:
         - name: status
           in: query
@@ -621,10 +1140,20 @@ paths:
     post:
       operationId: createCollection
       summary: Create collection
+      description: Create a manual or automated collection for merchandising.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.collections.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:write
       requestBody:
         required: true
         content:
@@ -656,10 +1185,20 @@ paths:
     get:
       operationId: getCollection
       summary: Get collection
+      description: Fetch a specific collection including selection rules and merchandising metadata.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.collections.enabled
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:read
       responses:
         '200':
           description: Collection retrieved
@@ -676,10 +1215,20 @@ paths:
     put:
       operationId: updateCollection
       summary: Update collection
+      description: Update collection rules, merchandising metadata, or publishing state.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.collections.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:write
       requestBody:
         required: true
         content:
@@ -702,10 +1251,20 @@ paths:
     delete:
       operationId: deleteCollection
       summary: Delete collection
+      description: Archive a collection and remove it from storefront navigation.
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
         - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.collections.enabled
+      x-rate-limit:
+        limit: 200
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:write
       responses:
         '204':
           description: Collection deleted
@@ -729,6 +1288,17 @@ paths:
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.import-export.enabled
+      x-rate-limit:
+        limit: 10
+        window: 1h
+        scope: user
+        note: "Limits job queue pressure"
+      x-required-scopes:
+        - catalog:write
       requestBody:
         required: true
         content:
@@ -757,7 +1327,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
+                $ref: '#/components/schemas/FeatureFlagError'
         '503':
           description: Service temporarily unavailable (job queue full)
           content:
@@ -779,6 +1349,17 @@ paths:
       tags: [Catalog, Admin]
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.import-export.enabled
+      x-rate-limit:
+        limit: 10
+        window: 1h
+        scope: user
+        note: "Limits job queue pressure"
+      x-required-scopes:
+        - catalog:read
       requestBody:
         required: true
         content:
@@ -807,7 +1388,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
+                $ref: '#/components/schemas/FeatureFlagError'
         '503':
           description: Service temporarily unavailable (job queue full)
           content:
@@ -831,6 +1412,16 @@ paths:
         - {}  # Optional auth
         - bearerAuth: []
         - apiKeyAuth: []
+        - oauthClientCredentials: [catalog:read]
+      x-tenant-scope: required
+      x-feature-flags:
+        - catalog.variant-matrix.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - catalog:read
       parameters:
         - name: productId
           in: path
@@ -858,13 +1449,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProblemDetails'
+                $ref: '#/components/schemas/FeatureFlagError'
         '404':
           description: Product not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+        '429':
+          description: Rate limit exceeded for variant matrix lookups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
 
   # ============================================================================
   # STOREFRONT - CHECKOUT ENDPOINTS (Placeholder)
@@ -1214,6 +1811,7 @@ paths:
     get:
       operationId: getShippingProfile
       summary: Get shipping profile
+      description: Retrieve one shipping profile including carrier credentials and origins.
       tags: [Shipping, Admin]
       parameters:
         - name: profileId
@@ -1248,6 +1846,7 @@ paths:
     put:
       operationId: updateShippingProfile
       summary: Update shipping profile
+      description: Update carrier credentials, origins, or rules on an existing profile.
       tags: [Shipping, Admin]
       parameters:
         - name: profileId
@@ -1288,6 +1887,7 @@ paths:
     delete:
       operationId: deleteShippingProfile
       summary: Delete shipping profile
+      description: Delete a shipping profile that is no longer needed.
       tags: [Shipping, Admin]
       parameters:
         - name: profileId
@@ -1316,6 +1916,7 @@ paths:
     post:
       operationId: setDefaultShippingProfile
       summary: Mark profile as default
+      description: Mark a profile as the default origin/carrier bundle for checkout.
       tags: [Shipping, Admin]
       parameters:
         - name: profileId
@@ -6506,3 +7107,308 @@ components:
           type: string
           format: date-time
           example: "2026-01-11T17:00:00Z"
+
+    # ============================================================================
+    # THEME & CUSTOMIZATION SCHEMAS
+    # ============================================================================
+
+    ThemeConfig:
+      type: object
+      description: |
+        Theme configuration defining colors, typography, and styling tokens for a tenant's storefront.
+        Used by Qute templates and can be exposed to headless clients for brand consistency.
+      required:
+        - themeId
+        - tenantId
+        - name
+        - tokens
+      properties:
+        themeId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Default Theme"
+          description: Human-readable theme name
+        tokens:
+          $ref: '#/components/schemas/ThemeTokens'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ThemeTokens:
+      type: object
+      description: |
+        Design tokens for theme customization following CSS custom property conventions.
+        All color values in hex format, spacing in rem units, typography as CSS font stacks.
+      properties:
+        colors:
+          type: object
+          properties:
+            primary:
+              type: string
+              example: "#3b82f6"
+            primaryHover:
+              type: string
+              example: "#2563eb"
+            secondary:
+              type: string
+              example: "#8b5cf6"
+            accent:
+              type: string
+              example: "#f59e0b"
+            background:
+              type: string
+              example: "#ffffff"
+            surface:
+              type: string
+              example: "#f9fafb"
+            text:
+              type: string
+              example: "#111827"
+            textMuted:
+              type: string
+              example: "#6b7280"
+            border:
+              type: string
+              example: "#e5e7eb"
+            error:
+              type: string
+              example: "#ef4444"
+            success:
+              type: string
+              example: "#10b981"
+        typography:
+          type: object
+          properties:
+            fontFamily:
+              type: string
+              example: "Inter, system-ui, sans-serif"
+            fontSizeBase:
+              type: string
+              example: "1rem"
+            fontSizeHeading:
+              type: string
+              example: "2rem"
+            fontWeightNormal:
+              type: integer
+              example: 400
+            fontWeightBold:
+              type: integer
+              example: 700
+        spacing:
+          type: object
+          properties:
+            base:
+              type: string
+              example: "1rem"
+            small:
+              type: string
+              example: "0.5rem"
+            large:
+              type: string
+              example: "2rem"
+        borderRadius:
+          type: string
+          example: "0.375rem"
+        shadows:
+          type: object
+          properties:
+            sm:
+              type: string
+              example: "0 1px 2px 0 rgb(0 0 0 / 0.05)"
+            md:
+              type: string
+              example: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+            lg:
+              type: string
+              example: "0 10px 15px -3px rgb(0 0 0 / 0.1)"
+
+    UpdateThemeTokensRequest:
+      type: object
+      description: Partial update for theme tokens (only specified fields are updated)
+      properties:
+        colors:
+          type: object
+          additionalProperties:
+            type: string
+        typography:
+          type: object
+          additionalProperties: true
+        spacing:
+          type: object
+          additionalProperties:
+            type: string
+
+    # ============================================================================
+    # INVENTORY LEVEL SCHEMAS (extends existing InventoryLocation)
+    # ============================================================================
+
+    InventoryLevel:
+      type: object
+      description: |
+        Stock level for a specific variant at a specific location.
+        Tracks on-hand quantity, reserved (allocated to orders), and incoming stock.
+      required:
+        - levelId
+        - variantId
+        - locationId
+        - onHand
+        - reserved
+        - available
+      properties:
+        levelId:
+          type: string
+          format: uuid
+        variantId:
+          type: string
+          format: uuid
+          description: Product variant this level tracks
+        locationId:
+          type: string
+          format: uuid
+          description: Inventory location (warehouse, store, etc.)
+        onHand:
+          type: integer
+          description: Physical quantity in stock
+          example: 150
+        reserved:
+          type: integer
+          description: Quantity allocated to unfulfilled orders
+          example: 25
+        available:
+          type: integer
+          description: Available for sale (onHand - reserved)
+          example: 125
+          readOnly: true
+        incoming:
+          type: integer
+          description: Quantity expected from pending transfers/purchases
+          example: 50
+        safetyStock:
+          type: integer
+          description: Minimum stock level before low-stock alerts trigger
+          example: 20
+        lowStockThreshold:
+          type: integer
+          description: Threshold for low stock warnings
+          example: 30
+        updatedAt:
+          type: string
+          format: date-time
+
+    UpdateInventoryLevelRequest:
+      type: object
+      description: Update inventory quantities (used for adjustments and corrections)
+      properties:
+        onHand:
+          type: integer
+          description: New on-hand quantity (null = no change)
+        safetyStock:
+          type: integer
+        lowStockThreshold:
+          type: integer
+        reason:
+          type: string
+          description: Audit trail reason for adjustment
+          example: "Physical count correction"
+
+    InventoryLevelSummary:
+      type: object
+      description: Aggregated inventory across all locations for a variant
+      required:
+        - variantId
+        - totalOnHand
+        - totalReserved
+        - totalAvailable
+      properties:
+        variantId:
+          type: string
+          format: uuid
+        totalOnHand:
+          type: integer
+          example: 500
+        totalReserved:
+          type: integer
+          example: 75
+        totalAvailable:
+          type: integer
+          example: 425
+        totalIncoming:
+          type: integer
+          example: 200
+        locationBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryLevel'
+
+    # ============================================================================
+    # ENHANCED ERROR SCHEMAS (extending ProblemDetails)
+    # ============================================================================
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            validationErrors:
+              type: array
+              description: Field-level validation errors
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: "email"
+                  message:
+                    type: string
+                    example: "Invalid email format"
+                  code:
+                    type: string
+                    example: "INVALID_FORMAT"
+
+    FeatureFlagError:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            requiredFeatureFlags:
+              type: array
+              description: Feature flags that must be enabled for this operation
+              items:
+                type: string
+              example: ["headless.api.enabled", "advanced_inventory.enabled"]
+            tenantPlan:
+              type: string
+              description: Current tenant plan
+              example: "basic"
+            upgradeUrl:
+              type: string
+              format: uri
+              description: URL to upgrade tenant plan
+              example: "https://storename.villagecompute.com/admin/settings/billing/upgrade"
+
+    RateLimitError:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            retryAfter:
+              type: integer
+              description: Seconds until rate limit resets
+              example: 45
+            limit:
+              type: integer
+              description: Request limit per window
+              example: 1000
+            window:
+              type: string
+              description: Time window for rate limit
+              example: "60s"

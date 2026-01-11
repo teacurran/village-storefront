@@ -7,15 +7,16 @@ import static org.hamcrest.Matchers.not;
 
 import java.time.OffsetDateTime;
 
+import jakarta.transaction.Transactional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import jakarta.transaction.Transactional;
-
-import io.quarkus.test.junit.QuarkusTest;
 import villagecompute.storefront.data.models.CustomDomain;
 import villagecompute.storefront.data.models.Tenant;
+
+import io.quarkus.test.junit.QuarkusTest;
 
 /**
  * Integration tests for storefront rendering, theming, and localization.
@@ -96,8 +97,9 @@ public class StorefrontRenderingTest {
     public void testTenantSpecificBrandingForCustomDomain() {
         provisionTenantDomain("example-store", TEST_TENANT_HOST);
 
-        given().header("Host", TEST_TENANT_HOST).when().get("/").then().statusCode(200)
-                .body(containsString("#4f46e5")); // example-store primary600 color
+        given().header("Host", TEST_TENANT_HOST).when().get("/").then().statusCode(200).body(containsString("#4f46e5")); // example-store
+                                                                                                                         // primary600
+                                                                                                                         // color
     }
 
     @Test

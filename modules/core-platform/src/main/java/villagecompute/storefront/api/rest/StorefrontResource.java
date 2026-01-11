@@ -312,11 +312,11 @@ public class StorefrontResource {
         LOG.infof("Homepage rendered in %d ms - tenantId=%s", renderTime, tenantInfo.tenantId());
 
         TemplateInstance templateInstance = Templates.index().data("tenantName", tenantInfo.name())
-                .data("tenantSubdomain", tenantInfo.subdomain()).data("tenantLogo", null)
-                .data("tenantTagline", null).data("seoTitle", null).data("seoDescription", null)
-                .data("canonicalUrl", null).data("msg", messages).data("rootCategories", rootCategoryDisplay)
-                .data("collections", List.of()).data("featuredProducts", featuredProducts).data("heroData", heroData)
-                .data("themeTokens", themeTokens).data("languageOptions", languageOptions).data("cartItems", cartItems)
+                .data("tenantSubdomain", tenantInfo.subdomain()).data("tenantLogo", null).data("tenantTagline", null)
+                .data("seoTitle", null).data("seoDescription", null).data("canonicalUrl", null).data("msg", messages)
+                .data("rootCategories", rootCategoryDisplay).data("collections", List.of())
+                .data("featuredProducts", featuredProducts).data("heroData", heroData).data("themeTokens", themeTokens)
+                .data("languageOptions", languageOptions).data("cartItems", cartItems)
                 .data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00")).data("cartItemCount", cartCount)
                 .data("locale", locale).data("currentYear", Year.now().getValue()).data("pageTitle", "Home");
         return buildHtmlResponse(templateInstance, localeResolution);
@@ -376,18 +376,14 @@ public class StorefrontResource {
 
     private List<Map<String, Object>> buildSampleFeaturedProducts() {
         return List.of(
-                createSampleProduct("11111111-2222-3333-4444-555555555555", "artisan-tote",
-                        "Artisan Leather Tote", "$58.00", "$72.00", true, "Bags",
-                        "https://placehold.co/600x600?text=Leather+Tote"),
-                createSampleProduct("55555555-6666-7777-8888-999999999999", "wellness-candle",
-                        "Wellness Candle Duo", "$32.00", null, false, "Home",
-                        "https://placehold.co/600x600?text=Candle+Duo"),
-                createSampleProduct("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "stoneware-mug",
-                        "Stoneware Mug Set", "$28.00", "$34.00", true, "Kitchen",
-                        "https://placehold.co/600x600?text=Stoneware+Mug"),
-                createSampleProduct("99999999-8888-7777-6666-555555555555", "linen-shirt",
-                        "Relaxed Linen Shirt", "$64.00", null, false, "Apparel",
-                        "https://placehold.co/600x600?text=Linen+Shirt"));
+                createSampleProduct("11111111-2222-3333-4444-555555555555", "artisan-tote", "Artisan Leather Tote",
+                        "$58.00", "$72.00", true, "Bags", "https://placehold.co/600x600?text=Leather+Tote"),
+                createSampleProduct("55555555-6666-7777-8888-999999999999", "wellness-candle", "Wellness Candle Duo",
+                        "$32.00", null, false, "Home", "https://placehold.co/600x600?text=Candle+Duo"),
+                createSampleProduct("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "stoneware-mug", "Stoneware Mug Set",
+                        "$28.00", "$34.00", true, "Kitchen", "https://placehold.co/600x600?text=Stoneware+Mug"),
+                createSampleProduct("99999999-8888-7777-6666-555555555555", "linen-shirt", "Relaxed Linen Shirt",
+                        "$64.00", null, false, "Apparel", "https://placehold.co/600x600?text=Linen+Shirt"));
     }
 
     private Map<String, Object> createSampleProduct(String id, String slug, String name, String price,
@@ -755,11 +751,11 @@ public class StorefrontResource {
                 products.size());
 
         TemplateInstance templateInstance = Templates.catalog().data("tenantName", tenantInfo.name())
-                .data("tenantSubdomain", tenantInfo.subdomain())
-                .data("msg", messages).data("themeTokens", themeTokens).data("categoryName", categoryName)
-                .data("categoryDescription", categoryDescription).data("breadcrumbs", breadcrumbs)
-                .data("products", mapProductsToDisplayData(products)).data("totalProducts", totalProducts)
-                .data("currentPage", page).data("currentPageDisplay", currentPageDisplay).data("totalPages", totalPages)
+                .data("tenantSubdomain", tenantInfo.subdomain()).data("msg", messages).data("themeTokens", themeTokens)
+                .data("categoryName", categoryName).data("categoryDescription", categoryDescription)
+                .data("breadcrumbs", breadcrumbs).data("products", mapProductsToDisplayData(products))
+                .data("totalProducts", totalProducts).data("currentPage", page)
+                .data("currentPageDisplay", currentPageDisplay).data("totalPages", totalPages)
                 .data("totalPagesDisplay", totalPagesDisplay).data("pageNumbers", pageNumbers).data("sortBy", sortBy)
                 .data("sortParam", sortParam).data("filterParams", filterParams).data("filters", filters)
                 .data("activeFilters", activeFilters).data("rootCategories", rootCategoryDisplay)
@@ -993,9 +989,8 @@ public class StorefrontResource {
         }
 
         TemplateInstance templateInstance = Templates.product().data("tenantName", tenantInfo.name())
-                .data("tenantSubdomain", tenantInfo.subdomain())
-                .data("msg", messages).data("themeTokens", themeTokens).data("product", productData)
-                .data("breadcrumbs", breadcrumbs).data("relatedProducts", relatedProducts)
+                .data("tenantSubdomain", tenantInfo.subdomain()).data("msg", messages).data("themeTokens", themeTokens)
+                .data("product", productData).data("breadcrumbs", breadcrumbs).data("relatedProducts", relatedProducts)
                 .data("rootCategories", rootCategoryDisplay).data("languageOptions", languageOptions)
                 .data("cartItems", cartItems).data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
                 .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
@@ -1030,9 +1025,8 @@ public class StorefrontResource {
         List<Map<String, Object>> rootCategoryDisplay = loadRootCategoryDisplay();
 
         TemplateInstance templateInstance = Templates.cart().data("tenantName", tenantInfo.name())
-                .data("tenantSubdomain", tenantInfo.subdomain())
-                .data("msg", messages).data("themeTokens", themeTokens).data("cartItems", cartItems)
-                .data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
+                .data("tenantSubdomain", tenantInfo.subdomain()).data("msg", messages).data("themeTokens", themeTokens)
+                .data("cartItems", cartItems).data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
                 .data("cartTax",
                         getCartField(cartContext, "tax",
                                 messages.getOrDefault("calculated_at_checkout", "Calculated at checkout")))
@@ -1081,7 +1075,8 @@ public class StorefrontResource {
                 .data("selectedShippingRate",
                         getCartField(cartContext, "shipping",
                                 messages.getOrDefault("calculated_next", "Calculated in next step")))
-                .data("shippingRates", List.of()).data("cartId", getCartField(cartContext, "cartId", SAMPLE_CART_ID.toString()))
+                .data("shippingRates", List.of())
+                .data("cartId", getCartField(cartContext, "cartId", SAMPLE_CART_ID.toString()))
                 .data("languageOptions", languageOptions).data("rootCategories", rootCategoryDisplay)
                 .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
                 .data("pageTitle", "Checkout");
@@ -1119,20 +1114,19 @@ public class StorefrontResource {
                 ? Map.of("name", "Gold", "icon", "🌟", "gradient", "from-amber-500 to-rose-500")
                 : null;
         Integer loyaltyPoints = loyaltyEnabled ? 1240 : null;
-       Integer loyaltyPointsToNext = loyaltyEnabled ? 260 : null;
-       Integer loyaltyProgress = loyaltyEnabled ? 72 : null;
+        Integer loyaltyPointsToNext = loyaltyEnabled ? 260 : null;
+        Integer loyaltyProgress = loyaltyEnabled ? 72 : null;
 
         TemplateInstance templateInstance = Templates.account().data("tenantName", tenantInfo.name())
-                .data("tenantSubdomain", tenantInfo.subdomain())
-                .data("msg", messages).data("themeTokens", themeTokens).data("customerName", "Avery Lee")
-                .data("customerEmail", "avery@example.com").data("customerFirstName", "Avery")
-                .data("recentOrders", recentOrders).data("defaultAddress", defaultAddress)
-                .data("loyaltyTier", loyaltyTier).data("loyaltyPoints", loyaltyPoints)
-                .data("loyaltyPointsToNext", loyaltyPointsToNext).data("loyaltyProgressPercent", loyaltyProgress)
-                .data("languageOptions", languageOptions).data("rootCategories", rootCategoryDisplay)
-                .data("cartItems", cartItems).data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00"))
-                .data("cartItemCount", cartCount).data("locale", locale).data("currentYear", Year.now().getValue())
-                .data("pageTitle", "My Account");
+                .data("tenantSubdomain", tenantInfo.subdomain()).data("msg", messages).data("themeTokens", themeTokens)
+                .data("customerName", "Avery Lee").data("customerEmail", "avery@example.com")
+                .data("customerFirstName", "Avery").data("recentOrders", recentOrders)
+                .data("defaultAddress", defaultAddress).data("loyaltyTier", loyaltyTier)
+                .data("loyaltyPoints", loyaltyPoints).data("loyaltyPointsToNext", loyaltyPointsToNext)
+                .data("loyaltyProgressPercent", loyaltyProgress).data("languageOptions", languageOptions)
+                .data("rootCategories", rootCategoryDisplay).data("cartItems", cartItems)
+                .data("cartSubtotal", getCartField(cartContext, "subtotal", "$0.00")).data("cartItemCount", cartCount)
+                .data("locale", locale).data("currentYear", Year.now().getValue()).data("pageTitle", "My Account");
         return buildHtmlResponse(templateInstance, localeResolution);
     }
 

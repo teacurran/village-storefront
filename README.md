@@ -1051,18 +1051,148 @@ quarkus.swagger-ui.path=/q/swagger-ui
 
 Add custom `x-` extensions when defining or updating endpoints to document additional metadata:
 
-- `x-tenant-scope`: Indicates whether endpoint is single-tenant or cross-tenant
-- `x-feature-flags`: Lists feature flags that control endpoint availability
-- `x-rate-limit`: Documents rate limit policies per authentication method
+- **`x-tenant-scope`**: `none`, `required`, or `optional` (indicates tenant resolution requirement)
+- **`x-feature-flags`**: Array of feature flag keys that must be enabled for this operation
+- **`x-rate-limit`**: Rate limiting metadata (limit, window, scope)
+- **`x-required-scopes`**: OAuth scopes or permission keys that must be granted to call the operation
 
 Example:
 ```yaml
 /api/v1/admin/products:
   get:
     summary: List products
-    x-tenant-scope: single
-    x-feature-flags: [catalog.advanced_search]
-    x-rate-limit: 1000/min (authenticated)
+    x-tenant-scope: required
+    x-feature-flags:
+      - catalog.management.enabled
+    x-rate-limit:
+      limit: 1000
+      window: 60s
+      scope: user
+    x-required-scopes:
+      - catalog:read
+
+```
+
+#### Spec Change Workflow
+
+Follow this loop whenever the OpenAPI contract changes:
+
+1. **Edit the spec** at `api/v1/openapi.yaml`, ensuring each operation declares `x-tenant-scope`, `x-feature-flags`, `x-rate-limit`, and `x-required-scopes`.
+2. **Lint + diff** – run `npm run lint:openapi` (Spectral) and `npm run openapi:diff` to compare against the previous release artifact.
+3. **Format + validate** – execute `node tools/lint.cjs` (Spotless) and `node tools/test.cjs` to keep the Java + contract tests green.
+4. **Regenerate SDKs** – use the TypeScript/Java generation commands below so downstream apps stay in sync.
+5. **Run contract tests** – execute the Schemathesis or REST-assured workflow below before sending the PR.
+6. **Commit spec + generated artifacts**, then push for review.
+
+#### SDK Generation
+
+The OpenAPI specification can be used to generate type-safe client SDKs for consuming the API from external applications.
+
+**Generate TypeScript SDK:**
+
+```bash
+# Install OpenAPI Generator
+npm install -g @openapitools/openapi-generator-cli
+
+# Generate TypeScript axios client
+openapi-generator-cli generate \
+  -i api/v1/openapi.yaml \
+  -g typescript-axios \
+  -o generated/typescript-client \
+  --additional-properties=npmName=@villagecompute/storefront-client,npmVersion=1.0.0
+
+# Use in your application
+cd generated/typescript-client
+npm install
+npm run build
+```
+
+**Generate Java SDK:**
+
+```bash
+# Generate Java client using Quarkus REST Client
+openapi-generator-cli generate \
+  -i api/v1/openapi.yaml \
+  -g java \
+  -o generated/java-client \
+  --library microprofile \
+  --additional-properties=groupId=com.villagecompute,artifactId=storefront-client,artifactVersion=1.0.0
+
+cd generated/java-client
+mvn clean install
+```
+
+**Integration with CI:**
+
+To keep SDKs up-to-date, add SDK generation to your CI pipeline:
+
+```yaml
+# .github/workflows/ci.yml (add to publish stage)
+- name: Generate and publish SDK
+  if: github.ref == 'refs/heads/main'
+  run: |
+    npm run generate:sdk:typescript
+    npm run generate:sdk:java
+    # Publish to package registry
+```
+
+#### Contract Testing
+
+Contract tests verify that the backend implementation matches the OpenAPI specification.
+
+**Using Schemathesis (Python):**
+
+```bash
+# Install schemathesis
+pip install schemathesis
+
+# Run contract tests against dev server
+./mvnw quarkus:dev &
+sleep 5  # Wait for server to start
+
+schemathesis run \
+  api/v1/openapi.yaml \
+  --base-url http://localhost:8080/api/v1 \
+  --checks all \
+  --hypothesis-max-examples=50
+
+# Stop dev server
+kill %1
+```
+
+**Using REST-assured (Java):**
+
+Add contract validation to integration tests:
+
+```java
+import io.restassured.module.jsv.JsonSchemaValidator;
+
+@QuarkusTest
+public class OpenAPIContractTest {
+
+    @Test
+    public void testProductListMatchesSpec() {
+        given()
+            .auth().oauth2(getAdminToken())
+            .when()
+            .get("/api/v1/catalog/products")
+            .then()
+            .statusCode(200)
+            .body(matchesJsonSchemaInClasspath("schemas/ProductListResponse.json"));
+    }
+}
+```
+
+**Integration with CI:**
+
+```yaml
+# .github/workflows/ci.yml
+- name: Contract tests
+  run: |
+    ./mvnw quarkus:dev &
+    sleep 10
+    schemathesis run api/v1/openapi.yaml --base-url http://localhost:8080/api/v1
+    kill %1
 ```
 
 #### Best Practices
