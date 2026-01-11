@@ -2,26 +2,35 @@
 ## 6. Verification and Integration Strategy
 
 *   **Testing Levels:**
-    - **Unit:** Required on every module (Panache repositories, services, Vue components) with mocks for external adapters; enforce factory tests for TenantContext, FeatureToggle, loyalty math, ledger updates, and background job handlers.
-    - **Integration:** Use Quarkus dev services + docker-compose stack to run tenant-aware API flows (catalog CRUD, checkout saga, consignment balance, payment webhooks, media upload handshake) with real Postgres RLS + MinIO + Mock carriers; include Playwright/Cypress runs for storefront/admin/POS with multi-tenant fixtures.
-    - **End-to-End:** Staging deployments run nightly synthetic journeys (guest checkout, staff fulfillment, consignment payout, loyalty redemption, POS offline queue flush, headless order) plus cross-tenant impersonation/resume; baseline snapshots stored for regression diffing.
-*   **CI/CD:**
-    - GitHub Actions pipeline triggered on PR + main; stages: lint (Spotless, ESLint, Stylelint), unit/integration (Maven + Vitest), OpenAPI lint (Spectral), security scans (OWASP dep check/Trivy), native build + Docker image, Cypress/Playwright e2e, SonarCloud gates, artifact signing, preview deploy to dev (k3s overlay) with smoke tests, manual approval for staging/prod, blue/green switch with health + e2e smoke gating, feature flag toggles captured in release notes.
-*   **Code Quality Gates:**
-    - Spotless + ESLint/Prettier must pass; JaCoCo coverage ≥80% per module; SonarCloud quality gate (no blocker/critical issues, maintainability rating ≥A); OWASP dep check no high/critical vulnerabilities; Quarkus `mvn verify -Dnative -pl modules/*` must pass before merge; TypeScript strict mode enforced; Storybook/axe accessibility snapshots must pass before UI merge.
-*   **Artifact Validation:**
-    - PlantUML/Mermaid diagrams validated via CI rendering step; OpenAPI spec diff + lint per PR; MyBatis migrations tested against throwaway Postgres with RLS verification script; DelayedJob payloads validated via JSON schema; docker-compose health check ensures local stack parity; documentation builds (MkDocs/pandoc) produce site verifying anchor references; release packages include diagram PNG exports + README version stamp.
+    - **Unit:** Each domain/service (tenant, catalog, checkout, payment, consignment, loyalty, POS, media) must keep ≥85% coverage, include negative cases (tenant mismatch, validation errors), and run via `mvn test` + Jest/Vitest for Vue stores. Feature toggles require dedicated unit tests verifying enable/disable behavior.
+    - **Integration:** Quarkus integration tests run against PostgreSQL + MinIO containers verifying RLS policies, Stripe webhook flows (mocked), shipping adapters, media uploads; REST-assured contract tests automatically validate OpenAPI schemas per iteration deliverables.
+    - **End-to-End:** Playwright suites cover storefront browsing/checkout, admin catalog/order workflows, POS offline transactions, platform impersonation; nightly + release candidate runs capture screenshots, tracing metadata, and Lighthouse metrics for storefront/admin.
+    - **Performance & Chaos:** Gatling/Locust load tests simulate peak checkout/cart traffic, POS offline bursts, and consignment payout spikes; chaos scripts trigger DB failover, worker restarts, and Stripe/carrier outages verifying kill-switch + fallback behavior documented in runbook.
+*   **CI/CD Flow:** GitHub Actions pipeline runs Spotless, unit/integration tests, Playwright API smoke, OpenAPI lint, coverage upload (JaCoCo ≥80%), Quinoa build, GraalVM native compile, docker image publish, and deploy workflow (blue/green with smoke tests + manual approval). Feature branch gating enforces spec alignment and prevents merges with unchecked tasks.
+*   **Quality Gates:**
+    - Test coverage: backend modules ≥80% (JaCoCo), frontend stores/components ≥80% (Vitest), e2e suites must pass each run.
+    - Lint/style: Spotless, ESLint, Stylelint, Spectral (OpenAPI) zero errors.
+    - Security: Dependency scanning (OWASP/Trivy) integrated into CI; secrets scanning ensures no credentials in repo; Stripe keys only referenced via GitHub secrets.
+    - Performance budgets: Checkout API <300 ms p95, storefront LCP <2 s, admin initial JS bundle <2 MB gz; budgets enforced by integration tests + Lighthouse CI.
+    - Observability checks: `/q/health` endpoints validated in pipeline; metrics/tracing exporters verified via unit tests.
+*   **Integration Strategy:**
+    - Feature flags gate incremental rollout; iteration deliverables specify required toggles/clamps for new modules (catalog, checkout, consignment, POS, headless, domain management).
+    - OpenAPI spec-first approach ensures backend/frontend/headless clients stay in sync; spec merged before code, and generated SDKs updated automatically.
+    - Background job payload schemas versioned; new job handlers introduced with compatibility tests + migration notes in runbook.
+    - Infrastructure integration uses Kustomize overlays; dev/staging/prod parity maintained with sealed secrets + environment variable matrices documented in runbook.
+*   **Artifact Validation:** PlantUML/Mermaid diagrams validated via CI (PlantUML CLI, `mmdc`), OpenAPI via Spectral, Markdown docs linted (markdownlint). Media worker container includes health check to ensure FFmpeg version pinned; Kubernetes manifests tested via `kubeconform`.
+*   **Release Readiness:** Final iteration executes verification plan (Task `I5.T7`) producing release readiness report, capturing coverage metrics, unresolved risks, rollback plans, tenant onboarding checklist, and platform governance approvals.
 
 <!-- anchor: glossary -->
 ## 7. Glossary
 
-*   **TenantContext:** Request-scoped CDI bean capturing tenant_id, store metadata, feature flags; all services fetch scoped data through it to honor RLS.
-*   **FeatureToggle Service:** Caffeine-backed resolver layering platform defaults, tenant overrides, and emergency kill switches; documented in `feature-flags.md`.
-*   **DelayedJob:** Database queue pattern storing job payload JSON, priority, attempts; processed by dedicated worker pods for emails, media, payouts, reports.
-*   **PaymentProvider:** Interface encapsulating payment processor operations (intent, capture, refund, payout, webhook handling); Stripe Connect is first implementation.
-*   **Domain Event:** Immutable JSON row capturing aggregate change (ProductPublished, OrderPaid) used for projections, reports, and integrations.
-*   **Consignment Ledger (Pending/Available):** Balance mechanism crediting pending amounts immediately after sale, moving to available post-refund window, supporting Stripe payouts.
-*   **Media Pipeline:** Upload workflow (presigned URL → MinIO/R2 → validation → FFmpeg/Thumbnailator job) generating tenant-scoped variants served via signed URLs.
-*   **POS Offline Queue:** Encrypted IndexedDB storage capturing transactions when offline, replayed sequentially via REST once connectivity restored.
-*   **Headless API Client:** OAuth client credentials issued per tenant for catalog/cart/order scopes; rate limited via token bucket combining Caffeine + Postgres counters.
-*   **Platform Command:** Audit-tracked action executed by platform admins (suspend store, toggle flag, run DR command), stored with reason/ticket reference and surfaced in audit exports.
+*   **TenantContext:** Request-scoped CDI bean storing tenant_id, store metadata, feature flags, used across services to enforce RLS and theming.
+*   **DelayedJob:** Database-backed queue table implementing CRITICAL/HIGH/DEFAULT/LOW/BULK priorities and `SELECT ... SKIP LOCKED` workers.
+*   **Feature Flag:** Configuration entry in `feature_flags` table with default + tenant overrides, owner, expiry, and kill-switch semantics.
+*   **Platform Admin Console:** `/admin/platform/*` SPA modules used by VillageCompute ops to manage stores, impersonation, feature flags, and system health.
+*   **Headless API:** OAuth-scoped REST surface exposing catalog/cart/order data for partner sites; enforces rate limits + JWT-style client credentials.
+*   **POS Offline Queue:** IndexedDB-backed storage of POS sales when offline, encrypted and replayed sequentially after reconnect.
+*   **Stripe Connect:** Payment platform enabling per-tenant onboarding, application fees, payouts, and Stripe Terminal hardware support.
+*   **FFmpeg Worker Pod:** Dedicated Kubernetes deployment subscribed to CRITICAL queue for video transcoding, isolated from web pods.
+*   **Runbook:** `docs/operations/runbook.md` manual containing deployment, rollback, incident, and observability procedures referenced by ops teams.
+*   **Release Readiness Report:** Artifact summarizing verification results, coverage metrics, load/chaos findings, and go/no-go decisions before pilot launch.

@@ -2,130 +2,227 @@
   {
     "task_id": "I5.T1",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Build Loyalty module (ledger, tier definitions, accrual/redemption services, nightly jobs, OpenAPI endpoints) plus integration into checkout + admin UI.",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Implement platform admin backend (store listing, plan changes, suspend/resume, impersonation session management, platform metrics APIs) respecting governance guardrails and audit logging.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Loyalty requirements, checkout orchestration.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Ledger schema, accrual/reservation logic, nightly job (Quartz/Scheduler) releasing expired reservations, APIs for admin + customer, UI components (earn/redeem), tests verifying two-phase commit.",
-    "acceptance_criteria": "Points accrue/reserve/refund flows tested; checkout integration toggled via feature flag; Admin UI displays tier progress; metrics exported for loyalty KPIs.",
+    "inputs": "Section 14 requirements, Clarification 5, ERD (platform tables), Tenant blueprint.",
+    "target_files": [
+      "src/main/java/com/village/platform/PlatformAdminResource.java",
+      "src/main/java/com/village/platform/ImpersonationService.java",
+      "src/main/java/com/village/platform/StoreMetricsService.java",
+      "src/test/java/com/village/platform/PlatformAdminResourceIT.java"
+    ],
+    "input_files": [
+      "src/main/java/com/village/platform",
+      "docs/architecture/platform_ops.md",
+      "api/openapi.yaml"
+    ],
+    "deliverables": "REST APIs with RBAC, impersonation session CRUD, plan management endpoints, tests verifying audit entries + tenant safety.",
+    "acceptance_criteria": "- Suspend/resume updates tenant + triggers feature flags; actions logged with reason/ticket.\n        - Impersonation tokens expire/renew per policy, storing events in audit tables.\n        - Platform metrics API aggregates store KPIs using read models from reporting module.",
     "dependencies": [
-      "I3.T1",
-      "I4.T2"
+      "I1.T2",
+      "I3.T9",
+      "I4.T8"
     ],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I5.T2",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Implement Reporting & Retention pipeline (domain_events poller, aggregate tables, scheduled exports, archival to R2 JSONL, retention doc updates).",
-    "agent_type_hint": "DataEngineeringAgent",
-    "inputs": "Domain events, ERD, Section 5 data governance.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Worker to transform domain events into aggregates (sales KPI, inventory, loyalty, consignment), export job + API, retention doc describing partition + archive steps.",
-    "acceptance_criteria": "Worker processes backlog idempotently; exports upload to R2 with manifest; doc lists retention windows + automation schedule; Prometheus metrics for job lag.",
-    "dependencies": [
-      "I3.T1",
-      "I4.T6"
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Build platform admin console UI (Vue) with dashboards, store directory, impersonation toolbar, alert feed, support queue integration, and feature flag management panel.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Task `I5.T1`, design system tokens, feature flag docs.",
+    "target_files": [
+      "src/main/webui/src/views/PlatformDashboard.vue",
+      "src/main/webui/src/components/ImpersonationBanner.vue",
+      "src/main/webui/src/views/PlatformStores.vue",
+      "src/main/webui/src/stores/platform.ts",
+      "src/main/webui/src/components/FeatureFlagPanel.vue",
+      "tests/e2e/admin/platform.spec.ts"
     ],
-    "parallelizable": true,
-    "done": true
+    "input_files": [
+      "src/main/webui/src",
+      "api/openapi.yaml",
+      "docs/architecture/platform_ops.md"
+    ],
+    "deliverables": "UI views/stores/components, impersonation banner, e2e tests verifying console navigation + impersonation flows.",
+    "acceptance_criteria": "- Dashboard shows KPIs, queue depth, alerts; store table supports filters + actions.\n        - Impersonation banner persists across app, includes exit button + timer, disables destructive actions if reason missing.\n        - Playwright spec covers impersonation start/stop and verifies audit log entry visible.",
+    "dependencies": [
+      "I5.T1"
+    ],
+    "parallelizable": false,
+    "done": false
   },
   {
     "task_id": "I5.T3",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Deliver Platform Admin console backend + UI (store list, plan/billing, impersonation approvals, health metrics, audit exports) plus impersonation logging enhancements.",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Finalize headless APIs (catalog/cart/order/customer read/write scopes) with OAuth client credential issuance, rate limiting buckets, and documentation for partner integration.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Platform admin requirements, audit schema.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "APIs (store listing, impersonation start/stop, audit exports, health metrics), UI dashboard with KPIs + filters, impersonation banner + session log, feature flag controls, tests verifying RBAC.",
-    "acceptance_criteria": "Platform scope tokens enforce access; impersonation workflow logs reason/ticket, TTL, SSE notifications; UI displays store health cards; export job statuses show.",
-    "dependencies": [
-      "I3.T5",
-      "I4.T2",
-      "I4.T6"
+    "inputs": "OpenAPI spec, Section 13 headless requirements, TenantContext.",
+    "target_files": [
+      "src/main/java/com/village/headless/HeadlessClientResource.java",
+      "src/main/java/com/village/headless/OAuthClientService.java",
+      "src/main/java/com/village/headless/RateLimitBucketRepository.java",
+      "src/test/java/com/village/headless/HeadlessApiTest.java",
+      "docs/architecture/tenant_isolation.md"
     ],
-    "parallelizable": false,
-    "done": true
+    "input_files": [
+      "src/main/java/com/village/headless",
+      "api/openapi.yaml",
+      "docs/quality/test_strategy.md"
+    ],
+    "deliverables": "OAuth client issuance endpoints, scope enforcement, rate limit storage, spec updates, tests verifying quotas + tenant scoping.",
+    "acceptance_criteria": "- Client credentials stored hashed, scopes enforced at filter level, responses include rate-limit headers.\n        - Spec documents scopes + sample requests; docs describe onboarding + revocation.\n        - Tests simulate abuse (exceeding rate) and confirm 429 responses + logging.",
+    "dependencies": [
+      "I2.T4",
+      "I3.T6"
+    ],
+    "parallelizable": true,
+    "done": false
   },
   {
     "task_id": "I5.T4",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Implement Headless API + OAuth client credential management (tenant-level clients, scopes, rate limiting, documentation portal) plus sample integration.",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Implement custom domain + SSL automation workflow (domain verification job, cert-manager integration, UI for status) as described in Clarification 1 and Section 14.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "API spec, Identity service.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "OAuth client issuance UI + API, scopes (catalog:read, cart:write, orders:read), rate limit enforcement (token bucket), docs describing usage + sample calls, sample Next.js script.",
-    "acceptance_criteria": "Token issuance/resv validated; rate limiting returns 429 with ProblemDetails; docs include curl + JS examples; integration test ensures headless order flows function.",
+    "inputs": "Tenant blueprint, runbook, Kubernetes requirements.",
+    "target_files": [
+      "src/main/java/com/village/domain/CustomDomainResource.java",
+      "src/main/java/com/village/domain/DomainValidationJob.java",
+      "src/main/java/com/village/domain/CertificateEventHandler.java",
+      "src/test/java/com/village/domain/DomainValidationJobTest.java",
+      "src/main/webui/src/views/DomainSettingsView.vue",
+      "infra/kustomize/base/cert-manager/issuer.yaml"
+    ],
+    "input_files": [
+      "src/main/java/com/village/domain",
+      "docs/architecture/platform_ops.md",
+      "infra/kustomize/base"
+    ],
+    "deliverables": "API/UI for domain management, background job validating DNS + requesting certs, Kubernetes issuer manifests.",
+    "acceptance_criteria": "- Domain states (PENDING/ACTIVE/FAILED) persisted, job retries with backoff, errors produce actionable messages.\n        - UI displays DNS instructions, verification status, certificate expiry warnings.\n        - Manifests include cert-manager ClusterIssuer + RBAC, documented in runbook.",
     "dependencies": [
-      "I1.T5",
-      "I1.T6",
-      "I3.T1"
+      "I1.T2",
+      "I4.T7"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I5.T5",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Launch Gift card + Store credit services (entities, APIs, checkout integration, admin UI, reporting) with compliance logging.",
-    "agent_type_hint": "BackendAgent",
-    "inputs": "Requirements (gift card/store credit), checkout + loyalty integration.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Gift card issuance/redemption, store credit ledger, checkout logic stacking rules, admin UI for management, reporting aggregator entries.",
-    "acceptance_criteria": "API tests for issuance/redeem/refund; checkout ensures gift card + loyalty stacking rules enforced; UI surfaces balances; events recorded for reporting.",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Hardening observability + alerting: configure OpenTelemetry exporter, Prometheus scraping, Grafana dashboards, alert rules for checkout/media/POS, and log shipping policies referencing Section 3.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Runbook, metrics from previous iterations, infrastructure stack.",
+    "target_files": [
+      "infra/kustomize/base/observability/otel-collector.yaml",
+      "infra/kustomize/base/prometheus-rules.yaml",
+      "docs/operations/runbook.md",
+      "docs/architecture/platform_ops.md"
+    ],
+    "input_files": [
+      "src/main/resources/application.properties",
+      "docs/operations/runbook.md",
+      "infra/kustomize/base",
+      "docs/architecture/platform_ops.md"
+    ],
+    "deliverables": "Configs + manifests for telemetry stacks, documentation of dashboards + alert thresholds.",
+    "acceptance_criteria": "- Otel collector exports traces to Jaeger; Prometheus rules cover queue depth, webhook latency, POS offline queue.\n        - Dashboards defined (grafana JSON or doc) for SLO monitoring, referenced in runbook.\n        - Alert routing described with PagerDuty/Statuspage hooks.",
     "dependencies": [
-      "I3.T1",
-      "I5.T1",
-      "I3.T3"
+      "I4.T7"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I5.T6",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Automate consignment payouts (Stripe Connect Express integration, payout scheduling job, statements, emails, portal updates).",
-    "agent_type_hint": "BackendAgent",
-    "inputs": "Consignment ledger, Stripe provider.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Scheduled job moving pending→available balances, Stripe payout creation, statements stored to R2, portal + email updates.",
-    "acceptance_criteria": "Jobs respects configurable windows, handles refunds/chargebacks, logs audit trail; UI shows payout status; notifications sent; tests with Stripe mocks.",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Finalize Kubernetes manifests + Kustomize overlays (dev/staging/prod) with HPAs per module, PodDisruptionBudgets, sealed secrets for Stripe/SMTP, and blue/green deployment workflow in CI/CD.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Infrastructure directories, runbook, CI pipeline.",
+    "target_files": [
+      "infra/kustomize/base/deployment.yaml",
+      "infra/kustomize/base/media-worker-deployment.yaml",
+      "infra/kustomize/overlays/staging/kustomization.yaml",
+      "infra/github-actions/workflows/deploy.yaml",
+      "docs/operations/runbook.md"
+    ],
+    "input_files": [
+      "infra/kustomize/base",
+      "infra/kustomize/overlays",
+      "infra/github-actions/workflows/ci.yaml",
+      "docs/operations/runbook.md"
+    ],
+    "deliverables": "Updated manifests, overlay configs, deploy workflow referencing blue/green, documentation with commands + approvals.",
+    "acceptance_criteria": "- Each module deployment includes resources, probes, HPAs, PDBs; overlays inject env-specific configs + secrets.\n        - Deploy workflow handles canary, smoke tests, and rollback steps with approval gates.\n        - Runbook includes quick reference for applying overlays + verifying rollout.",
     "dependencies": [
-      "I3.T5",
-      "I3.T3",
-      "I4.T5"
+      "I1.T7",
+      "I4.T6"
     ],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I5.T7",
     "iteration_id": "I5",
-    "iteration_goal": "Implement advanced programs (loyalty, gift cards, store credit), reporting + retention pipelines, platform admin console with impersonation governance, headless APIs/OAuth, and automated consignment payouts.",
-    "description": "Enhance structured logging, audit exports, and observability dashboards (Grafana/Jaeger) for loyalty, payments, consignment, headless APIs; update runbooks.",
-    "agent_type_hint": "ObservabilityAgent",
-    "inputs": "Modules implemented in this iteration.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Additional metrics/loggers, Grafana dashboards, alert rules for loyalty/consignment/payout/Headless API anomalies, runbook updates referencing new metrics.",
-    "acceptance_criteria": "Metrics exported with tenant/tier labels; alert rules defined; runbooks detail KPIs + troubleshooting; Jaeger traces show end-to-end flows.",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Execute verification plan: full regression (unit/integration/e2e), load tests for checkout + POS, chaos drills (database failover, worker crash), and produce release readiness report summarizing coverage + open risks.",
+    "agent_type_hint": "QAAgent",
+    "inputs": "Test strategy doc, e2e suites, runbook.",
+    "target_files": [
+      "docs/quality/test_strategy.md",
+      "docs/operations/runbook.md",
+      "docs/architecture/platform_ops.md",
+      "reports/release_readiness.md"
+    ],
+    "input_files": [
+      "docs/quality/test_strategy.md",
+      "scripts/qa/run_e2e.sh",
+      "tests",
+      "README.md"
+    ],
+    "deliverables": "Updated test strategy with actual coverage metrics, release readiness report, load/chaos test scripts + results summarised.",
+    "acceptance_criteria": "- Regression matrix completed, coverage numbers recorded, gating thresholds met or risk-accepted.\n        - Load test demonstrates checkout handles target throughput; POS offline/online switch validated.\n        - Chaos drill documented with remediation steps; release readiness report signed off by leads.",
     "dependencies": [
-      "I5.T1-T6"
+      "I5.T1",
+      "I5.T6"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I5.T8",
+    "iteration_id": "I5",
+    "iteration_goal": "Complete SaaS governance (platform admin console, impersonation/audit tooling), finalize headless APIs, lock down observability + Kubernetes deployments, and execute release validation so MVP can onboard pilot tenants.",
+    "description": "Finalize security/privacy features: data export/delete tooling, session management UI, encryption key rotation scripts, GDPR-ready documentation.",
+    "agent_type_hint": "SecurityAgent",
+    "inputs": "Section Safety Net, loyalty/gift card modules, session log partitions.",
+    "target_files": [
+      "src/main/java/com/village/security/DataExportResource.java",
+      "src/main/java/com/village/security/DataDeletionJob.java",
+      "src/main/webui/src/views/AccountSecurityView.vue",
+      "docs/architecture/tenant_isolation.md",
+      "docs/operations/runbook.md"
+    ],
+    "input_files": [
+      "src/main/java/com/village/security",
+      "src/main/webui/src/views",
+      "docs/architecture/tenant_isolation.md",
+      "docs/operations/runbook.md"
+    ],
+    "deliverables": "APIs/jobs for export/delete, admin UI to trigger/manage requests, docs on key rotation + privacy workflow.",
+    "acceptance_criteria": "- Export job streams hot + archived data (JSONL/CSV) with manifest; delete job soft-deletes, triggers purge per retention.\n        - UI shows active sessions, revoke button, and privacy controls; audit logs capture all actions.\n        - Documentation outlines encryption key rotation schedule + manual overrides.",
+    "dependencies": [
+      "I3.T9",
+      "I4.T8"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   }
 ]

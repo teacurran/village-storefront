@@ -2,126 +2,221 @@
   {
     "task_id": "I2.T1",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Define Panache entities + repositories for Product, Variant, Category, Collection with base filters applying tenant_id + status; include DTO mappers + validation.",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Implement catalog domain (Product, Variant, Category, Collection) with Panache repositories enforcing tenant filters, DTO mappers, and REST endpoints for CRUD plus status transitions (draft/active/scheduled/archived) consistent with spec.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "ERD, feature flag service, TenantContext utilities.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Entities + services with CRUD + pagination, DTO mappers (MapStruct), validation rules (status transitions, slug uniqueness), test coverage for tenant filters.",
-    "acceptance_criteria": "Unit/integration tests confirm RLS/tenant filtering; MapStruct mappers compile native; repository methods expose query builders for search facets; documentation referencing new services added to module README.",
+    "inputs": "`I1.T4` ERD, tenant isolation blueprint, Section 3 contract patterns, competitor research callouts.",
+    "target_files": [
+      "src/main/java/com/village/catalog/ProductResource.java",
+      "src/main/java/com/village/catalog/VariantResource.java",
+      "src/main/java/com/village/catalog/service/ProductService.java",
+      "src/main/java/com/village/catalog/model/ProductEntity.java",
+      "src/test/java/com/village/catalog/ProductResourceTest.java"
+    ],
+    "input_files": [
+      "src/main/java/com/village/catalog",
+      "docs/diagrams/domain_erd.puml",
+      ".codemachine/inputs/competitor-research.md"
+    ],
+    "deliverables": "REST endpoints with DTO mapping, validation annotations, Panache queries filtering by tenant + visibility windows, unit + integration tests hitting Postgres dev container.",
+    "acceptance_criteria": "- CRUD endpoints return RFC7807 errors, enforce tenant_id, include pagination/filtering, and emit domain event placeholders.\n        - MapStruct or manual mapper ensures domain vs persistence separation; serialization excludes internal columns.\n        - Tests cover happy path + RLS violation attempts, achieving ≥85% package coverage with Quarkus test containers.",
     "dependencies": [
+      "I1.T2",
       "I1.T5"
     ],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I2.T2",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Create MyBatis migrations for catalog/inventory tables (products, variants, categories, collections, inventory_locations/levels) with indexes, RLS policies, partition seeds for inventory logs.",
-    "agent_type_hint": "DatabaseAgent",
-    "inputs": "ERD, Task I2.T1 schema expectations.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Forward/backward migrations, verification script ensuring RLS policies exist, README snippet for migration order.",
-    "acceptance_criteria": "`mvn -pl modules/catalog quarkus:dev` with dev Postgres applies migrations clean; `psql` check shows RLS policy referencing `current_setting('app.tenant_id')`; rollback script passes dry run.",
-    "dependencies": [
-      "I2.T1",
-      "I1.T5"
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Build inventory subsystem with InventoryLocation, InventoryLevel, adjustments, transfers, and low-stock alert scheduler stub referencing Clarifications on multi-location + consignment coordination; integrate with catalog via variant IDs only.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "ERD, Safety Net, Clarification 4, existing catalog services.",
+    "target_files": [
+      "src/main/java/com/village/inventory/InventoryResource.java",
+      "src/main/java/com/village/inventory/TransferService.java",
+      "src/main/java/com/village/inventory/entity/InventoryLevelEntity.java",
+      "src/test/java/com/village/inventory/InventoryLevelTest.java",
+      "src/test/java/com/village/inventory/TransferServiceIT.java"
     ],
-    "parallelizable": true,
-    "done": true
+    "input_files": [
+      "src/main/java/com/village/inventory",
+      "docs/diagrams/domain_erd.puml",
+      "docs/architecture/tenant_isolation.md"
+    ],
+    "deliverables": "REST endpoints + services, scheduled job stubs, integration with audit events, unit/integration tests, config toggles for email alerts.",
+    "acceptance_criteria": "- Stock adjustments transactional with optimistic locking + reason codes, event log written per adjustment.\n        - Transfer endpoints log audit events, queue notifications, and emit domain event placeholders for reporting.\n        - Scheduler stub logs and respects feature flag gating + SLA metrics instrumentation.",
+    "dependencies": [
+      "I2.T1"
+    ],
+    "parallelizable": false,
+    "done": false
   },
   {
     "task_id": "I2.T3",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Extend OpenAPI spec + Quarkus resources for catalog (list/search products, variant matrix, categories/collections CRUD) and inventory endpoints; include pagination/filter parameter definitions.",
-    "agent_type_hint": "DocumentationAgent",
-    "inputs": "Task I2.T1 output, API skeleton.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "REST controllers (storefront + admin scopes) respecting TenantContext + feature flags; spec includes request/response schemas, ProblemDetails, RateLimit metadata.",
-    "acceptance_criteria": "OpenAPI passes lint; Quarkus endpoints return 200/404/403 as expected; integration test uses RestAssured verifying tenant isolation; spec referencing new tags `Catalog` + `Inventory`.",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Scaffold Qute storefront shell (layout, partials, theme token loader) with sample product grid pulling from catalog endpoints, multi-tenant theme injection (CSS variables derived from DB JSON), and Accept-Language stub logic storing visitor preference cookie.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Architecture Section 2, Directory structure, Task `I2.T1` outputs, design tokens spec.",
+    "target_files": [
+      "src/main/resources/qute/layouts/base.html",
+      "src/main/resources/qute/pages/home.html",
+      "src/main/resources/qute/components/product-card.html",
+      "src/main/java/com/village/storefront/ThemeProvider.java",
+      "src/test/java/com/village/storefront/ThemeProviderTest.java"
+    ],
+    "input_files": [
+      "src/main/resources/qute",
+      "src/main/java/com/village/catalog/ProductResource.java",
+      "docs/architecture/tenant_isolation.md"
+    ],
+    "deliverables": "Reusable layout, hero/grid partials, theme provider bean, integration test ensuring tenant-specific branding output.",
+    "acceptance_criteria": "- Storefront home renders sample catalog list per tenant with caching fallback + 404 for unknown tenant.\n        - Theme provider fetches tokens from DB or fallback JSON with caching + invalidation hook triggered via CDI event.\n        - I18n stub reads Accept-Language and sets cookie + request attribute, ready for translation bundles.",
     "dependencies": [
-      "I2.T1",
-      "I1.T4"
+      "I2.T1"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I2.T4",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Implement Inventory service (multi-location levels, adjustments, transfers) with Panache repositories, domain services enforcing reason codes, integration events for reporting.",
-    "agent_type_hint": "BackendAgent",
-    "inputs": "Requirements (inventory), migrations.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Services supporting create/update/transfer/adjust operations, domain events (InventoryAdjusted, TransferInitiated) persisted to `domain_events`, tests verifying concurrency + RLS.",
-    "acceptance_criteria": "Transfers handle validations (matching tenant, quantities, statuses); events recorded with JSON payload; tests run against dev Postgres; API docs updated referencing adjustments.",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Create OpenAPI v3 skeleton covering catalog, inventory, theme, tenant, and auth endpoints with reusable components, security schemes (JWT + OAuth client credentials), feature-flag metadata, and error schema templates.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Section 2 contract style, Task outputs `I2.T1`–`I2.T3`, `I1.T6` test strategy.",
+    "target_files": [
+      "api/openapi.yaml",
+      "README.md"
+    ],
+    "input_files": [
+      "api/openapi.yaml",
+      "README.md"
+    ],
+    "deliverables": "Spec file with tags, schemas, error objects, `x-feature-flags` fields, README instructions for generating SDK stubs + contract tests.",
+    "acceptance_criteria": "- Spec validates via `spectral lint` and includes schema references for all implemented endpoints.\n        - SecuritySchemes define bearer + client creds with scopes; operations cite required scopes + rate limit hints.\n        - README updated with spec change workflow + instructions to regenerate TypeScript/Java clients.",
     "dependencies": [
+      "I2.T1",
       "I2.T2"
     ],
-    "parallelizable": false,
-    "done": true
+    "parallelizable": true,
+    "done": false
   },
   {
     "task_id": "I2.T5",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Build CSV import/export foundation for catalog (async job, schema validation, sample template) leveraging DelayedJob queue.",
-    "agent_type_hint": "BackendAgent",
-    "inputs": "Async job policies, catalog service.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Job handlers, job catalog doc entry (payload schema, queues, retries), CLI or REST endpoint for import/export, sample CSV.",
-    "acceptance_criteria": "Job enqueues with DEFAULT priority, processes rows idempotently, logs errors per row; export job streams CSV to R2/MinIO; documentation describes operator workflow.",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Bootstrap Vue 3 admin SPA (Quinoa) with routing, authentication guard, Tailwind token ingestion, shared PrimeVue theme, and placeholder views for dashboard/products/inventory referencing OpenAPI client stubs.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Section 1 overview, Directory structure, Task `I2.T4` spec, Theme provider APIs.",
+    "target_files": [
+      "src/main/webui/src/main.ts",
+      "src/main/webui/src/router/index.ts",
+      "src/main/webui/src/stores/catalog.ts",
+      "src/main/webui/src/views/DashboardView.vue",
+      "src/main/webui/tailwind.config.cjs",
+      "src/main/webui/src/components/TokenPreview.vue"
+    ],
+    "input_files": [
+      "src/main/webui/src",
+      "api/openapi.yaml",
+      "src/main/resources/qute/layouts/base.html"
+    ],
+    "deliverables": "Bootstrapped SPA with auth guard stub, Pinia stores hitting mock endpoints, Tailwind tokens loader bridging backend theme API, CI build script update referencing Quinoa.",
+    "acceptance_criteria": "- SPA builds via Quinoa, loads inside Quarkus `/admin` route, uses dynamic config from backend endpoint hooking TenantContext.\n        - Stores fetch data from catalog endpoints with mocked auth token + loading skeleton states.\n        - Style guide page displays color/typography tokens using CSS variables, verifying contrast levels with automated check.",
     "dependencies": [
-      "I2.T1",
-      "I1.T7",
-      "I1.T6"
+      "I1.T5",
+      "I2.T3",
+      "I2.T4"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I2.T6",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Create storefront Qute partials + Tailwind tokens for catalog browsing (hero, product card, filter panel) plus design token export script hooking into database theme seed.",
-    "agent_type_hint": "FrontendAgent",
-    "inputs": "Design system spec, product endpoints.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Initial storefront screens hitting catalog API, responsive product cards, filter panel, theme token exporter referencing tenant branding.",
-    "acceptance_criteria": "Dev mode renders sample catalog with seeded data; Tailwind build uses exported tokens; Lighthouse passes basic performance (LCP <2.5s) on seeded data; tests verifying translations exist for EN/ES placeholders.",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Document async processing blueprint (media, reports, payouts) with Mermaid diagrams showing DelayedJob lifecycle, queue priorities, worker pods, FFmpeg isolation, SLA table, and monitoring hooks.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Clarifications 2–4, Section 5 contract patterns, Task `I1.T7` (tooling), background job scheduler requirements.",
+    "target_files": [
+      "docs/architecture/background_jobs.md",
+      "docs/diagrams/media_pipeline.mmd",
+      "docs/architecture/platform_ops.md"
+    ],
+    "input_files": [
+      "docs/architecture/background_jobs.md",
+      "docs/architecture/tenant_isolation.md"
+    ],
+    "deliverables": "Mermaid diagrams, detailed SLA table, backlog of metrics to collect, operations notes for queue tuning.",
+    "acceptance_criteria": "- Document covers queue table schema, job payload versioning, worker HPA triggers, circuit breaker strategy.\n        - Media pipeline diagram references FFmpeg containers, signed URL flows, failure retries, backoff policy.\n        - Ops doc lists dashboards/alerts needed plus manual remediation steps.",
     "dependencies": [
-      "I2.T1",
-      "I2.T3"
+      "I1.T3",
+      "I1.T7"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I2.T7",
     "iteration_id": "I2",
-    "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
-    "description": "Instrument observability for catalog/inventory APIs (OpenTelemetry spans, Prometheus metrics, structured logs) plus add component-level runbook entries.",
-    "agent_type_hint": "ObservabilityAgent",
-    "inputs": "Observability requirements, tasks T2.1-T2.4 outputs.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Metrics (request latency histograms, import job gauges), tracing instrumentation, runbook describing alerts and feature flags.",
-    "acceptance_criteria": "`/q/metrics` exposes catalog + inventory metrics; spans show tenant_id attribute; runbook lists KPIs + alert thresholds; tests ensure metrics registered.",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Implement media ingestion endpoints for images (upload request, completion hook, sync thumbnail creation) leveraging MinIO in dev, queue integration for heavy jobs, and tests for validation/signed URL generation + metadata storage.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Async blueprint, Directory structure, R2 requirements, Task `I2.T6` metrics.",
+    "target_files": [
+      "src/main/java/com/village/media/MediaResource.java",
+      "src/main/java/com/village/media/MediaService.java",
+      "src/main/java/com/village/media/MediaJobPayload.java",
+      "src/test/java/com/village/media/MediaResourceTest.java",
+      "src/test/java/com/village/media/MediaServiceIT.java",
+      "README.md"
+    ],
+    "input_files": [
+      "src/main/java/com/village/media",
+      "docs/architecture/background_jobs.md",
+      "docker/docker-compose.yaml"
+    ],
+    "deliverables": "REST endpoints, service layer hitting S3 SDK, queue enqueue logic, tests mocking MinIO + verifying signed URLs, README snippet describing local media flow.",
+    "acceptance_criteria": "- Upload request enforces tenant-specific path + size/mime validation; completion persists metadata + job entry.\n        - Signed URLs include hashed filenames + TTL, using Cloudflare-compatible settings; errors log audit events.\n        - Tests confirm security rules (tenant_id path, size enforcement) and queue integration placing CRITICAL or DEFAULT priority appropriately.",
+    "dependencies": [
+      "I2.T6"
+    ],
+    "parallelizable": false,
+    "done": false
+  },
+  {
+    "task_id": "I2.T8",
+    "iteration_id": "I2",
+    "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+    "description": "Establish contract tests + QA data fixtures for catalog/inventory/storefront flows using Playwright (storefront) and REST-assured (API), seeded via docker scripts for deterministic tenants.",
+    "agent_type_hint": "QAAgent",
+    "inputs": "Tasks `I2.T1`–`I2.T3`, `I2.T4`, test strategy doc, seed scripts.",
+    "target_files": [
+      "tests/e2e/storefront/catalog.spec.ts",
+      "tests/e2e/api/catalog_contract.spec.ts",
+      "scripts/dev/tenant_seed.sh",
+      "scripts/qa/run_e2e.sh",
+      "docs/quality/test_strategy.md"
+    ],
+    "input_files": [
+      "scripts/qa/run_e2e.sh",
+      "src/test/java/com/village/catalog",
+      "src/main/webui",
+      "scripts/dev/tenant_seed.sh"
+    ],
+    "deliverables": "Playwright spec hitting home/category + visual snapshot, REST-assured contract tests verifying OpenAPI responses, updated seed data with sample catalog + inventory to support tests, CI job wiring.",
+    "acceptance_criteria": "- Playwright run passes headless, produces artifacts stored via CI; spec asserts theme tokens + cart add stub.\n        - REST-assured tests validate JSON schema from OpenAPI, ensuring 100% coverage for implemented endpoints.\n        - Seed script populates sample catalog/inventory referenced by tests; e2e script wiring documented in README/test strategy.",
     "dependencies": [
       "I2.T1",
+      "I2.T2",
+      "I2.T3",
       "I2.T4"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   }
 ]

@@ -694,6 +694,150 @@ For static site integration and custom frontends:
 
 ---
 
+## Architecture Clarifications
+
+*Decisions made 2026-01-11 to resolve specification ambiguities.*
+
+### Clarification 1: Custom Domain Tenant Resolution
+
+**Decision: Application-First Routing (Path A)**
+
+- **Routing strategy**: JAX-RS `TenantFilter` handles all tenant resolution (both subdomains and custom domains)
+- **Ingress configuration**: Wildcard rules (`*.platform.com` + catch-all for custom domains)
+- **Unknown hosts**: Application returns 404 for unrecognized hosts
+- **DNS validation**: Asynchronous via background job
+  - Domain added immediately to `custom_domains` table with `status=PENDING`
+  - Background job validates DNS (CNAME points to correct target)
+  - Domain activated (`status=ACTIVE`) upon successful validation
+  - Retries with exponential backoff for DNS propagation delays
+- **SSL certificates**: cert-manager with Let's Encrypt
+  - Certificate resource created after DNS validation succeeds
+  - HTTP-01 challenge via Ingress
+  - cert-manager handles renewal automatically
+
+### Clarification 2: Media Processing Execution Environment
+
+**Decision: FFmpeg Binary in Alpine-based Worker Pods (Path A)**
+
+- **Video processing required for MVP**: Yes
+- **Container strategy**:
+  - **Web pods**: Distroless base, no FFmpeg, ~50-100MB
+  - **Media worker pods**: Alpine-based with FFmpeg static binary, ~150-200MB
+- **FFmpeg integration**:
+  - FFmpeg 6.x static build included in worker image at build time
+  - Invoked via `ProcessBuilder` with configurable timeout (10 minutes default)
+  - Subprocess resource limits enforced by pod resource constraints
+- **Queue isolation**: Media workers subscribe only to `CRITICAL` queue
+- **Autoscaling**: HPA triggered when media queue depth > 10 jobs for 2 minutes
+
+### Clarification 3: Background Job Queue Persistence
+
+**Decision: Row-Level Locking with SELECT FOR UPDATE SKIP LOCKED (Path A)**
+
+- **Concurrency model**: PostgreSQL native row-level locking
+- **Job claim query**: `SELECT FOR UPDATE SKIP LOCKED` for atomic job acquisition
+- **Job table schema** (key columns):
+  - `id` (UUID, PK)
+  - `queue` (VARCHAR - CRITICAL, HIGH, DEFAULT, LOW, BULK)
+  - `priority` (INTEGER - higher = more urgent within queue)
+  - `status` (ENUM - PENDING, PROCESSING, COMPLETED, FAILED)
+  - `locked_by` (VARCHAR - pod identifier, nullable)
+  - `locked_at` (TIMESTAMP - when job was claimed)
+  - `attempts` (INTEGER - retry count)
+  - `max_attempts` (INTEGER - default 3)
+  - `last_error` (TEXT - error message from last failure)
+  - `scheduled_at` (TIMESTAMP - when to run, for delayed jobs)
+  - `created_at`, `updated_at` (TIMESTAMP)
+- **Orphan detection**: Scheduled cleanup task runs every 5 minutes
+  - Jobs in `PROCESSING` status with `locked_at` > 10 minutes ago reset to `PENDING`
+  - `attempts` incremented; job marked `FAILED` if `attempts >= max_attempts`
+- **Job history retention**: 30 days
+  - Completed/failed jobs pruned by daily scheduled job
+  - Archived to R2 in JSONL format before deletion (optional, for audit)
+
+### Clarification 4: Consignment Vendor Balance Crediting
+
+**Decision: Trigger on Shipment Confirmation (Path B)**
+
+- **Refund window trigger**: 30-day countdown starts when order status = `SHIPPED` with tracking number
+- **Split shipments**: Each shipment triggers independent 30-day window for its line items
+  - Vendor balance credited per-shipment as each window expires
+  - Partial orders may have staggered vendor credits
+- **Digital products**: 30-day window starts on payment capture (instant "delivery")
+- **Duration**: Platform-wide 30-day policy (not store-configurable)
+- **Never-shipped orders**: Items remain in `pending_balance` indefinitely until fulfilled or cancelled
+- **Balance sweep job**: Runs daily, moves eligible `pending_balance → available_balance`
+
+### Clarification 5: Platform Admin Impersonation Audit
+
+**Decision: Mutation-Only Audit Logging (Path B)**
+
+- **Audit granularity**: Only POST/PUT/PATCH/DELETE requests logged during impersonation
+  - GET requests not logged (reduces volume ~80-90%)
+  - Sufficient for SOC2 Type II compliance
+- **Audit table schema** (`platform_impersonation_audit`):
+  - `id` (UUID, PK)
+  - `session_id` (UUID, FK to `platform_impersonation_sessions`)
+  - `platform_admin_id` (UUID)
+  - `impersonated_user_id` (UUID)
+  - `tenant_id` (UUID)
+  - `timestamp` (TIMESTAMP)
+  - `http_method` (VARCHAR)
+  - `request_path` (VARCHAR)
+  - `request_body_hash` (VARCHAR - SHA-256, nullable)
+  - `response_status` (INTEGER)
+- **Session table** (`platform_impersonation_sessions`):
+  - `id` (UUID, PK)
+  - `platform_admin_id`, `impersonated_user_id`, `tenant_id`
+  - `reason` (TEXT, NOT NULL via application validation)
+  - `ticket_reference` (VARCHAR, nullable)
+  - `started_at`, `ended_at` (TIMESTAMP)
+- **Reason field enforcement**: Application-level validation (API rejects empty reason)
+- **Visibility**: Platform admins only
+  - Store admins cannot see when they were impersonated
+  - Impersonation logs restricted to platform admin audit reports
+- **Retention**: 7 years for all impersonation audit data
+
+### Clarification 6: Session Activity Partitioning
+
+**Decision: Calendar Month Partitions with Monthly Archive (Path A)**
+
+- **Partition alignment**: Calendar months (`sessions_2026_01`, `sessions_2026_02`, etc.)
+- **Partition naming**: `{table_name}_YYYY_MM` (e.g., `session_activity_2026_01`)
+- **Partition creation**: Automated via scheduled job
+  - Job runs on 1st of each month
+  - Creates partition for current month + next month (2 months ahead buffer)
+- **Archive job**: Runs on 1st of each month
+  - Archives partitions older than 90 days to R2
+  - Drops archived partitions from PostgreSQL
+  - Format: JSONL with gzip compression
+- **Multi-partition queries**: Application-layer UNION
+  - Application code determines relevant partitions from date range
+  - Issues UNION ALL query across partitions
+  - Provides fine-grained query optimization control
+- **Archived data**: Accessible only via CSV export (no live queries)
+
+### Clarification 7: Loyalty Points Redemption Reservation
+
+**Decision: 1-Minute Scheduled Job with Optimistic Locking (Path A)**
+
+- **Reservation release**: Quarkus `@Scheduled` job every 60 seconds
+  - Queries `WHERE reserved_at < NOW() - INTERVAL '15 minutes' AND status = 'RESERVED'`
+  - Releases expired reservations using JPA `@Version` column for optimistic locking
+  - Prevents conflicts with concurrent checkout completion
+- **Expired reservation UX**: Graceful error with re-reserve option
+  - If checkout attempts to complete after reservation expires:
+    1. Show friendly message: "Your points reservation expired. Would you like to apply points again?"
+    2. Check if points still available
+    3. Offer to re-reserve if available, or proceed without points
+  - Never hard-fail the order; allow customer to complete without points
+- **Reservation timeout**: Store-configurable (5-30 minutes)
+  - Default: 15 minutes
+  - Configurable in store settings under Loyalty Program
+  - Shorter timeouts for high-traffic stores, longer for complex checkouts
+
+---
+
 ## Deployment Architecture
 
 ### Container Build

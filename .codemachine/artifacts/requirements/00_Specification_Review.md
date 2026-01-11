@@ -1,7 +1,8 @@
-# Specification Review & Recommendations: Village Storefront - Multi-Tenant SaaS Ecommerce Platform
+# Specification Review & Recommendations: Village Storefront SaaS Platform
 
-**Date:** 2026-01-09
-**Status:** Awaiting Specification Enhancement
+**Date:** 2026-01-10
+**Updated:** 2026-01-11
+**Status:** ✅ Resolved - All clarifications recorded in specifications.md
 
 ### **1.0 Executive Summary**
 
@@ -13,89 +14,93 @@ This document is an automated analysis of the provided project specifications. I
 
 *Based on the provided data, the core project objective is to engineer a system that:*
 
-Delivers a multi-tenant SaaS ecommerce platform enabling small-to-medium merchants (including consignment-based businesses) to operate independent online stores with subdomain/custom domain access, full inventory management, integrated payment processing via Stripe Connect, and comprehensive consignment vendor management with automated payouts. The system architecture mandates Java 21 + Quarkus with GraalVM native compilation, PostgreSQL database, Qute templates for customer-facing storefronts, and Vue.js 3 admin dashboards.
+Delivers a production-grade, multi-tenant SaaS ecommerce platform enabling merchants to operate independent online stores with consignment vendor support, built on Java 21/Quarkus with native compilation targeting Kubernetes deployment, featuring dual frontends (Qute-templated storefronts and Vue.js admin dashboards) with Stripe-based payment processing and comprehensive inventory, order, and loyalty management capabilities.
 
 ### **3.0 Critical Assertions & Required Clarifications**
 
 ---
 
-#### **Assertion 1: Tenant Isolation RLS Implementation Strategy**
+#### **Assertion 1: Tenant Resolution Strategy for Custom Domains**
 
-*   **Observation:** The specification declares "Application-Primary with RLS Safety Net" but provides conflicting technical details. It mandates Panache entity filtering as primary enforcement while stating RLS policies check `current_setting('app.tenant_id')` - yet also claims "no session variable management" for simpler connection pooling. These constraints are mutually exclusive.
-*   **Architectural Impact:** This is a foundational security decision affecting database connection architecture, query performance, and data breach risk surface.
-    *   **Path A (Pure Application-Layer):** Panache base class applies tenant filters exclusively; RLS policies disabled or nonexistent. Simplest connection pooling, but single filter bypass bug exposes cross-tenant data.
-    *   **Path B (True Hybrid with Session Variables):** Connection filter sets PostgreSQL session variable on checkout from pool; RLS policies enforce tenant isolation as defense-in-depth. Requires connection pool lifecycle hooks but provides genuine safety net.
-    *   **Path C (RLS-Primary):** PostgreSQL RLS policies as sole enforcement mechanism; application trusts database to filter all queries. Maximum security guarantee, moderate connection management complexity.
-*   **Default Assumption & Required Action:** The architecture will assume **Path A (Pure Application-Layer)** with comprehensive integration test coverage of tenant isolation to mitigate bypass risk. **The specification must be updated** to explicitly define the RLS implementation strategy, including whether PostgreSQL session variables will be used and the specific lifecycle hooks for setting `app.tenant_id` if Path B is chosen.
-
----
-
-#### **Assertion 2: Multi-Location Inventory Data Model & Concurrency Control**
-
-*   **Observation:** The specification requires "Multi-location inventory: Track stock across warehouses, stores, suppliers" and "Stock transfers: Move inventory between locations" but provides no data model, no concurrency strategy for simultaneous sales/transfers, and no definition of location hierarchy or transfer workflows.
-*   **Architectural Impact:** This variable dictates database schema complexity, transaction isolation requirements, and the feasibility of real-time inventory accuracy across locations.
-    *   **Tier 1 (Simple Location Ledger):** Single `inventory_ledger` table with `(product_variant_id, location_id, quantity)` composite key. Transfers are two-row updates (decrement source, increment destination) in single transaction. No historical tracking. Suitable for <5 locations with low transfer volume.
-    *   **Tier 2 (Event-Sourced Inventory):** All inventory changes (sales, transfers, adjustments) modeled as immutable events in `inventory_events` table; current stock computed via aggregation. Full audit trail, supports complex workflows (multi-stage transfers, approvals), but requires materialized views for query performance.
-    *   **Tier 3 (Reserved Quantity Model):** Separate columns for `physical_quantity`, `reserved_quantity`, `available_quantity`. Orders reserve stock before payment; fulfillment decrements physical. Prevents overselling but adds complexity to transfer logic.
-*   **Default Assumption & Required Action:** The system will implement **Tier 2 (Event-Sourced Inventory)** to satisfy audit requirements and support consignment accounting complexity. **The specification must be updated** to define: (1) maximum expected locations per tenant, (2) transfer approval workflow requirements, (3) whether "available to promise" logic (reservations) is required for multi-location scenarios.
+*   **Observation:** The specification mandates both subdomain-based (`store.platform.com`) and custom domain (`shop.merchant.com`) routing, with tenant resolution occurring in a `@Provider` JAX-RS filter that inspects the Host header. The custom domain resolution mechanism mentions a `custom_domains` table lookup, but the architecture for handling SSL termination, routing precedence, and DNS validation timing is underspecified.
+*   **Architectural Impact:** This directly affects ingress controller configuration, certificate management complexity, and the boundary between application-level and infrastructure-level routing logic.
+    *   **Path A (Application-First Routing):** The JAX-RS filter performs both subdomain parsing and custom domain table lookup. Ingress controller uses wildcard routing (`*.platform.com` + catch-all for custom domains). Application returns 404 for unrecognized hosts.
+    *   **Path B (Ingress-Managed Routing):** Custom domains are registered as explicit Ingress rules when validated. Application filter only handles subdomain parsing; custom domain requests arrive pre-routed with tenant context injected via header.
+    *   **Path C (Hybrid with Edge Routing):** Cloudflare Workers or similar edge compute layer resolves custom domains to tenant IDs, injects `X-Tenant-ID` header before request reaches k8s cluster. Application trusts injected header for custom domains, falls back to subdomain parsing for platform domains.
+*   **Default Assumption & Required Action:** To minimize infrastructure dependencies and maintain application control, the system will assume **Path A (Application-First Routing)** with wildcard Ingress rules and application-layer tenant resolution for all request types. **The specification must be updated** to explicitly define the tenant resolution architecture, including how custom domain Ingress rules are created (cert-manager Certificate resources vs dynamic Ingress patching), whether DNS validation occurs synchronously during domain addition or asynchronously via background jobs, and the intended behavior for DNS propagation delays (immediate activation vs validation-gated activation).
 
 ---
 
-#### **Assertion 3: Consignment Vendor Balance Settlement & Chargeback Risk Model**
+#### **Assertion 2: Media Processing Execution Environment & Resource Isolation**
 
-*   **Observation:** The specification defines a two-phase balance model (`pending_balance` → `available_balance` after 30 days) and states chargebacks deduct from `available_balance`, flagging negative balances for "merchant resolution." The mechanism for this resolution and liability allocation between platform, store, and vendor are undefined.
-*   **Architectural Impact:** This decision determines financial risk distribution, cash flow timing, and potential platform loss exposure in fraud scenarios.
-    *   **Path A (Vendor Liability):** Negative vendor balances are vendor debt; future sales credits apply until balance positive. Store is made whole by platform. Requires platform reserve fund for chargebacks.
-    *   **Path B (Store Liability):** Negative vendor balances are store debt; store must either clawback from vendor externally or absorb loss. Platform remains neutral intermediary. Requires store-level reserve or escrow mechanism.
-    *   **Path C (Shared Liability Pool):** Platform, store, and vendor each absorb percentage of chargeback loss per configurable policy. Complex accounting but distributes risk.
-*   **Default Assumption & Required Action:** The architecture will assume **Path B (Store Liability)** to minimize platform capital requirements and align with Stripe Connect's liability model where platform fees are store responsibility. **The specification must be updated** to explicitly define: (1) chargeback liability party, (2) negative balance resolution workflow and timeline, (3) whether platform will hold reserve funds or escrow for chargeback risk.
-
----
-
-#### **Assertion 4: Custom Domain SSL Certificate Lifecycle & Failure States**
-
-*   **Observation:** The specification mandates "Merchant-Managed DNS with HTTP-01" and outlines the happy-path workflow (CNAME validation → cert-manager issuance), but does not define certificate renewal failure handling, domain removal workflows, or the behavior when a merchant's CNAME is deleted after initial setup.
-*   **Architectural Impact:** Unhandled certificate expiration or DNS misconfiguration results in customer-facing HTTPS errors, directly impacting merchant revenue and platform reputation.
-    *   **Scenario A (Passive Monitoring):** System monitors certificate expiration dates; emails merchant at 14 days and 3 days before expiry. If renewal fails, custom domain automatically disabled and traffic falls back to subdomain. Merchant must re-verify.
-    *   **Scenario B (Active Remediation):** System detects CNAME removal or validation failure; automatically retries HTTP-01 challenge every 6 hours for 72 hours. If unsuccessful, domain marked "degraded" but remains active with warning banner in admin. Merchant has 7 days to fix before forced fallback.
-    *   **Scenario C (Fail-Secure with Grace Period):** Certificate expiration triggers immediate fallback to subdomain with merchant notification. Grace period (48 hours) allows re-verification without customer disruption. After grace period, custom domain entry deleted and requires full re-setup.
-*   **Default Assumption & Required Action:** The system will implement **Scenario A (Passive Monitoring)** with automatic fallback to minimize platform operational burden. **The specification must be updated** to define: (1) renewal failure SLA and fallback behavior, (2) whether active retry attempts are required, (3) merchant notification cadence and escalation policy for certificate issues.
+*   **Observation:** The specification mandates FFmpeg-based video transcoding with a "Dedicated Worker Pods (Tier 2)" execution model, where media worker pods subscribe only to the CRITICAL queue. However, the mechanism for FFmpeg installation in native GraalVM images, subprocess execution constraints within distroless containers, and the pod autoscaling trigger metrics source are undefined.
+*   **Architectural Impact:** This is a critical operational decision affecting container image size, build complexity, runtime security posture, and the feasibility of the entire video processing feature.
+    *   **Path A (FFmpeg Native Binary in Image):** Include FFmpeg static binary in Docker image at build time. Increases image size by ~100MB, requires non-distroless base (Alpine or similar). ProcessBuilder execution is straightforward.
+    *   **Path B (FFmpeg Sidecar Container):** Run FFmpeg as a sidecar container in worker pods. Main application container communicates via shared volume. Maintains distroless main image, adds pod scheduling complexity.
+    *   **Path C (External Processing Service):** Delegate video transcoding to external API (e.g., Cloudflare Stream, AWS Elemental). Eliminates FFmpeg dependency entirely, introduces per-transcode cost and external service dependency.
+    *   **Path D (Defer Video Transcoding to Post-MVP):** Launch with image processing only, add video support in Phase 2 after validating native compilation constraints with simpler media operations.
+*   **Default Assumption & Required Action:** To preserve the native compilation benefits while maintaining operational simplicity, the system will assume **Path A (FFmpeg Native Binary in Alpine-based Image)** with explicit acknowledgment that the container size target increases from 50-100MB to 150-200MB for media worker pods. Web pods remain distroless without FFmpeg. **The specification must be updated** to explicitly define the FFmpeg integration strategy, including container base image choice for worker pods, FFmpeg version and build flags, subprocess timeout enforcement mechanism, and whether video processing is a hard requirement for Phase 1 MVP or can be deferred.
 
 ---
 
-#### **Assertion 5: Platform Admin Impersonation Session Boundaries & Action Scope**
+#### **Assertion 3: Background Job Queue Persistence & Failure Recovery Strategy**
 
-*   **Observation:** The specification requires impersonation of store admins and customers with audit logging, but does not define whether impersonated sessions inherit full admin privileges, whether certain sensitive actions (refunds, user deletion, Stripe disconnect) are restricted during impersonation, or whether impersonation sessions can span multiple stores in a single session.
-*   **Architectural Impact:** This variable determines authorization complexity, audit log schema design, and the potential for platform admin abuse or accidental destructive actions.
-    *   **Path A (Full Privilege Inheritance):** Impersonated session has identical permissions to target user. Platform admin can perform any action the user could perform, including financial transactions. All actions logged but not restricted. Simplest implementation, highest risk.
-    *   **Path B (Read-Only Impersonation):** Impersonated session has view-only access; no write operations allowed. Platform admin must exit impersonation to take corrective action in their own capacity. Safest but least operationally useful for customer service.
-    *   **Path C (Restricted Write Impersonation):** Impersonated session allows most actions but blocks high-risk operations (refunds >$X, user account deletion, payment config changes). Blocked actions require explicit platform admin override with additional audit justification field.
-*   **Default Assumption & Required Action:** The system will implement **Path C (Restricted Write Impersonation)** with thresholds configurable per platform admin role. **The specification must be updated** to define: (1) explicit list of actions restricted during impersonation, (2) whether multi-store impersonation (switching tenants within a single session) is permitted, (3) maximum impersonation session duration and idle timeout.
-
----
-
-#### **Assertion 6: Media Processing Queue Isolation & Resource Starvation Prevention**
-
-*   **Observation:** The specification describes a DelayedJob-based queue system with priority tiers (CRITICAL, HIGH, DEFAULT, LOW, BULK) and suggests video processing runs on separate worker pods, but does not define the queue assignment logic for media jobs, whether image processing shares queues with transactional jobs (emails, webhooks), or the autoscaling trigger thresholds.
-*   **Architectural Impact:** Improper queue isolation results in video transcoding jobs starving time-sensitive operations like order confirmation emails or low-stock alerts, directly degrading customer experience.
-    *   **Tier 1 (Shared Queue with Priority):** All jobs (media, email, webhooks) use same queue with priority ordering. Video jobs are LOW priority. Risk: large video uploads can delay email delivery if queue depth exceeds worker capacity.
-    *   **Tier 2 (Dedicated Media Queue):** CRITICAL queue exclusively for video transcoding; HIGH/DEFAULT for transactional jobs; BULK for analytics. Separate pod pools subscribe to different queues. Clean isolation but requires more infrastructure planning.
-    *   **Tier 3 (External Media Processing):** Video transcoding offloaded to external service (AWS MediaConvert, Cloudflare Stream). Application only uploads source files and polls for completion. Highest reliability but adds vendor dependency and cost.
-*   **Default Assumption & Required Action:** The system will implement **Tier 2 (Dedicated Media Queue)** with video processing isolated to CRITICAL queue and dedicated worker pods. **The specification must be updated** to define: (1) queue assignment matrix (which job types use which priority tier), (2) HPA thresholds for each worker pod type (queue depth, CPU, memory), (3) whether image resizing uses asynchronous queues or synchronous in-process execution.
+*   **Observation:** The specification mandates a DelayedJob-style database-persisted job queue with priority levels and exponential backoff retry logic, referencing `java-project-standards.adoc` for implementation details. However, the job table schema, lock acquisition strategy for concurrent pod execution, and the mechanism for detecting and recovering orphaned jobs (jobs claimed by pods that crash mid-execution) are undefined.
+*   **Architectural Impact:** This is foundational to system reliability for critical operations like vendor payouts, email delivery, and media processing. Incorrect implementation risks duplicate job execution, lost jobs, or database lock contention.
+    *   **Path A (Row-Level Locking with SELECT FOR UPDATE):** Jobs table includes `status` (pending/processing/completed/failed) and `locked_by` (pod identifier) columns. Workers use `SELECT FOR UPDATE SKIP LOCKED` to claim jobs atomically. Orphaned job detection via scheduled cleanup task that resets jobs locked by dead pods (detected via heartbeat timeout).
+    *   **Path B (Advisory Locks with Timestamp Leases):** PostgreSQL advisory locks combined with `lease_expires_at` timestamp. Workers acquire advisory lock, set lease timestamp, execute job, release lock. Lease expiration allows automatic orphan recovery without explicit cleanup task.
+    *   **Path C (Quarkus Scheduler with Database State Tracking):** Use `@Scheduled` methods to poll for pending jobs, update status via optimistic locking (version column). Simpler concurrency model, but lacks native priority queue support and requires custom retry logic.
+*   **Default Assumption & Required Action:** To leverage PostgreSQL's native concurrency control while maintaining clean failure recovery semantics, the system will assume **Path A (Row-Level Locking with SELECT FOR UPDATE SKIP LOCKED)** with a dedicated orphan detection scheduled task running every 5 minutes. **The specification must be updated** to explicitly define the job queue table schema (including all status values, priority enum, retry count, error logging columns), the lock acquisition query pattern, the orphan detection criteria (e.g., jobs in `processing` state for >10 minutes with no heartbeat), and whether job execution history is retained indefinitely or pruned after a retention period.
 
 ---
 
-#### **Assertion 7: Session & Audit Log Archival Format & Historical Query Performance**
+#### **Assertion 4: Consignment Vendor Balance Crediting Trigger & Refund Window Definition**
 
-*   **Observation:** The specification mandates 90-day hot storage in PostgreSQL with JSONL+gzip archival to R2, and describes a CSV export tool for archived data. However, the query patterns for historical data (date range filters, user ID lookups, action type filtering) and whether pre-aggregated summaries are required for compliance reporting are undefined.
-*   **Architectural Impact:** Without indexed summary tables or queryable archive format, generating compliance reports (e.g., "all impersonation sessions in Q4 2025") requires full archive decompression and linear scan, potentially taking hours for large tenants.
-    *   **Path A (Raw Archive with Export Tool):** JSONL archives are opaque; all historical queries require full export to CSV for manual analysis. Simple to implement but painful for compliance audits. Suitable if queries are rare (<1/month).
-    *   **Path B (Indexed Summary Tables):** Scheduled job pre-aggregates audit logs into summary tables (daily session counts, action type breakdowns, impersonation index) retained indefinitely. Archives remain JSONL but summaries provide fast reporting. Moderate complexity, excellent query performance.
-    *   **Path C (Queryable Archive Layer):** Archives stored in Parquet format (columnar, compressed) on R2; external query engine (DuckDB, Athena) allows SQL queries against archives without import. High setup cost but unlimited historical analysis capability.
-*   **Default Assumption & Required Action:** The system will implement **Path B (Indexed Summary Tables)** to balance compliance requirements with implementation complexity. **The specification must be updated** to define: (1) specific audit report types required (session duration histograms, action frequency by user role, etc.), (2) query SLA for archived data (seconds, minutes, hours), (3) whether GDPR "right to erasure" requires selective deletion from archives or archive regeneration.
+*   **Observation:** The specification defines a Two-Phase Balance model where vendor balances are credited "after refund window expires (30 days post-fulfillment)." However, the triggering event for the 30-day countdown (order creation, payment capture, or shipment tracking confirmation) and the behavior for orders with split shipments or partial fulfillment are undefined.
+*   **Architectural Impact:** This directly affects vendor payout timing accuracy, customer refund policy alignment, and the complexity of balance sweep job queries.
+    *   **Path A (Trigger on Payment Capture):** 30-day countdown starts when order payment is captured. Simple to implement, but misaligns with actual product delivery timing for slow shipping methods.
+    *   **Path B (Trigger on Shipment Confirmation):** 30-day countdown starts when order status changes to "Shipped" and carrier tracking number is recorded. Aligns with physical product delivery, requires shipment tracking integration to be operational.
+    *   **Path C (Trigger on Delivered Status):** 30-day countdown starts when carrier reports "Delivered" status via webhook. Most accurate for customer satisfaction window, introduces dependency on carrier API reliability.
+    *   **Path D (Configurable Per-Store Policy):** Store owners configure refund window trigger in settings (payment/shipment/delivery). Maximum flexibility, adds configuration complexity and requires clear documentation of implications.
+*   **Default Assumption & Required Action:** To balance implementation simplicity with customer-centric refund alignment, the system will assume **Path B (Trigger on Shipment Confirmation)** with the 30-day window starting when an order's status transitions to "Shipped." For split shipments, each shipment triggers independent 30-day windows for its line items. Orders never shipped remain in `pending_balance` indefinitely until fulfilled or cancelled. **The specification must be updated** to explicitly define the refund window trigger event, the handling of split shipments and partial fulfillment, the behavior for digital products and services (which have no shipment event), and whether stores can customize the 30-day duration or if it is platform-wide policy.
+
+---
+
+#### **Assertion 5: Platform Admin Impersonation Session Security & Audit Granularity**
+
+*   **Observation:** The specification mandates impersonation logging with "who impersonated whom, timestamp and duration, actions taken during impersonation, reason/ticket reference." However, the mechanism for tracking "actions taken" (all HTTP requests, only mutations, or specific high-risk operations), the storage location for impersonation audit logs (within tenant-scoped tables or separate audit schema), and the enforcement strategy for mandatory reason field are undefined.
+*   **Architectural Impact:** This affects compliance readiness (SOC2, GDPR Article 32), database schema design, query performance for audit reports, and the feasibility of forensic investigations.
+    *   **Path A (Request-Level Audit Logging):** Every HTTP request during an impersonation session is logged to a separate `impersonation_audit_log` table outside RLS scope, including method, path, request body hash, and response status. Comprehensive but high write volume.
+    *   **Path B (Mutation-Only Audit Logging):** Only POST/PUT/PATCH/DELETE requests logged during impersonation. Reduces volume by ~80-90%, loses visibility into data access patterns (GET requests).
+    *   **Path C (High-Risk Operation Tracking):** Application code explicitly logs impersonation context for sensitive operations (refunds, customer data exports, password resets). Minimal overhead, requires disciplined instrumentation.
+    *   **Path D (Session Summary with Sampling):** Log impersonation session start/end with reason, sample 10% of requests for detailed logging. Balances compliance with performance, may not satisfy strict audit requirements.
+*   **Default Assumption & Required Action:** To meet SOC2 Type II audit expectations while maintaining system performance, the system will assume **Path B (Mutation-Only Audit Logging)** where all state-changing HTTP requests during impersonation sessions are logged to a dedicated `platform_impersonation_audit` table with columns for `platform_admin_id`, `impersonated_user_id`, `tenant_id`, `timestamp`, `http_method`, `request_path`, `request_body_hash`, `response_status`, and `session_id`. Session metadata (reason, ticket reference, start/end times) stored in separate `platform_impersonation_sessions` table. **The specification must be updated** to explicitly define the audit logging granularity, the retention period for impersonation logs (currently states 7 years, confirm this applies to all audit data or only session metadata), the enforcement mechanism for mandatory reason field (database constraint, application validation, or UI-only), and whether audit logs are queryable by store admins (to see when they were impersonated) or restricted to platform admins only.
+
+---
+
+#### **Assertion 6: Session Activity Partitioning & Archive Compression Strategy**
+
+*   **Observation:** The specification mandates time-based partitioning with monthly partitions, 90-day hot storage, and archival to R2 in JSONL/gzip format. However, the partition boundary definition (calendar month vs 30-day rolling window), the archival job execution timing (end of month, daily incremental, or on-demand), and the query strategy for date ranges spanning partition boundaries are undefined.
+*   **Architectural Impact:** This affects query performance, storage costs, archival job complexity, and the user experience for reports that cross partition boundaries.
+    *   **Path A (Calendar Month Partitions with Monthly Archive Job):** Partitions aligned to calendar months (`sessions_2026_01`, `sessions_2026_02`). Archive job runs on 1st of each month to archive partitions >90 days old. Simple boundary logic, but creates large batch operations.
+    *   **Path B (30-Day Rolling Partitions with Daily Incremental Archive):** Partitions span exactly 30 days from creation. Archive job runs daily, archives partitions >90 days old incrementally. Smoother resource usage, more complex partition management.
+    *   **Path C (Weekly Partitions with Weekly Archive Cadence):** Partitions aligned to ISO weeks. Archive job runs weekly. Balances batch size with operational complexity.
+*   **Default Assumption & Required Action:** To align with operational intuition and simplify archive retrieval semantics, the system will assume **Path A (Calendar Month Partitions with Monthly Archive Job)** where partitions are named `sessions_YYYY_MM` and `audit_logs_YYYY_MM`, and a scheduled job executes on the 1st of each month to archive and drop partitions older than 90 days. Queries spanning partition boundaries will be handled via UNION ALL across relevant partitions for hot data, with archived data accessible only via CSV export. **The specification must be updated** to explicitly define partition boundary alignment, archive job execution schedule, the partition naming convention, whether partition creation is automated or requires manual intervention during deployment, and the expected query pattern for multi-partition reporting (application-layer union vs database view).
+
+---
+
+#### **Assertion 7: Loyalty Points Redemption Reservation Timeout & Concurrent Checkout Handling**
+
+*   **Observation:** The specification mandates a Two-Phase Commit model for points redemption with a 15-minute reservation timeout and automatic release via scheduled job. However, the scheduled job execution frequency (every 1 minute, 5 minutes, 15 minutes), the locking strategy to prevent race conditions between checkout completion and timeout expiration, and the user experience when a reservation expires mid-checkout are undefined.
+*   **Architectural Impact:** This affects reservation accuracy, database transaction contention, and customer frustration during checkout abandonment recovery.
+    *   **Path A (1-Minute Scheduled Job with Optimistic Locking):** Job runs every 1 minute, releases reservations with `reserved_at < NOW() - INTERVAL '15 minutes'`. Uses optimistic locking (version column) to prevent conflicts with checkout completion. Tight timeout enforcement, higher job execution frequency.
+    *   **Path B (5-Minute Scheduled Job with Pessimistic Locking):** Job runs every 5 minutes, acquires row locks before releasing. Looser timeout window (reservations may persist up to 20 minutes), lower database load.
+    *   **Path C (Database Trigger with Lazy Cleanup):** PostgreSQL trigger on `orders` table automatically releases reservation on order creation. Scheduled job only handles abandoned carts (no order created). Real-time cleanup, more complex trigger logic.
+    *   **Path D (Application-Layer Timeout Check on Redemption Attempt):** No scheduled job. When user attempts to redeem points, application checks if any expired reservations exist for that user and releases them synchronously before processing new redemption. Simplest implementation, tolerates stale reservations until next redemption attempt.
+*   **Default Assumption & Required Action:** To balance reservation accuracy with system load, the system will assume **Path A (1-Minute Scheduled Job with Optimistic Locking)** where a Quarkus `@Scheduled` method executes every 60 seconds, queries for expired reservations, and releases them using optimistic locking via JPA version column to prevent conflicts with concurrent checkout completion transactions. **The specification must be updated** to explicitly define the scheduled job execution interval, the locking strategy for reservation release, the user experience when checkout attempts to complete after reservation expiration (graceful error with option to re-reserve or hard failure), and whether reservation timeout is configurable per-store or platform-wide policy.
 
 ---
 
 ### **4.0 Next Steps**
 
-Upon the user's update of the original specification document, the development process will be unblocked and can proceed to the architectural design phase. Each assertion above requires an explicit resolution statement in the updated specification, referencing the chosen path or tier and providing the requested clarification details.
+Upon the user's update of the original specification document, the development process will be unblocked and can proceed to the architectural design phase.

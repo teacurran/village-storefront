@@ -2,128 +2,243 @@
   {
     "task_id": "I3.T1",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Implement Cart + Checkout services (cart storage, promo validation, saga orchestrator) with transactional safeguards, idempotency keys, and domain events (CartUpdated, OrderInitiated, OrderPaid).",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Build persistent Cart domain (cart, cart items, discount entries) with REST endpoints for add/update/remove/save-for-later, linking to customer/guest sessions and storing feature flag snapshots.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Catalog APIs, ERD, feature flags.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Services managing guest/auth carts, promotions, line-level adjustments; Order aggregate with statuses/states; domain events persisted; tests for concurrency + RLS.",
-    "acceptance_criteria": "Integration tests simulate multi-tenant carts + orders; idempotency key support validated; events recorded for reporting; documentation updated.",
+    "inputs": "ERD, OpenAPI skeleton, catalog APIs, TenantContext modules.",
+    "target_files": [
+      "src/main/java/com/village/cart/CartResource.java",
+      "src/main/java/com/village/cart/CartService.java",
+      "src/main/java/com/village/cart/model/CartEntity.java",
+      "src/test/java/com/village/cart/CartResourceIT.java"
+    ],
+    "input_files": [
+      "src/main/java/com/village/cart",
+      "docs/diagrams/domain_erd.puml",
+      "api/openapi.yaml"
+    ],
+    "deliverables": "Cart REST endpoints, service logic, Panache entities, tests verifying multi-tenant isolation + concurrency.",
+    "acceptance_criteria": "- Cart operations idempotent, persist loyalty snapshots, and expire via scheduler hook.\n        - Endpoints enforce JWT + guest tokens, return Problem Details on errors.\n        - Tests include concurrency scenario verifying optimistic locking.",
     "dependencies": [
-      "I2.T1-T2"
+      "I2.T1",
+      "I2.T4"
     ],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I3.T2",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Extend OpenAPI + REST controllers for cart/checkout/order endpoints (storefront + admin), including ProblemDetails, rate limits, and webhook callback modeling.",
-    "agent_type_hint": "DocumentationAgent",
-    "inputs": "Task I3.T1, API skeleton.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Documented endpoints for cart operations, checkout steps, order admin operations; tests verifying success/errors and security scopes.",
-    "acceptance_criteria": "Spec lint + contract tests pass; controllers use TenantContext & feature flags; e2e stub uses RestAssured to run sample checkout.",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Implement checkout orchestrator service coordinating address validation, shipping rate service, loyalty redemption, gift cards, and cart finalization prior to payment intent creation.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Tasks `I3.T1`, `I2.T2`, Section 5 contract patterns, Clarification on loyalty reservations.",
+    "target_files": [
+      "src/main/java/com/village/checkout/CheckoutResource.java",
+      "src/main/java/com/village/checkout/CheckoutService.java",
+      "src/main/java/com/village/checkout/AddressValidatorAdapter.java",
+      "src/test/java/com/village/checkout/CheckoutServiceTest.java"
+    ],
+    "input_files": [
+      "src/main/java/com/village/checkout",
+      "docs/architecture/background_jobs.md",
+      "docs/diagrams/media_pipeline.mmd"
+    ],
+    "deliverables": "REST endpoint plus orchestrator, integration with inventory/loyalty placeholders, tests mocking adapters.",
+    "acceptance_criteria": "- Checkout returns totals summary, shipping options, and provisional loyalty reservation.\n        - Integrates with TenantContext + feature flags; invalid addresses produce actionable errors.\n        - Tests cover happy path, invalid shipping, and loyalty reservation collisions.",
     "dependencies": [
       "I3.T1",
-      "I1.T4"
+      "I2.T2"
     ],
-    "parallelizable": true,
-    "done": true
+    "parallelizable": false,
+    "done": false
   },
   {
     "task_id": "I3.T3",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Implement PaymentProvider abstraction + Stripe Connect provider (charge/capture/refund/payout, onboarding, webhook receiver) plus PaymentIntent/Refund entities + migrations.",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Integrate Stripe Connect for payment intents, application fees, payouts, and webhook ingestion; include repository for PaymentIntent/Refund entities and CLI tooling for webhook tunneling in dev.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Payment requirements, Stripe docs.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Interfaces + implementation, webhook endpoint, MyBatis migrations for payment tables, job catalog entry for payout reconciliation, tests mocking Stripe SDK.",
-    "acceptance_criteria": "Stripe sandbox integration test passes (intent create/capture/refund), webhooks stored idempotently, payout job enqueues; provider annotated with feature flag for future processors.",
+    "inputs": "Payment architecture clarifications, Task `I3.T2`, Async blueprint, docker stack.",
+    "target_files": [
+      "src/main/java/com/village/payment/StripePaymentProvider.java",
+      "src/main/java/com/village/payment/PaymentIntentResource.java",
+      "src/main/java/com/village/payment/WebhookHandler.java",
+      "src/test/java/com/village/payment/StripePaymentProviderTest.java",
+      "scripts/dev/stripe_tunnel.sh"
+    ],
+    "input_files": [
+      "src/main/java/com/village/payment",
+      "docs/architecture/background_jobs.md",
+      "docker/docker-compose.yaml"
+    ],
+    "deliverables": "Payment provider implementation, webhook endpoint persisting payloads + idempotency, tests mocking Stripe SDK, dev script for stripe-cli.",
+    "acceptance_criteria": "- Payment intents created with application fee + metadata, webhook updates payment + order states.\n        - Idempotency keys stored and validated; secrets pulled from env.\n        - Tests simulate success/failure webhooks + refund path, achieving ≥80% coverage.",
     "dependencies": [
-      "I3.T1",
-      "I1.T7",
-      "I1.T6"
+      "I3.T2"
     ],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I3.T4",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Integrate address validation + shipping rate adapters (USPS Web Tools, UPS, FedEx) with caching + fallback table rates; expose shipping profiles + label endpoints.",
-    "agent_type_hint": "IntegrationAgent",
-    "inputs": "Shipping requirements, integration adapter pattern.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Adapter interfaces w/ retries/backoff, shipping service hooking into checkout, caching for 15 minutes, tests mocking carrier responses, runbook updates.",
-    "acceptance_criteria": "Rate caching working (unit test verifying TTL), fallback table rate when carrier offline, logging includes correlation IDs, OpenAPI updated with rate endpoints.",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Author PlantUML checkout + payment sequence diagram capturing tenant resolution, cart orchestration, Stripe interactions, loyalty hold/release, shipping rate adapters, audit logging.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Tasks `I3.T1`–`I3.T3`, architecture clarifications, Section 3 communication patterns.",
+    "target_files": [
+      "docs/diagrams/checkout_sequence.puml",
+      "docs/architecture/platform_ops.md"
+    ],
+    "input_files": [
+      "docs/diagrams/checkout_sequence.puml"
+    ],
+    "deliverables": "Sequence diagram + textual summary used by ops + QA to understand saga steps.",
+    "acceptance_criteria": "- Diagram validated, includes TenantContext, AddressValidator, Stripe, Inventory, Loyalty, Audit.\n        - Summary lists failure hooks + compensations for shipping failures, payment declines.",
     "dependencies": [
-      "I2",
-      "I3.T1"
+      "I3.T1",
+      "I3.T2",
+      "I3.T3"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I3.T5",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Build Consignment domain foundations (entities, services, payouts ledger) tying variants to consignors, commission rules, intake + status tracking.",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Implement shipping integration adapters (USPS/UPS/FedEx placeholders) + caching layer abiding 15-minute TTL, plus fallback table-rate configuration.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Consignment requirements, ERD.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Data model + services for consignor registration, commission rules, balance ledger (pending/available), event emission (ConsignmentItemReceived, ConsignmentPayoutDue), unit/integration tests.",
-    "acceptance_criteria": "Services enforce commission configs, ledger updates triggered by sale/refund events; tests verifying multi-tenant RLS; docs describing payout sweep logic.",
-    "dependencies": [
-      "I2",
-      "I3.T1"
+    "inputs": "Clarifications shipping, Integration adapter layer, Async blueprint.",
+    "target_files": [
+      "src/main/java/com/village/shipping/ShippingRateService.java",
+      "src/main/java/com/village/shipping/adapters/CarrierAdapter.java",
+      "src/test/java/com/village/shipping/ShippingRateServiceTest.java",
+      "docs/architecture/platform_ops.md"
     ],
-    "parallelizable": false,
-    "done": true
+    "input_files": [
+      "src/main/java/com/village/shipping",
+      "docs/architecture/background_jobs.md",
+      "api/openapi.yaml"
+    ],
+    "deliverables": "Adapter interface + default USPS/UPS/FedEx skeletons pulling mock responses, caching layer, fallback config docs.",
+    "acceptance_criteria": "- Rate service caches per origin/destination/weight, invalidates per TTL, logs metrics.\n        - Table-rate fallback toggled via feature flag + config file.\n        - Tests stub adapters and verify fallback behavior when adapter fails.",
+    "dependencies": [
+      "I3.T2"
+    ],
+    "parallelizable": true,
+    "done": false
   },
   {
     "task_id": "I3.T6",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Document Media + POS critical flows via Mermaid sequence diagrams (media upload→processing→delivery, POS offline queue→replay) referencing future implementation steps.",
-    "agent_type_hint": "DiagrammingAgent",
-    "inputs": "Requirements sections (media, POS), architecture plan.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Sequence diagrams covering presigned uploads, FFmpeg workers, R2 storage, admin/storefront updates; POS offline capture/resume, encryption, replay; notes on metrics/alerts.",
-    "acceptance_criteria": "Diagrams reference queue priorities, API endpoints, feature flags; runbook updated with cross-links; reviewed with Media/POS leads.",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Extend OpenAPI spec + admin/storefront consumers for cart/checkout/payment/shipping endpoints; regenerate client stubs and update docs/test strategy accordingly.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Tasks `I3.T1`–`I3.T5`, spec file, test strategy.",
+    "target_files": [
+      "api/openapi.yaml",
+      "README.md",
+      "docs/quality/test_strategy.md"
+    ],
+    "input_files": [
+      "api/openapi.yaml",
+      "README.md",
+      "docs/quality/test_strategy.md"
+    ],
+    "deliverables": "Updated spec, changelog snippet, guidance for client regen.",
+    "acceptance_criteria": "- Spec includes cart/checkout/payment schemas with examples, hooking into security scopes.\n        - README change log outlines new endpoints + compatibility notes.\n        - Test strategy updated with coverage requirements for checkout + payment.",
     "dependencies": [
-      "I1"
+      "I3.T1",
+      "I3.T2",
+      "I3.T3",
+      "I3.T5"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I3.T7",
     "iteration_id": "I3",
-    "iteration_goal": "Build checkout/orchestration pipeline spanning cart persistence, address validation, shipping, Stripe payments, consignment attribution, and supporting APIs/async flows.",
-    "description": "Expand docker-compose + dev bootstrap to include Stripe CLI forwarder, USPS mock, UPS/FedEx stubs, and seeding for consignment data to support QA.",
-    "agent_type_hint": "DevExAgent",
-    "inputs": "Local dev requirements, tasks I3.T3-T5 outputs.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Additional services + docs for running Stripe CLI webhook tunnel, shipping mock APIs, consignment sample data, instructions for QA flows.",
-    "acceptance_criteria": "Compose stack runs new services; README describes hooking Stripe CLI; sample data demonstrates multi-tenant consignment; tests referencing mocks run in CI.",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Build admin order dashboard (Vue) showing statuses, filters, timeline view, and inline actions (capture/refund/note) wired to new APIs with optimistic updates + error toasts.",
+    "agent_type_hint": "FrontendAgent",
+    "inputs": "Admin SPA base, OpenAPI spec, payment endpoints, audit log requirements.",
+    "target_files": [
+      "src/main/webui/src/views/OrdersView.vue",
+      "src/main/webui/src/components/OrderTimeline.vue",
+      "src/main/webui/src/stores/orders.ts",
+      "src/main/webui/src/components/RefundDialog.vue"
+    ],
+    "input_files": [
+      "src/main/webui/src/views",
+      "src/main/webui/src/stores",
+      "api/openapi.yaml"
+    ],
+    "deliverables": "Vue views/stores/components, integration tests (Vitest) for store logic, screenshot updates for docs.",
+    "acceptance_criteria": "- Order list supports filtering, pagination, inline status badges; timeline shows audit entries.\n        - Action dialogs call APIs, handle loading/error states, and refresh list automatically.\n        - Unit tests cover store actions; E2E update ensures order view loads sample data.",
     "dependencies": [
-      "I1.T7",
       "I3.T3",
-      "I3.T4",
-      "I3.T5"
+      "I3.T6"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
+  },
+  {
+    "task_id": "I3.T8",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Expand e2e automation: Playwright checkout flow (guest + logged-in), REST-assured payment/discount validation, plus Stripe webhook replay tests using stripe-cli fixtures.",
+    "agent_type_hint": "QAAgent",
+    "inputs": "Completed checkout/payment endpoints, e2e runner script, stripe tunnel.",
+    "target_files": [
+      "tests/e2e/storefront/checkout.spec.ts",
+      "tests/e2e/api/payment.spec.ts",
+      "scripts/qa/run_e2e.sh",
+      "docs/quality/test_strategy.md"
+    ],
+    "input_files": [
+      "tests/e2e/storefront",
+      "tests/e2e/api",
+      "scripts/qa/run_e2e.sh",
+      "scripts/dev/stripe_tunnel.sh"
+    ],
+    "deliverables": "Playwright spec for checkout, API tests verifying Stripe webhooks, doc updates describing data requirements + secrets.",
+    "acceptance_criteria": "- Playwright spec covers address entry, shipping selection, Stripe test card, order confirmation, screenshot artifact.\n        - API tests simulate webhook payloads, verifying idempotency + order status transitions.\n        - CI gating ensures checkout suite runs nightly + on release candidates.",
+    "dependencies": [
+      "I3.T2",
+      "I3.T3",
+      "I3.T6"
+    ],
+    "parallelizable": true,
+    "done": false
+  },
+  {
+    "task_id": "I3.T9",
+    "iteration_id": "I3",
+    "iteration_goal": "Deliver persistent carts, checkout orchestration, Stripe payment integration, shipping rate adapters, and operational diagrams/tests so orders, refunds, and fulfillment flows reach production-ready maturity.",
+    "description": "Implement refund + return initiation endpoints (backend) with audit/event logging, plus admin UI controls hooking into PaymentProvider and Inventory modules for restocking.",
+    "agent_type_hint": "BackendAgent",
+    "inputs": "Payment + inventory modules, OpenAPI spec, reporting requirements.",
+    "target_files": [
+      "src/main/java/com/village/orders/RefundResource.java",
+      "src/main/java/com/village/orders/ReturnResource.java",
+      "src/main/java/com/village/orders/service/RefundService.java",
+      "src/test/java/com/village/orders/RefundServiceIT.java"
+    ],
+    "input_files": [
+      "src/main/java/com/village/orders",
+      "src/main/java/com/village/payment",
+      "api/openapi.yaml"
+    ],
+    "deliverables": "Refund/return APIs, service logic for stock adjustments + audit events, tests verifying multi-tenant safety.",
+    "acceptance_criteria": "- Refund API handles partial/full amounts, writes PaymentIntent + AuditEvent records, triggers loyalty adjustments.\n        - Return endpoint queues inventory adjustments + notifications, referencing consignment data when needed.\n        - Tests cover concurrency + unauthorized access scenarios.",
+    "dependencies": [
+      "I3.T3",
+      "I3.T5"
+    ],
+    "parallelizable": false,
+    "done": false
   }
 ]

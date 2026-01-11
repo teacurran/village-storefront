@@ -2,119 +2,186 @@
   {
     "task_id": "I1.T1",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Initialize Maven multi-module workspace (`pom.xml`, module folders) plus baseline GitHub Actions pipeline and Spotless/JaCoCo configuration aligned to `docs/java-project-standards.adoc`.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Audit existing Maven modules against `docs/java-project-standards.adoc`, add missing Quarkus extensions (RESTEasy Reactive, Panache, Scheduler, AWS S3, Stripe SDK), and configure Maven profiles for GraalVM native + JVM builds with Spotless and JaCoCo baselines.",
     "agent_type_hint": "SetupAgent",
-    "inputs": "Foundation blueprint, java standards doc, repo README expectations.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Maven parent + modules, CI workflow covering Spotless + JaCoCo + native build smoke, updated README explaining build targets.",
-    "acceptance_criteria": "Build passes `mvn -pl modules/core-platform clean verify`; CI workflow triggers on PR and enforces Spotless & coverage ≥80%; README includes quickstart for Maven + Quarkus dev mode.",
+    "inputs": "Architecture Section 2, Standard kit references, existing `pom.xml`.",
+    "target_files": [
+      "pom.xml",
+      "docs/quality/test_strategy.md"
+    ],
+    "input_files": [
+      "docs/java-project-standards.adoc",
+      "pom.xml"
+    ],
+    "deliverables": "Updated Maven config with enforced plugins, profile docs inside test strategy, initial module map in README snippet.",
+    "acceptance_criteria": "- Maven build runs `mvn clean verify` with Spotless + JaCoCo hooks locally.\n        - Profiles `%dev/%test/%prod` configured with Quarkus extension list documented.\n        - README/test strategy captures module inventory + coverage expectations.\n        - No regression to existing modules; CI dry run passing logged in plan notes.",
     "dependencies": [],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I1.T2",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Author PlantUML System Context + Container + Component diagrams describing actors, Quarkus modules, worker pods, and adapters; document diagram intent.",
-    "agent_type_hint": "DiagrammingAgent",
-    "inputs": "Requirements brief, Section 2 Core Architecture.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Three diagrams plus Markdown commentary linking modules to deployment/integration concerns.",
-    "acceptance_criteria": "PlantUML renders without errors; diagrams include all actors (merchants, staff, consignors, platform admins, headless partners) and integrations (Stripe, R2, carriers, DNS, FFmpeg); Markdown summarises responsibilities + links to diagram anchors.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Document Tenant Access Gateway + RLS enforcement plan detailing subdomain/custom-domain resolution, TenantContext lifecycle, Panache filters, and PostgreSQL policy templates with rollback guidance.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Section 2 Core Architecture, Section 6 Safety Net, Clarification 1 + 6.",
+    "target_files": [
+      "docs/architecture/tenant_isolation.md",
+      "src/main/java/com/village/tenant/TenantContext.java",
+      "src/main/java/com/village/tenant/TenantFilter.java"
+    ],
+    "input_files": [
+      "docs/java-project-standards.adoc",
+      ".codemachine/inputs/competitor-research.md"
+    ],
+    "deliverables": "Markdown blueprint, scaffolded TenantContext bean + JAX-RS filter skeleton with TODOs referencing spec, sample RLS SQL snippet.",
+    "acceptance_criteria": "- Markdown covers subdomain + custom domain resolution, RLS policy template, test hooks.\n        - TenantContext + TenantFilter compile and include logging + TODOs for later services.\n        - Document cross-links to ERD + component diagram placeholders.",
     "dependencies": [
       "I1.T1"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I1.T3",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Produce Mermaid ERD capturing multi-tenant schema (Tenant, StoreUser, Customer, SessionLog, FeatureFlag, Product, Variant, Inventory, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, Shipment, Return, LoyaltyLedger, GiftCard, StoreCredit, BackgroundJob, WebhookEvent, AuditEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket) with RLS annotations.",
-    "agent_type_hint": "DatabaseAgent",
-    "inputs": "Requirements data model, Section 2.1 artifacts list.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "ERD source, short narrative describing tenancy columns, indices, partition strategy.",
-    "acceptance_criteria": "Mermaid renders; each table includes tenant_id + metadata; doc explains RLS policy template, partitioned tables, archival approach; reviewed with Identity + Reporting stakeholders.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Produce PlantUML C4 component diagram capturing modules, worker pods, and integrations (Stripe, carriers, R2, GitHub Actions, Kubernetes) referencing Section 2 architecture narrative.",
+    "agent_type_hint": "DiagrammingAgent",
+    "inputs": "Section 2 components, system architecture blueprint, Clarifications 2–5.",
+    "target_files": [
+      "docs/diagrams/component_overview.puml"
+    ],
+    "input_files": [
+      "docs/architecture/tenant_isolation.md"
+    ],
+    "deliverables": "Annotated PlantUML diagram plus rendered PNG (optional) referenced in README.",
+    "acceptance_criteria": "- Diagram passes PlantUML syntax check and highlights module responsibilities + external edges.\n        - Includes notes on queues, feature flags, observability toolchain.\n        - README gains link to artifact (if README touched, cite change in task notes).",
     "dependencies": [
-      "I1.T1"
+      "I1.T2"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I1.T4",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Draft OpenAPI 3.0 skeleton covering versioning, security schemes (JWT + OAuth client credentials), shared components (Money, Address, Pagination, Problem Details), and stub paths for tenants, auth, catalog, checkout, headless, platform admin; integrate with Quarkus and set up lint.",
-    "agent_type_hint": "DocumentationAgent",
-    "inputs": "Requirements list, architecture plan, API contract style.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Validated OpenAPI (passes `spectral lint` or equivalent), Quarkus config pointing to spec for code generation, README snippet on spec workflow.",
-    "acceptance_criteria": "`npm run lint:openapi` (or Maven plugin) succeeds; spec defines servers, tags, security schemes, base schemas; CI ensures spec diff check.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Author ERD (PlantUML) covering tenant-scoped entities plus support tables (FeatureFlag, BackgroundJob, DomainEvent, GiftCard, SubscriptionPlan, PosDevice, MediaAsset) with commentary on tenant_id usage and indexes.",
+    "agent_type_hint": "DatabaseAgent",
+    "inputs": "Section 2 data overview, Clarifications 3–5, Safety Net assumptions.",
+    "target_files": [
+      "docs/diagrams/domain_erd.puml"
+    ],
+    "input_files": [
+      "docs/architecture/tenant_isolation.md"
+    ],
+    "deliverables": "PlantUML ERD + textual summary snippet appended to `docs/architecture/tenant_isolation.md`.",
+    "acceptance_criteria": "- ERD passes PlantUML validation, includes tenant_id on every table, and marks partitioned tables.\n        - Comments list key indexes + relationships for consignment, loyalty, jobs.\n        - Data-types align with PostgreSQL 17 recommendations.",
     "dependencies": [
-      "I1.T1"
+      "I1.T2"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I1.T5",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Implement TenantContext, TenantResolver (subdomain/custom domain), Request filter, and baseline MyBatis migrations for Tenant + StoreUser tables including RLS policies; add Caffeine caching shim.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Implement base Quarkus modules for Tenant Access Gateway, Identity skeleton, and shared `platform-kit` utilities (money, feature flags, tracing helpers) with placeholder endpoints + tests to verify dependency wiring and TenantContext injection.",
     "agent_type_hint": "BackendAgent",
-    "inputs": "Requirements (multi-tenancy & SSL), ERD.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Request filter populating TenantContext, Caffeine caching for host lookups, migrations creating tenants/store_users with RLS policies, unit/integration tests hitting dev Postgres profile.",
-    "acceptance_criteria": "Multi-tenant filter enforces 404 on unknown domain, populates feature flag placeholder; integration test using Quarkus dev service demonstrates RLS preventing cross-tenant selection; migration rollbacks tested; lint passes.",
+    "inputs": "Tasks `I1.T1`–`I1.T4`, architecture rules.",
+    "target_files": [
+      "src/main/java/com/village/tenant/TenantFilter.java",
+      "src/main/java/com/village/tenant/TenantResolverService.java",
+      "src/main/java/com/village/platformkit/FeatureToggleService.java",
+      "src/main/java/com/village/identity/IdentityResource.java",
+      "src/test/java/com/village/tenant/TenantFilterTest.java"
+    ],
+    "input_files": [
+      "src/main/java/com/village/tenant/TenantContext.java",
+      "docs/architecture/tenant_isolation.md"
+    ],
+    "deliverables": "Compiling Quarkus resources with placeholder endpoints, CDI beans, unit tests verifying tenant header parsing + feature flag caching.",
+    "acceptance_criteria": "- `mvn test` green with new tests covering TenantFilter happy/sad paths.\n        - FeatureToggle service caches per tenant with TTL config stub.\n        - Identity endpoint returns HTTP 501 placeholder yet enforces TenantContext presence.",
     "dependencies": [
-      "I1.T3"
+      "I1.T1",
+      "I1.T2"
     ],
     "parallelizable": false,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I1.T6",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Create Feature Flag governance matrix + README guidance; implement FeatureToggle service skeleton referencing PostgreSQL storage + Caffeine; include emergency kill switches for checkout/media/impersonation.",
-    "agent_type_hint": "BackendAgent",
-    "inputs": "Section 4 directives, requirements.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Governance doc (owner, rollout, expiry fields), service + repository stub, tests verifying cache + override precedence.",
-    "acceptance_criteria": "Service resolves platform default + tenant override + emergency flags; governance doc lists initial kill switches; README references process.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Draft comprehensive test strategy mapping unit/integration/e2e expectations per module, coverage thresholds, test data mgmt, and CI gating incl. JaCoCo 80% + mutation testing stretch goals.",
+    "agent_type_hint": "DocumentationAgent",
+    "inputs": "Section 6 Verification strategy preview, Section 2 architecture.",
+    "target_files": [
+      "docs/quality/test_strategy.md",
+      "scripts/qa/run_e2e.sh"
+    ],
+    "input_files": [
+      "docs/quality/test_strategy.md",
+      "docs/java-project-standards.adoc"
+    ],
+    "deliverables": "Updated strategy doc plus stub e2e runner script referencing Playwright/Cypress suites.",
+    "acceptance_criteria": "- Document outlines per-module suites, data seeding, coverage criteria, and reporting pipeline.\n        - Script stub runs placeholder command and includes TODO for actual tests.\n        - Links to iteration tasks that will satisfy coverage increments.",
     "dependencies": [
-      "I1.T5"
+      "I1.T1"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
   },
   {
     "task_id": "I1.T7",
     "iteration_id": "I1",
-    "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
-    "description": "Provision local development tooling: docker-compose for Postgres, MinIO (S3), Mailhog, FFmpeg dependency validation; scripts for migrations and DelayedJob tables; update README quickstart.",
-    "agent_type_hint": "DevExAgent",
-    "inputs": "Requirements (local dev), docker instructions from blueprint.",
-    "target_files": [],
-    "input_files": [],
-    "deliverables": "Compose stack wired to Quarkus dev profile, helper script running migrations + seeding sample tenants, docs for FFmpeg install.",
-    "acceptance_criteria": "`docker compose up` starts dependencies, bootstrap script seeds tenant + staff; README outlines steps; Quarkus dev mode connects via `.env` variables.",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Build developer docker-compose stack (PostgreSQL 17, MinIO mimicking R2, Mailhog, Stripe CLI) with Quarkus devservices wiring + onboarding instructions.",
+    "agent_type_hint": "SetupAgent",
+    "inputs": "Infrastructure requirements from Overview + Clarifications (media processing/Stripe).",
+    "target_files": [
+      "docker/docker-compose.yaml",
+      "README.md",
+      "scripts/dev/tenant_seed.sh"
+    ],
+    "input_files": [
+      "docker/docker-compose.yaml",
+      "README.md"
+    ],
+    "deliverables": "Compose file, seed script generating sample tenant + data, README section guiding setup.",
+    "acceptance_criteria": "- `docker-compose up` starts services with documented env vars and volume mounts.\n        - Seed script inserts sample tenant + store + admin user; README explains cleanup.\n        - Compose integrates MinIO bucket with credentials matching Quarkus dev config.",
     "dependencies": [
-      "I1.T1",
-      "I1.T5"
+      "I1.T1"
     ],
     "parallelizable": true,
-    "done": true
+    "done": false
+  },
+  {
+    "task_id": "I1.T8",
+    "iteration_id": "I1",
+    "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+    "description": "Configure GitHub Actions baseline workflow executing build, tests, native image dry run, and artifact upload (OpenAPI placeholder + diagrams) with cache warming for GraalVM.",
+    "agent_type_hint": "DevOpsAgent",
+    "inputs": "Task outputs from `I1.T1`, `I1.T6`, docker tooling from `I1.T7`.",
+    "target_files": [
+      "infra/github-actions/workflows/ci.yaml",
+      "README.md"
+    ],
+    "input_files": [
+      "infra/github-actions/workflows/ci.yaml"
+    ],
+    "deliverables": "Workflow YAML, status badge snippet, caching strategy docs.",
+    "acceptance_criteria": "- Workflow has lint, unit, integration (profile), and native build jobs with concurrency groups.\n        - Artifacts include coverage report + placeholder openapi stub to enforce spec-first.\n        - README shows CI badge referencing GitHub Actions.",
+    "dependencies": [
+      "I1.T1",
+      "I1.T6",
+      "I1.T7"
+    ],
+    "parallelizable": false,
+    "done": false
   }
 ]
