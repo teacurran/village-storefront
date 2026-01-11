@@ -24,6 +24,7 @@
     <quarkus.platform.version>3.20.0</quarkus.platform.version>
     <skipITs>true</skipITs>
     <surefire-plugin.version>3.5.2</surefire-plugin.version>
+    <failsafe-plugin.version>3.5.2</failsafe-plugin.version>
     <!-- Coverage threshold - enforced by SonarCloud quality gate -->
     <coverage.minimum>0.80</coverage.minimum>
     <!-- MapStruct version for DTO mapping -->
@@ -196,6 +197,31 @@
           </configuration>
         </plugin>
 
+        <!-- Failsafe for integration tests -->
+        <plugin>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>${failsafe-plugin.version}</version>
+          <configuration>
+            <skipITs>${skipITs}</skipITs>
+            <includes>
+              <include>**/*IT.java</include>
+            </includes>
+            <systemPropertyVariables>
+              <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+              <maven.home>${maven.home}</maven.home>
+            </systemPropertyVariables>
+          </configuration>
+          <executions>
+            <execution>
+              <id>integration-tests</id>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+
         <!-- Surefire for unit tests -->
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
@@ -352,6 +378,11 @@
         <artifactId>maven-compiler-plugin</artifactId>
       </plugin>
 
+      <!-- Failsafe for integration tests - explicitly declared for all modules -->
+      <plugin>
+        <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+
       <!-- Surefire for unit tests - explicitly declared for all modules -->
       <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
@@ -428,6 +459,14 @@
         <skipITs>false</skipITs>
         <quarkus.native.enabled>true</quarkus.native.enabled>
         <quarkus.package.jar.enabled>false</quarkus.package.jar.enabled>
+      </properties>
+    </profile>
+
+    <!-- CI integration test profile (runs Failsafe ITs) -->
+    <profile>
+      <id>integration-tests</id>
+      <properties>
+        <skipITs>false</skipITs>
       </properties>
     </profile>
   </profiles>

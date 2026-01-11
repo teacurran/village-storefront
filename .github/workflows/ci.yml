@@ -76,6 +76,24 @@ jobs:
           path: artifacts/lint/
           retention-days: 14
 
+      - name: Upload OpenAPI specification
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: openapi-spec
+          path: api/v1/*.yaml
+          retention-days: 90
+
+      - name: Upload PlantUML diagrams
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plantuml-diagrams
+          path: |
+            docs/diagrams/*.puml
+            docs/diagrams/*.png
+          retention-days: 90
+
       - name: Record job duration
         if: always()
         run: |
@@ -219,6 +237,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: 'maven'
 
+      - name: Cache GraalVM native image workspace
+        if: matrix.runtime == 'native'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/native-image
+          key: ${{ runner.os }}-native-image-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-native-image-
+
       - name: Set up Node.js
         if: matrix.runtime == 'jvm'
         uses: actions/setup-node@v4
@@ -318,6 +346,81 @@ jobs:
           end=$(date +%s)
           duration=$((end - JOB_START))
           echo "⏱️ test-${{ matrix.runtime }} duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
+
+  integration-tests:
+    name: Integration Tests (Failsafe profile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Start shipping mock services (Task I3.T7)
+        run: |
+          cd docker
+          docker compose up -d usps-mock ups-mock fedex-mock
+          docker compose ps
+
+      - name: Wait for shipping mocks to be healthy
+        run: |
+          echo "Waiting for USPS mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9100/health 2>/dev/null; do sleep 1; done'
+          echo "✅ USPS mock is healthy"
+
+          echo "Waiting for UPS mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9101/health 2>/dev/null; do sleep 1; done'
+          echo "✅ UPS mock is healthy"
+
+          echo "Waiting for FedEx mock..."
+          timeout 30 bash -c 'until curl -f http://localhost:9102/health 2>/dev/null; do sleep 1; done'
+          echo "✅ FedEx mock is healthy"
+
+      - name: Capture job start time
+        run: echo "JOB_START=$(date +%s)" >> $GITHUB_ENV
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run integration test profile
+        env:
+          USPS_MOCK_URL: http://localhost:9100/ShippingAPI.dll
+          UPS_MOCK_URL: http://localhost:9101/api/rating/v1
+          FEDEX_MOCK_URL: http://localhost:9102/rate/v1
+        run: |
+          ./mvnw -B -pl modules/core-platform verify -Pintegration-tests
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: |
+            modules/core-platform/target/failsafe-reports/
+            modules/core-platform/target/quarkus.log
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Stop shipping mock services
+        if: always()
+        run: |
+          cd docker
+          docker compose down usps-mock ups-mock fedex-mock || true
+          docker compose logs usps-mock ups-mock fedex-mock || true
+
+      - name: Record job duration
+        if: always()
+        run: |
+          end=$(date +%s)
+          duration=$((end - JOB_START))
+          echo "⏱️ integration-tests duration: ${duration}s" >> $GITHUB_STEP_SUMMARY
 
   e2e-visual:
     name: E2E Visual Regression (Percy)
@@ -710,7 +813,7 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: [test, admin-spa, e2e-visual, lighthouse-performance, performance-test]
+    needs: [test, integration-tests, admin-spa, e2e-visual, lighthouse-performance, performance-test]
     timeout-minutes: 25
 
     steps:

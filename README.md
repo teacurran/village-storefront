@@ -39,13 +39,14 @@ The platform provides comprehensive SaaS ecommerce capabilities:
 
 The GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push/PR and enforces the engineering guardrails mandated in `docs/java-project-standards.adoc`. The pipeline is fully parallelized and publishes lint/test artifacts plus job timing metrics so we can continuously harden the runtime.
 
-| Stage | What it checks | Commands |
-| --- | --- | --- |
-| **Validate Code Style & Specs** | Spotless formatting, OpenAPI linting, PlantUML diagram validation, npm helper health | `npm run lint`, `npm run lint:openapi`, `npm run diagrams:check` |
-| **Test (matrix: JVM & Native)** | JVM tests with JaCoCo 80% line/branch coverage gate + native profile verification | `npm run test` (runs `./mvnw verify jacoco:report`), `./mvnw verify -Pnative` |
-| **Admin SPA (conditional)** | Future Vue admin lint/test when `modules/core-platform/src/main/webui/` exists | `npm run lint` / `npm test` inside SPA workspace |
-| **SonarCloud** | Static analysis + duplicate coverage verification with blocking quality gate | `./mvnw verify` + `sonar-maven-plugin` |
-| **Docker Build (opt-in)** | Pushes container images when `vars.DOCKER_ENABLED` is true | `docker buildx build` |
+| Stage | What it checks | Artifacts | Commands |
+| --- | --- | --- | --- |
+| **Validate Code Style & Specs** | Spotless formatting, OpenAPI linting, PlantUML diagram validation, npm helper health | lint-reports, openapi-spec, plantuml-diagrams | `npm run lint`, `npm run lint:openapi`, `npm run diagrams:check` |
+| **Test (matrix: JVM & Native)** | JVM tests with JaCoCo 80% line/branch coverage gate + native profile verification | coverage-reports-jvm, test-results-jvm, native-build-info | `npm run test` (runs `./mvnw verify jacoco:report`), `./mvnw verify -Pnative` |
+| **Integration (Failsafe profile)** | Quarkus ITs against shipping mocks via `-Pintegration-tests` | integration-test-results | `./mvnw verify -Pintegration-tests` |
+| **Admin SPA (conditional)** | Future Vue admin lint/test when `modules/core-platform/src/main/webui/` exists | - | `npm run lint` / `npm test` inside SPA workspace |
+| **SonarCloud** | Static analysis + duplicate coverage verification with blocking quality gate | - | `./mvnw verify` + `sonar-maven-plugin` |
+| **Docker Build (opt-in)** | Pushes container images when `vars.DOCKER_ENABLED` is true | - | `docker buildx build` |
 
 ### Local Quality Gate Checklist
 
@@ -55,6 +56,9 @@ npm run lint
 
 # JVM tests with JaCoCo 80% enforcement
 npm run test
+
+# Integration profile (failsafe ITs)
+./mvnw verify -Pintegration-tests
 
 # Optional native profile tests (slow)
 npm run test:native
@@ -68,6 +72,55 @@ npm run diagrams:generate
 ```
 
 > **Tip:** The pipeline uses `tools/plantuml.jar` so the same commands work locally and in CI. Run `act pull_request` if you want a dry-run of the workflow before pushing.
+
+### CI Artifacts & Caching Strategy
+
+**Build Artifacts:**
+
+The CI pipeline uploads several artifact types to enable debugging, compliance auditing, and downstream processes:
+
+| Artifact | Retention | Purpose | Job |
+| --- | --- | --- | --- |
+| `openapi-spec` | 90 days | OpenAPI YAML specs enforcing spec-first development | validate |
+| `plantuml-diagrams` | 90 days | PlantUML source + rendered PNG diagrams | validate |
+| `lint-reports` | 14 days | Spotless formatting violation reports | validate |
+| `coverage-reports-jvm` | 30 days | JaCoCo HTML reports + jacoco.exec for SonarCloud | test (jvm) |
+| `test-results-jvm` | 30 days | Surefire XML test reports | test (jvm) |
+| `integration-test-results` | 14 days | Failsafe XML + Quarkus logs for integration profile | integration-tests |
+| `native-build-info` | 7 days | GraalVM native executable metadata | test (native) |
+| `performance-test-results` | 30 days | k6 load test JSON + Lighthouse CI reports | performance-test |
+| `lighthouse-reports` | 14 days | Lighthouse performance budgets | lighthouse-performance |
+| `dependency-check-report` | 30 days | OWASP vulnerability scan HTML | security-scan |
+| `trivy-scan-results` | 30 days | Container vulnerability SARIF | security-scan |
+
+**Cache Layers:**
+
+The workflow uses GitHub Actions cache to speed up builds and reduce external API calls:
+
+- **Maven repository cache:** Automatically cached by `actions/setup-java@v4` with `cache: 'maven'` (JVM jobs)
+- **GraalVM Maven cache:** Cached by `graalvm/setup-graalvm@v1` with `cache: 'maven'` (native builds)
+- **npm dependency cache:** Cached by `actions/setup-node@v4` with `cache: 'npm'` for root and SPA workspaces
+- **SonarCloud analysis cache:** Explicit cache at `~/.sonar/cache` using `actions/cache@v4` to avoid re-analyzing unchanged files
+- **Docker layer cache:** BuildKit GHA cache (`type=gha`) for Docker image builds reduces native image rebuild time
+
+**Cache Warming for GraalVM:**
+
+Native builds benefit from warm caches when dependencies haven't changed:
+
+1. First run: Downloads all Maven dependencies + GraalVM SDK (~5-10 min overhead)
+2. Subsequent runs: Restores cached `.m2/repository` + GraalVM components (~30s overhead)
+3. Cache key: Based on `pom.xml` hash, automatically invalidates when dependencies change
+4. Concurrency control: `cancel-in-progress: true` prevents cache pollution from stale runs
+
+**Local cache simulation:**
+
+```bash
+# Pre-warm Maven cache before native build
+./mvnw dependency:go-offline
+
+# Native build with warm cache (saves ~5-8 minutes)
+./mvnw package -Pnative
+```
 
 ## Technology Stack
 
@@ -703,12 +756,17 @@ The project uses GitHub Actions for continuous integration. The pipeline runs:
    - **JVM tests:** Maven verify with JaCoCo coverage
    - **Native tests:** GraalVM native build + integration tests (main/PR only)
 
-3. **Quality Gate** (~5-8 min):
+3. **Integration Stage (Failsafe profile)** (~8-12 min):
+   - Quarkus integration tests via `./mvnw verify -Pintegration-tests`
+   - Uses shipping carrier mock services for deterministic API calls
+   - Publishes `integration-test-results` artifact for debugging
+
+4. **Quality Gate** (~5-8 min):
    - SonarCloud analysis
    - Coverage enforcement (80%)
    - Security vulnerability scan
 
-4. **Docker Build** (~15-20 min, main/beta only):
+5. **Docker Build** (~15-20 min, main/beta only):
    - Native container image build
    - Push to registry
 
@@ -728,6 +786,9 @@ Before pushing code, run the same checks that CI will execute:
 # Run tests with coverage
 ./mvnw verify
 
+# Run integration profile (failsafe ITs)
+./mvnw verify -Pintegration-tests
+
 # Lint OpenAPI spec
 npm run lint:openapi
 
@@ -736,6 +797,7 @@ npm run lint:openapi
   npm run lint && \
   npm run lint:openapi && \
   ./mvnw verify && \
+  ./mvnw verify -Pintegration-tests && \
   ./mvnw jacoco:check
 ```
 
@@ -1035,7 +1097,7 @@ open target/site/jacoco/index.html
 
 ```bash
 # Run integration tests (requires test database)
-./mvnw verify
+./mvnw verify -Pintegration-tests
 
 # Run native integration tests
 ./mvnw verify -Pnative
