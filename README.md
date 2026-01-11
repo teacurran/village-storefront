@@ -180,6 +180,46 @@ The project uses a Maven parent-child module structure:
 
 All Maven commands run from the root directory. Use `-pl modules/core-platform` to target the specific module, or omit it to build all modules.
 
+**Module Inventory:**
+
+| Module | Artifact ID | Purpose | Key Dependencies |
+|--------|-------------|---------|------------------|
+| Parent | `village-storefront-parent` | Aggregator and shared config | Quarkus BOM, Spotless, JaCoCo, OWASP |
+| Core Platform | `core-platform` | Tenant gateway, identity, catalog, orders | Quarkus REST, Panache, Stripe, AWS S3, Quinoa |
+
+**Maven Profiles:**
+
+| Profile | Activation | Purpose | Key Properties |
+|---------|------------|---------|----------------|
+| `dev` | Default | Local development with debugging | `quarkus.hibernate-orm.log.sql=true`, Dev UI enabled |
+| `test` | `-Ptest` or `-Dquarkus.profile=test` | CI/CD test execution | SQL logging disabled, Dev UI disabled |
+| `prod` | `-Pprod` or `-Dquarkus.profile=prod` | Production deployments | `quarkus.log.level=INFO`, optimized settings |
+| `native` | `-Pnative` or `-Dnative` | GraalVM native executable builds | `quarkus.native.enabled=true`, requires GraalVM |
+
+**Build Standards Compliance:**
+
+The project fully complies with [VillageCompute Java Project Standards](docs/java-project-standards.adoc):
+
+- ✅ Java 21 with Maven multi-module structure
+- ✅ Quarkus 3.20.0 with all required extensions (RESTEasy Reactive, Panache, Scheduler, AWS S3, Stripe SDK, Kubernetes, Mailer, OpenTelemetry, etc.)
+- ✅ Spotless formatter + JaCoCo 80% coverage enforcement
+- ✅ OWASP Dependency-Check for vulnerability scanning
+- ✅ GraalVM native image support via `native` profile
+
+**Verify build compliance:**
+```bash
+# Run all quality gates (Spotless + JaCoCo + tests)
+./mvnw clean verify
+
+# Check code formatting
+./mvnw spotless:check
+
+# Enforce 80% coverage threshold
+./mvnw jacoco:check
+```
+
+See [Test Strategy](docs/quality/test_strategy.md) for complete module inventory, extension list, coverage expectations, and compliance verification details.
+
 **Quickstart for local development:**
 
 ```bash

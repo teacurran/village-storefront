@@ -24,6 +24,7 @@ import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.PayoutLedger;
 import villagecompute.storefront.data.models.PayoutLedgerEntry;
 import villagecompute.storefront.data.models.Tenant;
+import villagecompute.storefront.testsupport.TestDataCleaner;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 
@@ -57,14 +58,7 @@ class PayoutLedgerServiceTest {
     @BeforeEach
     @Transactional
     void setUp() {
-        // Clean up existing data
-        entityManager.createQuery("DELETE FROM PayoutLedgerEntry").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutLedger").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
-        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
-        entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
+        TestDataCleaner.clearTenantData(entityManager);
 
         // Create test tenant
         Tenant tenant = new Tenant();

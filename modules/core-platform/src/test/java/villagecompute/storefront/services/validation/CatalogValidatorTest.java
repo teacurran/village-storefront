@@ -12,6 +12,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -287,27 +288,47 @@ class CatalogValidatorTest {
     }
 
     private void purgeCatalogTables() {
-        entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
-        entityManager.createQuery("DELETE FROM Collection").executeUpdate();
-        entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM Cart").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
-        entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
-        entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryTransfer").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryAgingAggregate").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryLocation").executeUpdate();
-        entityManager.createQuery("DELETE FROM ProductImage").executeUpdate();
-        entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
-        entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
-        entityManager.createQuery("DELETE FROM Product").executeUpdate();
-        entityManager.createQuery("DELETE FROM Category").executeUpdate();
-        entityManager.createQuery("DELETE FROM FeatureFlag").executeUpdate();
-        entityManager.createQuery("DELETE FROM User").executeUpdate();
-        entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
+        boolean integrityDisabled = false;
+        try {
+            if (!isPostgres()) {
+                entityManager.createNativeQuery("SET REFERENTIAL_INTEGRITY FALSE").executeUpdate();
+                integrityDisabled = true;
+            }
+            entityManager.createQuery("DELETE FROM ProductCollection").executeUpdate();
+            entityManager.createQuery("DELETE FROM Collection").executeUpdate();
+            entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
+            entityManager.createQuery("DELETE FROM Cart").executeUpdate();
+            entityManager.createQuery("DELETE FROM PayoutLineItem").executeUpdate();
+            entityManager.createQuery("DELETE FROM PayoutBatch").executeUpdate();
+            entityManager.createQuery("DELETE FROM ConsignmentItem").executeUpdate();
+            entityManager.createQuery("DELETE FROM Consignor").executeUpdate();
+            entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
+            entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
+            entityManager.createQuery("DELETE FROM InventoryTransfer").executeUpdate();
+            entityManager.createQuery("DELETE FROM InventoryAgingAggregate").executeUpdate();
+            entityManager.createQuery("DELETE FROM InventoryLevel").executeUpdate();
+            entityManager.createQuery("DELETE FROM InventoryLocation").executeUpdate();
+            entityManager.createQuery("DELETE FROM ProductImage").executeUpdate();
+            entityManager.createQuery("DELETE FROM ProductCategory").executeUpdate();
+            entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
+            entityManager.createQuery("DELETE FROM Product").executeUpdate();
+            entityManager.createQuery("DELETE FROM Category").executeUpdate();
+            entityManager.createQuery("DELETE FROM FeatureFlag").executeUpdate();
+            entityManager.createQuery("DELETE FROM IdempotencyKey").executeUpdate();
+            entityManager.createQuery("DELETE FROM PaymentIntent").executeUpdate();
+            entityManager.createQuery("DELETE FROM User").executeUpdate();
+            entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
+        } finally {
+            if (integrityDisabled) {
+                entityManager.createNativeQuery("SET REFERENTIAL_INTEGRITY TRUE").executeUpdate();
+            }
+        }
+    }
+
+    private boolean isPostgres() {
+        return ConfigProvider.getConfig()
+                .getOptionalValue("quarkus.datasource.db-kind", String.class)
+                .map(value -> "postgresql".equalsIgnoreCase(value))
+                .orElse(false);
     }
 }

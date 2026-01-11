@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
 import org.junit.jupiter.api.AfterEach;
@@ -22,6 +23,7 @@ import villagecompute.storefront.data.models.FeatureFlag;
 import villagecompute.storefront.data.models.PayoutBatch;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.jobs.PayoutReconciliationJobHandler;
+import villagecompute.storefront.testsupport.TestDataCleaner;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.quarkus.test.junit.QuarkusTest;
@@ -43,13 +45,13 @@ class PaymentJobServiceTest {
     private Consignor consignor;
     private PayoutBatch payoutBatch;
 
+    @Inject
+    EntityManager entityManager;
+
     @BeforeEach
     @Transactional
     void setUp() {
-        FeatureFlag.deleteAll();
-        PayoutBatch.deleteAll();
-        Consignor.deleteAll();
-        Tenant.deleteAll();
+        TestDataCleaner.clearTenantData(entityManager);
 
         tenant = new Tenant();
         tenant.subdomain = "payout-test";

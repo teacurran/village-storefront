@@ -34,6 +34,4 @@ COMMENT ON TABLE oauth_client_scopes IS 'Scopes assigned to each OAuth client (c
 CREATE INDEX IF NOT EXISTS idx_oauth_clients_tenant ON oauth_clients(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_clients_active ON oauth_clients(active);
 
--- +migrate Down
-DROP TABLE IF EXISTS oauth_client_scopes;
-DROP TABLE IF EXISTS oauth_clients;
+-- Down migration handled via MyBatis migrations (omitted in Flyway).

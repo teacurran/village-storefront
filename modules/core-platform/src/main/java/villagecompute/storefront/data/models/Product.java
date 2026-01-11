@@ -179,6 +179,9 @@ public class Product extends PanacheEntityBase {
             UUID tenantId = TenantContext.getCurrentTenantId();
             tenant = Tenant.findById(tenantId);
         }
+        if (title == null || title.isBlank()) {
+            title = name != null ? name : "Untitled Product";
+        }
         OffsetDateTime now = OffsetDateTime.now();
         createdAt = now;
         updatedAt = now;
@@ -186,6 +189,9 @@ public class Product extends PanacheEntityBase {
 
     @PreUpdate
     public void preUpdate() {
+        if (title == null || title.isBlank()) {
+            title = name != null ? name : "Untitled Product";
+        }
         updatedAt = OffsetDateTime.now();
     }
 }

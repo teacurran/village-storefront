@@ -37,6 +37,4 @@ COMMENT ON COLUMN processed_domain_events.processed_at IS 'Timestamp when event 
 -- MIGRATION DOWN: Drop processed events tracking table
 -- ============================================================================
 
--- +migrate Down
-
-DROP TABLE IF EXISTS processed_domain_events CASCADE;
+-- Down migration handled via MyBatis migrations (omitted in Flyway).

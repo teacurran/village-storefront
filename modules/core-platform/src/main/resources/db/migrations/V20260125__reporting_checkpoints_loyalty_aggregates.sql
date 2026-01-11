@@ -80,7 +80,4 @@ COMMENT ON COLUMN loyalty_aggregates.tier_distribution IS 'JSON object with coun
 -- MIGRATION DOWN: Drop reporting checkpoint and loyalty aggregate tables
 -- ============================================================================
 
--- +migrate Down
-
-DROP TABLE IF EXISTS loyalty_aggregates CASCADE;
-DROP TABLE IF EXISTS reporting_checkpoints CASCADE;
+-- Down migration handled via MyBatis migrations (omitted in Flyway).

@@ -136,9 +136,4 @@ COMMENT ON COLUMN report_jobs.result_url IS 'Cloudflare R2 signed URL for downlo
 -- MIGRATION DOWN: Drop all reporting tables
 -- ============================================================================
 
--- +migrate Down
-
-DROP TABLE IF EXISTS report_jobs CASCADE;
-DROP TABLE IF EXISTS inventory_aging_aggregates CASCADE;
-DROP TABLE IF EXISTS consignment_payout_aggregates CASCADE;
-DROP TABLE IF EXISTS sales_by_period_aggregates CASCADE;
+-- Down migration handled via MyBatis migrations (omitted in Flyway).

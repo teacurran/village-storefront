@@ -21,6 +21,8 @@ public class PostgresTenantTestResource implements QuarkusTestResourceLifecycleM
     private static final String APP_DB_USER = "storefront_app";
     private static final String APP_DB_PASSWORD = "storefront_app";
 
+    private static final String JDBC_PARAM_SSLMODE_DISABLE = "sslmode=disable";
+
     private PostgreSQLContainer<?> postgres;
 
     @Override
@@ -33,18 +35,23 @@ public class PostgresTenantTestResource implements QuarkusTestResourceLifecycleM
 
         Map<String, String> config = new HashMap<>();
         config.put("quarkus.datasource.db-kind", "postgresql");
-        config.put("quarkus.datasource.jdbc.url", postgres.getJdbcUrl());
+        String jdbcUrl = buildJdbcUrl();
+        config.put("quarkus.datasource.jdbc.url", jdbcUrl);
         config.put("quarkus.datasource.username", APP_DB_USER);
         config.put("quarkus.datasource.password", APP_DB_PASSWORD);
         config.put("quarkus.hibernate-orm.database.generation", "drop-and-create");
         config.put("quarkus.hibernate-orm.log.sql", "false");
         config.put("quarkus.datasource.jdbc.transaction-isolation", "read-committed");
         config.put("tenant.rls.enabled", "true");
+        config.put("test.db.kind", "postgresql");
+        config.put("test.jdbc.url", jdbcUrl);
+        config.put("test.db.username", APP_DB_USER);
+        config.put("test.db.password", APP_DB_PASSWORD);
         return config;
     }
 
     private void initializeApplicationRole() {
-        try (Connection connection = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(),
+        try (Connection connection = DriverManager.getConnection(buildJdbcUrl(), postgres.getUsername(),
                 postgres.getPassword()); Statement stmt = connection.createStatement()) {
             stmt.execute("""
                     DO $$
@@ -66,5 +73,11 @@ public class PostgresTenantTestResource implements QuarkusTestResourceLifecycleM
         if (postgres != null) {
             postgres.stop();
         }
+    }
+
+    private String buildJdbcUrl() {
+        String baseUrl = postgres.getJdbcUrl();
+        return baseUrl.contains("?") ? baseUrl + "&" + JDBC_PARAM_SSLMODE_DISABLE
+                : baseUrl + "?" + JDBC_PARAM_SSLMODE_DISABLE;
     }
 }

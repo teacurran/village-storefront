@@ -48,7 +48,9 @@ import io.quarkus.test.junit.TestProfile;
  */
 @QuarkusTest
 @TestProfile(TenantPostgresRlsProfile.class)
-@QuarkusTestResource(PostgresTenantTestResource.class)
+@QuarkusTestResource(
+        value = PostgresTenantTestResource.class,
+        restrictToAnnotatedClass = true)
 class InventoryLevelRepositoryRLSTest {
 
     @Inject
@@ -148,6 +150,7 @@ class InventoryLevelRepositoryRLSTest {
         product.tenant = tenant;
         product.sku = sku;
         product.name = name;
+        product.title = name + " Title";
         product.slug = sku.toLowerCase();
         product.type = "physical";
         product.status = "active";

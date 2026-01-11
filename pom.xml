@@ -158,6 +158,15 @@
               </sortPom>
             </pom>
           </configuration>
+          <executions>
+            <execution>
+              <id>spotless-check</id>
+              <goals>
+                <goal>check</goal>
+              </goals>
+              <phase>verify</phase>
+            </execution>
+          </executions>
         </plugin>
 
         <!-- Java Compiler -->
@@ -347,6 +356,56 @@
   </build>
 
   <profiles>
+    <!-- Development profile (default) -->
+    <profile>
+      <id>dev</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>quarkus.profile</name>
+          <value>dev</value>
+        </property>
+      </activation>
+      <properties>
+        <quarkus.profile>dev</quarkus.profile>
+        <quarkus.hibernate-orm.log.sql>true</quarkus.hibernate-orm.log.sql>
+        <quarkus.dev-ui.enabled>true</quarkus.dev-ui.enabled>
+      </properties>
+    </profile>
+
+    <!-- Test profile -->
+    <profile>
+      <id>test</id>
+      <activation>
+        <property>
+          <name>quarkus.profile</name>
+          <value>test</value>
+        </property>
+      </activation>
+      <properties>
+        <quarkus.profile>test</quarkus.profile>
+        <quarkus.hibernate-orm.log.sql>false</quarkus.hibernate-orm.log.sql>
+        <quarkus.dev-ui.enabled>false</quarkus.dev-ui.enabled>
+      </properties>
+    </profile>
+
+    <!-- Production profile -->
+    <profile>
+      <id>prod</id>
+      <activation>
+        <property>
+          <name>quarkus.profile</name>
+          <value>prod</value>
+        </property>
+      </activation>
+      <properties>
+        <quarkus.profile>prod</quarkus.profile>
+        <quarkus.hibernate-orm.log.sql>false</quarkus.hibernate-orm.log.sql>
+        <quarkus.dev-ui.enabled>false</quarkus.dev-ui.enabled>
+        <quarkus.log.level>INFO</quarkus.log.level>
+      </properties>
+    </profile>
+
     <!-- Native build profile for GraalVM -->
     <profile>
       <id>native</id>
@@ -358,6 +417,7 @@
       <properties>
         <skipITs>false</skipITs>
         <quarkus.native.enabled>true</quarkus.native.enabled>
+        <quarkus.package.jar.enabled>false</quarkus.package.jar.enabled>
       </properties>
     </profile>
   </profiles>

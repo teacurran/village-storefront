@@ -88,7 +88,4 @@ CREATE INDEX idx_privacy_deletions_status ON privacy_deletions (status);
 
 COMMENT ON TABLE privacy_deletions IS 'Tracks soft-delete + purge lifecycle per privacy request (retention SLA)';
 
--- +migrate Down
-DROP TABLE IF EXISTS privacy_deletions CASCADE;
-DROP TABLE IF EXISTS marketing_consents CASCADE;
-DROP TABLE IF EXISTS privacy_requests CASCADE;
+-- Down migration handled via MyBatis migrations (omitted in Flyway).

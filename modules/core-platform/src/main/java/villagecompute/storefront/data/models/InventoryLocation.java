@@ -18,6 +18,8 @@ import jakarta.persistence.UniqueConstraint;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Physical or virtual inventory storage location.
@@ -80,6 +82,7 @@ public class InventoryLocation extends PanacheEntityBase {
     /**
      * Physical address in JSON format.
      */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(
             columnDefinition = "jsonb")
     public String address;

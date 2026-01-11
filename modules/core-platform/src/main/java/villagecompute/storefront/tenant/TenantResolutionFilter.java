@@ -301,6 +301,9 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
     }
 
     private void seedTenantSessionVariable(UUID tenantId) {
+        if (!rlsEnabled) {
+            return;
+        }
         try {
             entityManager.createNativeQuery("SELECT set_current_tenant_id(:tenantId)")
                     .setParameter("tenantId", tenantId).getSingleResult();

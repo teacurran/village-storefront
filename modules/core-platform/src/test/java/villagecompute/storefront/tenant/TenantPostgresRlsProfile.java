@@ -18,6 +18,9 @@ public class TenantPostgresRlsProfile implements QuarkusTestProfile {
         // Enable tenant safety features
         config.put("tenant.rls.enabled", "true");
         config.put("tenant.cache.enabled", "true");
+        config.put("test.db.kind", "postgresql");
+        config.put("test.db.username", "storefront_app");
+        config.put("test.db.password", "storefront_app");
 
         return config;
     }

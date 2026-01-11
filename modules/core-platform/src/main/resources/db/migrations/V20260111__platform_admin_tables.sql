@@ -165,8 +165,4 @@ COMMENT ON COLUMN system_health_snapshots.metrics IS 'Additional metrics from Pr
 -- MIGRATION DOWN: Drop all platform admin tables
 -- ============================================================================
 
--- +migrate Down
-DROP TABLE IF EXISTS system_health_snapshots CASCADE;
-DROP TABLE IF EXISTS platform_admin_roles CASCADE;
-DROP TABLE IF EXISTS impersonation_sessions CASCADE;
-DROP TABLE IF EXISTS platform_commands CASCADE;
+-- Down migration handled via MyBatis migrations (omitted in Flyway).

@@ -91,7 +91,10 @@ class CartServiceCoverageTest {
 
         Product product = new Product();
         product.tenant = tenant;
+        product.sku = "PROD-001";
         product.name = "Test Product";
+        product.title = "Test Product Title";
+        product.slug = "test-product";
 
         variant = new ProductVariant();
         variant.id = UUID.randomUUID();
@@ -99,6 +102,7 @@ class CartServiceCoverageTest {
         variant.product = product;
         variant.price = new BigDecimal("29.99");
         variant.name = "Variant";
+        variant.sku = "SKU-123";
 
         lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(counter);
 
