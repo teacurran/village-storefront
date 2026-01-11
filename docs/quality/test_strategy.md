@@ -81,7 +81,7 @@ The parent POM defines the following Maven profiles to support different environ
 The following Quarkus extensions are configured per the [VillageCompute Java Project Standards](../java-project-standards.adoc):
 
 ### Required Extensions (Standard Kit)
-- **quarkus-arc** - CDI dependency injection
+- **quarkus-arc** - CDI dependency injection (explicitly declared in `modules/core-platform/pom.xml:50`)
 - **quarkus-rest** - RESTEasy Reactive for REST endpoints (successor to quarkus-resteasy-reactive)
 - **quarkus-rest-jackson** - Jackson JSON serialization for REST APIs
 - **quarkus-hibernate-orm-panache** - Hibernate ORM with Panache active record pattern
@@ -238,10 +238,12 @@ The following commands verify that the build meets all standards:
 
 **Acceptance Criteria Mapping (Task I1.T1):**
 
-- ✅ **Maven build runs with Spotless + JaCoCo hooks:** `./mvnw clean verify` executes both checks
-- ✅ **Profiles configured and documented:** `%dev`, `%test`, `%prod`, `%native` profiles defined and documented above
-- ✅ **Module inventory + coverage expectations captured:** Module inventory in Module Inventory section, coverage requirements in Code Coverage Requirements section
-- ✅ **No regression to existing modules:** All existing extensions preserved, no modifications to working code
+- ✅ **Maven build runs with Spotless + JaCoCo hooks:** `./mvnw clean verify` executes both checks in verify phase
+- ✅ **Profiles configured and documented:** `%dev`, `%test`, `%prod`, `%native` profiles defined and documented in Maven Profiles section
+- ✅ **Module inventory + coverage expectations captured:** Module inventory documented with dependencies, coverage requirements in Code Coverage Requirements section
+- ✅ **No regression to existing modules:** All existing extensions preserved, only added missing `quarkus-arc` per Standard Kit requirements
+- ✅ **All Standard Kit extensions present:** Quarkus ARC, REST, Panache, Scheduler, AWS S3, Stripe SDK all confirmed in module POM
+- ✅ **GraalVM native build configured:** Native profile present with `quarkus.native.enabled=true` and documented usage
 
 ## Code Quality Standards
 
