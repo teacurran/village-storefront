@@ -1,6 +1,21 @@
 # Test Strategy
 
-This document defines the testing approach, coverage expectations, and quality standards for the Village Storefront platform.
+<!-- anchor: test-strategy-overview -->
+
+This document defines the comprehensive testing approach, coverage expectations, and quality standards for the Village Storefront platform. It maps unit/integration/e2e test expectations per module, establishes coverage thresholds, documents test data management practices, and defines CI gating criteria including JaCoCo 80% enforcement and mutation testing stretch goals.
+
+## Executive Summary
+
+Village Storefront maintains a multi-level testing strategy aligned with the [VillageCompute Java Project Standards](../java-project-standards.adoc):
+
+- **Unit Tests:** ≥85% coverage per module with JUnit 5 + Mockito
+- **Integration Tests:** PostgreSQL + Testcontainers with RLS verification
+- **End-to-End Tests:** Playwright suites covering storefront, admin, POS, platform workflows
+- **Performance Tests:** Gatling/Locust load testing (planned in I3.T8)
+- **CI Enforcement:** JaCoCo 80% minimum (quality gate failure below threshold), Spotless formatting, OpenAPI validation
+- **Mutation Testing (Stretch):** PIT + StrykerJS for critical modules (planned in I3.T8)
+
+This strategy is delivered incrementally across iterations I1-I5, with explicit task linkage for coverage growth tracking.
 
 ## Module Inventory
 
@@ -287,9 +302,34 @@ The following quality checks run automatically during `mvn clean verify`:
 
 ## Testing Strategy
 
+<!-- anchor: testing-strategy -->
+
 This section defines the comprehensive testing approach for the Village Storefront platform, mapping unit/integration/e2e expectations per module, coverage thresholds, test data management, and CI gating.
 
+### Verification Hierarchy
+
+<!-- anchor: verification-hierarchy -->
+
+Village Storefront employs a four-tier testing pyramid optimized for multi-tenant SaaS reliability:
+
+1. **Unit Tests (Foundation):** Fast, isolated tests of service/domain logic with mocked dependencies. Target ≥85% line/branch coverage per module. Run on every commit via `./mvnw test` (<5 min).
+
+2. **Integration Tests (Contracts):** REST API contract validation, database RLS verification, external service mocks (Stripe, carriers). Use Testcontainers PostgreSQL 17 with full schema + RLS policies. Run via `./mvnw verify` (<10 min).
+
+3. **End-to-End Tests (Workflows):** Browser-based Playwright suites covering tenant provisioning, storefront checkout, admin catalog/orders, POS offline sync, platform impersonation. Run via `scripts/qa/run_e2e.sh` (<20 min, 4 parallel workers).
+
+4. **Performance & Chaos (Resilience):** Load testing (Gatling/Locust) for checkout/cart stress, chaos scripts for DB failover/API outages. Nightly + release candidate runs. Planned in `I3.T8`.
+
+**Quality Gates (enforced in CI):**
+- Unit/Integration: JaCoCo ≥80% coverage (hard fail)
+- E2E: 100% suite pass (2 retries allowed per Playwright config)
+- Formatting: Spotless zero violations
+- Security: OWASP Dependency-Check zero critical/high CVEs
+- OpenAPI: Spectral lint zero errors
+
 ### Testing Levels and Scope
+
+<!-- anchor: testing-levels -->
 
 Village Storefront employs a multi-level testing strategy to ensure quality, performance, and reliability across all platform modules:
 
@@ -360,11 +400,13 @@ Village Storefront employs a multi-level testing strategy to ensure quality, per
 
 ### Module-by-Module Test Obligations
 
-The following table maps each domain module to required test suites, ownership, and coverage targets:
+<!-- anchor: module-test-matrix -->
+
+The following table maps each domain module to required test suites, ownership, and coverage targets. Each entry links to the iteration task responsible for delivering the indicated coverage level:
 
 | Module | Unit Tests | Integration Tests | E2E Tests | Coverage Target | Responsible Iteration |
 |--------|-----------|------------------|----------|----------------|---------------------|
-| **Tenant Gateway** | TenantContext resolution, subdomain/custom-domain parsing, RLS filter | TenantResolutionFilter with request headers, cross-tenant isolation | Platform console tenant provisioning | ≥85% | I1 (skeleton), I2 (full impl) |
+| **Tenant Gateway** | TenantContext resolution, subdomain/custom-domain parsing, RLS filter | TenantResolutionFilter with request headers, cross-tenant isolation | Platform console tenant provisioning | ≥85% | I1.T1 (skeleton), I2.T8 (RLS hardening) |
 | **Identity & Auth** | JWT generation/validation, password hashing, session logging, impersonation audit | Login/logout flows, refresh token rotation, impersonation endpoints | Admin impersonation with audit log verification | ≥85% | I2.T2 |
 | **Catalog** | Product CRUD, variant pricing, SKU generation, category tree | Catalog import/export jobs, REST API CRUD, RLS verification | Admin catalog management, storefront product browsing | ≥85% | I2.T3, I2.T4 |
 | **Inventory** | Stock adjustments, low-stock alerts, reservation logic | Inventory API endpoints, job-based recount workflows | Admin inventory dashboard, storefront out-of-stock handling | ≥85% | I2.T5 |
@@ -379,35 +421,43 @@ The following table maps each domain module to required test suites, ownership, 
 
 ### Test Data Management
 
+<!-- anchor: test-data-management -->
+
+Reliable test data management is critical for deterministic test execution across unit, integration, and e2e suites. Village Storefront employs environment-specific seeding strategies with tenant isolation guarantees.
+
 #### Data Seeding Strategy
 
-**Development Environment (`scripts/dev/bootstrap.sh`):**
-- Provisioned by `I2.T7` docker stack task
-- Seeds 3 demo tenants (subdomain + custom domain examples) with realistic product catalogs, users, orders
-- Uses SQL scripts in `migrations/src/main/resources/seed/` directory
-- Run via: `cd migrations && mvn migration:up -Dmigration.env=development && cd ../scripts/dev && ./bootstrap.sh`
+<!-- anchor: data-seeding-strategy -->
 
-**Unit Tests (H2 In-Memory):**
-- Each test creates minimal fixtures inline using JPA entities
-- Use `@Transactional` to ensure automatic rollback after each test
-- Shared fixtures in `src/test/java/villagecompute/storefront/fixtures/` package (e.g., `TenantFixture.createTestTenant()`)
+##### Local & Shared Seeds
 
-**Integration Tests (Testcontainers PostgreSQL):**
-- Testcontainers starts fresh PostgreSQL 17 instance per test class
-- Migrations applied via MyBatis Migrations during `@BeforeAll` setup
-- Test-specific data seeded via SQL scripts in `src/test/resources/testdata/` directory
-- Teardown via `@AfterAll` to stop container
+<!-- anchor: local-shared-seeds -->
 
-**E2E Tests (Playwright):**
-- Canonical seed script: `tests/fixtures/seed-e2e-data.js`
-- Provisions deterministic tenants, products, users, orders via REST API calls
-- Run via: `npm --prefix tests/e2e/playwright run seed:e2e` (or invoked automatically by `scripts/qa/run_e2e.sh`)
-- Cleanup: Database reset between E2E runs via `DELETE FROM ...` statements or migration rollback
+- `scripts/dev/bootstrap.sh` validates prerequisites, starts the Docker Compose stack, runs Quarkus/Flyway migrations, and loads deterministic demo data. The script pulls SQL fixtures from `tools/scripts/sample_catalog_loader.sql` and `tools/scripts/sample_consignment_loader.sql` so every developer environment starts from the same tenants (`techgadgets`, `artisancrafts`) and sample consignors.
+- The bootstrap script can be re-run at any time (or invoked with `--skip-seed`) to refresh data without manually invoking MyBatis commands. CI agents can reuse the same script when spinning up preview environments so database contents match local machines.
 
-**Data Isolation:**
-- All tests must use unique tenant identifiers to avoid cross-test pollution
-- E2E tests use reserved tenant subdomains: `e2e-test-1`, `e2e-test-2`, `e2e-test-3`
-- Integration tests use random UUID-based tenant identifiers
+##### Unit + Integration Fixtures
+
+<!-- anchor: unit-integration-fixtures -->
+
+- **Unit tests:** Each test instantiates Panache entities or domain records inline and leverages H2 in-memory isolation plus `@Transactional` rollback to keep state clean. Shared helper methods live directly inside the `modules/core-platform/src/test/java/**` test classes to avoid brittle global fixtures.
+- **Integration tests:** `@QuarkusIntegrationTest` classes spin up PostgreSQL 17 Testcontainers instances and automatically apply migrations from `modules/core-platform/src/main/resources/db/migrations`. CSV fixtures such as `modules/core-platform/src/test/resources/catalog-import-test.csv` and `catalog-import-invalid.csv` feed import/export scenarios, and the container is discarded after each class so no cleanup scripts are required. Negative tests rely on dynamically generated tenant IDs to ensure RLS policies are exercised.
+
+##### Playwright / E2E Fixtures
+
+<!-- anchor: e2e-fixtures -->
+
+- Canonical seed entry point: `tests/fixtures/seed-e2e-data.js`, which hydrates tenants defined in `tests/fixtures/tenants.ts` (tenant-a/b/c). It provisions platform admin accounts plus tenant users, catalog content, loyalty programs, and OAuth clients against the REST API so data matches production traffic paths.
+- Run seeding prior to E2E execution: `npm --prefix tests/e2e/playwright run seed:e2e`. The command is idempotent and can be re-run mid-suite to repair data drifts.
+- `scripts/qa/run_e2e.sh` documents the seeding requirement today and exposes `E2E_PLACEHOLDER_CMD` so CI can prove the wiring until `TODO(I2.T8)` integrates an automated `seed:e2e` call directly into the runner.
+
+##### Isolation & Refresh Policy
+
+<!-- anchor: data-isolation -->
+
+- Local Docker volumes should be recycled with `docker compose down -v` before smoke testing schema changes; `scripts/dev/bootstrap.sh` recreates the schema + seed data end-to-end.
+- CI pipelines rely on ephemeral PostgreSQL service containers, guaranteeing a fresh schema per run. Playwright runs always point to environment-specific tenants (`tenant-a.test.local`, `tenant-b.test.local`, `tenant-c.test.local`) so traces and reports can be correlated across runs.
+- Because both Testcontainers and the Playwright seed script are deterministic, restoring tests to a clean state only requires re-running the bootstrap or seeding helpers—no manual SQL cleanup is permitted.
 
 ### Coverage Requirements and Reporting
 
@@ -465,6 +515,69 @@ The following table maps each domain module to required test suites, ownership, 
 
 ### CI/CD Pipeline and Quality Gates
 
+<!-- anchor: ci-cd-pipeline -->
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) orchestrates a multi-stage pipeline with parallel execution and strict quality gates. All stages must pass before code can be merged to main.
+
+#### Pipeline Architecture
+
+The CI pipeline follows this execution flow:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Validation Stage (Parallel)                              │
+├─────────────────────────────────────────────────────────────┤
+│ • Spotless Check (./mvnw spotless:check)                    │
+│ • OpenAPI Lint (Spectral validation)                        │
+│ • PlantUML Validation (plantuml -checkonly)                 │
+│ • Markdown Lint (markdownlint docs/**/*.md)                 │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 2. Test Stage (Parallel)                                    │
+├─────────────────────────────────────────────────────────────┤
+│ • JVM Tests: ./mvnw verify                                  │
+│   - Surefire (unit + integration tests)                     │
+│   - JaCoCo coverage collection                              │
+│   - Threshold check (≥80% or fail)                          │
+│ • E2E Tests: scripts/qa/run_e2e.sh                          │
+│   - Environment: BASE_URL, HEADLESS=true                    │
+│   - Playwright 4 parallel workers                           │
+│   - Artifacts: target/playwright-report/                    │
+│ • Native Build (main/PR only): ./mvnw verify -Pnative       │
+│   - GraalVM native compilation                              │
+│   - Duration: ~15-30 minutes                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 3. Quality Gate (Sequential, blocks merge)                  │
+├─────────────────────────────────────────────────────────────┤
+│ • SonarCloud Analysis                                       │
+│   - Upload: target/site/jacoco/jacoco.xml                   │
+│   - Profile: APPI                                           │
+│   - Gates: coverage ≥80%, bugs=0, vulnerabilities=0         │
+│ • Security Scan                                             │
+│   - OWASP Dependency-Check (already run in verify)          │
+│   - Trivy container scan (future: I3.T8)                    │
+│   - GitHub secrets scanning (always active)                 │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 4. Docker Build & Deploy (main/beta only)                   │
+├─────────────────────────────────────────────────────────────┤
+│ • Native Container Image                                    │
+│   - ./mvnw package -Pnative -Dquarkus.container-image...    │
+│   - Base: distroless/ubi-minimal                            │
+│   - Tags: SHA + latest/beta                                 │
+│   - Registry: ghcr.io                                       │
+│ • Kubernetes Deploy                                         │
+│   - Manifests: quarkus-kubernetes extension                 │
+│   - Strategy: blue/green + smoke tests + manual approval    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Quality Gate Details
+
 The GitHub Actions workflow (`.github/workflows/ci.yml`) enforces the following quality gates:
 
 #### 1. Validation Stage (Parallel Execution)
@@ -483,11 +596,24 @@ The GitHub Actions workflow (`.github/workflows/ci.yml`) enforces the following 
 
 - **Playwright E2E Tests:**
   ```bash
-  scripts/qa/run_e2e.sh  # Runs npm install, Playwright test suites
+  scripts/qa/run_e2e.sh  # Orchestrates Playwright execution with prereq checks
   ```
-  - Output: `target/playwright-report/`, `target/playwright-results.json`
-  - Retry: 2 retries on failure (configured in `playwright.config.ts`)
-  - Timeout: 20 minutes total (4 parallel workers)
+  - **Script:** `scripts/qa/run_e2e.sh` (canonical E2E entry point)
+  - **Environment Variables:**
+    - `BASE_URL` (default: `http://localhost:8080`) - Application URL to test against
+    - `HEADLESS` (default: `true`) - Run browsers in headless mode
+    - `CI` (auto-detected) - Uses `npm ci` instead of `npm install` when `CI=true`
+    - `E2E_PLACEHOLDER_CMD` (default: `echo '[stub] TODO(I2.T8/I3.T8): wire Playwright + Cypress suites'`) - Placeholder command proving the future Cypress/Playwright orchestration hook
+  - **Prerequisites:** Node 18+, npm, Playwright browsers
+  - **Output Artifacts:**
+    - HTML Report: `target/playwright-report/index.html`
+    - JSON Results: `target/playwright-results.json`
+    - JUnit XML: `target/playwright-junit.xml`
+    - Traces: `target/playwright-traces/` (on failure)
+  - **Placeholder Stub:** Until `I2.T8` adds automated seed + Cypress orchestration, the runner executes the configured placeholder command (logs TODO message) before invoking Playwright so CI history documents the missing suites.
+  - **Retry Logic:** 2 retries on failure (configured in `playwright.config.ts`)
+  - **Timeout:** 20 minutes total (4 parallel workers)
+  - **CI Usage:** GitHub Actions runs with `CI=true HEADLESS=true BASE_URL=http://localhost:8080`
 
 - **Native Image Build (main/PR only):**
   ```bash
@@ -600,18 +726,87 @@ scripts/qa/run_e2e.sh
 - Prometheus metrics endpoints (`/q/metrics`) validated in integration tests
 - E2E tests can assert on metric values post-workflow (e.g., checkout counter incremented)
 
-### Future Enhancements (Linked to Iteration Tasks)
+### Iteration Roadmap: Coverage Increment Tracking
 
-The following test strategy improvements are planned for future iterations:
+<!-- anchor: iteration-roadmap -->
 
-- **I2.T8:** Expand integration test suite for Catalog, Inventory, and Tenant modules; add REST-assured contract tests
-- **I3.T8:** Implement performance testing (Gatling/Locust) for checkout/cart workflows; add chaos testing scripts
-- **I4.T8:** Expand E2E test suite for POS offline scenarios, loyalty redemption flows, and headless CMS rendering
-- **I5.T7:** Execute comprehensive verification plan (Task `I5.T7`) producing release readiness report with:
-  - Final coverage metrics (unit/integration/e2e/mutation)
-  - Unresolved risks and rollback plans
-  - Tenant onboarding checklist
-  - Platform governance approvals
+The test strategy is delivered incrementally across iterations I1-I5. Each iteration task contributes specific coverage milestones that aggregate toward the 80% minimum threshold:
+
+#### Iteration 1 (I1): Foundation
+
+- **I1.T1:** Maven skeleton + Spotless/JaCoCo hooks configured (completed)
+- **I1.T6:** Test strategy document + E2E runner script stub (this document + `scripts/qa/run_e2e.sh`)
+- **Baseline Coverage:** Skeleton tests only (~20% coverage from existing TenantResolutionFilterTest, CatalogImportJobHandlerTest)
+
+#### Iteration 2 (I2): Tenant + Identity + Catalog Core
+
+- **I2.T2:** Identity service implementation with unit/integration tests (target: ≥85% identity module coverage)
+  - JWT generation/validation tests
+  - Password hashing negative cases
+  - Session logging integration tests
+  - Impersonation audit trail verification
+- **I2.T3:** Catalog CRUD with REST-assured contract tests (target: ≥85% catalog module coverage)
+  - Product/variant service unit tests
+  - SKU generation edge cases
+  - Category tree traversal tests
+- **I2.T4:** Catalog import/export job handlers (already implemented, target: maintain existing coverage)
+- **I2.T8:** Integration test suite expansion
+  - REST-assured OpenAPI schema validation for all endpoints
+  - Testcontainers PostgreSQL with RLS verification
+  - Tenant isolation negative tests
+- **Cumulative Coverage Target:** ≥60% overall (identity + catalog + tenant modules fully tested)
+
+#### Iteration 3 (I3): Checkout + Payments + Media
+
+- **I3.T2:** Checkout service with cart/discount/tax tests (target: ≥85% checkout module coverage)
+  - Order state machine unit tests
+  - Discount application edge cases
+  - Tax calculation boundary tests
+- **I3.T3:** Payment service with Stripe webhook mocks (target: ≥85% payment module coverage)
+  - Webhook signature validation tests
+  - Payment state transitions (pending/captured/refunded)
+  - Refund logic negative cases
+- **I3.T5:** Media pipeline with FFmpeg integration tests (target: ≥85% media module coverage)
+- **I3.T8:** Performance + chaos testing implementation
+  - Gatling/Locust load tests for checkout/cart APIs
+  - Chaos scripts for DB failover, Stripe outages
+  - Performance budgets enforcement (checkout <300ms p95)
+  - **Stretch Goal:** Mutation testing evaluation (PIT + StrykerJS)
+- **Cumulative Coverage Target:** ≥75% overall (checkout + payment + media modules added)
+
+#### Iteration 4 (I4): Loyalty + POS + Headless
+
+- **I4.T2:** Loyalty service tests (target: ≥85% loyalty module coverage)
+  - Points accrual/redemption unit tests
+  - Tier progression logic tests
+  - Expiration rule edge cases
+- **I4.T3:** POS offline sync tests (target: ≥85% POS module coverage)
+  - Offline transaction queue tests
+  - Sync conflict resolution unit tests
+  - Receipt generation integration tests
+- **I4.T4:** Headless CMS tests (target: ≥85% headless module coverage)
+- **I4.T8:** E2E suite expansion
+  - POS app offline checkout + sync scenarios
+  - Loyalty redemption flow E2E tests
+  - Headless content rendering E2E tests
+- **Cumulative Coverage Target:** ≥80% overall (platform-wide 80% threshold achieved)
+
+#### Iteration 5 (I5): Platform Admin + Release Readiness
+
+- **I5.T2:** Platform admin module tests (target: ≥85% platform admin coverage)
+  - Feature flag CRUD tests
+  - Tenant bulk operations tests
+  - Usage metrics aggregation tests
+- **I5.T7:** Comprehensive verification plan execution
+  - **Deliverable:** Release readiness report (`target/release-readiness-report.html`)
+  - **Contents:**
+    - Final coverage metrics (unit: ≥85%, integration: ≥80%, e2e: 100% pass)
+    - Mutation score (if implemented in I3.T8): ≥75% for critical modules
+    - Performance benchmarks (checkout API <300ms p95, storefront LCP <2s)
+    - Unresolved risks + rollback plans
+    - Tenant onboarding checklist
+    - Platform governance approvals
+- **Final Coverage Target:** ≥85% overall (stretch goal beyond 80% minimum)
 
 ### References
 

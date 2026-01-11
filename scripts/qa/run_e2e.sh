@@ -1,6 +1,65 @@
 #!/usr/bin/env bash
+# =============================================================================
 # Village Storefront E2E Test Runner
-# Orchestrates Playwright test execution with prerequisite checks and artifact collection
+# =============================================================================
+#
+# DESCRIPTION:
+#   Orchestrates Playwright end-to-end test execution with prerequisite checks,
+#   dependency installation, browser setup, and artifact collection. This is the
+#   canonical entry point for E2E tests in both local development and CI/CD.
+#
+# USAGE:
+#   # Run with defaults (localhost:8080, headless mode)
+#   ./scripts/qa/run_e2e.sh
+#
+#   # Run against specific environment
+#   BASE_URL=https://staging.example.com ./scripts/qa/run_e2e.sh
+#
+#   # Run in headed mode (see browser UI)
+#   HEADLESS=false ./scripts/qa/run_e2e.sh
+#
+#   # CI usage (uses npm ci, headless)
+#   CI=true BASE_URL=http://localhost:8080 ./scripts/qa/run_e2e.sh
+#
+# PREREQUISITES:
+#   - Node.js 18+ (verified by script)
+#   - npm (verified by script)
+#   - Playwright browsers (auto-installed if missing)
+#   - Running application instance at BASE_URL
+#
+# ENVIRONMENT VARIABLES:
+#   BASE_URL      - Application URL to test against (default: http://localhost:8080)
+#   HEADLESS      - Run browsers in headless mode (default: true)
+#   CI            - CI environment flag, auto-detected (uses npm ci when true)
+#   E2E_PLACEHOLDER_CMD - Override placeholder stub command logged before suites run
+#
+# OUTPUT ARTIFACTS:
+#   target/playwright-report/index.html  - HTML test report (browsable)
+#   target/playwright-results.json       - JSON results (parseable)
+#   target/playwright-junit.xml          - JUnit XML (CI integration)
+#   target/playwright-traces/            - Playwright traces (on failure)
+#
+# EXIT CODES:
+#   0   - All tests passed
+#   >0  - Test failures or script errors
+#
+# INTEGRATION:
+#   - Called by GitHub Actions CI pipeline (.github/workflows/ci.yml)
+#   - Referenced in test strategy (docs/quality/test_strategy.md)
+#   - Extends coverage delivered by iteration tasks (I2.T8, I3.T8, I4.T8, I5.T7)
+#
+# TROUBLESHOOTING:
+#   - "Node.js 18+ required": Upgrade Node via nvm, asdf, or system package manager
+#   - "Playwright directory not found": Ensure running from repo root
+#   - Browser install errors: Run `npx playwright install --with-deps` manually
+#   - Connection refused: Verify application is running at BASE_URL
+#
+# RELATED FILES:
+#   - tests/e2e/playwright/playwright.config.ts - Playwright configuration
+#   - tests/fixtures/seed-e2e-data.js           - Test data seeding script
+#   - docs/quality/test_strategy.md             - Test strategy documentation
+#
+# =============================================================================
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
@@ -21,6 +80,9 @@ REPORT_DIR="target/playwright-report"
 RESULTS_JSON="target/playwright-results.json"
 JUNIT_XML="target/playwright-junit.xml"
 TRACE_DIR="target/playwright-traces"
+
+# Placeholder command proves CI wiring until Cypress + expanded Playwright suites land
+E2E_PLACEHOLDER_CMD="${E2E_PLACEHOLDER_CMD:-"echo '[stub] TODO(I2.T8/I3.T8): wire Playwright + Cypress suites via scripts/qa/run_e2e.sh'"}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -49,6 +111,12 @@ check_command() {
         log_error "Required command '$1' not found. Please install it and try again."
         return 1
     fi
+}
+
+run_placeholder_stub() {
+    log_warn "Executing placeholder E2E command (replace when suites are wired): $E2E_PLACEHOLDER_CMD"
+    bash -c "$E2E_PLACEHOLDER_CMD"
+    log_warn "Placeholder command completed; proceeding to Playwright orchestration."
 }
 
 # -----------------------------------------------------------------------------
@@ -82,6 +150,12 @@ fi
 
 log_info "Prerequisites OK"
 log_info ""
+
+# -----------------------------------------------------------------------------
+# Placeholder (TODO wiring for Cypress + additional suites)
+# -----------------------------------------------------------------------------
+
+run_placeholder_stub
 
 # -----------------------------------------------------------------------------
 # Dependency Installation
@@ -159,32 +233,64 @@ if [ -d "$TRACE_DIR" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Future Work / TODOs
+# Future Work / Iteration Roadmap
 # -----------------------------------------------------------------------------
+# This script serves as the foundation E2E runner. Future iterations will extend
+# it with additional testing capabilities as outlined in docs/quality/test_strategy.md
 
-# TODO(I2.T8): Add REST-assured API smoke tests before running E2E tests
-#   - Verify health endpoints (/q/health/live, /q/health/ready)
-#   - Check database connectivity
-#   - Validate OpenAPI spec endpoint (/q/openapi)
-#   - Ensure tenant resolution filter is active
+# TODO(I2.T8): Integration test suite expansion - Add REST-assured API smoke tests
+#   Implementation plan:
+#   - Add pre-flight health check function before running Playwright
+#   - Verify health endpoints (/q/health/live, /q/health/ready) return 200
+#   - Check database connectivity via /q/health readiness probe
+#   - Validate OpenAPI spec endpoint (/q/openapi) returns valid spec
+#   - Ensure tenant resolution filter is active (test with X-Tenant-Id header)
+#   - Exit early if smoke tests fail (no point running full E2E suite)
+#   Deliverable: Expand this script with smoke_test() function called before Playwright
 
-# TODO(I3.T8): Add performance test integration
-#   - Run Gatling/Locust load tests after E2E tests pass
-#   - Capture p95 latency metrics for checkout/cart APIs
-#   - Enforce performance budgets (checkout <300ms, storefront LCP <2s)
-#   - Generate performance report in target/gatling/
-
-# TODO(I4.T8): Add chaos testing integration
-#   - Trigger database failover scenarios
-#   - Simulate Stripe/carrier API outages
-#   - Verify kill-switch + fallback behavior
+# TODO(I3.T8): Performance + chaos testing implementation
+#   Performance testing integration:
+#   - Add performance_test() function that runs Gatling/Locust load tests
+#   - Execute after E2E tests pass to validate checkout/cart API performance
+#   - Capture p95 latency metrics and compare against budgets (checkout <300ms)
+#   - Generate performance report in target/gatling/ or target/locust/
+#   - Fail script if performance budgets violated
+#
+#   Chaos testing integration:
+#   - Add chaos_test() function that triggers controlled failure scenarios
+#   - Simulate database failover (stop/start PostgreSQL container)
+#   - Simulate Stripe/carrier API outages (use mock server kill switches)
+#   - Verify graceful degradation + fallback behavior per runbook
 #   - Capture chaos test results in target/chaos/
+#
+#   Mutation testing (stretch goal):
+#   - Evaluate PIT mutation testing for Java modules
+#   - Evaluate StrykerJS for Vue.js admin dashboard
+#   - Generate mutation score reports in target/pitest/ and target/stryker/
+#   Deliverable: Expand this script with conditional flags (RUN_PERF_TESTS, RUN_CHAOS_TESTS)
 
-# TODO(I5.T7): Generate release readiness report
-#   - Aggregate coverage metrics (unit/integration/e2e/mutation)
-#   - Parse test results for failure trends
-#   - Include unresolved risks and rollback plans
-#   - Output consolidated report to target/release-readiness-report.html
+# TODO(I4.T8): E2E suite expansion for POS, Loyalty, Headless
+#   - Playwright tests will expand to cover new modules (handled in Playwright project)
+#   - This script remains unchanged but will execute expanded suite
+#   - Verify artifact collection handles additional test files
+#   - Consider adding suite-specific reporting (e.g., POS-only report)
+#   Deliverable: No changes to this script, verification that expanded suite runs correctly
+
+# TODO(I5.T7): Release readiness report generation
+#   - Add release_readiness_report() function that aggregates all test results
+#   - Parse JaCoCo coverage XML: modules/core-platform/target/site/jacoco/jacoco.xml
+#   - Parse Playwright JSON results: target/playwright-results.json
+#   - Parse performance results (if available): target/gatling/results.json
+#   - Parse mutation testing results (if available): target/pitest/mutations.xml
+#   - Generate consolidated HTML report: target/release-readiness-report.html
+#   - Include sections:
+#     * Final coverage metrics (unit/integration/e2e/mutation)
+#     * Performance benchmarks vs. budgets
+#     * Unresolved risks from test failures
+#     * Rollback plans
+#     * Tenant onboarding checklist
+#     * Platform governance approval checklist
+#   Deliverable: Expand this script to generate release-readiness-report.html
 
 # -----------------------------------------------------------------------------
 # Exit
