@@ -119,6 +119,8 @@ The fastest way to get started is using the bootstrap script:
    - Seed sample consignment data (consignors, payout ledgers for QA testing)
    - Create MinIO bucket for media storage
 
+   > **Note:** The bootstrap script automatically calls `scripts/dev/tenant_seed.sh` to load sample data. See [Managing Sample Data](#managing-sample-data) below for manual seeding options.
+
 3. **Start the development server:**
    ```bash
    npm install
@@ -154,10 +156,11 @@ If you prefer manual control:
 
 4. **Load sample data (optional, creates tenants + staff accounts):**
    ```bash
-   # Load catalog data (products, inventory, staff accounts)
-   psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
+   # Using the tenant seed script (recommended)
+   ./scripts/dev/tenant_seed.sh --catalog --consignment
 
-   # Load consignment data (consignors, payout ledgers for QA)
+   # Or manually via psql:
+   psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_catalog_loader.sql
    psql -h localhost -U appuser -d storefront_dev -f tools/scripts/sample_consignment_loader.sql
    ```
 
@@ -454,14 +457,25 @@ After running `./scripts/dev/bootstrap.sh` or `docker compose up`, these service
 **Common operations:**
 
 ```bash
+# Start all core services (default)
+cd docker && docker compose up -d
+
+# Start with optional services
+docker compose --profile payments up -d              # Add Stripe CLI webhook forwarder
+docker compose --profile observability up -d         # Add Jaeger tracing
+docker compose --profile payments --profile observability up -d  # Both profiles
+
 # View service logs
 docker compose logs -f [postgres|minio|mailhog|usps-mock|ups-mock|fedex-mock]
 
 # View all mock service logs
 docker compose logs -f usps-mock ups-mock fedex-mock
 
-# Stop all services
+# Stop all services (keeps volumes/data)
 docker compose down
+
+# Stop and remove volumes (destroys data)
+docker compose down -v
 
 # Restart a specific service
 docker compose restart postgres
@@ -537,6 +551,133 @@ Test scenarios:
 4. Test Stripe webhooks for payment attribution
 5. Test shipping rate calculation with carrier mocks
 6. Test refund of consignment item → verify REFUND ledger entry
+
+### Managing Sample Data
+
+The project includes a dedicated tenant seed script (`scripts/dev/tenant_seed.sh`) for flexible management of sample data in your local development environment.
+
+#### Using the Tenant Seed Script
+
+**Basic usage (load only tenants and admin users):**
+```bash
+./scripts/dev/tenant_seed.sh
+```
+
+**Load all sample data (recommended for full development):**
+```bash
+./scripts/dev/tenant_seed.sh --catalog --consignment
+```
+
+**Available options:**
+- `--catalog` - Load sample catalog data (products, variants, categories, inventory)
+- `--consignment` - Load consignment data (consignors, payout ledgers)
+- `--reset` - Drop and recreate database (WARNING: destructive)
+- `--help` - Show usage information
+
+#### Sample Data Contents
+
+When you run `./scripts/dev/tenant_seed.sh --catalog --consignment`, you'll get:
+
+**Tenants:**
+- `techgadgets` (ID: a0000000-0000-0000-0000-000000000001)
+- `artisancrafts` (ID: a0000000-0000-0000-0000-000000000002)
+
+**Staff Login Credentials (password: `changeme123!`):**
+- `owner@techgadgets.local` (Store Owner role)
+- `staff@techgadgets.local` (Staff role)
+- `owner@artisancrafts.local` (Store Owner role)
+
+**Catalog Data:**
+- 4 categories (Electronics, Smartphones, Audio, Accessories)
+- 3 products with 7 variants
+- 8 inventory records across multiple locations
+
+**Consignment Data:**
+- 3 consignors across 2 tenants
+- Payout ledger entries with test balances
+- Mobile Accessories Hub: $342.75 available for payout testing
+
+#### Cleanup and Reset Procedures
+
+**Option 1: Reset database with fresh schema (destroys all data):**
+```bash
+# Stop services and remove volumes
+cd docker && docker compose down -v
+
+# Start services
+docker compose up -d
+
+# Wait for PostgreSQL
+./scripts/dev/wait-for-postgres.sh
+
+# Run migrations to create fresh schema
+./mvnw -pl modules/core-platform flyway:migrate
+
+# Reload sample data
+./scripts/dev/tenant_seed.sh --catalog --consignment
+```
+
+**Option 2: Use the seed script's reset mode (WARNING: destructive):**
+```bash
+# This drops and recreates the database
+./scripts/dev/tenant_seed.sh --reset
+
+# Then run migrations
+./mvnw -pl modules/core-platform flyway:migrate
+
+# Then reload data
+./scripts/dev/tenant_seed.sh --catalog --consignment
+```
+
+**Option 3: Manual cleanup via psql:**
+```bash
+# Connect to database
+psql -h localhost -U appuser -d storefront_dev
+
+# Drop specific tables or truncate data
+TRUNCATE TABLE products, product_variants, inventory CASCADE;
+TRUNCATE TABLE consignors, consignment_items, consignment_payout_ledger CASCADE;
+
+# Or drop all tenant data
+DELETE FROM tenants WHERE subdomain IN ('techgadgets', 'artisancrafts');
+```
+
+#### Environment Variables
+
+The seed script reads configuration from your `.env` file:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_NAME` | storefront_dev | PostgreSQL database name |
+| `DB_USER` | appuser | Database user |
+| `DB_PASSWORD` | apppass | Database password |
+| `DB_PORT` | 5432 | PostgreSQL port |
+
+**Required Tools:**
+- `psql` (PostgreSQL client) - Install via `brew install postgresql` (macOS) or `apt install postgresql-client` (Ubuntu)
+- Docker Compose (for running PostgreSQL)
+
+#### Troubleshooting
+
+**Error: "psql: connection refused"**
+- Ensure Docker Compose services are running: `docker compose ps`
+- Start services: `cd docker && docker compose up -d`
+- Wait for PostgreSQL: `./scripts/dev/wait-for-postgres.sh`
+
+**Error: "relation does not exist"**
+- Run database migrations first: `./mvnw -pl modules/core-platform flyway:migrate`
+- Or start Quarkus (migrations run automatically): `npm run dev`
+
+**Error: "duplicate key value violates unique constraint"**
+- Data may already exist. Options:
+  - Use `--reset` flag to drop and recreate database
+  - Skip seeding: bootstrap already loaded data
+  - Manually delete conflicting records via psql
+
+**Data not visible after seeding:**
+- Verify tenant context in your queries: `SELECT * FROM tenants;`
+- Check RLS policies if accessing via application
+- Ensure you're using the correct database: `\c storefront_dev` in psql
 
 ## Code Quality & CI/CD
 
