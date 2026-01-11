@@ -740,7 +740,8 @@ void featureFlagService_hydratesOnTenantResolved() {
 - **[Architecture Overview](../architecture_overview.md)** (Section 4: Multi-Tenancy & Data Isolation)
 - **[ADR-001: Tenancy Strategy](../adr/ADR-001-tenancy.md)** (authoritative design decisions)
 - **[Component Diagram](../architecture/component_diagram.puml)** (placeholder: I1.T4)
-- **[ERD](../architecture/datamodel_erd.puml)** (placeholder: I1.T3)
+- **[ERD](../diagrams/datamodel_erd.puml)** (baseline schema)
+- **[Domain ERD](../diagrams/domain_erd.puml)** (authoritative schema with RLS + indexes, Task I1.T4)
 
 ### Implementation References
 
@@ -763,6 +764,192 @@ void featureFlagService_hydratesOnTenantResolved() {
 ### Risk Register
 
 - **RISK-001:** Tenant data leakage due to missing `tenant_id` filter (mitigated by RLS + test suite)
+
+---
+
+## 7. Database Schema & Entity Relationship Diagram
+
+### Domain ERD Overview
+
+The authoritative database schema is documented in `docs/diagrams/domain_erd.puml` (Task I1.T4). This PlantUML diagram provides comprehensive coverage of all tenant-scoped entities with detailed commentary on:
+
+- **Tenant isolation enforcement:** Every table includes `tenant_id UUID NOT NULL` foreign key to `tenants(id)`
+- **PostgreSQL RLS policies:** All tables marked with `<<RLS>>` stereotype have `FORCE ROW LEVEL SECURITY` enabled
+- **Composite indexes:** Critical performance indexes listed for tenant-scoped queries (e.g., `(tenant_id, sku)`, `(tenant_id, status, created_at)`)
+- **Partitioning strategy:** Tables marked with `<<PARTITIONED>>` include `sessions`, `audit_log_entries`, and `offline_pos_queue`
+- **Data type standards:** NUMERIC(19,4) for money, TIMESTAMPTZ for timestamps, JSONB for flexible data
+
+### Entity Modules
+
+The ERD organizes entities into logical modules aligned with the bounded contexts from the component diagram:
+
+1. **Tenancy Module:** `tenants`, `custom_domains` (foundation for all isolation)
+2. **Identity Module:** `users`, `roles`, `user_roles`, `sessions`, `api_keys`
+3. **Catalog Module:** `categories`, `products`, `product_variants`, `product_categories`, `product_images`, `inventory_levels`
+4. **Cart/Order/Payment Module:** `carts`, `cart_items`, `orders`, `order_line_items`, `shipments`, `payment_methods`, `payments`, `refunds`
+5. **Consignment Module:** `consignors`, `consignment_items`, `payout_batches`, `payout_line_items` (see `docs/consignment/domain.md`)
+6. **Loyalty Module:** `loyalty_programs`, `loyalty_members`, `loyalty_transactions`, `gift_cards`, `gift_card_transactions`, `subscription_plans`
+7. **POS Module:** `pos_devices`, `offline_pos_queue` (encrypted offline transaction replay)
+8. **Media Module:** `media_assets`, `media_variants` (Cloudflare R2 storage with FFmpeg processing)
+9. **Platform-Ops Module:** `background_jobs`, `domain_events`, `audit_log_entries`, `feature_flags`
+
+### Key Indexes for Tenant-Scoped Queries
+
+All tenant-scoped tables follow the composite index convention `(tenant_id, <lookup_column>)` to enable efficient filtering:
+
+**Tenancy:**
+- `idx_tenants_subdomain` (UNIQUE): Subdomain-based tenant resolution
+- `idx_custom_domains_domain` (UNIQUE): Custom domain-based resolution
+- `idx_custom_domains_tenant_verified` (tenant_id, verified): Active domain lookup
+
+**Identity:**
+- `idx_users_tenant_email` (UNIQUE, tenant_id, email): User authentication
+- `idx_sessions_tenant_token` (tenant_id, session_token): Session validation
+- `idx_sessions_tenant_expires` (tenant_id, expires_at): Cleanup queries (partial index WHERE expires_at < NOW())
+
+**Catalog:**
+- `idx_products_tenant_sku` (UNIQUE, tenant_id, sku): Product lookup
+- `idx_products_tenant_type_status` (tenant_id, type, status): Active product queries
+- `idx_variants_tenant_product` (tenant_id, product_id, status): Variant listing
+
+**Orders:**
+- `idx_orders_tenant_number` (UNIQUE, tenant_id, order_number): Order lookup
+- `idx_orders_tenant_user` (tenant_id, user_id, status): Customer order history
+- `idx_payments_provider_txn` (provider_transaction_id): Webhook idempotency
+
+**Consignment:**
+- `idx_consignment_items_tenant_consignor` (tenant_id, consignor_id, status): Vendor inventory
+- `idx_consignment_items_sold` (tenant_id, status, sold_at): Payout batch generation (partial index WHERE status='sold')
+- `idx_payout_batches_tenant_period` (UNIQUE, tenant_id, consignor_id, period_start, period_end): Duplicate prevention
+
+**Loyalty:**
+- `idx_loyalty_members_unique` (UNIQUE, tenant_id, program_id, user_id): Loyalty enrollment guardrail
+- `idx_loyalty_tx_member` (tenant_id, member_id, created_at DESC): Ledger pagination + balance checks
+- `idx_loyalty_tx_order` (tenant_id, order_id): Order-to-loyalty reconciliation and fraud traces
+- `idx_gift_card_tx_card` (tenant_id, gift_card_id, created_at DESC): Redemption audit with time filtering
+
+**Background Jobs:**
+- `idx_background_jobs_queue_status` (tenant_id, queue, status, run_at): Worker polling
+- `idx_background_jobs_worker` (status, run_at): Distributed job claiming (SKIP LOCKED)
+- `idx_background_jobs_lock_expiry` (locked_until): Stale lock cleanup
+
+### Partitioned Tables
+
+The following tables use PostgreSQL declarative partitioning for performance and retention management:
+
+**sessions** (monthly range partitions):
+- Partition key: `created_at`
+- Strategy: One partition per month (e.g., `sessions_2026_01`, `sessions_2026_02`)
+- Retention: 90 days, old partitions dropped automatically
+- Rationale: High write volume, session data expires quickly
+
+**audit_log_entries** (weekly range partitions):
+- Partition key: `created_at`
+- Strategy: One partition per week (e.g., `audit_2026_w01`, `audit_2026_w02`)
+- Retention: 2 years active, then archival to S3 for 7 years (compliance requirement)
+- Rationale: Compliance logging, high write volume, time-based queries
+
+**offline_pos_queue** (composite tenant + time partitions):
+- Partition key: `(tenant_id, created_at)`
+- Strategy: One partition per tenant per month
+- Retention: 6 months, then dropped (transaction replayed, no need to retain)
+- Rationale: Tenant-scoped sharding preparation, encrypted payload isolation
+
+### RLS Policy Enforcement
+
+Every tenant-scoped table has a corresponding RLS policy enforcing `tenant_id = get_current_tenant_id()`. The helper function `get_current_tenant_id()` reads the PostgreSQL session variable `app.tenant_id`, which is set by `TenantResolutionFilter` at request start and cleared by `TenantContextClearFilter` at response end.
+
+**RLS Policy Template:**
+```sql
+ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
+ALTER TABLE <table_name> FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY <table_name>_isolation_policy ON <table_name>
+    FOR ALL
+    USING (tenant_id = get_current_tenant_id());
+```
+
+**Special Cases:**
+- `tenants` table: Policy is `id = get_current_tenant_id()` (self-referential)
+- Cross-cutting tables (`audit_log_entries`, `background_jobs`, `domain_events`, `feature_flags`): `tenant_id` is nullable for platform-wide operations, RLS policy is `(tenant_id IS NULL OR tenant_id = get_current_tenant_id())`
+
+### Data Type Standards (PostgreSQL 17)
+
+The schema follows these data type conventions for consistency and PostgreSQL 17 compatibility:
+
+- **UUIDs:** All primary keys and foreign keys (`UUID` type, not `VARCHAR(36)`)
+- **Money:** `NUMERIC(19,4)` with HALF_UP rounding (supports micro-currencies, no floating-point errors)
+- **Timestamps:** `TIMESTAMPTZ` (UTC storage, local display via application timezone)
+- **Text:** `VARCHAR(n)` for bounded fields (with explicit limits), `TEXT` for unbounded content
+- **JSON:** `JSONB` for flexible data (indexed via GIN indexes, not plain `JSON`)
+- **IP Addresses:** `INET` type for IP address columns (supports IPv4 and IPv6)
+- **Enumerations:** `VARCHAR(n)` with application-level validation (not PostgreSQL `ENUM` type for schema flexibility)
+
+### Consignment Schema Details
+
+The consignment module entities (`consignors`, `consignment_items`, `payout_batches`, `payout_line_items`) implement the commission tracking and payout logic documented in `docs/consignment/domain.md`. Key relationships:
+
+- `consignment_items.product_id` → `products.id`: Links consigned products to vendors
+- `consignment_items.consignor_id` → `consignors.id`: Tracks item ownership
+- `payout_line_items.order_line_item_id` → `order_line_items.id`: References sold items for payout calculation
+- `payout_batches` unique constraint on `(tenant_id, consignor_id, period_start, period_end)`: Prevents duplicate payouts
+
+**Commission Calculation:**
+```sql
+-- Stored as NUMERIC(19,4) for precision
+commission_amount = item_subtotal × (commission_rate / 100)
+net_payout = item_subtotal - commission_amount
+```
+
+### Loyalty & Gift Card Schema
+
+The loyalty module introduces several new entities beyond the baseline ERD:
+
+**Gift Cards:**
+- `gift_cards` table stores card codes, balances, and expiry dates
+- `gift_card_transactions` ledger tracks all redemptions and refunds
+- Code uniqueness is global (not tenant-scoped) to prevent cross-tenant fraud
+- Current balance updated via row-level locking during redemption (optimistic concurrency control)
+
+**Subscription Plans:**
+- `subscription_plans` defines recurring billing configurations
+- Future integration with Stripe Subscriptions API (per ADR-003)
+- Features JSONB field stores plan entitlements for feature flag gating
+
+### Background Jobs & Domain Events
+
+**Background Jobs (Database-Backed Queue):**
+- Eliminates need for external message broker (Redis/RabbitMQ)
+- Workers poll `WHERE status='pending' AND run_at <= NOW()` with `FOR UPDATE SKIP LOCKED`
+- Queues: `default`, `media`, `payouts`, `emails`, `reports`, `cleanup`
+- Automatic retry with exponential backoff (controlled by `attempts` and `max_attempts`)
+
+**Domain Events (Event Sourcing):**
+- Immutable append-only log of domain events (`OrderPlaced`, `PaymentSucceeded`, etc.)
+- Event replay capability for projections and audit trails
+- Future integration with Kafka/Pulsar for external consumers
+- Indexed by `(tenant_id, aggregate_type, aggregate_id, published_at)` for event stream queries
+
+### Media Assets & Variants
+
+**Media Module:**
+- `media_assets`: Original uploaded files (images, videos, documents)
+- `media_variants`: Processed variants (thumbnails, transcoded videos, previews)
+- Storage via Cloudflare R2 (S3-compatible), keys stored in `storage_key` column
+- Processing via FFmpeg (videos) and Thumbnailator (images) in background jobs
+
+**Variant Strategy:**
+- Images: `thumbnail` (100x100), `small` (400x400), `medium` (800x800), `large` (1600x1600)
+- Videos: Transcoded to 480p, 720p, 1080p with HLS playlists
+- Lazy generation: Variants created on-demand if not exist
+
+### POS Offline Queue
+
+**Offline Transaction Replay:**
+- `offline_pos_queue` stores encrypted transaction payloads from POS devices
+- Partitioned by `(tenant_id, created_at)` for tenant-scoped sharding
+- Payload encrypted at-rest (AES-256-GCM), decryption key per tenant via KMS
+- Sync on network reconnect, conflict resolution via timestamp-based merge
 
 ---
 

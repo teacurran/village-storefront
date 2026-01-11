@@ -1,0 +1,1456 @@
+@startuml domain_erd
+!theme plain
+scale max 1920 width
+
+' Rendering command:
+' docker run --rm -v "$PWD":/work ghcr.io/plantuml/plantuml docs/diagrams/domain_erd.puml -tpng
+' Or with local PlantUML: plantuml docs/diagrams/domain_erd.puml
+
+title Village Storefront - Domain Entity Relationship Diagram (ERD)\n(Authoritative Database Schema - PostgreSQL 17)
+
+note as N1
+  **Schema Design Principles**
+  Version: 1.0 (2026-01-11)
+
+  **References:**
+  - Architecture Overview: docs/architecture_overview.md Section 4
+  - Tenant Isolation: docs/architecture/tenant_isolation.md
+  - ADR-001: Multi-tenancy & tenant isolation strategy
+  - RLS Setup: docs/rls-setup.md
+  - Consignment Domain: docs/consignment/domain.md
+
+  **Tenant Isolation Enforcement:**
+  - Every table includes tenant_id UUID NOT NULL FK → tenants(id)
+  - PostgreSQL RLS policies: FORCE ROW LEVEL SECURITY enabled
+  - Session variable app.tenant_id set by TenantResolutionFilter
+  - Composite indexes: (tenant_id, ...) for all tenant-scoped queries
+
+  **Data Type Standards (PostgreSQL 17):**
+  - UUIDs: All primary keys and foreign keys
+  - Money: NUMERIC(19,4) with HALF_UP rounding
+  - Timestamps: TIMESTAMPTZ (UTC storage, local display)
+  - Flexible data: JSONB for settings, metadata, addresses
+  - Text: VARCHAR with explicit limits, TEXT for unbounded
+
+  **Partitioning Strategy:**
+  - sessions: Partitioned by created_at (monthly ranges)
+  - audit_log_entries: Partitioned by created_at (weekly ranges)
+  - offline_pos_queue: Partitioned by tenant_id + created_at
+
+  **Index Conventions:**
+  - All tenant-scoped queries: (tenant_id, status/sku/email)
+  - Performance-critical lookups: Partial indexes on active records
+  - Unique constraints: Include tenant_id for isolation
+
+  **Soft Delete Pattern:**
+  - Status enum includes 'deleted' for reversible deletes
+  - RLS policies filter deleted records unless explicitly queried
+end note
+
+legend top left
+|= Symbol |= Meaning |
+|**bold**|Primary key|
+|<<FK>>|Foreign key to parent table|
+|<<UNIQUE>>|Unique constraint (tenant-scoped)|
+|<<PARTITIONED>>|Table uses PostgreSQL partitioning|
+|<<RLS>>|Row-Level Security policy enforced|
+endlegend
+
+' ============================================================================
+' TENANCY MODULE - Foundation for all multi-tenant isolation
+' ============================================================================
+package "Tenancy Module" as TenancyModule #FFFFCC {
+  entity "tenants" as tenants <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * subdomain : VARCHAR(63) <<UNIQUE>>
+    * name : VARCHAR(255)
+    * status : VARCHAR(20)
+    settings : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | suspended | deleted
+    **Indexes:**
+    - UNIQUE(subdomain) - subdomain lookup
+    - INDEX(status) - active tenant queries
+    **RLS Policy:** id = get_current_tenant_id()
+  }
+
+  note right of tenants
+    **Core Tenant Entity**
+    - Subdomain: 2-63 chars, RFC 1123 DNS label
+    - Settings JSONB: feature flags, branding config
+    - Status lifecycle: active → suspended → deleted
+    - RLS special case: self-referential policy
+
+    **Critical Indexes:**
+    - idx_tenants_subdomain (UNIQUE)
+    - idx_tenants_status
+  end note
+
+  entity "custom_domains" as custom_domains <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * domain : VARCHAR(253) <<UNIQUE>>
+    verified : BOOLEAN DEFAULT FALSE
+    verification_token : VARCHAR(64)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - UNIQUE(domain) - domain uniqueness
+    - INDEX(tenant_id, verified) - tenant lookups
+  }
+
+  note right of custom_domains
+    **Custom Domain Mapping**
+    - Domain: Full FQDN (max 253 chars per RFC 1035)
+    - Verification: DNS TXT record validation
+    - Multiple custom domains per tenant supported
+
+    **Resolution Priority:**
+    1. Custom domains (verified=true) checked first
+    2. Fallback to subdomain-based resolution
+
+    **Critical Index:**
+    - idx_custom_domains_domain (UNIQUE)
+    - idx_custom_domains_tenant_verified (tenant_id, verified)
+  end note
+
+  tenants ||--o{ custom_domains : "has many"
+}
+
+' ============================================================================
+' IDENTITY MODULE - Authentication, authorization, session management
+' ============================================================================
+package "Identity Module" as IdentityModule #E6F3FF {
+  entity "users" as users <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * email : VARCHAR(255)
+    password_hash : VARCHAR(255)
+    * status : VARCHAR(20)
+    first_name : VARCHAR(100)
+    last_name : VARCHAR(100)
+    phone : VARCHAR(20)
+    metadata : JSONB
+    email_verified : BOOLEAN DEFAULT FALSE
+    last_login_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | suspended | deleted
+    <<UNIQUE (tenant_id, email)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, email) - email uniqueness per tenant
+    - INDEX(tenant_id, status) - active user queries
+    - INDEX(tenant_id, last_login_at) - session analytics
+  }
+
+  note right of users
+    **User Account Management**
+    - Email: Unique per tenant, lowercase normalized
+    - Password: bcrypt hash (cost factor 12)
+    - Metadata JSONB: preferences, profile data
+
+    **Authentication Patterns:**
+    - JWT tokens (stateless, short-lived access + refresh)
+    - Session logging for RISK-001 audit trail
+    - Impersonation tracking (admin → user)
+
+    **Critical Indexes:**
+    - idx_users_tenant_email (UNIQUE, tenant_id, email)
+    - idx_users_tenant_status (tenant_id, status)
+  end note
+
+  entity "roles" as roles <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * name : VARCHAR(100)
+    description : TEXT
+    permissions : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, name)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, name) - role name uniqueness
+    - INDEX(tenant_id) - tenant role queries
+  }
+
+  note right of roles
+    **Role-Based Access Control**
+    - Permissions JSONB: action → resource mapping
+    - Built-in roles: admin, merchant, customer, vendor
+    - Custom roles supported per tenant
+
+    **Permission Structure:**
+    {
+      "catalog.products": ["read", "write"],
+      "orders.manage": ["read"]
+    }
+  end note
+
+  entity "user_roles" as user_roles <<RLS>> {
+    * **tenant_id** : UUID <<PK,FK>>
+    * **user_id** : UUID <<PK,FK>>
+    * **role_id** : UUID <<PK,FK>>
+    --
+    * assigned_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - PK(tenant_id, user_id, role_id)
+    - INDEX(tenant_id, user_id) - user role lookup
+    - INDEX(tenant_id, role_id) - role membership query
+  }
+
+  entity "sessions" as sessions <<RLS>> <<PARTITIONED>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * user_id : UUID <<FK>>
+    * session_token : VARCHAR(255)
+    ip_address : INET
+    user_agent : TEXT
+    impersonated_by : UUID <<FK>>
+    * status : VARCHAR(20)
+    expires_at : TIMESTAMPTZ
+    last_activity_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | expired | revoked
+    **Partitioning:** RANGE on created_at (monthly)
+    **Retention:** 90 days, auto-archival
+    **Indexes:**
+    - INDEX(tenant_id, user_id, status)
+    - INDEX(tenant_id, session_token)
+    - INDEX(tenant_id, expires_at) - cleanup queries
+  }
+
+  note right of sessions
+    **Session Logging & Audit**
+    - All login activity written to database
+    - JWT tokens reference session_id for revocation
+    - Impersonation tracking: admin → customer flows
+
+    **Partitioning Strategy:**
+    - Monthly range partitions: sessions_2026_01, sessions_2026_02
+    - Automatic partition creation via pg_cron
+    - Old partitions dropped after 90 days
+
+    **RISK-001 Mitigation:**
+    - All tenant access logged with IP + user-agent
+    - Impersonation events flagged for security review
+  end note
+
+  entity "api_keys" as api_keys <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    * key_hash : VARCHAR(255)
+    key_prefix : VARCHAR(20)
+    * name : VARCHAR(100)
+    scopes : JSONB
+    expires_at : TIMESTAMPTZ
+    last_used_at : TIMESTAMPTZ
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | revoked
+    **Indexes:**
+    - INDEX(tenant_id, key_prefix) - prefix lookup
+    - INDEX(tenant_id, status) - active key queries
+  }
+
+  note right of api_keys
+    **Server-to-Server Authentication**
+    - Key prefix: First 8 chars visible (e.g., sk_test_abc123...)
+    - Key hash: SHA-256 of full key for validation
+    - Scopes JSONB: API endpoint permissions
+
+    **Security Notes:**
+    - Full key shown only once at creation
+    - Rotation: Create new key, revoke old after migration
+  end note
+
+  tenants ||--o{ users : "has many"
+  tenants ||--o{ roles : "has many"
+  users ||--o{ user_roles : "has many"
+  roles ||--o{ user_roles : "has many"
+  tenants ||--o{ sessions : "has many"
+  users ||--o{ sessions : "has many"
+  users ||--o{ sessions : "impersonates (nullable)"
+  tenants ||--o{ api_keys : "has many"
+  users ||--o{ api_keys : "has many"
+}
+
+' ============================================================================
+' CATALOG MODULE - Products, variants, categories, inventory
+' ============================================================================
+package "Catalog Module" as CatalogModule #E6E6FF {
+  entity "categories" as categories <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    parent_id : UUID <<FK>>
+    * code : VARCHAR(50)
+    * name : VARCHAR(255)
+    slug : VARCHAR(255)
+    description : TEXT
+    display_order : INTEGER
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | deleted
+    <<UNIQUE (tenant_id, code)>>
+    <<UNIQUE (tenant_id, slug)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, code)
+    - UNIQUE(tenant_id, slug)
+    - INDEX(tenant_id, parent_id, display_order)
+  }
+
+  note right of categories
+    **Hierarchical Category Tree**
+    - Self-referential parent_id for nesting
+    - Code: Internal identifier (immutable)
+    - Slug: URL-friendly path (can change)
+
+    **Critical Indexes:**
+    - idx_categories_tenant_code (UNIQUE, tenant_id, code)
+    - idx_categories_tenant_slug (UNIQUE, tenant_id, slug)
+    - idx_categories_tenant_parent (tenant_id, parent_id, display_order)
+  end note
+
+  entity "products" as products <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * sku : VARCHAR(100)
+    * name : VARCHAR(255)
+    slug : VARCHAR(255)
+    description : TEXT
+    * type : VARCHAR(20)
+    * status : VARCHAR(20)
+    metadata : JSONB
+    seo_title : VARCHAR(255)
+    seo_description : TEXT
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Type Values:** physical | digital | service
+    **Status Values:** draft | active | archived | deleted
+    <<UNIQUE (tenant_id, sku)>>
+    <<UNIQUE (tenant_id, slug)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, sku)
+    - UNIQUE(tenant_id, slug)
+    - INDEX(tenant_id, type, status)
+    - GIN(metadata) - JSONB search
+  }
+
+  note right of products
+    **Core Product Entity**
+    - SKU: Stock Keeping Unit (tenant-scoped unique)
+    - Slug: SEO-friendly URL path
+    - Type: Dictates shipping/fulfillment logic
+    - Metadata JSONB: Custom fields, extensions
+
+    **Critical Indexes:**
+    - idx_products_tenant_sku (UNIQUE, tenant_id, sku)
+    - idx_products_tenant_slug (UNIQUE, tenant_id, slug)
+    - idx_products_tenant_type_status (tenant_id, type, status)
+  end note
+
+  entity "product_variants" as product_variants <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * product_id : UUID <<FK>>
+    * sku : VARCHAR(100)
+    * name : VARCHAR(255)
+    attributes : JSONB
+    * price : NUMERIC(19,4)
+    compare_at_price : NUMERIC(19,4)
+    cost : NUMERIC(19,4)
+    weight : NUMERIC(10,2)
+    weight_unit : VARCHAR(10)
+    barcode : VARCHAR(100)
+    * requires_shipping : BOOLEAN
+    * taxable : BOOLEAN
+    * position : INTEGER
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | archived | deleted
+    <<UNIQUE (tenant_id, sku)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, sku)
+    - INDEX(tenant_id, product_id, status)
+    - INDEX(tenant_id, barcode)
+  }
+
+  note right of product_variants
+    **Product Variant Management**
+    - Attributes JSONB: {"size": "L", "color": "red"}
+    - Price: NUMERIC(19,4) for precision (HALF_UP rounding)
+    - Weight: Physical shipping calculations
+    - Barcode: POS + inventory scanning
+
+    **Monetary Precision:**
+    - All currency values: NUMERIC(19,4)
+    - Supports micro-currencies (e.g., crypto)
+    - HALF_UP rounding per Java BigDecimal convention
+
+    **Critical Indexes:**
+    - idx_variants_tenant_sku (UNIQUE, tenant_id, sku)
+    - idx_variants_tenant_product (tenant_id, product_id, status)
+  end note
+
+  entity "product_categories" as product_categories <<RLS>> {
+    * **tenant_id** : UUID <<PK,FK>>
+    * **product_id** : UUID <<PK,FK>>
+    * **category_id** : UUID <<PK,FK>>
+    --
+    display_order : INTEGER
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - PK(tenant_id, product_id, category_id)
+    - INDEX(tenant_id, category_id, display_order)
+  }
+
+  entity "product_images" as product_images <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * product_id : UUID <<FK>>
+    variant_id : UUID <<FK>>
+    * url : VARCHAR(500)
+    * position : INTEGER
+    alt_text : VARCHAR(255)
+    width : INTEGER
+    height : INTEGER
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - INDEX(tenant_id, product_id, position)
+    - INDEX(tenant_id, variant_id, position)
+  }
+
+  entity "inventory_levels" as inventory_levels <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * variant_id : UUID <<FK>>
+    location : VARCHAR(100)
+    * quantity : INTEGER
+    reserved : INTEGER
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, variant_id, location)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, variant_id, location)
+    - INDEX(tenant_id, variant_id) - stock lookups
+  }
+
+  note right of inventory_levels
+    **Inventory Tracking**
+    - Location: Warehouse/store identifier
+    - Quantity: Total on-hand stock
+    - Reserved: Held for pending orders (not available)
+    - Available = quantity - reserved
+
+    **Concurrency Control:**
+    - SELECT FOR UPDATE on inventory updates
+    - Optimistic locking via updated_at checks
+  end note
+
+  tenants ||--o{ categories : "has many"
+  categories ||--o{ categories : "parent-child"
+  tenants ||--o{ products : "has many"
+  products ||--o{ product_variants : "has many"
+  products ||--o{ product_categories : "has many"
+  categories ||--o{ product_categories : "has many"
+  products ||--o{ product_images : "has many"
+  product_variants ||--o{ product_images : "has many"
+  tenants ||--o{ inventory_levels : "has many"
+  product_variants ||--o{ inventory_levels : "has many"
+}
+
+' ============================================================================
+' CART/ORDER/PAYMENT MODULE - Checkout flow, order management, payments
+' ============================================================================
+package "Cart/Order/Payment Module" as OrdersModule #FFE6E6 {
+  entity "carts" as carts <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    session_id : VARCHAR(255)
+    metadata : JSONB
+    * expires_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - INDEX(tenant_id, user_id)
+    - INDEX(tenant_id, session_id)
+    - INDEX(tenant_id, expires_at) - cleanup queries
+  }
+
+  note right of carts
+    **Shopping Cart Management**
+    - User ID: Nullable (guest carts via session_id)
+    - Session ID: Anonymous cart tracking
+    - Expires: 30-day default TTL
+    - Metadata JSONB: Promo codes, notes
+
+    **Cleanup Strategy:**
+    - Scheduled job deletes expired carts
+    - Partial index: WHERE expires_at < NOW()
+  end note
+
+  entity "cart_items" as cart_items <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * cart_id : UUID <<FK>>
+    * variant_id : UUID <<FK>>
+    * quantity : INTEGER
+    * unit_price : NUMERIC(19,4)
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - INDEX(tenant_id, cart_id)
+    - INDEX(tenant_id, variant_id)
+  }
+
+  entity "orders" as orders <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_number : VARCHAR(50)
+    user_id : UUID <<FK>>
+    * status : VARCHAR(20)
+    totals : JSONB
+    shipping_address : JSONB
+    billing_address : JSONB
+    customer_notes : TEXT
+    internal_notes : TEXT
+    * currency : VARCHAR(3)
+    cancelled_at : TIMESTAMPTZ
+    cancellation_reason : TEXT
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** pending | confirmed | processing |
+                       shipped | delivered | cancelled | refunded
+    <<UNIQUE (tenant_id, order_number)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, order_number)
+    - INDEX(tenant_id, user_id, status)
+    - INDEX(tenant_id, created_at DESC) - recent orders
+  }
+
+  note right of orders
+    **Order Management**
+    - Order Number: Human-readable ID (e.g., ORD-2026-00001)
+    - Totals JSONB: {subtotal, tax, shipping, discount, total}
+    - Addresses JSONB: Flexible schema for intl addresses
+    - Currency: ISO 4217 code (USD, EUR, CAD)
+
+    **Status Lifecycle:**
+    pending → confirmed → processing → shipped → delivered
+               ↓
+            cancelled/refunded
+
+    **Critical Indexes:**
+    - idx_orders_tenant_number (UNIQUE, tenant_id, order_number)
+    - idx_orders_tenant_user (tenant_id, user_id, status)
+  end note
+
+  entity "order_line_items" as order_line_items <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_id : UUID <<FK>>
+    * variant_id : UUID <<FK>>
+    * quantity : INTEGER
+    * unit_price : NUMERIC(19,4)
+    totals : JSONB
+    product_snapshot : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - INDEX(tenant_id, order_id)
+    - INDEX(tenant_id, variant_id) - sales reporting
+  }
+
+  note right of order_line_items
+    **Order Line Item Details**
+    - Product Snapshot JSONB: Name, SKU, attrs at order time
+    - Totals JSONB: {subtotal, tax, discount, total}
+    - Immutable after order confirmation
+
+    **Reporting Queries:**
+    - Sales by product: idx_order_line_items_tenant_variant
+    - Consignment payouts: Join to payout_line_items
+  end note
+
+  entity "shipments" as shipments <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_id : UUID <<FK>>
+    carrier : VARCHAR(100)
+    tracking_number : VARCHAR(255)
+    tracking_url : VARCHAR(500)
+    * status : VARCHAR(20)
+    shipped_at : TIMESTAMPTZ
+    estimated_delivery_at : TIMESTAMPTZ
+    delivered_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** pending | in_transit | delivered | failed
+    **Indexes:**
+    - INDEX(tenant_id, order_id)
+    - INDEX(tenant_id, tracking_number)
+  }
+
+  entity "payment_methods" as payment_methods <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    * type : VARCHAR(20)
+    provider_id : VARCHAR(255)
+    last_four : VARCHAR(4)
+    brand : VARCHAR(50)
+    expiry_month : INTEGER
+    expiry_year : INTEGER
+    billing_address : JSONB
+    * is_default : BOOLEAN
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Type Values:** card | bank_account | wallet
+    **Indexes:**
+    - INDEX(tenant_id, user_id, is_default)
+  }
+
+  note right of payment_methods
+    **Stored Payment Methods**
+    - Provider ID: Stripe payment method ID
+    - PCI Compliance: No raw card data stored
+    - Last Four: Display-only, safe to show
+    - Billing Address JSONB: For AVS checks
+  end note
+
+  entity "payments" as payments <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * order_id : UUID <<FK>>
+    payment_method_id : UUID <<FK>>
+    * amount : NUMERIC(19,4)
+    * currency : VARCHAR(3)
+    * status : VARCHAR(20)
+    provider : VARCHAR(50)
+    provider_transaction_id : VARCHAR(255)
+    provider_response : JSONB
+    metadata : JSONB
+    error_message : TEXT
+    processed_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** pending | processing | succeeded |
+                       failed | cancelled
+    **Indexes:**
+    - INDEX(tenant_id, order_id)
+    - INDEX(tenant_id, status, created_at)
+    - INDEX(provider_transaction_id) - webhook lookups
+  }
+
+  note right of payments
+    **Payment Processing**
+    - Provider: stripe | paypal | square
+    - Provider Transaction ID: External payment ID
+    - Provider Response JSONB: Raw webhook payload
+    - Error Message: User-facing failure reason
+
+    **Idempotency:**
+    - Webhook replays: Check provider_transaction_id
+    - Retry logic: Check status before reprocessing
+  end note
+
+  entity "refunds" as refunds <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * payment_id : UUID <<FK>>
+    * amount : NUMERIC(19,4)
+    reason : TEXT
+    * status : VARCHAR(20)
+    provider_refund_id : VARCHAR(255)
+    processed_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** pending | processing | succeeded | failed
+    **Indexes:**
+    - INDEX(tenant_id, payment_id)
+    - INDEX(tenant_id, status, created_at)
+  }
+
+  tenants ||--o{ carts : "has many"
+  users ||--o{ carts : "has many"
+  carts ||--o{ cart_items : "has many"
+  product_variants ||--o{ cart_items : "has many"
+
+  tenants ||--o{ orders : "has many"
+  users ||--o{ orders : "has many"
+  orders ||--o{ order_line_items : "has many"
+  product_variants ||--o{ order_line_items : "has many"
+  orders ||--o{ shipments : "has many"
+
+  tenants ||--o{ payment_methods : "has many"
+  users ||--o{ payment_methods : "has many"
+  tenants ||--o{ payments : "has many"
+  orders ||--o{ payments : "has many"
+  payment_methods ||--o{ payments : "has many"
+  payments ||--o{ refunds : "has many"
+}
+
+' ============================================================================
+' CONSIGNMENT MODULE - Vendor management, commission tracking, payouts
+' ============================================================================
+package "Consignment Module" as ConsignmentModule #D4E6F1 {
+  entity "consignors" as consignors <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * name : VARCHAR(255)
+    contact_info : JSONB
+    payout_settings : JSONB
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | suspended | deleted
+    **Indexes:**
+    - INDEX(tenant_id, status)
+    - INDEX(tenant_id, name) - search queries
+  }
+
+  note right of consignors
+    **Consignment Vendor Entity**
+    - Contact Info JSONB: {email, phone, address}
+    - Payout Settings JSONB: {method, account, tax_info}
+    - TODO: Encrypt payout_settings in production
+
+    **Business Rules:**
+    - Soft delete via status='deleted'
+    - Commission rates defined per item
+  end note
+
+  entity "consignment_items" as consignment_items <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * product_id : UUID <<FK>>
+    * consignor_id : UUID <<FK>>
+    * commission_rate : NUMERIC(5,2)
+    * status : VARCHAR(20)
+    sold_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | sold | returned | deleted
+    **Indexes:**
+    - INDEX(tenant_id, consignor_id, status)
+    - INDEX(tenant_id, product_id)
+    - INDEX(tenant_id, status, sold_at) - payout queries
+  }
+
+  note right of consignment_items
+    **Consignment Item Tracking**
+    - Commission Rate: 0.00-100.00 (percentage)
+    - Sold At: Timestamp when status → sold
+    - Status lifecycle: active → sold → (payout batch)
+
+    **Payout Logic:**
+    - commission_amount = subtotal × (rate / 100)
+    - net_payout = subtotal - commission_amount
+
+    **Relationships & Indexes:**
+    - FK product_id → products.id, consignor_id → consignors.id
+    - idx_consignment_items_tenant_consignor (tenant_id, consignor_id, status)
+    - idx_consignment_items_sold (tenant_id, status, sold_at)
+      WHERE status = 'sold' AND sold_at IS NOT NULL
+  end note
+
+  entity "payout_batches" as payout_batches <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * consignor_id : UUID <<FK>>
+    * period_start : DATE
+    * period_end : DATE
+    * total_amount : NUMERIC(19,4)
+    * currency : VARCHAR(3)
+    * status : VARCHAR(20)
+    processed_at : TIMESTAMPTZ
+    payment_reference : VARCHAR(255)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** pending | processing | completed | failed
+    <<UNIQUE (tenant_id, consignor_id, period_start, period_end)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, consignor_id, period_start, period_end)
+    - INDEX(tenant_id, status, created_at) - pending payouts
+  }
+
+  note right of payout_batches
+    **Payout Batch Aggregation**
+    - Period: Inclusive date range (start/end)
+    - Payment Reference: Stripe Connect payout ID
+    - Status lifecycle: pending → processing → completed
+
+    **Unique Constraint:**
+    - One batch per consignor per period
+    - Prevents duplicate payouts
+
+    **Integration:**
+    - Stripe Connect payouts via ADR-003 saga
+    - Background job processes pending batches
+  end note
+
+  entity "payout_line_items" as payout_line_items <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * batch_id : UUID <<FK>>
+    * order_line_item_id : UUID <<FK>>
+    * item_subtotal : NUMERIC(19,4)
+    * commission_amount : NUMERIC(19,4)
+    * net_payout : NUMERIC(19,4)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - INDEX(tenant_id, batch_id)
+    - INDEX(tenant_id, order_line_item_id)
+  }
+
+  note right of payout_line_items
+    **Payout Line Item Details**
+    - Item Subtotal: Sold price before commission
+    - Commission Amount: Store's cut (subtotal × rate)
+    - Net Payout: Amount paid to consignor
+
+    **Calculation Notes:**
+    - All NUMERIC(19,4) for precision
+    - HALF_UP rounding per Java BigDecimal
+    - net_payout = item_subtotal - commission_amount
+  end note
+
+  tenants ||--o{ consignors : "has many"
+  tenants ||--o{ consignment_items : "has many"
+  products ||--o{ consignment_items : "has many"
+  consignors ||--o{ consignment_items : "has many"
+  tenants ||--o{ payout_batches : "has many"
+  consignors ||--o{ payout_batches : "has many"
+  payout_batches ||--o{ payout_line_items : "has many"
+  order_line_items ||--o{ payout_line_items : "has many"
+}
+
+' ============================================================================
+' LOYALTY MODULE - Loyalty programs, gift cards, store credit
+' ============================================================================
+package "Loyalty Module" as LoyaltyModule #D5F4E6 {
+  entity "loyalty_programs" as loyalty_programs <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * code : VARCHAR(50)
+    * name : VARCHAR(255)
+    description : TEXT
+    rules : JSONB
+    * active : BOOLEAN
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, code)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, code)
+    - INDEX(tenant_id, active)
+  }
+
+  note right of loyalty_programs
+    **Loyalty Program Configuration**
+    - Rules JSONB: {earn_rate, redeem_rate, tiers, expiry}
+    - Active: Feature toggle per tenant
+
+    **Example Rules:**
+    {
+      "earn_rate": 1,  // 1 point per $1 spent
+      "redeem_rate": 0.01,  // $0.01 per point
+      "tiers": ["bronze", "silver", "gold"],
+      "expiry_days": 365
+    }
+  end note
+
+  entity "loyalty_members" as loyalty_members <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * program_id : UUID <<FK>>
+    * user_id : UUID <<FK>>
+    * points_balance : INTEGER
+    tier : VARCHAR(50)
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, program_id, user_id)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, program_id, user_id)
+    - INDEX(tenant_id, points_balance) - leaderboards
+  }
+
+  entity "loyalty_transactions" as loyalty_transactions <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * member_id : UUID <<FK>>
+    order_id : UUID <<FK>>
+    * points_delta : INTEGER
+    * transaction_type : VARCHAR(50)
+    description : TEXT
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Type Values:** earned | redeemed | adjusted | expired
+    **Indexes:**
+    - INDEX(tenant_id, member_id, created_at DESC)
+    - INDEX(tenant_id, order_id)
+  }
+
+  note right of loyalty_transactions
+    **Loyalty Transaction Ledger**
+    - Points Delta: +/- integer (positive=earn, negative=redeem)
+    - Transaction Type: Event classification
+    - Order ID: Nullable (manual adjustments)
+
+    **Relationships & Indexes:**
+    - FK member_id → loyalty_members.id, order_id → orders.id
+    - idx_loyalty_tx_member (tenant_id, member_id, created_at DESC) for ledger queries
+    - idx_loyalty_tx_order (tenant_id, order_id) linking to fulfillment
+
+    **Audit Trail:**
+    - Immutable ledger (no updates/deletes)
+    - Points balance: SUM(points_delta) per member
+  end note
+
+  entity "gift_cards" as gift_cards <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * code : VARCHAR(50)
+    * initial_balance : NUMERIC(19,4)
+    * current_balance : NUMERIC(19,4)
+    * currency : VARCHAR(3)
+    issued_to_user_id : UUID <<FK>>
+    * status : VARCHAR(20)
+    expires_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | redeemed | expired | cancelled
+    <<UNIQUE (code)>>
+    **Indexes:**
+    - UNIQUE(code) - code lookup (global unique)
+    - INDEX(tenant_id, status)
+    - INDEX(tenant_id, issued_to_user_id)
+  }
+
+  note right of gift_cards
+    **Gift Card Management**
+    - Code: Random 16-char alphanumeric (e.g., GIFT-ABCD-1234-WXYZ)
+    - Initial Balance: Original value at issuance
+    - Current Balance: Remaining value after redemptions
+    - Expires At: Optional expiry date (NULL = never expires)
+
+    **Redemption Flow:**
+    1. Validate code + tenant + status=active
+    2. Check current_balance >= order_total
+    3. Deduct from current_balance
+    4. Create gift_card_transaction record
+
+    **Status Lifecycle:**
+    active → redeemed (when current_balance=0)
+    active → expired (when expires_at < NOW())
+    active → cancelled (manual admin action)
+  end note
+
+  entity "gift_card_transactions" as gift_card_transactions <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * gift_card_id : UUID <<FK>>
+    order_id : UUID <<FK>>
+    * amount : NUMERIC(19,4)
+    * transaction_type : VARCHAR(50)
+    * balance_after : NUMERIC(19,4)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Type Values:** issue | redeem | refund | adjust
+    **Indexes:**
+    - INDEX(tenant_id, gift_card_id, created_at DESC)
+    - INDEX(tenant_id, order_id)
+  }
+
+  note right of gift_card_transactions
+    **Gift Card Transaction Ledger**
+    - Amount: +/- change (negative for redemptions)
+    - Transaction Type: Event classification
+    - Balance After: Snapshot for audit trail
+
+    **Concurrency Control:**
+    - Row-level locking on gift_cards during redemption
+    - Optimistic locking via gift_cards.updated_at
+  end note
+
+  entity "subscription_plans" as subscription_plans <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * code : VARCHAR(50)
+    * name : VARCHAR(255)
+    description : TEXT
+    * price : NUMERIC(19,4)
+    * currency : VARCHAR(3)
+    * billing_interval : VARCHAR(20)
+    trial_period_days : INTEGER
+    features : JSONB
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Billing Interval:** daily | weekly | monthly | yearly
+    **Status Values:** active | archived | deleted
+    <<UNIQUE (tenant_id, code)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, code)
+    - INDEX(tenant_id, status)
+  }
+
+  note right of subscription_plans
+    **Subscription Plan Definition**
+    - Billing Interval: Recurring charge frequency
+    - Trial Period Days: Free trial before first charge
+    - Features JSONB: Plan-specific entitlements
+
+    **Future Integration:**
+    - Stripe Subscriptions API (ADR-003)
+    - Metered billing for usage-based plans
+  end note
+
+  tenants ||--o{ loyalty_programs : "has many"
+  tenants ||--o{ loyalty_members : "has many"
+  loyalty_programs ||--o{ loyalty_members : "has many"
+  users ||--o{ loyalty_members : "has many"
+  tenants ||--o{ loyalty_transactions : "has many"
+  loyalty_members ||--o{ loyalty_transactions : "has many"
+  orders ||--o{ loyalty_transactions : "has many"
+  tenants ||--o{ gift_cards : "has many"
+  users ||--o{ gift_cards : "has many (nullable)"
+  tenants ||--o{ gift_card_transactions : "has many"
+  gift_cards ||--o{ gift_card_transactions : "has many"
+  orders ||--o{ gift_card_transactions : "has many"
+  tenants ||--o{ subscription_plans : "has many"
+}
+
+' ============================================================================
+' POS MODULE - Point-of-sale devices, offline queue, sync
+' ============================================================================
+package "POS Module" as POSModule #FAE5D3 {
+  entity "pos_devices" as pos_devices <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * device_id : VARCHAR(100)
+    * name : VARCHAR(255)
+    location : VARCHAR(100)
+    * status : VARCHAR(20)
+    last_sync_at : TIMESTAMPTZ
+    metadata : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** active | offline | suspended | deleted
+    <<UNIQUE (tenant_id, device_id)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, device_id)
+    - INDEX(tenant_id, status, last_sync_at)
+  }
+
+  note right of pos_devices
+    **POS Device Registration**
+    - Device ID: Hardware identifier (MAC, serial)
+    - Location: Physical store location
+    - Last Sync At: Timestamp of last sync attempt
+    - Metadata JSONB: Device config, capabilities
+
+    **Offline Support:**
+    - Devices queue transactions locally
+    - Sync on network reconnect
+    - Conflict resolution: timestamp-based
+  end note
+
+  entity "offline_pos_queue" as offline_pos_queue <<RLS>> <<PARTITIONED>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * device_id : UUID <<FK>>
+    * payload : JSONB
+    * payload_type : VARCHAR(50)
+    * status : VARCHAR(20)
+    encrypted : BOOLEAN
+    attempts : INTEGER
+    last_error : TEXT
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Payload Type:** order | payment | inventory_adjustment
+    **Status Values:** pending | processing | synced | failed
+    **Partitioning:** RANGE on (tenant_id, created_at) monthly
+    **Indexes:**
+    - INDEX(tenant_id, device_id, status, created_at)
+    - INDEX(tenant_id, status, created_at) - sync queries
+  }
+
+  note right of offline_pos_queue
+    **Offline Transaction Queue**
+    - Payload JSONB: Encrypted order/payment data
+    - Encrypted: Flag for sensitive data
+    - Attempts: Retry counter for sync failures
+
+    **Partitioning Strategy:**
+    - Combined tenant_id + created_at range partitions
+    - Automatic partition creation per tenant per month
+    - Old partitions dropped after 6 months
+
+    **Security:**
+    - Payload encrypted at-rest (AES-256-GCM)
+    - Decryption key per tenant (KMS integration)
+  end note
+
+  tenants ||--o{ pos_devices : "has many"
+  tenants ||--o{ offline_pos_queue : "has many"
+  pos_devices ||--o{ offline_pos_queue : "has many"
+}
+
+' ============================================================================
+' MEDIA MODULE - Asset management, variants, processing
+' ============================================================================
+package "Media Module" as MediaModule #E8DAEF {
+  entity "media_assets" as media_assets <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * asset_type : VARCHAR(20)
+    * filename : VARCHAR(255)
+    * mime_type : VARCHAR(100)
+    * file_size : BIGINT
+    * storage_key : VARCHAR(500)
+    * storage_bucket : VARCHAR(100)
+    alt_text : VARCHAR(255)
+    metadata : JSONB
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Asset Type:** image | video | document | archive
+    **Status Values:** pending | processing | ready | failed | deleted
+    **Indexes:**
+    - INDEX(tenant_id, asset_type, status)
+    - INDEX(tenant_id, created_at DESC) - recent uploads
+    - GIN(metadata) - JSONB search
+  }
+
+  note right of media_assets
+    **Media Asset Management**
+    - Storage Key: S3/R2 object key
+    - Storage Bucket: Cloudflare R2 bucket name
+    - File Size: Bytes (for quota tracking)
+    - Metadata JSONB: {width, height, duration, exif}
+
+    **Asset Processing:**
+    - Images: Thumbnailator → variants (thumb, medium, large)
+    - Videos: FFmpeg → transcoding (HLS, MP4)
+    - Documents: PDF text extraction, preview generation
+
+    **Storage:**
+    - Cloudflare R2 (S3-compatible)
+    - Signed URLs for presigned upload/download
+    - CDN distribution for customer-facing assets
+  end note
+
+  entity "media_variants" as media_variants <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * asset_id : UUID <<FK>>
+    * variant_name : VARCHAR(50)
+    * storage_key : VARCHAR(500)
+    * mime_type : VARCHAR(100)
+    * file_size : BIGINT
+    width : INTEGER
+    height : INTEGER
+    * status : VARCHAR(20)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Variant Name:** thumbnail | small | medium | large | original
+    **Status Values:** pending | processing | ready | failed
+    **Indexes:**
+    - INDEX(tenant_id, asset_id, variant_name)
+    - INDEX(tenant_id, status)
+  }
+
+  note right of media_variants
+    **Media Variant Processing**
+    - Variant Name: Size/format identifier
+    - Width/Height: Pixel dimensions (images/videos)
+    - Storage Key: Separate S3 object per variant
+
+    **Variant Strategy:**
+    - Images: 100x100, 400x400, 800x800, 1600x1600
+    - Videos: 480p, 720p, 1080p transcodes
+    - Lazy generation: Create on-demand if not exists
+  end note
+
+  tenants ||--o{ media_assets : "has many"
+  tenants ||--o{ media_variants : "has many"
+  media_assets ||--o{ media_variants : "has many"
+}
+
+' ============================================================================
+' PLATFORM-OPS MODULE - Background jobs, domain events, audit logs, feature flags
+' ============================================================================
+package "Platform-Ops Module" as PlatformOpsModule #FADBD8 {
+  entity "background_jobs" as background_jobs <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * queue : VARCHAR(100)
+    * handler_class : VARCHAR(255)
+    payload : JSONB
+    * status : VARCHAR(20)
+    attempts : INTEGER
+    max_attempts : INTEGER
+    last_error : TEXT
+    run_at : TIMESTAMPTZ
+    locked_until : TIMESTAMPTZ
+    locked_by : VARCHAR(255)
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    **Status Values:** pending | locked | processing |
+                       completed | failed
+    **Indexes:**
+    - INDEX(tenant_id, queue, status, run_at)
+    - INDEX(status, run_at) - worker polling
+    - INDEX(locked_until) - lock expiration cleanup
+  }
+
+  note right of background_jobs
+    **Background Job Queue (Database-Backed)**
+    - Queue: Logical queue name (default, media, payouts, emails)
+    - Handler Class: Full Java class name for job processor
+    - Payload JSONB: Job parameters (tenant_id, entity_id, etc.)
+    - Run At: Scheduled execution time (NULL = immediate)
+    - Locked Until: Optimistic locking for distributed workers
+    - Locked By: Worker ID that claimed the job
+
+    **Tenant Isolation & Indexes:**
+    - tenant_id enforces per-tenant queue isolation when shared DB used
+    - idx_background_jobs_queue_status (tenant_id, queue, status, run_at)
+    - idx_background_jobs_worker (status, run_at) keeps cross-tenant workers efficient
+    - idx_background_jobs_lock_expiry (locked_until) clears stale locks
+
+    **Job Processing:**
+    - Workers poll: WHERE status='pending' AND run_at <= NOW()
+    - Acquire lock: UPDATE ... SET locked_until = NOW() + interval
+    - Execute handler: Reflect.invoke(handlerClass, payload)
+    - Update status: completed | failed (with retry logic)
+
+    **Queues:**
+    - default: General-purpose jobs
+    - media: Image/video processing (FFmpeg)
+    - payouts: Consignment payout batch processing
+    - emails: Transactional email delivery
+    - reports: Scheduled report generation
+    - cleanup: Data archival, cache warming
+
+    **No External Broker:**
+    - PostgreSQL-backed queue eliminates Redis/RabbitMQ dependency
+    - SKIP LOCKED for concurrent worker polling
+    - Automatic retry with exponential backoff
+  end note
+
+  entity "domain_events" as domain_events <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * event_type : VARCHAR(100)
+    * aggregate_type : VARCHAR(100)
+    * aggregate_id : UUID
+    * payload : JSONB
+    * published_at : TIMESTAMPTZ
+    * created_at : TIMESTAMPTZ
+    --
+    **Indexes:**
+    - INDEX(tenant_id, aggregate_type, aggregate_id, published_at)
+    - INDEX(tenant_id, event_type, published_at)
+    - INDEX(published_at DESC) - event replay
+  }
+
+  note right of domain_events
+    **Domain Event Sourcing**
+    - Event Type: OrderPlaced, PaymentProcessed, etc.
+    - Aggregate Type: Order, Payment, Product
+    - Aggregate ID: Entity UUID
+    - Payload JSONB: Event data snapshot
+    - Published At: Event timestamp (immutable)
+
+    **Event Sourcing Patterns:**
+    - Immutable append-only log
+    - Event replay for projections
+    - Audit trail for debugging
+
+    **Example Events:**
+    - OrderPlaced, OrderConfirmed, OrderShipped
+    - PaymentSucceeded, PaymentFailed
+    - ConsignmentItemSold, PayoutBatchCreated
+
+    **Future Integration:**
+    - Kafka/Pulsar publishing for external consumers
+    - Event-driven microservices decomposition
+  end note
+
+  entity "audit_log_entries" as audit_log_entries <<RLS>> <<PARTITIONED>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    user_id : UUID <<FK>>
+    * action : VARCHAR(100)
+    entity_type : VARCHAR(100)
+    entity_id : UUID
+    changes : JSONB
+    ip_address : INET
+    user_agent : TEXT
+    * created_at : TIMESTAMPTZ
+    --
+    **Partitioning:** RANGE on created_at (weekly)
+    **Retention:** 2 years, auto-archival to S3
+    **Indexes:**
+    - INDEX(tenant_id, user_id, created_at DESC)
+    - INDEX(tenant_id, entity_type, entity_id, created_at DESC)
+    - INDEX(tenant_id, action, created_at DESC)
+  }
+
+  note right of audit_log_entries
+    **Audit Logging & Compliance**
+    - Action: CRUD operation (create, update, delete, read)
+    - Entity Type: Table/model name
+    - Entity ID: Record UUID
+    - Changes JSONB: {before: {...}, after: {...}}
+    - IP Address: Client IP (for security forensics)
+    - User Agent: Browser/API client identifier
+
+    **RISK-001 Mitigation:**
+    - All tenant access logged with IP + user-agent
+    - Impersonation events flagged for security review
+    - Failed authentication attempts tracked
+
+    **Partitioning Strategy:**
+    - Weekly range partitions: audit_2026_w01, audit_2026_w02
+    - Automatic partition creation via pg_cron
+    - Old partitions exported to S3 after 2 years
+
+    **Compliance:**
+    - GDPR right to erasure: Redact user data in changes JSONB
+    - Retention policy: 2 years active, 7 years archive
+  end note
+
+  entity "feature_flags" as feature_flags <<RLS>> {
+    * **id** : UUID <<PK>>
+    --
+    * tenant_id : UUID <<FK>>
+    * flag_key : VARCHAR(100)
+    * enabled : BOOLEAN
+    config : JSONB
+    * created_at : TIMESTAMPTZ
+    * updated_at : TIMESTAMPTZ
+    --
+    <<UNIQUE (tenant_id, flag_key)>>
+    **Indexes:**
+    - UNIQUE(tenant_id, flag_key)
+    - INDEX(enabled) - active flag queries
+  }
+
+  note right of feature_flags
+    **Feature Flag Management**
+    - Flag Key: Dotted identifier (e.g., catalog.import.enabled)
+    - Enabled: Boolean toggle (per tenant)
+    - Config JSONB: Rollout percentage, targeting rules
+
+    **Kill Switch Pattern:**
+    - Disable features without code deployment
+    - Rollout: 0% → 10% → 50% → 100% users
+    - A/B testing: Split traffic by user segment
+
+    **Caffeine Caching:**
+    - Flags cached in-memory per tenant
+    - Cache invalidation on flag update (CDI event)
+    - Fallback to database if cache miss
+
+    **Example Flags:**
+    - tenant.media.video_processing (enable FFmpeg jobs)
+    - catalog.import.batch_size (config: {size: 1000})
+    - checkout.stripe.enabled (payment provider toggle)
+  end note
+
+  tenants ||--o{ background_jobs : "has many (nullable)"
+  tenants ||--o{ domain_events : "has many (nullable)"
+  tenants ||--o{ audit_log_entries : "has many (nullable)"
+  users ||--o{ audit_log_entries : "has many (nullable)"
+  tenants ||--o{ feature_flags : "has many (nullable)"
+}
+
+@enduml
