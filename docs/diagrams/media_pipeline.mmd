@@ -1,0 +1,254 @@
+%% Comprehensive Media Processing Pipeline - Job Lifecycle Diagram
+%% Task: I2.T6
+%% References: docs/architecture/background_jobs.md, docs/diagrams/media-flow.mmd
+%%
+%% This diagram shows the complete DelayedJob lifecycle for media processing,
+%% including job enqueue, worker polling, FFmpeg isolation, retry strategies,
+%% failure handling, and dead letter queue routing.
+
+sequenceDiagram
+    actor Client
+    participant API as MediaResource<br/>(API Service)
+    participant JobSvc as MediaJobService<br/>(Queue Facade)
+    participant Queue as media_processing_jobs<br/>(PostgreSQL Table)
+    participant Worker as Background Worker Pod<br/>(@Scheduled Polling)
+    participant Handler as MediaProcessingJobHandler<br/>(Business Logic)
+    participant FFmpeg as FFmpeg Container<br/>(Subprocess)
+    participant Storage as MediaStorageClient<br/>(R2 Integration)
+    participant R2 as Cloudflare R2<br/>(Object Storage)
+    participant DB as PostgreSQL<br/>(MediaAsset, Derivatives)
+    participant DLQ as DeadLetterQueue<br/>(Failed Jobs)
+
+    %% ==================== PHASE 1: Job Enqueue ====================
+    Note over Client,Queue: Phase 1: Job Enqueue (Transactional)
+
+    Client->>+API: POST /media/{assetId}/complete
+    Note right of Client: Client completed direct upload<br/>to R2 via presigned URL
+
+    API->>DB: UPDATE media_assets<br/>SET status='pending', updated_at=NOW()<br/>WHERE id={assetId} AND tenant_id={current}
+    Note right of DB: Tenant isolation enforced via RLS<br/>(get_current_tenant_id())
+
+    API->>+JobSvc: enqueue(MediaProcessingPayload, priority)
+    Note right of JobSvc: Payload version: 1<br/>Priority: DEFAULT (images), LOW (video)
+
+    JobSvc->>JobSvc: Serialize payload to JSONB<br/>Tag with version=1
+    JobSvc->>Queue: INSERT INTO media_processing_jobs<br/>(tenant_id, job_type, priority, payload,<br/> payload_version, run_at, status, max_attempts)
+    Note right of Queue: Status: pending<br/>run_at: NOW()<br/>max_attempts: 3 (DEFAULT priority)
+
+    Queue-->>JobSvc: Job ID returned
+    JobSvc->>JobSvc: Emit metric: media.job.enqueued{priority, tenant}
+    JobSvc-->>-API: Job enqueued successfully
+
+    API-->>-Client: HTTP 202 Accepted<br/>{jobId, status: "pending"}
+
+    %% ==================== PHASE 2: Worker Polling ====================
+    Note over Worker,Queue: Phase 2: Worker Polling (Every 3s)
+
+    loop Every {media.processing.dispatch-interval}
+        Worker->>+Queue: SELECT ... FOR UPDATE SKIP LOCKED<br/>WHERE status='pending' AND run_at<=NOW()<br/>ORDER BY priority ASC, run_at ASC<br/>LIMIT 10
+        Note right of Queue: Index: idx_media_jobs_worker_claim<br/>SKIP LOCKED prevents worker contention
+
+        alt Jobs available
+            Queue-->>Worker: List<MediaProcessingJob> (batch of 10)
+            Worker->>Queue: UPDATE ... SET status='locked',<br/>locked_by={workerPodName},<br/>locked_until=NOW()+5min
+            Queue-->>-Worker: Lock acquired
+        else Queue empty
+            Queue-->>-Worker: Empty result set
+            Note right of Worker: Sleep until next poll interval
+        end
+    end
+
+    %% ==================== PHASE 3: Job Execution ====================
+    Note over Worker,DB: Phase 3: Job Execution (TenantContext Seeding)
+
+    Worker->>Worker: CRITICAL: TenantContext.setCurrentTenantId(job.tenantId)
+    Note right of Worker: Mandatory for tenant isolation<br/>(see tenant_isolation.md §3)
+
+    Worker->>DB: SELECT set_current_tenant_id({tenantId})
+    Note right of DB: Sets PostgreSQL session variable<br/>app.tenant_id for RLS enforcement
+
+    Worker->>Queue: UPDATE ... SET status='processing', started_at=NOW()
+
+    Worker->>+Handler: execute(payload)
+    Note right of Handler: Validate payload version before processing
+
+    Handler->>Handler: Check payload.version == SUPPORTED_VERSION (1)
+    alt Version mismatch
+        Handler-->>Worker: PayloadVersionMismatchException
+        Note right of Handler: Severity: SEV-1<br/>Logged for manual investigation
+        Worker->>DLQ: Move to dead_letter_queue<br/>(no retry for schema errors)
+    else Version valid
+        Handler->>Handler: Deserialize payload.data → MediaProcessingPayload
+    end
+
+    %% ==================== PHASE 4: Media Download ====================
+    Note over Handler,R2: Phase 4: Download Original from R2
+
+    Handler->>+Storage: downloadMedia(storageKey)
+    Note right of Storage: storageKey format:<br/>{tenantId}/media/{assetType}/{assetId}/original/{filename}
+
+    Storage->>+R2: GET {storageKey}<br/>Authorization: R2 Access Key
+    R2->>R2: Validate tenant prefix isolation
+    R2-->>Storage: Binary stream (image/video bytes)
+    Storage->>-Storage: Write to temp file: /tmp/media-{jobId}-original
+
+    Storage-->>-Handler: Path to temp file
+
+    %% ==================== PHASE 5: Processing Fork ====================
+    Note over Handler,FFmpeg: Phase 5: Processing (Image vs Video)
+
+    alt Content-Type: image/*
+        Handler->>Handler: processImage(sourceFile, derivativeTypes)
+        Note right of Handler: Thumbnailator library<br/>Derivatives: thumbnail(150px), small(400px),<br/>medium(800px), large(1600px)<br/>Quality: 0.85 JPEG, bicubic interpolation
+
+        loop For each derivative type
+            Handler->>Handler: Resize image to target dimension
+            Handler->>+Storage: uploadDerivative(derivativeKey, stream, metadata)
+            Storage->>R2: PUT {derivativeKey}<br/>Content-Type, Content-Length
+            R2-->>Storage: 200 OK
+            Storage-->>-Handler: Derivative uploaded
+
+            Handler->>DB: INSERT INTO media_derivatives<br/>(asset_id, derivative_type, width, height,<br/> size_bytes, storage_key, tenant_id)
+        end
+
+    else Content-Type: video/*
+        Handler->>Handler: Check feature flag: media.processing.enabled
+        alt Flag disabled (kill switch)
+            Handler-->>Worker: ProcessingDisabledException
+            Note right of Handler: Kill switch activated<br/>Job requeued, not failed
+        else Flag enabled
+            Handler->>Handler: Acquire FFmpeg semaphore<br/>(max concurrent: 2 per worker)
+
+            Handler->>+FFmpeg: Spawn subprocess with timeout<br/>ffmpeg -i {input} -c:v libx264 -preset medium<br/>-hls_time 6 -hls_playlist_type vod {output.m3u8}
+            Note right of FFmpeg: Resource limits (K8s):<br/>CPU: 2000m, Memory: 4Gi<br/>Timeout: 300s (5 minutes)
+
+            FFmpeg->>FFmpeg: Transcode to H.264 + AAC<br/>Generate HLS playlists (720p, 480p, 360p)<br/>Segment duration: 6s
+
+            alt FFmpeg success
+                FFmpeg-->>Handler: Exit code 0, output files ready
+                Handler->>Handler: Release FFmpeg semaphore
+
+                loop For each HLS variant + playlist
+                    Handler->>+Storage: uploadDerivative(variantKey, stream, metadata)
+                    Storage->>R2: PUT {variantKey}
+                    R2-->>Storage: 200 OK
+                    Storage-->>-Handler: Variant uploaded
+
+                    Handler->>DB: INSERT INTO media_derivatives<br/>(asset_id, derivative_type, storage_key, ...)
+                end
+
+            else FFmpeg timeout
+                FFmpeg--xHandler: TimeoutException (>300s)
+                Handler->>FFmpeg: Process.destroyForcibly()
+                Handler->>Handler: Release FFmpeg semaphore
+                Handler-->>Worker: ProcessingException (retryable)
+
+            else FFmpeg failure
+                FFmpeg--xHandler: Exit code != 0
+                Handler->>Handler: Release FFmpeg semaphore
+                Handler-->>Worker: ProcessingException (retryable)
+            end
+        end
+    end
+
+    %% ==================== PHASE 6: Finalization ====================
+    Note over Handler,DB: Phase 6: Finalization & Cleanup
+
+    Handler->>DB: UPDATE media_assets<br/>SET status='ready', processed_at=NOW()<br/>WHERE id={assetId}
+
+    Handler->>DB: UPDATE media_quotas<br/>SET used_bytes = used_bytes + {totalSize}<br/>WHERE tenant_id={current}
+    Note right of DB: Track original + derivatives size<br/>for quota enforcement
+
+    Handler->>Handler: Delete temp files: /tmp/media-{jobId}-*
+    Handler-->>-Worker: Processing complete
+
+    Worker->>Queue: UPDATE ... SET status='completed',<br/>completed_at=NOW()
+
+    Worker->>Worker: Emit metrics:<br/>media.job.completed{priority, tenant}<br/>media.job.duration{priority, duration}
+
+    Worker->>DB: SELECT set_config('app.tenant_id', '', FALSE)
+    Worker->>Worker: TenantContext.clear()
+    Note right of Worker: CRITICAL: Prevent context leak<br/>to next job on same thread
+
+    %% ==================== PHASE 7: Retry Flow ====================
+    Note over Worker,Queue: Error Scenario: Retryable Failure
+
+    alt Handler throws ProcessingException
+        Worker->>Worker: Increment job.attempts
+        Worker->>Worker: Calculate backoff delay<br/>Exponential: 1s * 2^(attempts-1)<br/>Max delay: 5 minutes
+
+        alt attempts < max_attempts (3)
+            Worker->>Queue: UPDATE ... SET status='pending',<br/>run_at=NOW()+{backoffDelay},<br/>attempts=attempts+1,<br/>last_error={exceptionMessage}
+
+            Worker->>Worker: Emit metric: media.job.retried{priority, attempt}
+            Note right of Worker: Job will be retried on next poll<br/>after backoff delay
+
+        else attempts >= max_attempts
+            Worker->>Queue: UPDATE ... SET status='dead'
+            Worker->>+DLQ: INSERT INTO dead_letter_queue<br/>(queue_name, job_type, priority,<br/> original_job_id, payload, attempts,<br/> last_error, stack_trace, tenant_id,<br/> owning_module='media.processing')
+
+            DLQ-->>-Worker: DLQ entry created
+
+            Worker->>Worker: Emit metrics:<br/>media.job.exhausted{priority, tenant}<br/>media.dlq.added{priority, tenant}
+
+            Note right of Worker: Alert: DLQ depth > 10 → P2<br/>Requires manual investigation
+        end
+
+        Worker->>DB: SELECT set_config('app.tenant_id', '', FALSE)
+        Worker->>Worker: TenantContext.clear()
+    end
+
+    %% ==================== PHASE 8: Signed URL Delivery ====================
+    Note over Client,R2: Phase 7: Download URL (On-Demand)
+
+    Client->>+API: GET /media/{assetId}/download?derivative=medium
+
+    API->>DB: SELECT ma.*, md.storage_key<br/>FROM media_assets ma<br/>JOIN media_derivatives md ON md.asset_id=ma.id<br/>WHERE ma.id={assetId}<br/>AND ma.tenant_id={current}<br/>AND md.derivative_type='medium'
+
+    alt Asset ready
+        API->>+Storage: getSignedDownloadUrl(storageKey, expiryHours=24)
+        Storage->>R2: Generate presigned GET URL<br/>Expiry: 24 hours
+        R2-->>Storage: Signed URL
+        Storage-->>-API: {url, expiresAt}
+
+        API->>DB: INSERT INTO media_access_logs<br/>(asset_id, user_id, ip_address, derivative_type)
+        Note right of DB: Audit trail for digital product downloads
+
+        API-->>-Client: {url, expiresAt, remainingAttempts}
+
+    else Asset not ready (status=pending/processing)
+        API-->>Client: HTTP 202 Accepted<br/>{status: "processing", retryAfter: 30}
+
+    else Asset failed
+        API-->>Client: HTTP 500 Internal Server Error<br/>{error: "Processing failed", supportTicketId}
+    end
+
+    %% ==================== PHASE 9: Monitoring & Alerting ====================
+    Note over Worker,Queue: Operational Monitoring (Prometheus)
+
+    Worker->>Worker: Continuous metric emission:<br/>- media.queue.depth{priority, tenant}<br/>- media.job.duration{priority, percentile}<br/>- media.job.failed{priority, tenant, attempt}<br/>- media.dlq.depth
+
+    Note over Worker,Queue: Alert Rules (from job_runbook.md):<br/>- Queue depth > 1000 (5m) → P2<br/>- Failure rate > 5% (10m) → P2<br/>- DLQ depth > 10 → P2<br/>- p95 duration > 60s → P2
+
+    %% ==================== PHASE 10: HPA Scaling ====================
+    Note over Worker,Queue: Auto-Scaling (HPA)
+
+    opt Queue depth exceeds threshold
+        Note over Worker,Queue: HPA Configuration:<br/>- Metric: media_processing_queue_depth<br/>- Target: 100 jobs/pod<br/>- Min replicas: 2, Max replicas: 10<br/>- Scale-up: 50% every 60s<br/>- Scale-down: 1 pod every 60s (5m stabilization)
+
+        Worker->>Worker: Kubernetes HPA scales replicas:<br/>target_replicas = ceil(queue_depth / 100)
+        Note right of Worker: More workers poll queue concurrently,<br/>increasing throughput
+    end
+
+    %% ==================== PHASE 11: Circuit Breaker ====================
+    Note over Handler,R2: Circuit Breaker (External Service Failures)
+
+    opt R2 failure rate exceeds 50%
+        Handler->>Handler: Circuit breaker state: OPEN
+        Note right of Handler: Fail-fast for 30s without calling R2<br/>Prevents cascading failures
+
+        Handler-->>Worker: CircuitBreakerOpenException (retryable)
+        Worker->>Queue: Schedule retry with backoff
+
+        Note over Handler,R2: After 30s wait duration:<br/>- State: HALF_OPEN<br/>- Allow test request<br/>- If success → CLOSED<br/>- If failure → OPEN (retry wait)
+    end

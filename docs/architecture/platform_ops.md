@@ -1,0 +1,1025 @@
+# Platform Operations Architecture
+
+<!-- anchor: platform-ops-blueprint -->
+
+**Status:** Authoritative
+**Last Updated:** 2026-01-11
+**Owner:** Platform Operations Team
+
+## Document Purpose
+
+This document provides operational procedures, infrastructure configurations, and monitoring strategies for managing the Village Storefront platform in production. It covers background job worker scaling, queue tuning, incident response playbooks, and observability dashboards.
+
+**Intended Audience:** DevOps engineers managing Kubernetes infrastructure, SREs responding to production incidents, platform operations team configuring monitoring and alerting.
+
+---
+
+## Table of Contents
+
+1. [Overview & Operational Philosophy](#overview--operational-philosophy)
+2. [Worker Pod Management](#worker-pod-management)
+3. [Queue Tuning & Capacity Planning](#queue-tuning--capacity-planning)
+4. [Monitoring Dashboards](#monitoring-dashboards)
+5. [Alert Response Playbooks](#alert-response-playbooks)
+6. [Manual Intervention Procedures](#manual-intervention-procedures)
+7. [Incident Response Workflows](#incident-response-workflows)
+8. [References & Related Documents](#references--related-documents)
+
+---
+
+<!-- anchor: overview-operational-philosophy -->
+
+## 1. Overview & Operational Philosophy
+
+### Operational Principles
+
+Village Storefront's platform operations follow these core tenets:
+
+1. **Observable by Default:** All critical paths emit structured metrics and logs
+2. **Self-Healing Infrastructure:** HPAs, health checks, and circuit breakers minimize manual intervention
+3. **Graceful Degradation:** Feature flags enable selective service disablement under load
+4. **Tenant Isolation:** Operational changes scoped to single tenants when possible
+5. **Runbook-Driven:** All alerts link to specific remediation procedures
+
+### Infrastructure Components
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        k3s Cluster                               │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
+│  │  API Pods        │  │  Worker Pods     │  │  Admin SPA   │  │
+│  │  (Quarkus)       │  │  (Background)    │  │  (Vue/Vite)  │  │
+│  │  Replicas: 3-10  │  │  Replicas: 2-10  │  │  Static      │  │
+│  └──────────────────┘  └──────────────────┘  └──────────────┘  │
+│            │                     │                     │         │
+│            └─────────────────────┴─────────────────────┘         │
+│                              ↓                                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              PostgreSQL 17 (RDS/Managed)                  │  │
+│  │  - Primary + read replica                                 │  │
+│  │  - Partition tables: sessions, audit_log, pos_queue       │  │
+│  │  - Connection pool: max 100 per pod                       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              ↓                                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              Cloudflare R2 (Object Storage)               │  │
+│  │  - Media assets, derivatives, report exports              │  │
+│  │  - Tenant-scoped prefixes for isolation                   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                    Observability Stack                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │ Prometheus   │  │ Grafana      │  │ Elasticsearch/Loki   │  │
+│  │ (Metrics)    │  │ (Dashboards) │  │ (Logs)               │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│            │                 │                     │             │
+│            └─────────────────┴─────────────────────┘             │
+│                              ↓                                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              PagerDuty (Incident Management)              │  │
+│  │  - Alert routing, escalation policies, on-call rotation  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Deployment Topology
+
+| Component | Deployment Type | Min Replicas | Max Replicas | HPA Metric |
+|-----------|----------------|--------------|--------------|------------|
+| API Pods | Deployment | 3 | 10 | CPU (70%), request rate |
+| Worker Pods | Deployment | 2 | 10 | Queue depth (100 jobs/pod) |
+| Admin SPA | Static (CDN) | N/A | N/A | N/A |
+| PostgreSQL | Managed Service | 1 (primary) | 1 + replicas | Manual scaling |
+| R2 Storage | Managed Service | N/A | N/A | Auto-scaling |
+
+---
+
+<!-- anchor: worker-pod-management -->
+
+## 2. Worker Pod Management
+
+### Worker Deployment Configuration
+
+**Base Configuration:** `k8s/base/deployment-workers.yaml`
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-workers
+  namespace: storefront
+  labels:
+    app: village-storefront
+    component: worker
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: village-storefront
+        component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/q/metrics"
+    spec:
+      containers:
+      - name: worker
+        image: villagecompute/storefront:latest
+        imagePullPolicy: Always
+
+        env:
+        - name: WORKER_MODE
+          value: "true"
+        - name: QUARKUS_SCHEDULER_ENABLED
+          value: "true"
+        - name: WORKER_POLL_INTERVAL_MS
+          value: "3000"
+        - name: JAVA_OPTS
+          value: "-Xmx3g -Xms2g -XX:MaxRAMPercentage=75.0"
+
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+```
+
+### Horizontal Pod Autoscaler (HPA)
+
+**HPA Configuration:** `k8s/base/hpa-workers.yaml`
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: village-storefront-workers
+  namespace: storefront
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: village-storefront-workers
+
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+  # Primary metric: Queue depth
+  - type: Pods
+    pods:
+      metric:
+        name: media_processing_queue_depth
+      target:
+        type: AverageValue
+        averageValue: "100"
+
+  # Secondary metric: CPU utilization
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+```
+
+**HPA Tuning Guide:**
+
+| Parameter | Default | Tuning Guidance |
+|-----------|---------|-----------------|
+| `minReplicas` | 2 | Set to minimum viable capacity for off-peak hours |
+| `maxReplicas` | 10 | Set to cluster capacity limit minus API pod headroom |
+| `averageValue` (queue depth) | 100 | Lower = more responsive, higher = better resource efficiency |
+| `stabilizationWindowSeconds` (up) | 60s | Shorter = faster scale-up, longer = prevent thrashing |
+| `stabilizationWindowSeconds` (down) | 300s | Longer = prevent premature scale-down during spikes |
+
+### Worker Health Checks
+
+**Liveness Probe:** Ensures worker pod is not deadlocked or crashed
+- **Endpoint:** `/q/health/live`
+- **Failure Action:** Restart pod
+- **Use Case:** Detect JVM crashes, thread exhaustion
+
+**Readiness Probe:** Ensures worker can accept jobs
+- **Endpoint:** `/q/health/ready`
+- **Failure Action:** Remove from service mesh (no new jobs routed)
+- **Use Case:** Database connectivity issues, startup delays
+
+**Custom Health Check (Future Implementation):**
+
+```java
+@ApplicationScoped
+@Liveness
+public class WorkerHealthCheck implements HealthCheck {
+
+    @Inject
+    EntityManager entityManager;
+
+    @Override
+    public HealthCheckResponse call() {
+        try {
+            // Verify database connectivity
+            entityManager.createNativeQuery("SELECT 1").getSingleResult();
+
+            // Verify no deadlock on job queue
+            // (add specific checks as needed)
+
+            return HealthCheckResponse.up("worker");
+        } catch (Exception e) {
+            return HealthCheckResponse.down("worker", Map.of("error", e.getMessage()));
+        }
+    }
+}
+```
+
+### Graceful Shutdown
+
+Workers finish in-flight jobs before terminating:
+
+```java
+@ApplicationScoped
+public class WorkerLifecycleManager {
+
+    @Inject
+    @ConfigProperty(name = "worker.shutdown.timeout", defaultValue = "60")
+    int shutdownTimeoutSeconds;
+
+    void onStop(@Observes ShutdownEvent event) {
+        LOGGER.info("Shutdown signal received, draining jobs...");
+
+        // Stop accepting new jobs
+        schedulerService.pauseAll();
+
+        // Wait for in-flight jobs to complete (up to timeout)
+        boolean completed = jobExecutor.awaitTermination(
+            shutdownTimeoutSeconds,
+            TimeUnit.SECONDS
+        );
+
+        if (!completed) {
+            LOGGER.warning("Shutdown timeout exceeded, forcing termination");
+            jobExecutor.shutdownNow();
+        }
+
+        LOGGER.info("Worker shutdown complete");
+    }
+}
+```
+
+**Kubernetes Configuration:**
+- `terminationGracePeriodSeconds: 60` allows 60s for graceful shutdown
+- SIGTERM sent to pod → worker stops polling → jobs finish → SIGKILL after 60s
+
+---
+
+<!-- anchor: queue-tuning-capacity-planning -->
+
+## 3. Queue Tuning & Capacity Planning
+
+### Queue Capacity Configuration
+
+**Application Properties:** `application.properties`
+
+```properties
+# Queue capacity limits (per priority per queue)
+jobs.queue.capacity.critical=100
+jobs.queue.capacity.high=500
+jobs.queue.capacity.default=1000
+jobs.queue.capacity.low=5000
+jobs.queue.capacity.bulk=20000
+
+# Worker polling configuration
+media.processing.dispatch-interval=3s
+media.processing.worker.batch-size=10
+media.processing.worker.timeout=300s
+
+payouts.batch.dispatch-interval=5s
+payouts.batch.worker.batch-size=5
+
+reports.export.dispatch-interval=10s
+reports.export.worker.batch-size=3
+
+# FFmpeg isolation
+media.ffmpeg.max-concurrent=2
+media.ffmpeg.cpu-limit=2000m
+media.ffmpeg.memory-limit=4Gi
+media.ffmpeg.timeout=300
+
+# Retry policies (see background_jobs.md §6)
+jobs.retry.critical.max-attempts=5
+jobs.retry.high.max-attempts=3
+jobs.retry.default.max-attempts=3
+jobs.retry.low.max-attempts=3
+jobs.retry.bulk.max-attempts=0
+```
+
+### Capacity Planning Formulas
+
+**Worker Replica Calculation:**
+
+```
+target_replicas = ceil(queue_depth / jobs_per_worker_per_minute / target_latency_minutes)
+```
+
+**Example (DEFAULT queue):**
+- Queue depth: 3000 jobs
+- Worker throughput: 10 jobs/minute (varies by job complexity)
+- Target latency: 30s (0.5 minutes)
+- **Calculation:** `ceil(3000 / 10 / 0.5) = 600 replicas`
+
+**Interpretation:** If calculated replicas exceed `maxReplicas`, the queue is overloaded:
+1. Investigate spike source (media upload burst, scheduled report generation)
+2. Consider increasing worker capacity temporarily
+3. Review job efficiency (optimize handlers, reduce processing time)
+
+**Queue Depth Thresholds:**
+
+| Priority | Healthy | Warning | Critical | Overflow |
+|----------|---------|---------|----------|----------|
+| CRITICAL | < 50 | 50-100 | > 100 (alert) | > 100 (reject) |
+| HIGH | < 200 | 200-500 | > 500 (alert) | > 500 (reject) |
+| DEFAULT | < 500 | 500-1000 | > 1000 (alert) | > 1000 (reject) |
+| LOW | < 2000 | 2000-5000 | > 5000 (alert) | > 5000 (reject) |
+| BULK | < 10000 | 10000-20000 | > 20000 (alert) | > 20000 (reject) |
+
+**Overflow Behavior:** When queue depth exceeds capacity, new job enqueue requests receive HTTP 503 Service Unavailable.
+
+### Performance Benchmarks
+
+**Job Processing Throughput (per worker pod):**
+
+| Queue Type | Job Type | Avg Duration | Jobs/Minute | Notes |
+|------------|----------|--------------|-------------|-------|
+| media.processing | Image resize | 2s | 30 | Lightweight (Thumbnailator) |
+| media.processing | Video transcode | 90s | 0.67 | Heavy (FFmpeg, max 2 concurrent) |
+| payouts.batch | Payout calculation | 5s | 12 | Database-intensive |
+| reports.export | CSV export | 8s | 7.5 | I/O-heavy |
+| emails.transactional | Send email | 0.5s | 120 | External API call |
+
+**Database Connection Pool Tuning:**
+
+```properties
+# Connection pool per worker pod
+quarkus.datasource.jdbc.max-size=20
+quarkus.datasource.jdbc.min-size=5
+quarkus.datasource.jdbc.acquisition-timeout=10s
+```
+
+**Rule of Thumb:** `total_connections = (API_pods * 20) + (worker_pods * 20) < PostgreSQL max_connections`
+
+---
+
+<!-- anchor: monitoring-dashboards -->
+
+## 4. Monitoring Dashboards
+
+### Grafana Dashboard: Background Job Health
+
+**Dashboard ID:** `/d/background-jobs`
+**Refresh Interval:** 30s
+**Data Source:** Prometheus
+
+#### Panel 1: Queue Depth by Priority (Stacked Area Chart)
+
+**Query:**
+```promql
+sum by (priority) (media_processing_queue_depth)
+```
+
+**Visualization:** Stacked area chart
+**Y-Axis:** Job count
+**Thresholds:**
+- Green: 0-500
+- Yellow: 500-1000
+- Red: > 1000
+
+#### Panel 2: Job Throughput (Success/Failed Rate)
+
+**Query:**
+```promql
+# Success rate
+sum(rate(media_processing_job_completed_total[5m]))
+
+# Failure rate
+sum(rate(media_processing_job_failed_total[5m]))
+```
+
+**Visualization:** Time series graph
+**Legend:** Success (green), Failures (red)
+
+#### Panel 3: Dead Letter Queue Depth
+
+**Query:**
+```promql
+sum by (queue) (dead_letter_queue_depth)
+```
+
+**Visualization:** Bar gauge
+**Alert Threshold:** > 10
+
+#### Panel 4: Job Duration Percentiles
+
+**Query:**
+```promql
+histogram_quantile(0.50, sum(rate(media_processing_job_duration_seconds_bucket[5m])) by (le, priority))
+histogram_quantile(0.95, sum(rate(media_processing_job_duration_seconds_bucket[5m])) by (le, priority))
+histogram_quantile(0.99, sum(rate(media_processing_job_duration_seconds_bucket[5m])) by (le, priority))
+```
+
+**Visualization:** Multi-line time series
+**Legend:** p50, p95, p99 by priority
+**Reference Lines:** SLA targets from background_jobs.md §3
+
+#### Panel 5: Retry Attempt Distribution (Heatmap)
+
+**Query:**
+```promql
+sum by (attempt) (rate(media_processing_job_retried_total[5m]))
+```
+
+**Visualization:** Heatmap
+**X-Axis:** Time
+**Y-Axis:** Attempt number (1-5)
+**Color Scale:** Job count (darker = more retries)
+
+#### Panel 6: Worker Pod Resource Usage
+
+**Query:**
+```promql
+# CPU usage
+sum(rate(container_cpu_usage_seconds_total{pod=~"village-storefront-workers.*"}[5m])) by (pod)
+
+# Memory usage
+sum(container_memory_working_set_bytes{pod=~"village-storefront-workers.*"}) by (pod)
+```
+
+**Visualization:** Time series + stat panel
+**Thresholds:** CPU > 1.5 cores (75% of 2 core limit), Memory > 3Gi (75% of 4Gi limit)
+
+#### Panel 7: FFmpeg Active Processes (Future)
+
+**Query:**
+```promql
+media_processing_ffmpeg_active_processes
+```
+
+**Visualization:** Gauge
+**Max Value:** 2 (per worker)
+**Alert:** If metric missing, FFmpeg monitoring not implemented
+
+### Grafana Dashboard: Media Pipeline
+
+**Dashboard ID:** `/d/media-pipeline`
+**Refresh Interval:** 30s
+
+#### Panel 1: Upload → Ready Funnel
+
+**Queries:**
+```promql
+# Uploads started
+sum(increase(media_upload_negotiated_total[5m]))
+
+# Processing started
+sum(increase(media_processing_job_started_total[5m]))
+
+# Assets ready
+sum(increase(media_asset_ready_total[5m]))
+```
+
+**Visualization:** Funnel chart
+**Conversion Tracking:** Upload negotiation → Job enqueue → Processing → Ready
+
+#### Panel 2: Processing Time by Content Type
+
+**Query:**
+```promql
+histogram_quantile(0.95, sum(rate(media_processing_job_duration_seconds_bucket[5m])) by (le, content_type))
+```
+
+**Visualization:** Time series
+**Legend:** Image (blue), Video (orange)
+
+#### Panel 3: Derivative Generation Success Rate
+
+**Query:**
+```promql
+sum(rate(media_derivative_created_total[5m])) by (derivative_type)
+/
+sum(rate(media_derivative_attempted_total[5m])) by (derivative_type)
+* 100
+```
+
+**Visualization:** Stat panel
+**Target:** > 99% success rate per derivative type
+
+#### Panel 4: R2 Bandwidth
+
+**Query (requires custom metric):**
+```promql
+sum(rate(media_storage_upload_bytes_total[5m])) + sum(rate(media_storage_download_bytes_total[5m]))
+```
+
+**Visualization:** Gauge
+**Unit:** Mbps
+**Alert:** > 500 Mbps sustained (R2 egress cost consideration)
+
+---
+
+<!-- anchor: alert-response-playbooks -->
+
+## 5. Alert Response Playbooks
+
+### Alert Severity Levels
+
+| Level | Response Time | Escalation | Examples |
+|-------|--------------|------------|----------|
+| P1 (Critical) | < 15 minutes | Immediate page on-call | Queue overflow, DLQ accumulation, service down |
+| P2 (Warning) | < 1 hour | Slack notification | High failure rate, SLA breach, resource exhaustion |
+| P3 (Info) | Next business day | Email digest | Non-critical metric drift, configuration warnings |
+
+### Playbook: CRITICAL Queue Backlog (P1)
+
+**Alert Name:** `CriticalQueueBacklog`
+**Trigger:** `media_processing_queue_depth{priority="critical"} > 100` for 2 minutes
+
+**Response Steps:**
+
+1. **Verify Alert Legitimacy:**
+   ```bash
+   # Check current queue depth
+   curl -s http://prometheus:9090/api/v1/query \
+     --data-urlencode 'query=media_processing_queue_depth{priority="critical"}' | jq
+   ```
+
+2. **Check Worker Health:**
+   ```bash
+   kubectl get pods -l component=worker -n storefront
+   kubectl top pods -l component=worker -n storefront
+   ```
+
+3. **Scale Workers Immediately:**
+   ```bash
+   kubectl scale deployment/village-storefront-workers --replicas=10 -n storefront
+   ```
+
+4. **Investigate Spike Source:**
+   ```bash
+   # Check job enqueue rate
+   kubectl logs -l component=worker --tail=500 -n storefront | grep "Job enqueued"
+
+   # Check for tenant-specific spike
+   kubectl logs -l app=village-storefront --tail=500 -n storefront | \
+     grep "tenantId" | jq -r '.tenantId' | sort | uniq -c | sort -rn
+   ```
+
+5. **If External Service Failure (e.g., Stripe API down):**
+   ```bash
+   # Enable circuit breaker via feature flag
+   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -d '{"flag": "stripe.webhook.processing.enabled", "enabled": false}' \
+     https://api.villagecompute.com/admin/feature-flags
+   ```
+
+6. **Post-Incident:**
+   - Document root cause in incident report
+   - Update capacity planning if structural (not transient spike)
+   - Review HPA configuration for faster scale-up
+
+### Playbook: Dead Letter Queue Accumulation (P1)
+
+**Alert Name:** `DLQAccumulating`
+**Trigger:** `rate(dead_letter_queue_added_total[5m]) > 0.1` for 5 minutes
+
+**Response Steps:**
+
+1. **Identify Failure Pattern:**
+   ```bash
+   # Group DLQ entries by error type
+   kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+     "SELECT substring(last_error, 1, 100) AS error_prefix, COUNT(*) \
+      FROM dead_letter_queue \
+      WHERE resolved_at IS NULL \
+      GROUP BY error_prefix \
+      ORDER BY COUNT(*) DESC \
+      LIMIT 10;"
+   ```
+
+2. **Check for Tenant-Specific Issue:**
+   ```bash
+   kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+     "SELECT tenant_id, COUNT(*) \
+      FROM dead_letter_queue \
+      WHERE resolved_at IS NULL \
+      GROUP BY tenant_id \
+      ORDER BY COUNT(*) DESC \
+      LIMIT 5;"
+   ```
+
+3. **Categorize Root Cause:**
+   - **Data Error:** Fix tenant data, replay jobs manually
+   - **Code Bug:** Deploy hotfix, replay jobs after fix
+   - **External Service Outage:** Wait for recovery, enable circuit breaker
+   - **Configuration Issue:** Update ConfigMap, restart workers
+
+4. **Manual Job Replay (after fix):**
+   ```bash
+   # Export DLQ jobs to JSON
+   kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+     "COPY (SELECT * FROM dead_letter_queue WHERE resolved_at IS NULL) \
+      TO STDOUT WITH CSV HEADER" > dlq_export.csv
+
+   # Re-enqueue via admin API (future implementation)
+   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -d @dlq_export.json \
+     https://api.villagecompute.com/admin/jobs/replay-batch
+   ```
+
+### Playbook: High Job Failure Rate (P2)
+
+**Alert Name:** `HighJobFailureRate`
+**Trigger:** Failure rate > 5% for 10 minutes
+
+**Response Steps:**
+
+1. **Calculate Failure Rate:**
+   ```promql
+   rate(media_processing_job_failed_total[5m]) / rate(media_processing_job_started_total[5m]) * 100
+   ```
+
+2. **Sample Failed Job Logs:**
+   ```bash
+   kubectl logs -l component=worker --tail=1000 -n storefront | grep "Job failed"
+   ```
+
+3. **Check Retry Success Rate:**
+   ```promql
+   sum(rate(media_processing_job_completed_total{retry="true"}[5m]))
+   ```
+
+4. **If Transient Errors (network timeouts, DB connection pool exhaustion):**
+   - Monitor retry backoff (jobs should eventually succeed)
+   - No immediate action required if retries recovering
+
+5. **If Persistent Errors:**
+   - Correlate with recent deployments (rollback if regression)
+   - Check external service status pages (Stripe, R2)
+   - Investigate code path in failed job type
+
+### Playbook: Worker Pod OOMKilled (P2)
+
+**Alert Name:** `WorkerPodOOMKilled`
+**Trigger:** Pod restart with reason `OOMKilled`
+
+**Response Steps:**
+
+1. **Verify OOM Event:**
+   ```bash
+   kubectl describe pod <worker-pod-name> -n storefront | grep -A 10 "Last State"
+   ```
+
+2. **Check Memory Usage Trend:**
+   ```promql
+   max_over_time(container_memory_working_set_bytes{pod=~"village-storefront-workers.*"}[1h])
+   ```
+
+3. **Identify Memory Leak Candidate:**
+   - FFmpeg subprocess not cleaned up (check `media.ffmpeg.max-concurrent`)
+   - Temp file accumulation (check `/tmp` disk usage)
+   - ThreadLocal leak (TenantContext not cleared)
+
+4. **Immediate Mitigation:**
+   ```bash
+   # Increase memory limits temporarily
+   kubectl set resources deployment/village-storefront-workers \
+     --limits=memory=6Gi -n storefront
+   ```
+
+5. **Long-Term Fix:**
+   - Profile heap dump (enable JMX, dump via `jmap`)
+   - Review FFmpeg cleanup logic in `MediaProcessingJobHandler`
+   - Audit `TenantContext.clear()` in all worker loops
+
+---
+
+<!-- anchor: manual-intervention-procedures -->
+
+## 6. Manual Intervention Procedures
+
+### Pausing Queue Processing
+
+**Scenario:** Maintenance window, external service outage, runaway job investigation
+
+**Procedure:**
+
+1. **Scale Workers to 0:**
+   ```bash
+   kubectl scale deployment/village-storefront-workers --replicas=0 -n storefront
+   ```
+
+2. **Verify Queue Processing Stopped:**
+   ```promql
+   rate(media_processing_job_started_total[1m]) == 0
+   ```
+
+3. **Perform Maintenance:**
+   - Database schema migration
+   - External service cutover
+   - Code hotfix deployment
+
+4. **Resume Workers:**
+   ```bash
+   kubectl scale deployment/village-storefront-workers --replicas=3 -n storefront
+   ```
+
+5. **Monitor Queue Drain Rate:**
+   ```promql
+   rate(media_processing_job_completed_total[5m])
+   ```
+
+### Clearing Dead Letter Queue
+
+**Scenario:** After investigation and manual fixes, clear DLQ of resolved jobs
+
+**Procedure:**
+
+1. **Backup DLQ Contents:**
+   ```bash
+   kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+     "COPY (SELECT * FROM dead_letter_queue WHERE resolved_at IS NULL) \
+      TO STDOUT WITH CSV HEADER" > dlq_backup_$(date +%Y%m%d_%H%M%S).csv
+   ```
+
+2. **Mark Jobs as Resolved:**
+   ```bash
+   kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+     "UPDATE dead_letter_queue \
+      SET resolved_at = NOW(), resolution_notes = 'Bulk resolved after incident XYZ' \
+      WHERE resolved_at IS NULL AND queue_name = 'media.processing';"
+   ```
+
+3. **Verify DLQ Cleared:**
+   ```promql
+   dead_letter_queue_depth{queue="media.processing"} == 0
+   ```
+
+### Emergency Kill Switch Activation
+
+**Scenario:** Critical bug in job handler causing data corruption or cascading failures
+
+**Procedure:**
+
+1. **Disable Job Processing via Feature Flag:**
+   ```bash
+   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"flag": "media.processing.enabled", "enabled": false, "reason": "Emergency stop - incident #123"}' \
+     https://api.villagecompute.com/admin/feature-flags
+   ```
+
+2. **Verify Jobs Skipped (Not Failed):**
+   ```bash
+   kubectl logs -l component=worker --tail=200 -n storefront | grep "Kill switch activated"
+   ```
+
+3. **Jobs Remain in Queue (Not Moved to DLQ):**
+   - Status stays `pending`, will retry when flag re-enabled
+
+4. **Deploy Hotfix:**
+   ```bash
+   kubectl set image deployment/village-storefront-workers \
+     worker=villagecompute/storefront:hotfix-v1.2.3 -n storefront
+   ```
+
+5. **Re-Enable Processing:**
+   ```bash
+   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"flag": "media.processing.enabled", "enabled": true}' \
+     https://api.villagecompute.com/admin/feature-flags
+   ```
+
+### Manual Job Re-Enqueue
+
+**Scenario:** Jobs lost due to database corruption or operator error
+
+**Procedure:**
+
+1. **Export Job Payload from Backup:**
+   ```bash
+   # Restore from database backup to staging environment
+   kubectl exec -it postgres-staging -- psql -U storefront -d storefront -c \
+     "SELECT id, tenant_id, job_type, payload \
+      FROM media_processing_jobs \
+      WHERE created_at BETWEEN '2026-01-11 10:00:00' AND '2026-01-11 11:00:00';" \
+     > jobs_to_replay.csv
+   ```
+
+2. **Re-Enqueue via Admin Script (Future API):**
+   ```bash
+   cat jobs_to_replay.csv | while IFS=, read id tenant_id job_type payload; do
+     curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+       -H "Content-Type: application/json" \
+       -d "{\"tenantId\": \"$tenant_id\", \"jobType\": \"$job_type\", \"payload\": $payload}" \
+       https://api.villagecompute.com/admin/jobs/enqueue
+   done
+   ```
+
+3. **Verify Re-Enqueued Jobs Processed:**
+   ```promql
+   increase(media_processing_job_completed_total[10m])
+   ```
+
+---
+
+<!-- anchor: incident-response-workflows -->
+
+## 7. Incident Response Workflows
+
+### Incident Severity Classification
+
+| Severity | Impact | Response Time | Example |
+|----------|--------|---------------|---------|
+| SEV-1 | Platform-wide outage or data loss | Immediate (page) | Queue overflow blocking all uploads |
+| SEV-2 | Single tenant affected or degraded performance | < 1 hour | DLQ accumulation for specific tenant |
+| SEV-3 | Minor degradation or cosmetic issue | Next business day | Non-critical metric drift |
+
+### Incident Response Checklist
+
+**During Incident:**
+
+1. **Create Incident Channel:**
+   ```
+   Slack: #incident-2026-01-11-queue-overflow
+   ```
+
+2. **Acknowledge Alert in PagerDuty:**
+   - Claim ownership
+   - Update status to "Acknowledged"
+
+3. **Execute Relevant Playbook:**
+   - Follow steps in Section 5 based on alert type
+
+4. **Communicate Status:**
+   ```
+   # Slack channel updates
+   [10:05] Incident confirmed: CRITICAL queue backlog, scaling workers to 10
+   [10:08] Workers scaled, queue draining at 200 jobs/minute
+   [10:15] Queue depth below threshold, monitoring for 10 minutes
+   [10:25] Incident resolved, root cause: scheduled report spike
+   ```
+
+5. **Update Status Page:**
+   ```
+   https://status.villagecompute.com
+   - Mark affected components (Background Jobs)
+   - Post updates every 15 minutes
+   - Resolve when confirmed stable
+   ```
+
+**Post-Incident:**
+
+1. **Document Root Cause:**
+   ```markdown
+   # Incident Report: Queue Overflow 2026-01-11
+
+   ## Summary
+   CRITICAL queue backlog triggered by scheduled report generation spike.
+
+   ## Timeline
+   - 10:00 - Alert triggered
+   - 10:05 - On-call engineer acknowledged
+   - 10:08 - Workers scaled from 3 to 10
+   - 10:25 - Queue drained, incident resolved
+
+   ## Root Cause
+   Monthly report generation for 500 tenants scheduled simultaneously at 10:00 UTC.
+
+   ## Resolution
+   - Immediate: Manual worker scaling
+   - Long-term: Stagger report generation across 1-hour window
+
+   ## Action Items
+   - [ ] Update report scheduling logic (JIRA-123)
+   - [ ] Increase HPA maxReplicas to 15 (JIRA-124)
+   - [ ] Add alert for scheduled task spikes (JIRA-125)
+   ```
+
+2. **Update Runbooks:**
+   - Add learnings to relevant playbook sections
+   - Document new failure modes discovered
+
+3. **Review Monitoring Gaps:**
+   - Were there missing metrics that would have helped?
+   - Should alert thresholds be adjusted?
+
+### Escalation Paths
+
+| Role | Responsibility | Contact |
+|------|---------------|---------|
+| On-Call Engineer | First responder, execute playbooks | PagerDuty rotation |
+| Engineering Manager | Coordinate multi-team response | Slack @eng-manager |
+| Database Admin | Database-specific issues (schema, replication) | Slack @dba-team |
+| Infrastructure Lead | Kubernetes cluster issues (node failures, networking) | Slack @infra-lead |
+| CTO | SEV-1 incidents affecting revenue or data loss | Escalation after 30 minutes |
+
+---
+
+<!-- anchor: references-related-documents -->
+
+## 8. References & Related Documents
+
+### Architecture Documents
+
+- **[Background Jobs Architecture](./background_jobs.md)** (authoritative async processing specification)
+- **[Operational Architecture](./04_Operational_Architecture.md)** (Section 3.6: Background Processing)
+- **[Tenant Isolation](./tenant_isolation.md)** (Section 3: TenantContext Management)
+
+### Diagrams
+
+- **[Media Pipeline Flow](../diagrams/media_pipeline.mmd)** (comprehensive job lifecycle diagram)
+- **[POS Offline Sync](../diagrams/pos-offline.mmd)** (offline queue replay workflow)
+
+### Operations Runbooks
+
+- **[Job Operations Runbook](../operations/job_runbook.md)** (detailed operational procedures)
+- **[Incident Response](../operations/incident_response.md)** (generic incident management)
+
+### Monitoring & Alerting
+
+- **Grafana Dashboards:**
+  - Background Job Health: `https://grafana.villagecompute.com/d/background-jobs`
+  - Media Pipeline: `https://grafana.villagecompute.com/d/media-pipeline`
+- **Prometheus Alert Rules:** `k8s/base/prometheus-rules.yaml`
+- **PagerDuty Escalation Policies:** `https://villagecompute.pagerduty.com/escalation_policies`
+
+### Kubernetes Manifests
+
+- **Worker Deployment:** `k8s/base/deployment-workers.yaml`
+- **HPA Configuration:** `k8s/base/hpa-workers.yaml`
+- **ConfigMap:** `k8s/base/configmap-storefront.yaml`
+- **Service:** `k8s/base/service-workers.yaml` (metrics endpoint)
+
+### Standards & Compliance
+
+- **[Java Project Standards](../java-project-standards.adoc)** (Section 8: Background Job Conventions)
+- **GDPR Compliance:** Tenant-scoped log aggregation for data deletion support
+
+---
+
+**Document Maintainers:** Platform Operations Team
+**Review Cadence:** Monthly or after each SEV-1/SEV-2 incident
+**Next Review:** 2026-02-11
