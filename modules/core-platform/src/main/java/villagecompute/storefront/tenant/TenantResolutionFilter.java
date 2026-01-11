@@ -23,7 +23,8 @@ import io.quarkus.cache.CacheManager;
 
 /**
  * JAX-RS filter that resolves tenant context from HTTP Host header. Executes before authentication to populate tenant
- * context for downstream processing.
+ * context for downstream processing. This class is the runtime embodiment of the "Tenant Access Gateway" described in
+ * {@code docs/architecture/tenant_isolation.md}.
  *
  * <p>
  * <strong>Resolution Strategy:</strong>
@@ -151,6 +152,8 @@ public class TenantResolutionFilter implements ContainerRequestFilter {
             }
 
             // Fire CDI event for downstream subscribers (feature flag hydration, etc.)
+            // TODO(I1.T2): Attach structured audit payload described in
+            // docs/architecture/tenant_isolation.md#tenant-access-gateway once the audit service is available.
             tenantResolvedEvent.fire(new TenantResolved(tenantInfo, normalizedHost));
 
             long duration = System.currentTimeMillis() - startTime;

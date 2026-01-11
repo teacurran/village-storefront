@@ -2,6 +2,8 @@ package villagecompute.storefront.tenant;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import villagecompute.storefront.data.models.Tenant;
 
@@ -26,6 +28,7 @@ public class TenantContext {
 
     private static final ThreadLocal<TenantInfo> CURRENT_TENANT = new ThreadLocal<>();
     private static final ThreadLocal<FeatureFlagSnapshot> FEATURE_FLAGS = new ThreadLocal<>();
+    private static final Logger LOG = Logger.getLogger(TenantContext.class.getName());
 
     /**
      * Set current tenant for this request thread. Called by {@link TenantResolutionFilter}.
@@ -39,7 +42,11 @@ public class TenantContext {
         Objects.requireNonNull(tenantInfo, "Tenant info cannot be null");
         Objects.requireNonNull(tenantInfo.tenantId(), "Tenant ID cannot be null");
         CURRENT_TENANT.set(tenantInfo);
+        // TODO(I1.T2): Replace placeholder feature flag snapshot with hydrated data once
+        // FeatureFlagService hooks into the Tenant Access Gateway handshake documented in
+        // docs/architecture/tenant_isolation.md#tenantcontext-management.
         FEATURE_FLAGS.set(FeatureFlagSnapshot.placeholder(tenantInfo.tenantId()));
+        LOG.log(Level.FINE, () -> "Tenant context set for tenant=" + tenantInfo.tenantId());
     }
 
     /**
@@ -62,6 +69,7 @@ public class TenantContext {
 
         TenantInfo info = new TenantInfo(tenant.id, tenant.subdomain, tenant.name, tenant.status);
         setCurrentTenant(info);
+        LOG.log(Level.FINE, () -> "Tenant context resolved via setCurrentTenantId for tenant=" + tenantId);
     }
 
     /**
@@ -146,5 +154,8 @@ public class TenantContext {
     public static void clear() {
         CURRENT_TENANT.remove();
         FEATURE_FLAGS.remove();
+        if (LOG.isLoggable(Level.FINE)) {
+            LOG.fine("Tenant context cleared");
+        }
     }
 }
