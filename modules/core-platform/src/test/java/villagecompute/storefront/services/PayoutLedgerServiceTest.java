@@ -24,9 +24,9 @@ import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.PayoutLedger;
 import villagecompute.storefront.data.models.PayoutLedgerEntry;
 import villagecompute.storefront.data.models.Tenant;
-import villagecompute.storefront.testsupport.TestDataCleaner;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
+import villagecompute.storefront.testsupport.TestDataCleaner;
 
 import io.quarkus.test.junit.QuarkusTest;
 

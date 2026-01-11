@@ -72,6 +72,7 @@ class LoyaltyFuzzTest {
         entityManager.createQuery("DELETE FROM LoyaltyMember").executeUpdate();
         entityManager.createQuery("DELETE FROM LoyaltyProgram").executeUpdate();
         entityManager.createQuery("DELETE FROM User").executeUpdate();
+        entityManager.createQuery("DELETE FROM Tenant").executeUpdate();
 
         // Create test tenant
         Tenant tenant = new Tenant();

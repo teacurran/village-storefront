@@ -326,9 +326,7 @@ class CatalogValidatorTest {
     }
 
     private boolean isPostgres() {
-        return ConfigProvider.getConfig()
-                .getOptionalValue("quarkus.datasource.db-kind", String.class)
-                .map(value -> "postgresql".equalsIgnoreCase(value))
-                .orElse(false);
+        return ConfigProvider.getConfig().getOptionalValue("quarkus.datasource.db-kind", String.class)
+                .map(value -> "postgresql".equalsIgnoreCase(value)).orElse(false);
     }
 }

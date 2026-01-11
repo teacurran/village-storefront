@@ -206,6 +206,7 @@ class CheckoutSagaTest {
         intent.captureMethod = PaymentIntent.CaptureMethod.AUTOMATIC;
         intent.createdAt = OffsetDateTime.now().toInstant();
         intent.updatedAt = intent.createdAt;
+        intent.version = 0L;
 
         when(paymentService.createPaymentIntent(any(BigDecimal.class), anyString(), any(UUID.class), anyBoolean(),
                 anyString())).thenReturn(intent);

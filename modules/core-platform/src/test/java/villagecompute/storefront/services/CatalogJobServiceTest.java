@@ -94,6 +94,12 @@ class CatalogJobServiceTest {
         flag.tenant = tenant;
         flag.flagKey = key;
         flag.enabled = enabled;
+        flag.config = "{}";
+        flag.owner = "catalog-jobs-tests@villagecompute.dev";
+        flag.reviewCadenceDays = 90;
+        flag.riskLevel = "LOW";
+        flag.rollbackInstructions = "Disable catalog job";
+        flag.lastReviewedAt = OffsetDateTime.now();
         flag.persist();
     }
 

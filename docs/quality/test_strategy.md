@@ -173,7 +173,7 @@ The project fully complies with [docs/java-project-standards.adoc](../java-proje
 **✅ Build System:**
 - Maven 3.9+ with parent-child multi-module structure
 - Java 21 (`maven.compiler.release=21`)
-- Quarkus BOM 3.20.0 (meets 3.17+ requirement)
+- Quarkus BOM 3.20.0 (meets 3.17+ requirement; upgrade to 3.26.2 is queued so we can enable the Quarkus Amazon S3 extension once the Mockito `@InjectMock` migration lands)
 - No prohibited dependencies (Lombok absent)
 
 **✅ Required Quarkus Extensions (All Present in `modules/core-platform/pom.xml`):**
@@ -190,7 +190,7 @@ The project fully complies with [docs/java-project-standards.adoc](../java-proje
 - Deployment: `quarkus-kubernetes`, `quarkus-container-image-jib`
 
 **✅ External SDKs (Per Architectural Requirements):**
-- AWS S3 SDK (`software.amazon.awssdk:s3`) - Cloudflare R2 object storage
+- AWS S3 SDK (`software.amazon.awssdk:s3`) - Cloudflare R2 object storage (stopgap until the Quarkus Amazon S3 extension can ride the 3.26.2 platform upgrade)
 - Stripe Java SDK (`com.stripe:stripe-java`) - Payment processing
 - Thumbnailator (`net.coobird:thumbnailator`) - Image resizing
 - MapStruct (`org.mapstruct:mapstruct`) - DTO mapping

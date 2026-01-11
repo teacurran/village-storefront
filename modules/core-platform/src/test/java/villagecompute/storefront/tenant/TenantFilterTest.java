@@ -60,8 +60,7 @@ public class TenantFilterTest {
 
     private static final boolean POSTGRES_RLS_AVAILABLE = ConfigProvider.getConfig()
             .getOptionalValue("quarkus.datasource.db-kind", String.class)
-            .map(value -> "postgresql".equalsIgnoreCase(value))
-            .orElse(false);
+            .map(value -> "postgresql".equalsIgnoreCase(value)).orElse(false);
 
     private static boolean rlsInstalled = false;
 

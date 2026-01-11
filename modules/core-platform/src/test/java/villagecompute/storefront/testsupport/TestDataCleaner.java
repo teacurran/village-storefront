@@ -8,7 +8,8 @@ import jakarta.persistence.EntityManager;
  */
 public final class TestDataCleaner {
 
-    private TestDataCleaner() {}
+    private TestDataCleaner() {
+    }
 
     public static void clearTenantData(EntityManager entityManager) {
         entityManager.createQuery("DELETE FROM ReportJob").executeUpdate();

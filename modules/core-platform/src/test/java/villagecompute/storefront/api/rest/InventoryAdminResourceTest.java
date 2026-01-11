@@ -66,7 +66,6 @@ class InventoryAdminResourceTest {
         entityManager.createQuery("DELETE FROM InventoryAdjustment").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryTransferLine").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryTransfer").executeUpdate();
-        entityManager.createQuery("DELETE FROM InventoryLedger").executeUpdate();
         entityManager.createQuery("DELETE FROM InventoryLocation").executeUpdate();
         entityManager.createQuery("DELETE FROM ProductVariant").executeUpdate();
         entityManager.createQuery("DELETE FROM Product").executeUpdate();
