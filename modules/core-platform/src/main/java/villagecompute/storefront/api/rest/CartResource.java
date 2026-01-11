@@ -1,5 +1,7 @@
 package villagecompute.storefront.api.rest;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -37,14 +39,19 @@ import villagecompute.storefront.api.types.AddToCartRequest;
 import villagecompute.storefront.api.types.ApplyPromotionRequest;
 import villagecompute.storefront.api.types.CartDto;
 import villagecompute.storefront.api.types.CartItemDto;
+import villagecompute.storefront.api.types.SavedCartItemDto;
 import villagecompute.storefront.api.types.UpdateCartItemRequest;
 import villagecompute.storefront.data.models.Cart;
 import villagecompute.storefront.data.models.CartItem;
 import villagecompute.storefront.data.models.Promotion;
+import villagecompute.storefront.data.models.User;
 import villagecompute.storefront.services.CartService;
+import villagecompute.storefront.services.dto.CartSavedItem;
 import villagecompute.storefront.services.mappers.CartMapper;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.util.ProblemDetailsUtil;
+
+import io.quarkus.security.identity.SecurityIdentity;
 
 /**
  * REST resource for cart operations.
@@ -89,6 +96,9 @@ public class CartResource {
     @Inject
     CartMapper cartMapper;
 
+    @Inject
+    SecurityIdentity securityIdentity;
+
     @Context
     HttpHeaders httpHeaders;
 
@@ -121,20 +131,22 @@ public class CartResource {
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON))})
     public Response getCart() {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("GET /cart - tenantId=%s, sessionId=%s", tenantId, session.sessionId());
+        LOG.infof("GET /cart - tenantId=%s, sessionId=%s, userId=%s", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId());
 
-        Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
+        Optional<Cart> cartOptional = findActiveCart(context);
         if (cartOptional.isEmpty()) {
-            return respond(session, Response.status(Status.NOT_FOUND)
-                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
         }
 
         Cart cart = cartOptional.get();
         CartDto dto = cartMapper.toDto(cart);
-        LOG.debugf("Cart resolved - tenantId=%s, sessionId=%s, cartId=%s", tenantId, session.sessionId(), cart.id);
-        return respond(session, Response.ok(dto));
+        LOG.debugf("Cart resolved - tenantId=%s, sessionId=%s, userId=%s, cartId=%s", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId(), cart.id);
+        return respond(context, Response.ok(dto));
     }
 
     /**
@@ -159,18 +171,19 @@ public class CartResource {
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON))})
     public Response clearCart() {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("DELETE /cart - tenantId=%s, sessionId=%s", tenantId, session.sessionId());
+        LOG.infof("DELETE /cart - tenantId=%s, sessionId=%s, userId=%s", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId());
 
-        Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
+        Optional<Cart> cartOptional = findActiveCart(context);
         if (cartOptional.isEmpty()) {
-            return respond(session, Response.status(Status.NOT_FOUND)
-                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
         }
 
         cartService.clearCart(cartOptional.get().id);
-        return respond(session, Response.noContent());
+        return respond(context, Response.noContent());
     }
 
     /**
@@ -219,18 +232,19 @@ public class CartResource {
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON))})
     public Response addToCart(@Valid AddToCartRequest request) {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("POST /cart/items - tenantId=%s, sessionId=%s, variantId=%s, quantity=%d", tenantId,
-                session.sessionId(), request.getVariantId(), request.getQuantity());
+        LOG.infof("POST /cart/items - tenantId=%s, sessionId=%s, userId=%s, variantId=%s, quantity=%d", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId(),
+                request.getVariantId(), request.getQuantity());
 
         try {
-            Cart cart = cartService.getOrCreateCartForSession(session.sessionId());
+            Cart cart = resolveOrCreateCart(context);
 
             CartItem cartItem = cartService.addItemToCart(cart.id, request.getVariantId(), request.getQuantity());
 
             CartItemDto dto = cartMapper.toItemDto(cartItem);
-            return respond(session, Response.status(Status.CREATED).entity(dto));
+            return respond(context, Response.status(Status.CREATED).entity(dto));
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid add to cart request - tenantId=%s, error=%s", tenantId, e.getMessage());
@@ -238,11 +252,12 @@ public class CartResource {
             Map<String, Object> problemDetails = status == Status.NOT_FOUND
                     ? ProblemDetailsUtil.notFound(e.getMessage())
                     : ProblemDetailsUtil.badRequest(e.getMessage());
-            return respond(session, Response.status(status).entity(problemDetails));
+            return respond(context, Response.status(status).entity(problemDetails));
 
         } catch (OptimisticLockException e) {
-            LOG.warnf("Optimistic lock exception - tenantId=%s, cartId=%s", tenantId, session.sessionId());
-            return respond(session, Response.status(Status.CONFLICT).entity(
+            LOG.warnf("Optimistic lock exception - tenantId=%s, userId=%s, sessionId=%s", tenantId, context.userId(),
+                    context.session() != null ? context.session().sessionId() : null);
+            return respond(context, Response.status(Status.CONFLICT).entity(
                     ProblemDetailsUtil.conflict("Cart was modified concurrently. Please refresh and try again.")));
         }
     }
@@ -292,18 +307,19 @@ public class CartResource {
     public Response updateCartItem(@Parameter(
             description = "Cart item UUID",
             required = true) @PathParam("itemId") UUID itemId, @Valid UpdateCartItemRequest request) {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("PATCH /cart/items/%s - tenantId=%s, sessionId=%s, quantity=%d", itemId, tenantId,
-                session.sessionId(), request.getQuantity());
+        LOG.infof("PATCH /cart/items/%s - tenantId=%s, sessionId=%s, userId=%s, quantity=%d", itemId, tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId(),
+                request.getQuantity());
 
         try {
-            Cart cart = cartService.getOrCreateCartForSession(session.sessionId());
+            Cart cart = resolveOrCreateCart(context);
 
             CartItem cartItem = cartService.updateCartItemQuantity(cart.id, itemId, request.getQuantity());
 
             CartItemDto dto = cartMapper.toItemDto(cartItem);
-            return respond(session, Response.ok(dto));
+            return respond(context, Response.ok(dto));
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Cart item not found or invalid - tenantId=%s, itemId=%s, error=%s", tenantId, itemId,
@@ -313,12 +329,12 @@ public class CartResource {
             Map<String, Object> problemDetails = status == Status.NOT_FOUND
                     ? ProblemDetailsUtil.notFound(e.getMessage())
                     : ProblemDetailsUtil.badRequest(e.getMessage());
-            return respond(session, Response.status(status).entity(problemDetails));
+            return respond(context, Response.status(status).entity(problemDetails));
 
         } catch (OptimisticLockException e) {
             LOG.warnf("Optimistic lock exception - tenantId=%s, itemId=%s, sessionId=%s", tenantId, itemId,
-                    session.sessionId());
-            return respond(session, Response.status(Status.CONFLICT).entity(
+                    context.session() != null ? context.session().sessionId() : null);
+            return respond(context, Response.status(Status.CONFLICT).entity(
                     ProblemDetailsUtil.conflict("Cart item was modified concurrently. Please refresh and try again.")));
         }
     }
@@ -347,19 +363,20 @@ public class CartResource {
     public Response removeCartItem(@Parameter(
             description = "Cart item UUID",
             required = true) @PathParam("itemId") UUID itemId) {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("DELETE /cart/items/%s - tenantId=%s, sessionId=%s", itemId, tenantId, session.sessionId());
+        LOG.infof("DELETE /cart/items/%s - tenantId=%s, sessionId=%s, userId=%s", itemId, tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId());
 
         try {
-            Cart cart = cartService.getOrCreateCartForSession(session.sessionId());
+            Cart cart = resolveOrCreateCart(context);
 
             cartService.removeCartItem(cart.id, itemId);
-            return respond(session, Response.noContent());
+            return respond(context, Response.noContent());
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Cart item not found - tenantId=%s, itemId=%s, error=%s", tenantId, itemId, e.getMessage());
-            return respond(session,
+            return respond(context,
                     Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())));
         }
     }
@@ -408,20 +425,20 @@ public class CartResource {
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON))})
     public Response applyPromotion(@Valid ApplyPromotionRequest request) {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("POST /cart/promotions - tenantId=%s, sessionId=%s, promoCode=%s", tenantId, session.sessionId(),
+        LOG.infof("POST /cart/promotions - tenantId=%s, sessionId=%s, userId=%s, promoCode=%s", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId(),
                 request.getPromoCode());
 
         try {
-            Cart cart = cartService.getOrCreateCartForSession(session.sessionId());
+            Cart cart = resolveOrCreateCart(context);
 
             Promotion promotion = cartService.applyPromotion(cart.id, request.getPromoCode());
 
-            // Reload cart to get updated totals
             cart = Cart.findById(cart.id);
             CartDto dto = cartMapper.toDto(cart);
-            return respond(session, Response.ok(dto));
+            return respond(context, Response.ok(dto));
 
         } catch (IllegalArgumentException e) {
             LOG.warnf("Invalid promotion code - tenantId=%s, promoCode=%s, error=%s", tenantId, request.getPromoCode(),
@@ -430,7 +447,7 @@ public class CartResource {
             Map<String, Object> problemDetails = status == Status.NOT_FOUND
                     ? ProblemDetailsUtil.notFound(e.getMessage())
                     : ProblemDetailsUtil.badRequest(e.getMessage());
-            return respond(session, Response.status(status).entity(problemDetails));
+            return respond(context, Response.status(status).entity(problemDetails));
         }
     }
 
@@ -463,14 +480,15 @@ public class CartResource {
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON))})
     public Response removePromotion() {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("DELETE /cart/promotions - tenantId=%s, sessionId=%s", tenantId, session.sessionId());
+        LOG.infof("DELETE /cart/promotions - tenantId=%s, sessionId=%s, userId=%s", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId());
 
-        Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
+        Optional<Cart> cartOptional = findActiveCart(context);
         if (cartOptional.isEmpty()) {
-            return respond(session, Response.status(Status.NOT_FOUND)
-                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
         }
 
         Cart cart = cartOptional.get();
@@ -479,7 +497,7 @@ public class CartResource {
         // Reload cart to get updated totals
         cart = Cart.findById(cart.id);
         CartDto dto = cartMapper.toDto(cart);
-        return respond(session, Response.ok(dto));
+        return respond(context, Response.ok(dto));
     }
 
     /**
@@ -513,14 +531,15 @@ public class CartResource {
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON))})
     public Response getCartTotals() {
-        SessionContext session = resolveSessionContext();
+        RequestContext context = resolveRequestContext();
         UUID tenantId = TenantContext.getCurrentTenantId();
-        LOG.infof("GET /cart/totals - tenantId=%s, sessionId=%s", tenantId, session.sessionId());
+        LOG.infof("GET /cart/totals - tenantId=%s, sessionId=%s, userId=%s", tenantId,
+                context.session() != null ? context.session().sessionId() : null, context.userId());
 
-        Optional<Cart> cartOptional = cartService.findActiveCartForSession(session.sessionId());
+        Optional<Cart> cartOptional = findActiveCart(context);
         if (cartOptional.isEmpty()) {
-            return respond(session, Response.status(Status.NOT_FOUND)
-                    .entity(ProblemDetailsUtil.notFound("No active cart found for session")));
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
         }
 
         Cart cart = cartOptional.get();
@@ -541,7 +560,142 @@ public class CartResource {
         totals.put("currency", currency);
         totals.put("itemCount", itemCount);
 
-        return respond(session, Response.ok(totals));
+        return respond(context, Response.ok(totals));
+    }
+
+    /**
+     * List saved-for-later items.
+     */
+    @GET
+    @Path("/save-for-later")
+    @Operation(
+            summary = "List saved-for-later items",
+            description = "Returns items that were saved for later by the shopper.")
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Saved items retrieved",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = SavedCartItemDto.class)))})
+    public Response listSavedForLater() {
+        RequestContext context = resolveRequestContext();
+        Optional<Cart> cartOptional = findActiveCart(context);
+        if (cartOptional.isEmpty()) {
+            return respond(context, Response.ok(Collections.emptyList()));
+        }
+        List<SavedCartItemDto> savedItems = cartService.getSavedForLaterItems(cartOptional.get().id).stream()
+                .map(cartMapper::toSavedItemDto).toList();
+        return respond(context, Response.ok(savedItems));
+    }
+
+    /**
+     * Move an item from the active cart into the saved list.
+     */
+    @POST
+    @Path("/items/{itemId}/save-for-later")
+    @Operation(
+            summary = "Save cart item for later",
+            description = "Removes the item from the active cart and stores it under the saved-for-later list.")
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "201",
+                    description = "Item saved successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = SavedCartItemDto.class))),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart or item not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response saveItemForLater(@PathParam("itemId") UUID itemId) {
+        RequestContext context = resolveRequestContext();
+        Optional<Cart> cartOptional = findActiveCart(context);
+        if (cartOptional.isEmpty()) {
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
+        }
+        try {
+            CartSavedItem savedItem = cartService.saveItemForLater(cartOptional.get().id, itemId);
+            SavedCartItemDto dto = cartMapper.toSavedItemDto(savedItem);
+            return respond(context, Response.status(Status.CREATED).entity(dto));
+        } catch (IllegalArgumentException e) {
+            return respond(context,
+                    Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())));
+        }
+    }
+
+    /**
+     * Restore a saved item back into the cart.
+     */
+    @POST
+    @Path("/save-for-later/{savedItemId}/restore")
+    @Operation(
+            summary = "Restore saved item",
+            description = "Moves a saved item back into the active cart.")
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Saved item restored",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON,
+                            schema = @Schema(
+                                    implementation = CartItemDto.class))),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Saved item not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response restoreSavedItem(@PathParam("savedItemId") UUID savedItemId) {
+        RequestContext context = resolveRequestContext();
+        Optional<Cart> cartOptional = findActiveCart(context);
+        if (cartOptional.isEmpty()) {
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
+        }
+        try {
+            CartItem cartItem = cartService.restoreSavedItem(cartOptional.get().id, savedItemId);
+            return respond(context, Response.ok(cartMapper.toItemDto(cartItem)));
+        } catch (IllegalArgumentException e) {
+            return respond(context,
+                    Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())));
+        }
+    }
+
+    /**
+     * Delete a saved item without re-adding it to the cart.
+     */
+    @DELETE
+    @Path("/save-for-later/{savedItemId}")
+    @Operation(
+            summary = "Delete saved item",
+            description = "Removes a saved-for-later entry permanently.")
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "204",
+                    description = "Saved item deleted"),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Saved item not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response deleteSavedItem(@PathParam("savedItemId") UUID savedItemId) {
+        RequestContext context = resolveRequestContext();
+        Optional<Cart> cartOptional = findActiveCart(context);
+        if (cartOptional.isEmpty()) {
+            return respond(context, Response.status(Status.NOT_FOUND)
+                    .entity(ProblemDetailsUtil.notFound("No active cart found for session/user")));
+        }
+        try {
+            cartService.removeSavedItem(cartOptional.get().id, savedItemId);
+            return respond(context, Response.noContent());
+        } catch (IllegalArgumentException e) {
+            return respond(context,
+                    Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())));
+        }
     }
 
     private Map<String, String> buildMoney(java.math.BigDecimal amount, String currency) {
@@ -551,7 +705,48 @@ public class CartResource {
         return money;
     }
 
-    private SessionContext resolveSessionContext() {
+    private RequestContext resolveRequestContext() {
+        Optional<UUID> userId = resolveAuthenticatedUserId();
+        if (userId.isPresent()) {
+            Optional<String> existingSession = readSessionIdFromHeader().or(() -> readSessionIdFromCookie());
+            SessionContext session = existingSession.map(id -> new SessionContext(id, false)).orElse(null);
+            return new RequestContext(userId.get(), session);
+        }
+        return new RequestContext(null, resolveGuestSessionContext());
+    }
+
+    private Optional<UUID> resolveAuthenticatedUserId() {
+        if (securityIdentity == null || securityIdentity.isAnonymous() || securityIdentity.getPrincipal() == null) {
+            return Optional.empty();
+        }
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        String email = securityIdentity.getPrincipal().getName();
+        return User.<User>find("tenant.id = ?1 AND email = ?2", tenantId, email).firstResultOptional()
+                .map(user -> user.id);
+    }
+
+    private Optional<Cart> findActiveCart(RequestContext context) {
+        if (context.isAuthenticated()) {
+            return cartService.findActiveCartForUser(context.userId());
+        }
+        if (context.session() == null) {
+            return Optional.empty();
+        }
+        return cartService.findActiveCartForSession(context.session().sessionId());
+    }
+
+    private Cart resolveOrCreateCart(RequestContext context) {
+        if (context.isAuthenticated()) {
+            return cartService.getOrCreateCartForUser(context.userId());
+        }
+        SessionContext session = context.session();
+        if (session == null) {
+            throw new IllegalStateException("Guest session unavailable");
+        }
+        return cartService.getOrCreateCartForSession(session.sessionId());
+    }
+
+    private SessionContext resolveGuestSessionContext() {
         Optional<String> headerSession = readSessionIdFromHeader();
         if (headerSession.isPresent()) {
             return new SessionContext(headerSession.get(), false);
@@ -601,8 +796,9 @@ public class CartResource {
         }
     }
 
-    private Response respond(SessionContext sessionContext, Response.ResponseBuilder builder) {
-        if (sessionContext.newSession()) {
+    private Response respond(RequestContext context, Response.ResponseBuilder builder) {
+        SessionContext sessionContext = context.session();
+        if (sessionContext != null && sessionContext.newSession()) {
             builder.cookie(new NewCookie(SESSION_COOKIE, sessionContext.sessionId(), "/", null, "Guest session",
                     SESSION_TTL_SECONDS, false, true));
             builder.header(SESSION_HEADER, sessionContext.sessionId());
@@ -619,5 +815,11 @@ public class CartResource {
     }
 
     private record SessionContext(String sessionId, boolean newSession) {
+    }
+
+    private record RequestContext(UUID userId, SessionContext session) {
+        boolean isAuthenticated() {
+            return userId != null;
+        }
     }
 }

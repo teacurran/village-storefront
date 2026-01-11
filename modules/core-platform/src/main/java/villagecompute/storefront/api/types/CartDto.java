@@ -33,6 +33,9 @@ public class CartDto {
     @JsonProperty("items")
     private List<CartItemDto> items;
 
+    @JsonProperty("savedForLater")
+    private List<SavedCartItemDto> savedForLater;
+
     @JsonProperty("subtotal")
     private Money subtotal;
 
@@ -84,6 +87,14 @@ public class CartDto {
 
     public void setItems(List<CartItemDto> items) {
         this.items = items;
+    }
+
+    public List<SavedCartItemDto> getSavedForLater() {
+        return savedForLater;
+    }
+
+    public void setSavedForLater(List<SavedCartItemDto> savedForLater) {
+        this.savedForLater = savedForLater;
     }
 
     public Money getSubtotal() {

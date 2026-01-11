@@ -2,7 +2,10 @@ package villagecompute.storefront.services;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,8 +18,10 @@ import jakarta.transaction.Transactional.TxType;
 
 import org.jboss.logging.Logger;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import villagecompute.storefront.data.models.Cart;
@@ -28,6 +33,8 @@ import villagecompute.storefront.data.models.User;
 import villagecompute.storefront.data.repositories.CartItemRepository;
 import villagecompute.storefront.data.repositories.CartRepository;
 import villagecompute.storefront.data.repositories.ProductVariantRepository;
+import villagecompute.storefront.services.dto.CartSavedItem;
+import villagecompute.storefront.tenant.FeatureFlagSnapshot;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -53,6 +60,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 public class CartService {
 
     private static final Logger LOG = Logger.getLogger(CartService.class);
+    private static final String SAVED_ITEMS_FIELD = "savedForLaterItems";
 
     @Inject
     CartRepository cartRepository;
@@ -93,6 +101,7 @@ public class CartService {
         if (existingCart.isPresent()) {
             LOG.debugf("Found existing cart - tenantId=%s, userId=%s, cartId=%s", tenantId, userId,
                     existingCart.get().id);
+            ensureFeatureFlagSnapshot(existingCart.get());
             return existingCart.get();
         }
 
@@ -108,6 +117,7 @@ public class CartService {
         cart.user = user;
         cart.expiresAt = OffsetDateTime.now().plusDays(30);
         cartRepository.persist(cart);
+        ensureFeatureFlagSnapshot(cart);
 
         LOG.infof("Created new cart - tenantId=%s, userId=%s, cartId=%s", tenantId, userId, cart.id);
         meterRegistry.counter("cart.created", "tenant_id", tenantId.toString(), "type", "user").increment();
@@ -132,6 +142,7 @@ public class CartService {
         if (existingCart.isPresent()) {
             LOG.debugf("Found existing cart - tenantId=%s, sessionId=%s, cartId=%s", tenantId, normalizedSessionId,
                     existingCart.get().id);
+            ensureFeatureFlagSnapshot(existingCart.get());
             return existingCart.get();
         }
 
@@ -140,6 +151,7 @@ public class CartService {
         cart.sessionId = normalizedSessionId;
         cart.expiresAt = OffsetDateTime.now().plusDays(30);
         cartRepository.persist(cart);
+        ensureFeatureFlagSnapshot(cart);
 
         LOG.infof("Created new cart - tenantId=%s, sessionId=%s, cartId=%s", tenantId, normalizedSessionId, cart.id);
         meterRegistry.counter("cart.created", "tenant_id", tenantId.toString(), "type", "guest").increment();
@@ -503,6 +515,97 @@ public class CartService {
         return normalizeSessionId(sessionId).flatMap(cartRepository::findActiveBySession);
     }
 
+    /**
+     * Find an active cart for an authenticated user.
+     *
+     * @param userId
+     *            user UUID
+     * @return active cart if present
+     */
+    @Transactional(TxType.SUPPORTS)
+    public Optional<Cart> findActiveCartForUser(UUID userId) {
+        if (userId == null) {
+            return Optional.empty();
+        }
+        return cartRepository.findActiveByUser(userId);
+    }
+
+    // ========================================
+    // Save For Later Operations
+    // ========================================
+
+    @Transactional
+    public List<CartSavedItem> getSavedForLaterItems(UUID cartId) {
+        Cart cart = requireCart(cartId);
+        return readSavedItems(cart);
+    }
+
+    @Transactional
+    public CartSavedItem saveItemForLater(UUID cartId, UUID itemId) {
+        Cart cart = requireCart(cartId);
+        UUID tenantId = TenantContext.getCurrentTenantId();
+
+        CartItem item = cartItemRepository.findByIdOptional(itemId)
+                .orElseThrow(() -> new IllegalArgumentException("Cart item not found: " + itemId));
+
+        if (!item.cart.id.equals(cartId)) {
+            throw new IllegalArgumentException("Cart item does not belong to cart: " + itemId);
+        }
+
+        CartSavedItem savedItem = CartSavedItem.fromCartItem(item);
+        List<CartSavedItem> savedItems = new ArrayList<>(readSavedItems(cart));
+        savedItems.add(savedItem);
+
+        cartItemRepository.delete(item);
+        writeSavedItems(cart, savedItems);
+
+        LOG.infof("Saved cart item for later - tenantId=%s, cartId=%s, itemId=%s", tenantId, cartId, itemId);
+        meterRegistry.counter("cart.save_for_later.added", "tenant_id", tenantId.toString()).increment();
+        publishCartEvent("CartSavedForLater", cart);
+        return savedItem;
+    }
+
+    @Transactional
+    public CartItem restoreSavedItem(UUID cartId, UUID savedItemId) {
+        Cart cart = requireCart(cartId);
+        UUID tenantId = TenantContext.getCurrentTenantId();
+
+        List<CartSavedItem> savedItems = new ArrayList<>(readSavedItems(cart));
+        CartSavedItem savedItem = savedItems.stream().filter(item -> savedItemId.equals(item.getId())).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Saved cart item not found: " + savedItemId));
+
+        savedItems.removeIf(item -> savedItemId.equals(item.getId()));
+        writeSavedItems(cart, savedItems);
+
+        CartItem restored = addItemToCart(cartId, savedItem.getVariantId(), savedItem.getQuantity());
+        if (savedItem.getUnitPrice() != null) {
+            restored.unitPrice = savedItem.getUnitPrice();
+            cartItemRepository.persist(restored);
+        }
+
+        LOG.infof("Restored saved item to cart - tenantId=%s, cartId=%s, savedItemId=%s", tenantId, cartId,
+                savedItemId);
+        meterRegistry.counter("cart.save_for_later.restored", "tenant_id", tenantId.toString()).increment();
+        publishCartEvent("CartUpdated", cart);
+        return restored;
+    }
+
+    @Transactional
+    public void removeSavedItem(UUID cartId, UUID savedItemId) {
+        Cart cart = requireCart(cartId);
+        UUID tenantId = TenantContext.getCurrentTenantId();
+
+        List<CartSavedItem> savedItems = new ArrayList<>(readSavedItems(cart));
+        boolean removed = savedItems.removeIf(item -> savedItemId.equals(item.getId()));
+        if (!removed) {
+            throw new IllegalArgumentException("Saved cart item not found: " + savedItemId);
+        }
+
+        writeSavedItems(cart, savedItems);
+        LOG.infof("Removed saved item - tenantId=%s, cartId=%s, savedItemId=%s", tenantId, cartId, savedItemId);
+        meterRegistry.counter("cart.save_for_later.removed", "tenant_id", tenantId.toString()).increment();
+    }
+
     // ========================================
     // Promotion Operations
     // ========================================
@@ -719,8 +822,265 @@ public class CartService {
     }
 
     // ========================================
+    // Feature Flag & Loyalty Snapshot Operations
+    // ========================================
+
+    /**
+     * Store feature flag snapshot in cart metadata.
+     *
+     * <p>
+     * Captures the current state of feature flags for the cart to ensure consistent behavior throughout the cart and
+     * checkout lifecycle, even if feature flags change.
+     *
+     * @param cartId
+     *            cart UUID
+     * @param featureFlags
+     *            map of feature flag names to values
+     */
+    @Transactional
+    public void storeFeatureFlagSnapshot(UUID cartId, Map<String, Object> featureFlags) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Storing feature flag snapshot - tenantId=%s, cartId=%s", tenantId, cartId);
+
+        Cart cart = cartRepository.findByIdOptional(cartId)
+                .orElseThrow(() -> new IllegalArgumentException("Cart not found: " + cartId));
+
+        if (!cart.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Cart does not belong to current tenant");
+        }
+
+        try {
+            ObjectNode metadata = readMetadataNode(cart);
+
+            // Store feature flags snapshot
+            ObjectNode ffNode = objectMapper.createObjectNode();
+            featureFlags.forEach((key, value) -> {
+                if (value instanceof Boolean) {
+                    ffNode.put(key, (Boolean) value);
+                } else if (value instanceof String) {
+                    ffNode.put(key, (String) value);
+                } else if (value instanceof Number) {
+                    ffNode.put(key, ((Number) value).doubleValue());
+                } else {
+                    ffNode.put(key, value.toString());
+                }
+            });
+            metadata.set("featureFlagsSnapshot", ffNode);
+            persistMetadata(cart, metadata);
+
+            LOG.infof("Stored feature flag snapshot - tenantId=%s, cartId=%s, flags=%d", tenantId, cartId,
+                    featureFlags.size());
+            meterRegistry.counter("cart.feature_flags.snapshot", "tenant_id", tenantId.toString()).increment();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to store feature flag snapshot", e);
+        }
+    }
+
+    /**
+     * Store loyalty program snapshot in cart metadata.
+     *
+     * <p>
+     * Captures loyalty points balance, tier, and applicable rewards at cart creation time to ensure consistent
+     * redemption calculations.
+     *
+     * @param cartId
+     *            cart UUID
+     * @param loyaltySnapshot
+     *            loyalty data to snapshot (points, tier, eligible rewards)
+     */
+    @Transactional
+    public void storeLoyaltySnapshot(UUID cartId, Map<String, Object> loyaltySnapshot) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Storing loyalty snapshot - tenantId=%s, cartId=%s", tenantId, cartId);
+
+        Cart cart = cartRepository.findByIdOptional(cartId)
+                .orElseThrow(() -> new IllegalArgumentException("Cart not found: " + cartId));
+
+        if (!cart.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Cart does not belong to current tenant");
+        }
+
+        try {
+            ObjectNode metadata = readMetadataNode(cart);
+
+            // Store loyalty snapshot
+            ObjectNode loyaltyNode = objectMapper.createObjectNode();
+            loyaltySnapshot.forEach((key, value) -> {
+                if (value instanceof Boolean) {
+                    loyaltyNode.put(key, (Boolean) value);
+                } else if (value instanceof String) {
+                    loyaltyNode.put(key, (String) value);
+                } else if (value instanceof Number) {
+                    loyaltyNode.put(key, ((Number) value).doubleValue());
+                } else if (value != null) {
+                    loyaltyNode.put(key, value.toString());
+                }
+            });
+            metadata.set("loyaltySnapshot", loyaltyNode);
+            persistMetadata(cart, metadata);
+
+            LOG.infof("Stored loyalty snapshot - tenantId=%s, cartId=%s", tenantId, cartId);
+            meterRegistry.counter("cart.loyalty.snapshot", "tenant_id", tenantId.toString()).increment();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to store loyalty snapshot", e);
+        }
+    }
+
+    /**
+     * Retrieve feature flag snapshot from cart metadata.
+     *
+     * @param cartId
+     *            cart UUID
+     * @return map of feature flag values, empty if no snapshot exists
+     */
+    @Transactional(TxType.SUPPORTS)
+    public Map<String, Object> getFeatureFlagSnapshot(UUID cartId) {
+        Cart cart = cartRepository.findByIdOptional(cartId).orElse(null);
+        if (cart == null || cart.metadata == null) {
+            return Map.of();
+        }
+
+        try {
+            JsonNode metadata = objectMapper.readTree(cart.metadata);
+            if (!metadata.has("featureFlagsSnapshot")) {
+                return Map.of();
+            }
+
+            JsonNode ffNode = metadata.get("featureFlagsSnapshot");
+            Map<String, Object> flags = new java.util.HashMap<>();
+            ffNode.fields().forEachRemaining(entry -> {
+                JsonNode value = entry.getValue();
+                if (value.isBoolean()) {
+                    flags.put(entry.getKey(), value.asBoolean());
+                } else if (value.isNumber()) {
+                    flags.put(entry.getKey(), value.asDouble());
+                } else {
+                    flags.put(entry.getKey(), value.asText());
+                }
+            });
+            return flags;
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to parse feature flag snapshot from cart metadata - cartId=%s", cartId);
+            return Map.of();
+        }
+    }
+
+    /**
+     * Retrieve loyalty snapshot from cart metadata.
+     *
+     * @param cartId
+     *            cart UUID
+     * @return map of loyalty data, empty if no snapshot exists
+     */
+    @Transactional(TxType.SUPPORTS)
+    public Map<String, Object> getLoyaltySnapshot(UUID cartId) {
+        Cart cart = cartRepository.findByIdOptional(cartId).orElse(null);
+        if (cart == null || cart.metadata == null) {
+            return Map.of();
+        }
+
+        try {
+            JsonNode metadata = objectMapper.readTree(cart.metadata);
+            if (!metadata.has("loyaltySnapshot")) {
+                return Map.of();
+            }
+
+            JsonNode loyaltyNode = metadata.get("loyaltySnapshot");
+            Map<String, Object> loyalty = new java.util.HashMap<>();
+            loyaltyNode.fields().forEachRemaining(entry -> {
+                JsonNode value = entry.getValue();
+                if (value.isBoolean()) {
+                    loyalty.put(entry.getKey(), value.asBoolean());
+                } else if (value.isNumber()) {
+                    loyalty.put(entry.getKey(), value.asDouble());
+                } else {
+                    loyalty.put(entry.getKey(), value.asText());
+                }
+            });
+            return loyalty;
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to parse loyalty snapshot from cart metadata - cartId=%s", cartId);
+            return Map.of();
+        }
+    }
+
+    // ========================================
     // Private Helper Methods
     // ========================================
+
+    private Cart requireCart(UUID cartId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        Cart cart = cartRepository.findByIdOptional(cartId)
+                .orElseThrow(() -> new IllegalArgumentException("Cart not found: " + cartId));
+        if (!cart.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Cart does not belong to current tenant");
+        }
+        return cart;
+    }
+
+    private List<CartSavedItem> readSavedItems(Cart cart) {
+        try {
+            ObjectNode metadata = readMetadataNode(cart);
+            if (!metadata.has(SAVED_ITEMS_FIELD) || !metadata.get(SAVED_ITEMS_FIELD).isArray()) {
+                return List.of();
+            }
+            ArrayNode arrayNode = (ArrayNode) metadata.get(SAVED_ITEMS_FIELD);
+            List<CartSavedItem> items = new ArrayList<>();
+            arrayNode.forEach(node -> {
+                try {
+                    items.add(objectMapper.treeToValue(node, CartSavedItem.class));
+                } catch (JsonProcessingException e) {
+                    LOG.warnf(e, "Failed to deserialize saved-for-later item for cart %s", cart.id);
+                }
+            });
+            return items;
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to read saved-for-later items for cart %s", cart.id);
+            return List.of();
+        }
+    }
+
+    private void writeSavedItems(Cart cart, List<CartSavedItem> items) {
+        try {
+            ObjectNode metadata = readMetadataNode(cart);
+            ArrayNode arrayNode = objectMapper.createArrayNode();
+            for (CartSavedItem item : items) {
+                arrayNode.add(objectMapper.valueToTree(item));
+            }
+            metadata.set(SAVED_ITEMS_FIELD, arrayNode);
+            persistMetadata(cart, metadata);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to persist saved-for-later items", e);
+        }
+    }
+
+    private ObjectNode readMetadataNode(Cart cart) throws JsonProcessingException {
+        return cart.metadata != null ? (ObjectNode) objectMapper.readTree(cart.metadata)
+                : objectMapper.createObjectNode();
+    }
+
+    private void persistMetadata(Cart cart, ObjectNode metadata) throws JsonProcessingException {
+        cart.metadata = objectMapper.writeValueAsString(metadata);
+        cart.updatedAt = OffsetDateTime.now();
+        cartRepository.persist(cart);
+    }
+
+    private void ensureFeatureFlagSnapshot(Cart cart) {
+        if (cart == null || !TenantContext.hasFeatureFlagSnapshot()) {
+            return;
+        }
+        Map<String, Object> existing = getFeatureFlagSnapshot(cart.id);
+        if (!existing.isEmpty()) {
+            return;
+        }
+
+        FeatureFlagSnapshot snapshot = TenantContext.getFeatureFlagSnapshot();
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("hydrated", snapshot.hydrated());
+        payload.put("fetchedAt", snapshot.fetchedAt().toString());
+        snapshot.flags().forEach(payload::put);
+        storeFeatureFlagSnapshot(cart.id, payload);
+    }
 
     private String requireSessionId(String sessionId) {
         return normalizeSessionId(sessionId).orElseThrow(() -> new IllegalArgumentException("Session ID is required"));

@@ -27,6 +27,7 @@ import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.User;
+import villagecompute.storefront.services.dto.CartSavedItem;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 
@@ -577,5 +578,210 @@ class CartServiceTest {
         assertFalse(events.isEmpty(), "Expected cart domain event to be persisted");
         assertTrue(events.stream().anyMatch(event -> "CartUpdated".equals(event.eventType)),
                 "CartUpdated event should be emitted");
+    }
+
+    // ========================================
+    // Feature Flag & Loyalty Snapshot Tests
+    // ========================================
+
+    @Test
+    @Transactional
+    void storeFeatureFlagSnapshot_shouldPersistSnapshotInMetadata() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        java.util.Map<String, Object> featureFlags = new java.util.HashMap<>();
+        featureFlags.put("loyaltyEnabled", true);
+        featureFlags.put("giftCardsEnabled", false);
+        featureFlags.put("maxCartItems", 50);
+
+        cartService.storeFeatureFlagSnapshot(cart.id, featureFlags);
+
+        // Reload cart and verify snapshot
+        java.util.Map<String, Object> retrieved = cartService.getFeatureFlagSnapshot(cart.id);
+
+        assertEquals(true, retrieved.get("loyaltyEnabled"));
+        assertEquals(false, retrieved.get("giftCardsEnabled"));
+        assertEquals(50.0, retrieved.get("maxCartItems"));
+    }
+
+    @Test
+    @Transactional
+    void storeLoyaltySnapshot_shouldPersistSnapshotInMetadata() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        java.util.Map<String, Object> loyaltyData = new java.util.HashMap<>();
+        loyaltyData.put("pointsBalance", 1250);
+        loyaltyData.put("tier", "gold");
+        loyaltyData.put("lifetimeValue", 5432.10);
+
+        cartService.storeLoyaltySnapshot(cart.id, loyaltyData);
+
+        // Reload cart and verify snapshot
+        java.util.Map<String, Object> retrieved = cartService.getLoyaltySnapshot(cart.id);
+
+        assertEquals(1250.0, retrieved.get("pointsBalance"));
+        assertEquals("gold", retrieved.get("tier"));
+        assertEquals(5432.10, retrieved.get("lifetimeValue"));
+    }
+
+    @Test
+    @Transactional
+    void getFeatureFlagSnapshot_shouldReturnEmptyMapWhenNoSnapshot() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        java.util.Map<String, Object> retrieved = cartService.getFeatureFlagSnapshot(cart.id);
+
+        assertTrue(retrieved.isEmpty());
+    }
+
+    @Test
+    @Transactional
+    void getLoyaltySnapshot_shouldReturnEmptyMapWhenNoSnapshot() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        java.util.Map<String, Object> retrieved = cartService.getLoyaltySnapshot(cart.id);
+
+        assertTrue(retrieved.isEmpty());
+    }
+
+    @Test
+    @Transactional
+    void storeFeatureFlagSnapshot_shouldFailWhenTenantMismatch() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        TenantContext.clear();
+        TenantContext.setCurrentTenant(new TenantInfo(tenant2Id, "carttest2", "Cart Test Tenant 2", "active"));
+
+        java.util.Map<String, Object> featureFlags = java.util.Map.of("flag1", true);
+        assertThrows(IllegalArgumentException.class, () -> cartService.storeFeatureFlagSnapshot(cart.id, featureFlags));
+
+        TenantContext.clear();
+        TenantContext.setCurrentTenant(new TenantInfo(tenantId, "carttest", "Cart Test Tenant", "active"));
+    }
+
+    @Test
+    @Transactional
+    void storeLoyaltySnapshot_shouldFailWhenTenantMismatch() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        TenantContext.clear();
+        TenantContext.setCurrentTenant(new TenantInfo(tenant2Id, "carttest2", "Cart Test Tenant 2", "active"));
+
+        java.util.Map<String, Object> loyaltyData = java.util.Map.of("points", 100);
+        assertThrows(IllegalArgumentException.class, () -> cartService.storeLoyaltySnapshot(cart.id, loyaltyData));
+
+        TenantContext.clear();
+        TenantContext.setCurrentTenant(new TenantInfo(tenantId, "carttest", "Cart Test Tenant", "active"));
+    }
+
+    // ========================================
+    // Optimistic Locking / Concurrency Tests
+    // ========================================
+
+    @Test
+    @Transactional
+    void concurrentCartItemUpdate_shouldDetectOptimisticLockException() throws Exception {
+        // Create cart and add initial item
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+        CartItem item = cartService.addItemToCart(cart.id, variantId, 1);
+        entityManager.flush();
+        entityManager.clear();
+
+        // Simulate concurrent modification by loading cart in two "threads" (transactions)
+        // Thread 1: Update quantity to 5
+        UUID itemId1 = item.id;
+        UUID cartId1 = cart.id;
+
+        // First update succeeds
+        CartItem updated1 = cartService.updateCartItemQuantity(cartId1, itemId1, 5);
+        assertEquals(5, updated1.quantity);
+        entityManager.flush();
+
+        // Second concurrent update with stale version - should detect version mismatch
+        // Manually manipulate version to simulate stale read
+        entityManager.clear();
+        CartItem staleItem = entityManager.find(CartItem.class, itemId1);
+        Long originalVersion = staleItem.version;
+
+        // Update the item again (version increments)
+        cartService.updateCartItemQuantity(cartId1, itemId1, 10);
+        entityManager.flush();
+
+        // Now try to update with the stale version by reloading and forcing old version
+        entityManager.clear();
+        CartItem itemToCorrupt = entityManager.find(CartItem.class, itemId1);
+        itemToCorrupt.version = originalVersion; // Force old version
+        itemToCorrupt.quantity = 99;
+
+        // This should throw OptimisticLockException when flush occurs
+        assertThrows(jakarta.persistence.OptimisticLockException.class, () -> {
+            entityManager.flush();
+        });
+    }
+
+    @Test
+    @Transactional
+    void cartExpiration_shouldHaveDefaultExpiry() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+
+        assertNotNull(cart.expiresAt);
+        assertTrue(cart.expiresAt.isAfter(OffsetDateTime.now()));
+        // Default is 30 days from Cart.prePersist
+        assertTrue(cart.expiresAt.isBefore(OffsetDateTime.now().plusDays(31)));
+    }
+
+    @Test
+    @Transactional
+    void cartExpiration_shouldBeSetOnSessionCart() {
+        String sessionId = "expiry-test-session";
+        Cart cart = cartService.getOrCreateCartForSession(sessionId);
+
+        assertNotNull(cart.expiresAt);
+        assertTrue(cart.expiresAt.isAfter(OffsetDateTime.now()));
+        assertTrue(cart.expiresAt.isBefore(OffsetDateTime.now().plusDays(31)));
+    }
+
+    // ========================================
+    // Save For Later Tests
+    // ========================================
+
+    @Test
+    @Transactional
+    void saveItemForLater_shouldMoveItemOutOfCart() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+        CartItem item = cartService.addItemToCart(cart.id, variantId, 2);
+
+        CartSavedItem savedItem = cartService.saveItemForLater(cart.id, item.id);
+
+        assertNotNull(savedItem.getId());
+        assertEquals(variantId, savedItem.getVariantId());
+        assertEquals(0, cartService.getCartItems(cart.id).size());
+        assertEquals(1, cartService.getSavedForLaterItems(cart.id).size());
+    }
+
+    @Test
+    @Transactional
+    void restoreSavedItem_shouldReAddItemToCart() {
+        Cart cart = cartService.getOrCreateCartForUser(userId);
+        CartItem item = cartService.addItemToCart(cart.id, variantId, 1);
+        CartSavedItem savedItem = cartService.saveItemForLater(cart.id, item.id);
+
+        CartItem restored = cartService.restoreSavedItem(cart.id, savedItem.getId());
+
+        assertEquals(savedItem.getVariantId(), restored.variant.id);
+        assertEquals(savedItem.getQuantity(), restored.quantity);
+        assertTrue(cartService.getSavedForLaterItems(cart.id).isEmpty());
+    }
+
+    @Test
+    @Transactional
+    void removeSavedItem_shouldDeleteSavedEntry() {
+        Cart cart = cartService.getOrCreateCartForSession("save-test-session");
+        CartItem item = cartService.addItemToCart(cart.id, variantId, 1);
+        CartSavedItem savedItem = cartService.saveItemForLater(cart.id, item.id);
+
+        cartService.removeSavedItem(cart.id, savedItem.getId());
+
+        assertTrue(cartService.getSavedForLaterItems(cart.id).isEmpty());
     }
 }

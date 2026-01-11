@@ -2538,6 +2538,129 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /cart/save-for-later:
+    get:
+      operationId: listSavedForLaterItems
+      summary: List saved-for-later items
+      description: |
+        Returns items that were moved out of the active cart via the "save for later" action.
+      tags: [Storefront]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '200':
+          description: Saved items returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavedCartItem'
+
+  /cart/items/{itemId}/save-for-later:
+    post:
+      operationId: saveCartItemForLater
+      summary: Save cart item for later
+      description: |
+        Moves the specified cart line item into the saved-for-later collection.
+      tags: [Storefront]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Cart item UUID
+        - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Item saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedCartItem'
+        '404':
+          description: Cart or item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /cart/save-for-later/{savedItemId}/restore:
+    post:
+      operationId: restoreSavedItem
+      summary: Restore saved item to cart
+      description: |
+        Re-adds a saved-for-later line item back into the active cart.
+      tags: [Storefront]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: savedItemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Saved item identifier
+        - $ref: '#/components/parameters/GuestSessionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Saved item restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartItem'
+        '404':
+          description: Saved item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /cart/save-for-later/{savedItemId}:
+    delete:
+      operationId: deleteSavedItem
+      summary: Delete saved item
+      description: |
+        Removes the saved-for-later entry without restoring it to the cart.
+      tags: [Storefront]
+      security:
+        - {}  # Optional auth
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: savedItemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Saved item identifier
+        - $ref: '#/components/parameters/GuestSessionId'
+      responses:
+        '204':
+          description: Saved item deleted
+        '404':
+          description: Saved item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   # ============================================================================
   # LOYALTY ENDPOINTS
   # ============================================================================
@@ -5120,6 +5243,11 @@ components:
           items:
             $ref: '#/components/schemas/CartItem'
           description: Cart line items
+        savedForLater:
+          type: array
+          description: Items saved for later (not counted toward itemCount)
+          items:
+            $ref: '#/components/schemas/SavedCartItem'
         subtotal:
           $ref: '#/components/schemas/Money'
         itemCount:
@@ -5184,6 +5312,45 @@ components:
         updatedAt:
           type: string
           format: date-time
+    SavedCartItem:
+      type: object
+      required:
+        - id
+        - variantId
+        - sku
+        - quantity
+        - unitPrice
+        - savedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Saved item UUID
+        variantId:
+          type: string
+          format: uuid
+          description: Product variant UUID
+        productName:
+          type: string
+          nullable: true
+          description: Product name snapshot
+        variantName:
+          type: string
+          nullable: true
+          description: Variant name snapshot
+        sku:
+          type: string
+          description: Variant SKU (snapshot)
+        quantity:
+          type: integer
+          minimum: 1
+          description: Quantity that was saved
+        unitPrice:
+          $ref: '#/components/schemas/Money'
+        savedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the item was saved
 
     CartLoyaltySummary:
       type: object
