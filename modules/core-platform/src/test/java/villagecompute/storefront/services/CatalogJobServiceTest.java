@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -109,7 +108,7 @@ class CatalogJobServiceTest {
 
     @Test
     void enqueueImportWithFeatureFlagEnabled() throws Exception {
-        doNothing().when(importHandler).process(any());
+        when(importHandler.process(any())).thenReturn(new CatalogImportJobHandler.CatalogImportResult());
 
         double initialCount = meterRegistry.counter("catalog.import.enqueued", "tenant_id", tenant.id.toString())
                 .count();
@@ -157,7 +156,7 @@ class CatalogJobServiceTest {
 
     @Test
     void processNextImportJobExecutesHandler() throws Exception {
-        doNothing().when(importHandler).process(any());
+        when(importHandler.process(any())).thenReturn(new CatalogImportJobHandler.CatalogImportResult());
 
         catalogJobService.enqueueImport("/tmp/test.csv", "test-user", Map.of());
         boolean processed = catalogJobService.processNextImportJob();

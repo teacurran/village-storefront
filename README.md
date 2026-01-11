@@ -187,7 +187,7 @@ All Maven commands run from the root directory. Use `-pl modules/core-platform` 
 | Parent | `village-storefront-parent` | Aggregator and shared config | Quarkus BOM, Spotless, JaCoCo, OWASP |
 | Core Platform | `core-platform` | Tenant gateway, identity, catalog, orders | Quarkus REST, Panache, Stripe, AWS S3, Quinoa |
 
-> Module audit: RESTEasy Reactive, Panache, Scheduler, Stripe SDK, and the AWS S3 SDK are all wired into `modules/core-platform`. Enabling the Quarkus Amazon S3 extension itself requires upgrading the platform to 3.26.2, which is tracked in the test strategy.
+> Module audit: RESTEasy Reactive, Panache, Scheduler, Stripe SDK, and AWS S3 integration (`quarkus-amazon-s3` + AWS SDK) are all wired into `modules/core-platform`, satisfying the Standard Kit requirements.
 
 **Maven Profiles:**
 

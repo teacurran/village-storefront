@@ -86,6 +86,7 @@ The following Quarkus extensions are configured per the [VillageCompute Java Pro
 - **quarkus-rest-jackson** - Jackson JSON serialization for REST APIs
 - **quarkus-hibernate-orm-panache** - Hibernate ORM with Panache active record pattern
 - **quarkus-jdbc-postgresql** - PostgreSQL JDBC driver
+- **quarkus-amazon-s3** - Quarkus Amazon S3 client for Cloudflare R2-compatible storage
 - **quarkus-smallrye-health** - Health check endpoints for Kubernetes probes
 - **quarkus-micrometer-registry-prometheus** - Prometheus metrics export
 - **quarkus-scheduler** - Background job scheduling
@@ -173,7 +174,7 @@ The project fully complies with [docs/java-project-standards.adoc](../java-proje
 **✅ Build System:**
 - Maven 3.9+ with parent-child multi-module structure
 - Java 21 (`maven.compiler.release=21`)
-- Quarkus BOM 3.20.0 (meets 3.17+ requirement; upgrade to 3.26.2 is queued so we can enable the Quarkus Amazon S3 extension once the Mockito `@InjectMock` migration lands)
+- Quarkus BOM 3.20.0 (meets 3.17+ requirement) plus Quarkiverse Amazon S3 extension 3.3.3 managed via dependencyManagement
 - No prohibited dependencies (Lombok absent)
 
 **✅ Required Quarkus Extensions (All Present in `modules/core-platform/pom.xml`):**
@@ -182,6 +183,7 @@ The project fully complies with [docs/java-project-standards.adoc](../java-proje
 - Observability: `quarkus-smallrye-health`, `quarkus-micrometer-registry-prometheus`, `quarkus-opentelemetry`
 - Background Jobs: `quarkus-scheduler`
 - Email: `quarkus-mailer`
+- Object Storage: `quarkus-amazon-s3`
 - Authentication: `quarkus-smallrye-jwt`, `quarkus-smallrye-jwt-build`
 - API: `quarkus-smallrye-openapi`
 - Templates: `quarkus-qute`
@@ -190,7 +192,7 @@ The project fully complies with [docs/java-project-standards.adoc](../java-proje
 - Deployment: `quarkus-kubernetes`, `quarkus-container-image-jib`
 
 **✅ External SDKs (Per Architectural Requirements):**
-- AWS S3 SDK (`software.amazon.awssdk:s3`) - Cloudflare R2 object storage (stopgap until the Quarkus Amazon S3 extension can ride the 3.26.2 platform upgrade)
+- AWS S3 SDK (`software.amazon.awssdk:s3`) - Complements `quarkus-amazon-s3` for presigned URLs + advanced operations against Cloudflare R2
 - Stripe Java SDK (`com.stripe:stripe-java`) - Payment processing
 - Thumbnailator (`net.coobird:thumbnailator`) - Image resizing
 - MapStruct (`org.mapstruct:mapstruct`) - DTO mapping
