@@ -48,6 +48,20 @@ public class CollectionRepository implements PanacheRepositoryBase<Collection, U
     }
 
     /**
+     * Find collections for the current tenant with pagination support.
+     *
+     * @param page
+     *            zero-indexed page
+     * @param size
+     *            page size
+     * @return paged collections
+     */
+    public List<Collection> findByCurrentTenant(int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_FIND_BY_TENANT, Parameters.with("tenantId", tenantId)).page(Page.of(page, size)).list();
+    }
+
+    /**
      * Find collections by status for the current tenant with pagination.
      *
      * @param status

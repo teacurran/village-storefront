@@ -53,6 +53,9 @@ public interface ProductVariantMapper {
     @Mapping(
             target = "updatedAt",
             ignore = true)
+    @Mapping(
+            target = "name",
+            expression = "java(defaultVariantName(dto))")
     ProductVariant toEntity(ProductVariantDto dto);
 
     /**
@@ -81,5 +84,18 @@ public interface ProductVariantMapper {
     @Mapping(
             target = "version",
             ignore = true)
+    @Mapping(
+            target = "name",
+            ignore = true)
     void updateEntityFromDto(ProductVariantDto dto, @MappingTarget ProductVariant variant);
+
+    /**
+     * Derive a variant name from the DTO-visible fields.
+     */
+    default String defaultVariantName(ProductVariantDto dto) {
+        if (dto == null || dto.sku == null || dto.sku.isBlank()) {
+            return "UNSPECIFIED-VARIANT";
+        }
+        return dto.sku.trim();
+    }
 }

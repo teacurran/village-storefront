@@ -1,5 +1,6 @@
 package villagecompute.storefront.api.rest;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,22 +20,34 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.Response.Status;
+import jakarta.ws.rs.core.UriInfo;
 
 import org.jboss.logging.Logger;
 
 import villagecompute.storefront.api.types.CategoryDto;
 import villagecompute.storefront.api.types.CollectionDto;
 import villagecompute.storefront.api.types.PaginationMetadata;
+import villagecompute.storefront.api.types.ProductDto;
+import villagecompute.storefront.api.types.ProductVariantDto;
 import villagecompute.storefront.data.models.Category;
 import villagecompute.storefront.data.models.Collection;
+import villagecompute.storefront.data.models.Product;
+import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.repositories.CategoryRepository;
 import villagecompute.storefront.data.repositories.CollectionRepository;
+import villagecompute.storefront.data.repositories.ProductRepository;
+import villagecompute.storefront.data.repositories.ProductVariantRepository;
 import villagecompute.storefront.services.CatalogJobService;
+import villagecompute.storefront.services.CatalogService;
+import villagecompute.storefront.services.ValidationException;
 import villagecompute.storefront.services.mappers.CategoryMapper;
 import villagecompute.storefront.services.mappers.CollectionMapper;
+import villagecompute.storefront.services.mappers.ProductMapper;
+import villagecompute.storefront.services.mappers.ProductVariantMapper;
 import villagecompute.storefront.services.metrics.CatalogMetrics;
 import villagecompute.storefront.tenant.TenantContext;
 
@@ -94,6 +107,487 @@ public class CatalogAdminResource {
 
     @Inject
     CatalogMetrics catalogMetrics;
+
+    @Inject
+    ProductRepository productRepository;
+
+    @Inject
+    ProductVariantRepository variantRepository;
+
+    @Inject
+    ProductMapper productMapper;
+
+    @Inject
+    ProductVariantMapper variantMapper;
+
+    @Inject
+    CatalogService catalogService;
+
+    @Context
+    UriInfo uriInfo;
+
+    // ========================================
+    // Product Endpoints
+    // ========================================
+
+    /**
+     * List all products with optional pagination and filtering.
+     *
+     * @param status
+     *            optional status filter
+     * @param page
+     *            page number (1-indexed)
+     * @param pageSize
+     *            page size
+     * @return paginated list of products
+     */
+    @GET
+    @Path("/products")
+    @Timed(
+            value = "catalog.admin.product.list",
+            description = "Time to list products")
+    public Response listProducts(@QueryParam("status") String status, @QueryParam("page") Integer page,
+            @QueryParam("pageSize") Integer pageSize) {
+
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("GET /admin/catalog/products - tenantId=%s, status=%s, page=%d, pageSize=%d", tenantId, status, page,
+                pageSize);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "list_products");
+        if (status != null && !status.isBlank()) {
+            span.setAttribute("product.status_filter", status);
+        }
+
+        // Validate pagination parameters
+        int pageNumber = page != null && page > 0 ? page - 1 : 0; // Convert to 0-indexed
+        int size = pageSize != null && pageSize > 0 ? Math.min(pageSize, 100) : 20;
+
+        List<Product> products;
+        long totalItems;
+
+        if (status != null && !status.isBlank()) {
+            products = productRepository.findByStatusForCurrentTenant(status, pageNumber, size);
+            totalItems = productRepository.countByStatusForCurrentTenant(status);
+        } else {
+            products = productRepository.findByCurrentTenant(pageNumber, size);
+            totalItems = productRepository.countByCurrentTenant();
+        }
+
+        List<ProductDto> dtos = products.stream().map(productMapper::toDto).collect(Collectors.toList());
+
+        // Build paginated response
+        PaginationMetadata pagination = new PaginationMetadata();
+        pagination.setPage(pageNumber + 1); // Convert back to 1-indexed
+        pagination.setPageSize(size);
+        pagination.setTotalItems(totalItems);
+        pagination.setTotalPages((int) Math.ceil((double) Math.max(totalItems, 0) / size));
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("data", dtos);
+        response.put("pagination", pagination);
+        response.put("links", buildPaginationLinks(pageNumber + 1, size, pagination.getTotalPages()));
+
+        return Response.ok(response).build();
+    }
+
+    /**
+     * Create a new product.
+     *
+     * @param dto
+     *            product creation request
+     * @return created product
+     */
+    @POST
+    @Path("/products")
+    @Transactional
+    @Timed(
+            value = "catalog.admin.product.create",
+            description = "Time to create product")
+    public Response createProduct(@Valid ProductDto dto) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /admin/catalog/products - tenantId=%s, slug=%s", tenantId, dto.slug);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "create_product");
+        span.setAttribute("product.slug", dto.slug);
+
+        // Check for duplicate slug
+        if (productRepository.findBySlug(dto.slug).isPresent()) {
+            return Response.status(Status.CONFLICT).entity(createProblemDetails("Duplicate Product Slug",
+                    "Product with slug '" + dto.slug + "' already exists", Status.CONFLICT)).build();
+        }
+
+        Product product = productMapper.toEntity(dto);
+
+        try {
+            Product created = catalogService.createProduct(product);
+            ProductDto responseDto = productMapper.toDto(created);
+            return Response.status(Status.CREATED).entity(responseDto).build();
+        } catch (ValidationException e) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Product Data", e.getMessage(), Status.BAD_REQUEST)).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Product Data", e.getMessage(), Status.BAD_REQUEST)).build();
+        }
+    }
+
+    /**
+     * Get product details by ID.
+     *
+     * @param productId
+     *            product UUID
+     * @return product details
+     */
+    @GET
+    @Path("/products/{productId}")
+    @Timed(
+            value = "catalog.admin.product.get",
+            description = "Time to fetch product details")
+    public Response getProduct(@PathParam("productId") UUID productId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("GET /admin/catalog/products/%s - tenantId=%s", productId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "get_product");
+        span.setAttribute("product.id", productId.toString());
+
+        Optional<Product> productOpt = catalogService.getProduct(productId);
+
+        if (productOpt.isEmpty()) {
+            LOG.warnf("Product not found - tenantId=%s, productId=%s", tenantId, productId);
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                    .build();
+        }
+
+        Product product = productOpt.get();
+        ProductDto dto = productMapper.toDto(product);
+
+        return Response.ok(dto).build();
+    }
+
+    /**
+     * Update product by ID.
+     *
+     * @param productId
+     *            product UUID
+     * @param dto
+     *            updated product data
+     * @return updated product
+     */
+    @PUT
+    @Path("/products/{productId}")
+    @Transactional
+    @Timed(
+            value = "catalog.admin.product.update",
+            description = "Time to update product")
+    public Response updateProduct(@PathParam("productId") UUID productId, @Valid ProductDto dto) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("PUT /admin/catalog/products/%s - tenantId=%s", productId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "update_product");
+        span.setAttribute("product.id", productId.toString());
+
+        try {
+            Optional<Product> productOpt = catalogService.getProduct(productId);
+
+            if (productOpt.isEmpty()) {
+                return Response.status(Status.NOT_FOUND).entity(
+                        createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                        .build();
+            }
+
+            Product product = productOpt.get();
+            productMapper.updateEntityFromDto(dto, product);
+            Product updated = catalogService.updateProduct(productId, product);
+
+            ProductDto responseDto = productMapper.toDto(updated);
+            return Response.ok(responseDto).build();
+
+        } catch (ValidationException e) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Product Data", e.getMessage(), Status.BAD_REQUEST)).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Product Data", e.getMessage(), Status.BAD_REQUEST)).build();
+        }
+    }
+
+    /**
+     * Delete product by ID (soft delete by setting status to 'deleted').
+     *
+     * @param productId
+     *            product UUID
+     * @return no content
+     */
+    @DELETE
+    @Path("/products/{productId}")
+    @Transactional
+    @Timed(
+            value = "catalog.admin.product.delete",
+            description = "Time to delete product")
+    public Response deleteProduct(@PathParam("productId") UUID productId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("DELETE /admin/catalog/products/%s - tenantId=%s", productId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "delete_product");
+        span.setAttribute("product.id", productId.toString());
+
+        try {
+            catalogService.deleteProduct(productId);
+            return Response.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Status.NOT_FOUND)
+                    .entity(createProblemDetails("Product Not Found", e.getMessage(), Status.NOT_FOUND)).build();
+        }
+    }
+
+    // ========================================
+    // Variant Endpoints
+    // ========================================
+
+    /**
+     * List all variants for a product.
+     *
+     * @param productId
+     *            product UUID
+     * @return list of variants
+     */
+    @GET
+    @Path("/products/{productId}/variants")
+    @Timed(
+            value = "catalog.admin.variant.list",
+            description = "Time to list product variants")
+    public Response listVariants(@PathParam("productId") UUID productId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("GET /admin/catalog/products/%s/variants - tenantId=%s", productId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "list_variants");
+        span.setAttribute("product.id", productId.toString());
+
+        // Verify product exists and belongs to tenant
+        Optional<Product> productOpt = catalogService.getProduct(productId);
+        if (productOpt.isEmpty()) {
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                    .build();
+        }
+
+        List<ProductVariant> variants = catalogService.getProductVariants(productId);
+        List<ProductVariantDto> dtos = variants.stream().map(variantMapper::toDto).collect(Collectors.toList());
+
+        return Response.ok(dtos).build();
+    }
+
+    /**
+     * Create a new variant for a product.
+     *
+     * @param productId
+     *            product UUID
+     * @param dto
+     *            variant creation request
+     * @return created variant
+     */
+    @POST
+    @Path("/products/{productId}/variants")
+    @Transactional
+    @Timed(
+            value = "catalog.admin.variant.create",
+            description = "Time to create product variant")
+    public Response createVariant(@PathParam("productId") UUID productId, @Valid ProductVariantDto dto) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /admin/catalog/products/%s/variants - tenantId=%s, sku=%s", productId, tenantId, dto.sku);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "create_variant");
+        span.setAttribute("product.id", productId.toString());
+        span.setAttribute("variant.sku", dto.sku);
+
+        // Verify product exists and belongs to tenant
+        Optional<Product> productOpt = catalogService.getProduct(productId);
+        if (productOpt.isEmpty()) {
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                    .build();
+        }
+
+        // Check for duplicate SKU
+        if (variantRepository.findBySku(dto.sku).isPresent()) {
+            return Response.status(Status.CONFLICT).entity(createProblemDetails("Duplicate Variant SKU",
+                    "Variant with SKU '" + dto.sku + "' already exists", Status.CONFLICT)).build();
+        }
+
+        ProductVariant variant = variantMapper.toEntity(dto);
+        variant.product = productOpt.get();
+
+        try {
+            ProductVariant created = catalogService.createVariant(variant);
+            ProductVariantDto responseDto = variantMapper.toDto(created);
+
+            return Response.status(Status.CREATED).entity(responseDto).build();
+        } catch (ValidationException e) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Variant Data", e.getMessage(), Status.BAD_REQUEST)).build();
+        }
+    }
+
+    /**
+     * Get variant details by ID.
+     *
+     * @param productId
+     *            product UUID
+     * @param variantId
+     *            variant UUID
+     * @return variant details
+     */
+    @GET
+    @Path("/products/{productId}/variants/{variantId}")
+    @Timed(
+            value = "catalog.admin.variant.get",
+            description = "Time to fetch variant details")
+    public Response getVariant(@PathParam("productId") UUID productId, @PathParam("variantId") UUID variantId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("GET /admin/catalog/products/%s/variants/%s - tenantId=%s", productId, variantId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "get_variant");
+        span.setAttribute("product.id", productId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+
+        // Verify product exists and belongs to tenant
+        Optional<Product> productOpt = catalogService.getProduct(productId);
+        if (productOpt.isEmpty()) {
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                    .build();
+        }
+
+        Optional<ProductVariant> variantOpt = findVariantForProduct(productId, variantId);
+
+        if (variantOpt.isEmpty()) {
+            LOG.warnf("Variant not found - tenantId=%s, productId=%s, variantId=%s", tenantId, productId, variantId);
+            return Response.status(Status.NOT_FOUND).entity(
+                    createProblemDetails("Variant Not Found", "Variant not found: " + variantId, Status.NOT_FOUND))
+                    .build();
+        }
+
+        ProductVariant variant = variantOpt.get();
+        ProductVariantDto dto = variantMapper.toDto(variant);
+
+        return Response.ok(dto).build();
+    }
+
+    /**
+     * Update variant by ID.
+     *
+     * @param productId
+     *            product UUID
+     * @param variantId
+     *            variant UUID
+     * @param dto
+     *            updated variant data
+     * @return updated variant
+     */
+    @PUT
+    @Path("/products/{productId}/variants/{variantId}")
+    @Transactional
+    @Timed(
+            value = "catalog.admin.variant.update",
+            description = "Time to update variant")
+    public Response updateVariant(@PathParam("productId") UUID productId, @PathParam("variantId") UUID variantId,
+            @Valid ProductVariantDto dto) {
+
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("PUT /admin/catalog/products/%s/variants/%s - tenantId=%s", productId, variantId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "update_variant");
+        span.setAttribute("product.id", productId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+
+        try {
+            // Verify product exists and belongs to tenant
+            Optional<Product> productOpt = catalogService.getProduct(productId);
+            if (productOpt.isEmpty()) {
+                return Response.status(Status.NOT_FOUND).entity(
+                        createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                        .build();
+            }
+
+            Optional<ProductVariant> variantOpt = findVariantForProduct(productId, variantId);
+            if (variantOpt.isEmpty()) {
+                return Response.status(Status.NOT_FOUND).entity(
+                        createProblemDetails("Variant Not Found", "Variant not found: " + variantId, Status.NOT_FOUND))
+                        .build();
+            }
+
+            ProductVariant updated = catalogService.updateVariant(variantId, dto);
+            ProductVariantDto responseDto = variantMapper.toDto(updated);
+
+            return Response.ok(responseDto).build();
+
+        } catch (ValidationException e) {
+            return Response.status(Status.BAD_REQUEST)
+                    .entity(createProblemDetails("Invalid Variant Data", e.getMessage(), Status.BAD_REQUEST)).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Status.NOT_FOUND)
+                    .entity(createProblemDetails("Variant Not Found", e.getMessage(), Status.NOT_FOUND)).build();
+        }
+    }
+
+    /**
+     * Delete variant by ID (soft delete by setting status to 'deleted').
+     *
+     * @param productId
+     *            product UUID
+     * @param variantId
+     *            variant UUID
+     * @return no content
+     */
+    @DELETE
+    @Path("/products/{productId}/variants/{variantId}")
+    @Transactional
+    @Timed(
+            value = "catalog.admin.variant.delete",
+            description = "Time to delete variant")
+    public Response deleteVariant(@PathParam("productId") UUID productId, @PathParam("variantId") UUID variantId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("DELETE /admin/catalog/products/%s/variants/%s - tenantId=%s", productId, variantId, tenantId);
+
+        Span span = spanWithTenant(tenantId);
+        span.setAttribute("catalog.operation", "delete_variant");
+        span.setAttribute("product.id", productId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+
+        try {
+            // Verify product exists and belongs to tenant
+            Optional<Product> productOpt = catalogService.getProduct(productId);
+            if (productOpt.isEmpty()) {
+                return Response.status(Status.NOT_FOUND).entity(
+                        createProblemDetails("Product Not Found", "Product not found: " + productId, Status.NOT_FOUND))
+                        .build();
+            }
+
+            Optional<ProductVariant> variantOpt = findVariantForProduct(productId, variantId);
+            if (variantOpt.isEmpty()) {
+                return Response.status(Status.NOT_FOUND).entity(
+                        createProblemDetails("Variant Not Found", "Variant not found: " + variantId, Status.NOT_FOUND))
+                        .build();
+            }
+
+            catalogService.deleteVariant(variantId);
+            return Response.noContent().build();
+
+        } catch (IllegalArgumentException e) {
+            return Response.status(Status.NOT_FOUND)
+                    .entity(createProblemDetails("Variant Not Found", e.getMessage(), Status.NOT_FOUND)).build();
+        }
+    }
 
     // ========================================
     // Category Endpoints
@@ -332,7 +826,7 @@ public class CatalogAdminResource {
             collections = collectionRepository.findByStatus(status, pageNumber, size);
             totalItems = collectionRepository.countByStatus(status);
         } else {
-            collections = collectionRepository.findByCurrentTenant();
+            collections = collectionRepository.findByCurrentTenant(pageNumber, size);
             totalItems = collectionRepository.countByCurrentTenant();
         }
 
@@ -348,6 +842,7 @@ public class CatalogAdminResource {
         Map<String, Object> response = new HashMap<>();
         response.put("data", dtos);
         response.put("pagination", pagination);
+        response.put("links", buildPaginationLinks(pageNumber + 1, size, pagination.getTotalPages()));
 
         return Response.ok(response).build();
     }
@@ -648,8 +1143,21 @@ public class CatalogAdminResource {
         problem.put("type", "about:blank");
         problem.put("title", title);
         problem.put("status", status.getStatusCode());
+        String message = (detail != null && !detail.isBlank()) ? detail : title;
+        problem.put("message", message);
         if (detail != null && !detail.isBlank()) {
             problem.put("detail", detail);
+        }
+        if (TenantContext.hasContext()) {
+            problem.put("tenantId", TenantContext.getCurrentTenantId().toString());
+        }
+        Span span = Span.current();
+        String traceId = span.getSpanContext().isValid() ? span.getSpanContext().getTraceId()
+                : UUID.randomUUID().toString().replace("-", "");
+        problem.put("traceId", traceId);
+        problem.put("timestamp", OffsetDateTime.now().toString());
+        if (uriInfo != null) {
+            problem.put("instance", uriInfo.getRequestUri().toString());
         }
         return problem;
     }
@@ -676,5 +1184,31 @@ public class CatalogAdminResource {
 
         Category parentCategory = parentOpt.get();
         return parentCategory.tenant.id.equals(tenantId) ? parentCategory : null;
+    }
+
+    private Optional<ProductVariant> findVariantForProduct(UUID productId, UUID variantId) {
+        return variantRepository.findByIdForTenant(variantId)
+                .filter(variant -> variant.product != null && variant.product.id.equals(productId));
+    }
+
+    private Map<String, String> buildPaginationLinks(int page, int size, Integer totalPages) {
+        Map<String, String> links = new HashMap<>();
+        if (uriInfo == null) {
+            return links;
+        }
+        links.put("self", buildPageLink(page, size));
+        int resolvedTotal = (totalPages == null || totalPages < 1) ? 1 : totalPages;
+        if (page > 1) {
+            links.put("prev", buildPageLink(page - 1, size));
+        }
+        if (page < resolvedTotal) {
+            links.put("next", buildPageLink(page + 1, size));
+        }
+        return links;
+    }
+
+    private String buildPageLink(int page, int size) {
+        return uriInfo.getRequestUriBuilder().replaceQueryParam("page", page).replaceQueryParam("pageSize", size)
+                .build().toString();
     }
 }

@@ -47,7 +47,8 @@ public class ProductDto {
 
     @NotBlank
     @Pattern(
-            regexp = "^(draft|active|archived|deleted)$")
+            regexp = "^(draft|scheduled|active|archived)$",
+            message = "Status must be draft, scheduled, active, or archived")
     public String status;
 
     public String visibilityWindow; // JSON string: {start_date, end_date}

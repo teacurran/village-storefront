@@ -1,5 +1,6 @@
 package villagecompute.storefront.services.validation;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -36,9 +37,13 @@ import villagecompute.storefront.services.ValidationException;
 @ApplicationScoped
 public class CatalogValidator {
 
-    private static final Set<String> VALID_STATUSES = Set.of("draft", "active", "archived", "deleted");
+    private static final Set<String> VALID_STATUSES = Set.of("draft", "scheduled", "active", "archived", "deleted");
     private static final Set<String> VALID_PRODUCT_TYPES = Set.of("physical", "digital", "service");
     private static final Set<String> VALID_COLLECTION_TYPES = Set.of("manual", "automatic");
+    private static final Map<String, Set<String>> VALID_TRANSITIONS = Map.of("draft",
+            Set.of("draft", "scheduled", "active", "archived"), "scheduled",
+            Set.of("scheduled", "draft", "active", "archived"), "active", Set.of("active", "archived"), "archived",
+            Set.of("archived", "active", "deleted"), "deleted", Set.of("deleted"));
 
     @Inject
     ProductRepository productRepository;
@@ -73,10 +78,14 @@ public class CatalogValidator {
             throw new ValidationException("Can only delete archived entities. Archive first, then delete.");
         }
 
-        // Allow transitions: draft → active, active → archived, archived → deleted
-        // Disallow: active → draft (would break live storefronts)
-        if ("draft".equals(newStatus) && "active".equals(currentStatus)) {
+        if ("active".equals(currentStatus) && "draft".equals(newStatus)) {
             throw new ValidationException("Cannot revert active entity to draft. Use archived status instead.");
+        }
+
+        Set<String> allowed = VALID_TRANSITIONS.getOrDefault(currentStatus, VALID_STATUSES);
+        if (!allowed.contains(newStatus)) {
+            throw new ValidationException(
+                    "Cannot transition from " + currentStatus + " to " + newStatus + " for catalog entities.");
         }
     }
 

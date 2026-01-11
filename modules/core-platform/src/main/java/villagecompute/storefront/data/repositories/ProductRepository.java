@@ -196,6 +196,18 @@ public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
     }
 
     /**
+     * Count products by status for the current tenant.
+     *
+     * @param status
+     *            product status
+     * @return product count matching status
+     */
+    public long countByStatusForCurrentTenant(String status) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return count(QUERY_FIND_BY_TENANT_AND_STATUS, Parameters.with("tenantId", tenantId).and("status", status));
+    }
+
+    /**
      * Find product by ID ensuring it belongs to the current tenant.
      *
      * @param id

@@ -46,6 +46,7 @@ class CatalogAdminResourceTest {
 
     private String tenantSubdomain;
     private String otherTenantSubdomain;
+    private UUID tenantId;
     private UUID categoryId;
     private UUID otherTenantCategoryId;
     private UUID collectionId;
@@ -81,6 +82,7 @@ class CatalogAdminResourceTest {
         entityManager.persist(tenant);
         entityManager.flush();
         tenantSubdomain = tenant.subdomain;
+        tenantId = tenant.id;
 
         // Set tenant context for setup
         TenantContext.setCurrentTenant(new TenantInfo(tenant.id, tenant.subdomain, tenant.name, tenant.status));
@@ -261,7 +263,7 @@ class CatalogAdminResourceTest {
     @Test
     void listCollections_shouldReturnCollections() {
         request(tenantSubdomain).when().get("/api/v1/admin/catalog/collections").then().statusCode(200)
-                .body("data", notNullValue()).body("pagination", notNullValue());
+                .body("data", notNullValue()).body("pagination", notNullValue()).body("links.self", notNullValue());
     }
 
     @Test
@@ -290,7 +292,9 @@ class CatalogAdminResourceTest {
     void getCollection_shouldReturn404ForNonExistentCollection() {
         UUID nonExistentId = UUID.randomUUID();
         request(tenantSubdomain).when().get("/api/v1/admin/catalog/collections/" + nonExistentId).then().statusCode(404)
-                .body("title", equalTo("Collection Not Found")).body("status", equalTo(404));
+                .body("title", equalTo("Collection Not Found")).body("status", equalTo(404))
+                .body("message", equalTo("Collection not found: " + nonExistentId))
+                .body("tenantId", equalTo(tenantId.toString())).body("traceId", notNullValue());
     }
 
     @Test
@@ -369,6 +373,589 @@ class CatalogAdminResourceTest {
 
         // Verify tenant 2 cannot access tenant 1's collection
         request(otherTenantSubdomain).when().get("/api/v1/admin/catalog/collections/" + collectionId).then()
+                .statusCode(404);
+    }
+
+    // ========================================
+    // Product CRUD Tests
+    // ========================================
+
+    @Test
+    void createProduct_success() {
+        String productJson = """
+                {
+                  "title": "Test Product",
+                  "slug": "test-product-unique-slug-1",
+                  "description": "A test product description",
+                  "status": "draft"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).body("id", notNullValue())
+                .body("title", equalTo("Test Product")).body("slug", equalTo("test-product-unique-slug-1"))
+                .body("status", equalTo("draft"));
+    }
+
+    @Test
+    void createProduct_withScheduledStatus_success() {
+        String productJson = """
+                {
+                  "title": "Scheduled Product",
+                  "slug": "scheduled-product-slug",
+                  "visibilityWindow": "{\\"start_date\\":\\"2030-01-01T00:00:00Z\\",\\"end_date\\":\\"2030-01-31T00:00:00Z\\"}",
+                  "status": "scheduled"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).body("status", equalTo("scheduled"))
+                .body("visibilityWindow", notNullValue());
+    }
+
+    @Test
+    void createProduct_duplicateSlug_returns409() {
+        String productJson = """
+                {
+                  "title": "Test Product 1",
+                  "slug": "duplicate-slug-test",
+                  "description": "First product",
+                  "status": "draft"
+                }
+                """;
+
+        // Create first product
+        request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201);
+
+        // Attempt to create second product with same slug
+        String productJson2 = """
+                {
+                  "title": "Test Product 2",
+                  "slug": "duplicate-slug-test",
+                  "description": "Second product",
+                  "status": "draft"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(productJson2).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(409)
+                .body("title", equalTo("Duplicate Product Slug"))
+                .body("message", equalTo("Product with slug 'duplicate-slug-test' already exists"))
+                .body("tenantId", equalTo(tenantId.toString())).body("traceId", notNullValue());
+    }
+
+    @Test
+    void updateProduct_invalidTransition_returns400() {
+        String productJson = """
+                {
+                  "title": "Live Product",
+                  "slug": "live-product-slug",
+                  "status": "active"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        String updateJson = """
+                {
+                  "title": "Live Product",
+                  "slug": "live-product-slug",
+                  "status": "draft"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(updateJson).when()
+                .put("/api/v1/admin/catalog/products/" + productId).then().statusCode(400)
+                .body("title", equalTo("Invalid Product Data"))
+                .body("message", equalTo("Cannot transition from active to draft for catalog entities."))
+                .body("tenantId", equalTo(tenantId.toString()));
+    }
+
+    @Test
+    void listProducts_withPagination() {
+        // Create multiple products
+        for (int i = 1; i <= 5; i++) {
+            String productJson = String.format("""
+                    {
+                      "title": "Product %d",
+                      "slug": "product-%d-slug",
+                      "description": "Product %d description",
+                      "status": "active"
+                    }
+                    """, i, i, i);
+
+            request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                    .post("/api/v1/admin/catalog/products").then().statusCode(201);
+        }
+
+        // List products with pagination
+        request(tenantSubdomain).queryParam("page", 1).queryParam("pageSize", 3).when()
+                .get("/api/v1/admin/catalog/products").then().statusCode(200).body("pagination.page", equalTo(1))
+                .body("pagination.pageSize", equalTo(3)).body("pagination.totalItems", equalTo(5))
+                .body("data.size()", equalTo(3)).body("links.self", notNullValue());
+    }
+
+    @Test
+    void listProducts_filterByStatus() {
+        // Create products with different statuses
+        String draftProduct = """
+                {
+                  "title": "Draft Product",
+                  "slug": "draft-product-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String activeProduct = """
+                {
+                  "title": "Active Product",
+                  "slug": "active-product-slug",
+                  "status": "active"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(draftProduct).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201);
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(activeProduct).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201);
+
+        // Filter by status
+        request(tenantSubdomain).queryParam("status", "draft").when().get("/api/v1/admin/catalog/products").then()
+                .statusCode(200).body("data.size()", equalTo(1)).body("data[0].status", equalTo("draft"));
+
+        request(tenantSubdomain).queryParam("status", "active").when().get("/api/v1/admin/catalog/products").then()
+                .statusCode(200).body("data.size()", equalTo(1)).body("data[0].status", equalTo("active"));
+    }
+
+    @Test
+    void getProduct_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Get Test Product",
+                  "slug": "get-test-product-slug",
+                  "description": "Product for get test",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Get the product
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + productId).then().statusCode(200)
+                .body("id", equalTo(productId)).body("title", equalTo("Get Test Product"))
+                .body("slug", equalTo("get-test-product-slug"));
+    }
+
+    @Test
+    void getProduct_notFound_returns404() {
+        UUID nonExistentId = UUID.randomUUID();
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + nonExistentId).then().statusCode(404)
+                .body("title", equalTo("Product Not Found"))
+                .body("message", equalTo("Product not found: " + nonExistentId))
+                .body("tenantId", equalTo(tenantId.toString())).body("traceId", notNullValue());
+    }
+
+    @Test
+    void updateProduct_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Original Title",
+                  "slug": "original-slug-update-test",
+                  "description": "Original description",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Update the product
+        String updateJson = """
+                {
+                  "title": "Updated Title",
+                  "slug": "updated-slug-test",
+                  "description": "Updated description",
+                  "status": "active"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(updateJson).when()
+                .put("/api/v1/admin/catalog/products/" + productId).then().statusCode(200)
+                .body("title", equalTo("Updated Title")).body("slug", equalTo("updated-slug-test"))
+                .body("status", equalTo("active"));
+    }
+
+    @Test
+    void deleteProduct_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Product to Delete",
+                  "slug": "delete-test-product-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Delete the product
+        request(tenantSubdomain).when().delete("/api/v1/admin/catalog/products/" + productId).then().statusCode(204);
+
+        // Verify product is marked as deleted (should not appear in list)
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + productId).then().statusCode(200)
+                .body("status", equalTo("deleted"));
+    }
+
+    @Test
+    void enforceTenantIsolation_products() {
+        // Create product for tenant 1
+        String productJson = """
+                {
+                  "title": "Tenant 1 Product",
+                  "slug": "tenant-1-product-slug-isolation",
+                  "status": "active"
+                }
+                """;
+
+        String tenant1ProductId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Verify tenant 1 can access their product
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + tenant1ProductId).then().statusCode(200)
+                .body("id", equalTo(tenant1ProductId));
+
+        // Verify tenant 2 CANNOT access tenant 1's product
+        request(otherTenantSubdomain).when().get("/api/v1/admin/catalog/products/" + tenant1ProductId).then()
+                .statusCode(404);
+
+        // Verify tenant 2 CANNOT update tenant 1's product
+        String updateJson = """
+                {
+                  "title": "Malicious Update",
+                  "slug": "malicious-slug",
+                  "status": "active"
+                }
+                """;
+
+        request(otherTenantSubdomain).contentType(ContentType.JSON).body(updateJson).when()
+                .put("/api/v1/admin/catalog/products/" + tenant1ProductId).then().statusCode(404);
+
+        // Verify tenant 2 CANNOT delete tenant 1's product
+        request(otherTenantSubdomain).when().delete("/api/v1/admin/catalog/products/" + tenant1ProductId).then()
+                .statusCode(404);
+    }
+
+    // ========================================
+    // Variant CRUD Tests
+    // ========================================
+
+    @Test
+    void createVariant_success() {
+        // Create a product first
+        String productJson = """
+                {
+                  "title": "Product for Variant Test",
+                  "slug": "product-for-variant-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create a variant
+        String variantJson = """
+                {
+                  "sku": "TEST-VAR-001",
+                  "barcode": "1234567890123",
+                  "price": 99.99,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(201)
+                .body("id", notNullValue()).body("sku", equalTo("TEST-VAR-001"))
+                .body("barcode", equalTo("1234567890123")).body("price", equalTo(99.99f))
+                .body("inventoryPolicy", equalTo("continue"));
+    }
+
+    @Test
+    void createVariant_duplicateSku_returns409() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Product for Duplicate SKU Test",
+                  "slug": "product-duplicate-sku-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create first variant
+        String variantJson = """
+                {
+                  "sku": "DUPLICATE-SKU-001",
+                  "price": 50.00,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(201);
+
+        // Attempt to create second variant with same SKU
+        request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(409)
+                .body("title", equalTo("Duplicate Variant SKU"));
+    }
+
+    @Test
+    void listVariants_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Product with Multiple Variants",
+                  "slug": "product-with-variants-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create multiple variants
+        for (int i = 1; i <= 3; i++) {
+            String variantJson = String.format("""
+                    {
+                      "sku": "VAR-%03d",
+                      "price": %d.99,
+                      "inventoryPolicy": "continue"
+                    }
+                    """, i, i * 10);
+
+            request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                    .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(201);
+        }
+
+        // List variants
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + productId + "/variants").then()
+                .statusCode(200).body("size()", equalTo(3));
+    }
+
+    @Test
+    void getVariant_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Product for Get Variant Test",
+                  "slug": "product-get-variant-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create a variant
+        String variantJson = """
+                {
+                  "sku": "GET-VAR-001",
+                  "price": 49.99,
+                  "inventoryPolicy": "deny"
+                }
+                """;
+
+        String variantId = request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(201).extract()
+                .path("id");
+
+        // Get the variant
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + productId + "/variants/" + variantId)
+                .then().statusCode(200).body("id", equalTo(variantId)).body("sku", equalTo("GET-VAR-001"))
+                .body("price", equalTo(49.99f));
+    }
+
+    @Test
+    void updateVariant_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Product for Update Variant Test",
+                  "slug": "product-update-variant-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create a variant
+        String variantJson = """
+                {
+                  "sku": "UPDATE-VAR-001",
+                  "price": 29.99,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        String variantId = request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(201).extract()
+                .path("id");
+
+        // Update the variant
+        String updateJson = """
+                {
+                  "sku": "UPDATE-VAR-001-MODIFIED",
+                  "price": 39.99,
+                  "inventoryPolicy": "deny"
+                }
+                """;
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(updateJson).when()
+                .put("/api/v1/admin/catalog/products/" + productId + "/variants/" + variantId).then().statusCode(200)
+                .body("sku", equalTo("UPDATE-VAR-001-MODIFIED")).body("price", equalTo(39.99f))
+                .body("inventoryPolicy", equalTo("deny"));
+    }
+
+    @Test
+    void deleteVariant_success() {
+        // Create a product
+        String productJson = """
+                {
+                  "title": "Product for Delete Variant Test",
+                  "slug": "product-delete-variant-slug",
+                  "status": "draft"
+                }
+                """;
+
+        String productId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create a variant
+        String variantJson = """
+                {
+                  "sku": "DELETE-VAR-001",
+                  "price": 19.99,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        String variantId = request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productId + "/variants").then().statusCode(201).extract()
+                .path("id");
+
+        // Delete the variant
+        request(tenantSubdomain).when().delete("/api/v1/admin/catalog/products/" + productId + "/variants/" + variantId)
+                .then().statusCode(204);
+
+        // Verify variant is marked as deleted
+        request(tenantSubdomain).when().get("/api/v1/admin/catalog/products/" + productId + "/variants/" + variantId)
+                .then().statusCode(200).body("status", equalTo("deleted"));
+    }
+
+    @Test
+    void enforceTenantIsolation_variants() {
+        // Create product for tenant 1
+        String productJson = """
+                {
+                  "title": "Tenant 1 Product for Variant Isolation",
+                  "slug": "tenant-1-product-variant-isolation-slug",
+                  "status": "active"
+                }
+                """;
+
+        String tenant1ProductId = request(tenantSubdomain).contentType(ContentType.JSON).body(productJson).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        // Create variant for tenant 1's product
+        String variantJson = """
+                {
+                  "sku": "TENANT-1-VAR-001",
+                  "price": 99.99,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        String tenant1VariantId = request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + tenant1ProductId + "/variants").then().statusCode(201)
+                .extract().path("id");
+
+        // Verify tenant 1 can access their variant
+        request(tenantSubdomain).when()
+                .get("/api/v1/admin/catalog/products/" + tenant1ProductId + "/variants/" + tenant1VariantId).then()
+                .statusCode(200).body("id", equalTo(tenant1VariantId));
+
+        // Verify tenant 2 CANNOT access tenant 1's variant
+        request(otherTenantSubdomain).when()
+                .get("/api/v1/admin/catalog/products/" + tenant1ProductId + "/variants/" + tenant1VariantId).then()
+                .statusCode(404);
+
+        // Verify tenant 2 CANNOT update tenant 1's variant
+        String updateJson = """
+                {
+                  "sku": "MALICIOUS-SKU",
+                  "price": 1.00,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        request(otherTenantSubdomain).contentType(ContentType.JSON).body(updateJson).when()
+                .put("/api/v1/admin/catalog/products/" + tenant1ProductId + "/variants/" + tenant1VariantId).then()
+                .statusCode(404);
+
+        // Verify tenant 2 CANNOT delete tenant 1's variant
+        request(otherTenantSubdomain).when()
+                .delete("/api/v1/admin/catalog/products/" + tenant1ProductId + "/variants/" + tenant1VariantId).then()
+                .statusCode(404);
+    }
+
+    @Test
+    void variantMustBelongToProductForUpdates() {
+        String productOne = """
+                {
+                  "title": "Variant Parent One",
+                  "slug": "variant-parent-one",
+                  "status": "active"
+                }
+                """;
+
+        String productTwo = """
+                {
+                  "title": "Variant Parent Two",
+                  "slug": "variant-parent-two",
+                  "status": "active"
+                }
+                """;
+
+        String productOneId = request(tenantSubdomain).contentType(ContentType.JSON).body(productOne).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+        String productTwoId = request(tenantSubdomain).contentType(ContentType.JSON).body(productTwo).when()
+                .post("/api/v1/admin/catalog/products").then().statusCode(201).extract().path("id");
+
+        String variantJson = """
+                {
+                  "sku": "WRONG-PRODUCT-SKU",
+                  "price": 12.99,
+                  "inventoryPolicy": "continue"
+                }
+                """;
+
+        String variantId = request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .post("/api/v1/admin/catalog/products/" + productOneId + "/variants").then().statusCode(201).extract()
+                .path("id");
+
+        request(tenantSubdomain).contentType(ContentType.JSON).body(variantJson).when()
+                .put("/api/v1/admin/catalog/products/" + productTwoId + "/variants/" + variantId).then()
                 .statusCode(404);
     }
 }

@@ -1,5 +1,7 @@
 package villagecompute.storefront.services.mappers;
 
+import java.util.UUID;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
@@ -107,6 +109,15 @@ public interface ProductMapper {
     @Mapping(
             target = "updatedAt",
             ignore = true)
+    @Mapping(
+            target = "sku",
+            expression = "java(deriveProductSku(dto))")
+    @Mapping(
+            target = "name",
+            expression = "java(deriveProductName(dto))")
+    @Mapping(
+            target = "type",
+            expression = "java(defaultProductType(dto))")
     Product toEntity(ProductDto dto);
 
     /**
@@ -135,6 +146,15 @@ public interface ProductMapper {
     @Mapping(
             target = "version",
             ignore = true)
+    @Mapping(
+            target = "sku",
+            ignore = true)
+    @Mapping(
+            target = "name",
+            ignore = true)
+    @Mapping(
+            target = "type",
+            ignore = true)
     void updateEntityFromDto(ProductDto dto, @MappingTarget Product product);
 
     /**
@@ -153,5 +173,40 @@ public interface ProductMapper {
         // Simplified: return USD 0.00 as placeholder
         // Real implementation would fetch from variants or pricing service
         return new Money("0.00", "USD");
+    }
+
+    /**
+     * Derive a product name from the DTO-visible fields so we do not expose the persistence-only {@code name} column.
+     */
+    default String deriveProductName(ProductDto dto) {
+        if (dto == null || dto.title == null || dto.title.isBlank()) {
+            return "Untitled Product";
+        }
+        return dto.title.trim();
+    }
+
+    /**
+     * Generate an internal SKU from slug/title to satisfy unique constraints without requiring clients to provide it.
+     */
+    default String deriveProductSku(ProductDto dto) {
+        if (dto != null) {
+            if (dto.slug != null && !dto.slug.isBlank()) {
+                return dto.slug.replace('-', '_').toUpperCase();
+            }
+            if (dto.title != null && !dto.title.isBlank()) {
+                String sanitized = dto.title.replaceAll("[^A-Za-z0-9]+", "_");
+                if (!sanitized.isBlank()) {
+                    return sanitized.toUpperCase();
+                }
+            }
+        }
+        return "PRD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    /**
+     * Default product type when API callers do not send the persistence-only field.
+     */
+    default String defaultProductType(ProductDto dto) {
+        return "physical";
     }
 }

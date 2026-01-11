@@ -667,6 +667,83 @@ components:
           type: string
     PlatformEvent:
       type: object
+    ProductDto:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        title:
+          type: string
+          pattern: \S
+          maxLength: 500
+        slug:
+          type: string
+          pattern: "^[a-z0-9-]+$"
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 10000
+        status:
+          type: string
+          pattern: ^(draft|scheduled|active|archived)$
+        visibilityWindow:
+          type: string
+        seo:
+          type: string
+        categoryIds:
+          type: string
+        collectionIds:
+          type: string
+        customAttributes:
+          type: string
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+      required:
+      - title
+      - slug
+      - status
+    ProductVariantDto:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/UUID"
+        sku:
+          type: string
+          pattern: \S
+          maxLength: 100
+        barcode:
+          type: string
+          maxLength: 100
+        optionValues:
+          type: string
+        price:
+          type: number
+        compareAtPrice:
+          type: number
+        inventoryPolicy:
+          type: string
+          pattern: ^(continue|deny)$
+        weight:
+          type: number
+        dimensions:
+          type: string
+        mediaIds:
+          type: string
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+        updatedAt:
+          $ref: "#/components/schemas/OffsetDateTime"
+      required:
+      - sku
+      - price
     RateRequestDTO:
       type: object
       properties:
@@ -1250,6 +1327,190 @@ paths:
         "400":
           description: Bad Request
       summary: Import Catalog
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/products:
+    get:
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          format: int32
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+      summary: List Products
+      tags:
+      - Catalog Admin Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Create Product
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/products/{productId}:
+    put:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Update Product
+      tags:
+      - Catalog Admin Resource
+    get:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Product
+      tags:
+      - Catalog Admin Resource
+    delete:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Delete Product
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/products/{productId}/variants:
+    get:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: List Variants
+      tags:
+      - Catalog Admin Resource
+    post:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductVariantDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Create Variant
+      tags:
+      - Catalog Admin Resource
+  /api/v1/admin/catalog/products/{productId}/variants/{variantId}:
+    put:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: variantId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductVariantDto"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Update Variant
+      tags:
+      - Catalog Admin Resource
+    get:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: variantId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Get Variant
+      tags:
+      - Catalog Admin Resource
+    delete:
+      parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      - name: variantId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+      summary: Delete Variant
       tags:
       - Catalog Admin Resource
   /api/v1/admin/consignors:

@@ -19,6 +19,8 @@ import villagecompute.storefront.data.repositories.CategoryRepository;
 import villagecompute.storefront.data.repositories.CollectionRepository;
 import villagecompute.storefront.data.repositories.ProductRepository;
 import villagecompute.storefront.data.repositories.ProductVariantRepository;
+import villagecompute.storefront.services.events.ProductLifecyclePayload;
+import villagecompute.storefront.services.events.ProductVariantLifecyclePayload;
 import villagecompute.storefront.services.metrics.CatalogMetrics;
 import villagecompute.storefront.services.validation.CatalogValidator;
 import villagecompute.storefront.tenant.TenantContext;
@@ -66,6 +68,9 @@ public class CatalogService {
     @Inject
     CatalogMetrics catalogMetrics;
 
+    @Inject
+    DomainEventPublisher domainEventPublisher;
+
     // ========================================
     // Product Operations
     // ========================================
@@ -81,6 +86,8 @@ public class CatalogService {
     @WithSpan("CatalogService.createProduct")
     public Product createProduct(Product product) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        normalizeProduct(product);
 
         // Add OpenTelemetry span attributes
         Span span = Span.current();
@@ -106,6 +113,7 @@ public class CatalogService {
         LOG.infof("Product created successfully - tenantId=%s, productId=%s, sku=%s", tenantId, product.id,
                 product.sku);
         catalogMetrics.recordProductCreated(tenantId);
+        publishProductEvent("PRODUCT_CREATED", product);
 
         return product;
     }
@@ -125,6 +133,8 @@ public class CatalogService {
     @WithSpan("CatalogService.updateProduct")
     public Product updateProduct(UUID productId, Product updatedProduct) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+
+        normalizeProduct(updatedProduct);
 
         // Add OpenTelemetry span attributes
         Span span = Span.current();
@@ -153,10 +163,16 @@ public class CatalogService {
         }
 
         // Update fields (selective update pattern)
+        product.title = updatedProduct.title;
         product.name = updatedProduct.name;
         product.description = updatedProduct.description;
         product.slug = updatedProduct.slug;
         product.status = updatedProduct.status;
+        product.visibilityWindow = updatedProduct.visibilityWindow;
+        product.seo = updatedProduct.seo;
+        product.categoryIds = updatedProduct.categoryIds;
+        product.collectionIds = updatedProduct.collectionIds;
+        product.customAttributes = updatedProduct.customAttributes;
         product.metadata = updatedProduct.metadata;
         product.seoTitle = updatedProduct.seoTitle;
         product.seoDescription = updatedProduct.seoDescription;
@@ -167,6 +183,7 @@ public class CatalogService {
 
         LOG.infof("Product updated successfully - tenantId=%s, productId=%s", tenantId, productId);
         catalogMetrics.recordProductUpdated(tenantId);
+        publishProductEvent("PRODUCT_UPDATED", product);
         return product;
     }
 
@@ -368,6 +385,7 @@ public class CatalogService {
 
         LOG.infof("Product deleted successfully - tenantId=%s, productId=%s", tenantId, productId);
         catalogMetrics.recordProductDeleted(tenantId);
+        publishProductEvent("PRODUCT_DELETED", product);
     }
 
     // ========================================
@@ -660,12 +678,17 @@ public class CatalogService {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("Creating variant - tenantId=%s, productId=%s, sku=%s", tenantId, variant.product.id, variant.sku);
 
+        if (variant.name == null || variant.name.isBlank()) {
+            variant.name = variant.sku;
+        }
+
         variantRepository.persist(variant);
         catalogCacheService.invalidateTenantCache(tenantId, "variant-created");
 
         LOG.infof("Variant created successfully - tenantId=%s, variantId=%s, sku=%s", tenantId, variant.id,
                 variant.sku);
         catalogMetrics.recordVariantCreated(tenantId);
+        publishVariantEvent("VARIANT_CREATED", variant);
         return variant;
     }
 
@@ -698,8 +721,152 @@ public class CatalogService {
     }
 
     /**
+     * Update an existing product variant.
+     *
+     * @param variantId
+     *            variant UUID
+     * @param updatedVariant
+     *            updated variant data (DTO)
+     * @return updated variant
+     * @throws IllegalArgumentException
+     *             if variant not found
+     */
+    @Transactional
+    @WithSpan("CatalogService.updateVariant")
+    public ProductVariant updateVariant(UUID variantId,
+            villagecompute.storefront.api.types.ProductVariantDto updatedVariant) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Add OpenTelemetry span attributes
+        Span span = Span.current();
+        span.setAttribute("tenant.id", tenantId.toString());
+        span.setAttribute("variant.id", variantId.toString());
+
+        LOG.infof("Updating variant - tenantId=%s, variantId=%s", tenantId, variantId);
+
+        ProductVariant variant = variantRepository.findByIdOptional(variantId)
+                .orElseThrow(() -> new IllegalArgumentException("Variant not found: " + variantId));
+
+        // Verify tenant ownership
+        if (!variant.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Variant does not belong to current tenant");
+        }
+
+        // Update fields (selective update pattern)
+        variant.sku = updatedVariant.sku;
+        variant.barcode = updatedVariant.barcode;
+        variant.optionValues = updatedVariant.optionValues;
+        variant.price = updatedVariant.price;
+        variant.compareAtPrice = updatedVariant.compareAtPrice;
+        variant.inventoryPolicy = updatedVariant.inventoryPolicy;
+        variant.weight = updatedVariant.weight;
+        variant.dimensions = updatedVariant.dimensions;
+        variant.mediaIds = updatedVariant.mediaIds;
+        if (updatedVariant.sku != null && !updatedVariant.sku.isBlank()) {
+            variant.name = updatedVariant.sku;
+        }
+        variant.updatedAt = OffsetDateTime.now();
+
+        variantRepository.persist(variant);
+        catalogCacheService.invalidateTenantCache(tenantId, "variant-updated");
+
+        LOG.infof("Variant updated successfully - tenantId=%s, variantId=%s", tenantId, variantId);
+        catalogMetrics.recordVariantUpdated(tenantId);
+        publishVariantEvent("VARIANT_UPDATED", variant);
+        return variant;
+    }
+
+    /**
+     * Delete a product variant (soft delete by setting status to 'deleted').
+     *
+     * @param variantId
+     *            variant UUID
+     */
+    @Transactional
+    public void deleteVariant(UUID variantId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Deleting variant - tenantId=%s, variantId=%s", tenantId, variantId);
+
+        ProductVariant variant = variantRepository.findByIdOptional(variantId)
+                .orElseThrow(() -> new IllegalArgumentException("Variant not found: " + variantId));
+
+        if (!variant.tenant.id.equals(tenantId)) {
+            throw new IllegalArgumentException("Variant does not belong to current tenant");
+        }
+
+        variant.status = "deleted";
+        variantRepository.persist(variant);
+        catalogCacheService.invalidateTenantCache(tenantId, "variant-deleted");
+
+        LOG.infof("Variant deleted successfully - tenantId=%s, variantId=%s", tenantId, variantId);
+        catalogMetrics.recordVariantDeleted(tenantId);
+        publishVariantEvent("VARIANT_DELETED", variant);
+    }
+
+    /**
      * Value object encapsulating catalog search results.
      */
     public record CatalogSearchResult(List<Product> products, long totalItems) {
+    }
+
+    private void normalizeProduct(Product product) {
+        if (product == null) {
+            return;
+        }
+        if (product.title != null) {
+            product.title = product.title.trim();
+        }
+        if (product.slug != null) {
+            product.slug = product.slug.trim();
+        }
+        if (product.name == null || product.name.isBlank()) {
+            product.name = product.title != null && !product.title.isBlank() ? product.title : "Untitled Product";
+        }
+        if (product.sku == null || product.sku.isBlank()) {
+            product.sku = buildSkuCandidate(product.slug, product.title);
+        }
+        if (product.type == null || product.type.isBlank()) {
+            product.type = "physical";
+        }
+    }
+
+    private String buildSkuCandidate(String slug, String title) {
+        String base = slug;
+        if (base == null || base.isBlank()) {
+            base = title;
+        }
+        if (base == null || base.isBlank()) {
+            base = UUID.randomUUID().toString();
+        }
+        String normalized = base.replaceAll("[^A-Za-z0-9]+", "_").toUpperCase();
+        if (normalized.isBlank()) {
+            normalized = "PRD_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        }
+        return normalized;
+    }
+
+    private void publishProductEvent(String eventType, Product product) {
+        if (product == null || domainEventPublisher == null) {
+            return;
+        }
+        try {
+            domainEventPublisher.publish("PRODUCT", product.id, eventType, new ProductLifecyclePayload(product.id,
+                    product.slug, product.status, eventType, product.visibilityWindow));
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to publish product domain event - productId=%s, eventType=%s", product.id, eventType);
+        }
+    }
+
+    private void publishVariantEvent(String eventType, ProductVariant variant) {
+        if (variant == null || domainEventPublisher == null) {
+            return;
+        }
+        try {
+            domainEventPublisher.publish("PRODUCT_VARIANT", variant.id, eventType,
+                    new ProductVariantLifecyclePayload(variant.id, variant.product != null ? variant.product.id : null,
+                            variant.sku, variant.status, eventType));
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to publish variant domain event - variantId=%s, eventType=%s", variant.id, eventType);
+        }
     }
 }
