@@ -70,7 +70,25 @@
 
     <!-- Data Table -->
     <div class="bg-white rounded-lg border border-neutral-200 overflow-hidden">
+      <div v-if="showSkeleton" class="divide-y divide-neutral-100">
+        <div
+          v-for="index in 6"
+          :key="`skeleton-row-${index}`"
+          class="flex items-center gap-4 px-4 py-4"
+        >
+          <Skeleton shape="circle" size="3rem" class="flex-shrink-0" />
+          <div class="flex-1 space-y-2">
+            <Skeleton width="40%" height="1.25rem" />
+            <Skeleton width="25%" height="1rem" />
+          </div>
+          <Skeleton width="6rem" height="1.25rem" />
+          <Skeleton width="4rem" height="1rem" />
+          <Skeleton width="5rem" height="1rem" />
+        </div>
+      </div>
+
       <DataTable
+        v-else
         :value="products"
         :loading="loading"
         :paginator="true"
@@ -233,6 +251,7 @@ import { useToast } from 'primevue/usetoast'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Tag from 'primevue/tag'
+import Skeleton from 'primevue/skeleton'
 import BaseButton from '@/components/base/BaseButton.vue'
 import { emitTelemetryEvent } from '@/telemetry'
 import type { DataTablePageEvent } from 'primevue/datatable'
@@ -242,7 +261,6 @@ const router = useRouter()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
-const loading = ref(false)
 const createFilterState = (): CatalogFilters => ({
   search: catalogStore.currentFilters.search ?? '',
   category: catalogStore.currentFilters.category ?? '',
@@ -256,6 +274,8 @@ const sortOrder = ref(catalogStore.sortOrder === 'asc' ? 1 : -1)
 const products = computed(() => catalogStore.products)
 const categories = computed(() => catalogStore.categories)
 const pagination = computed(() => catalogStore.pagination)
+const loading = computed(() => catalogStore.isLoadingProducts)
+const showSkeleton = computed(() => loading.value && products.value.length === 0)
 
 // Load products on mount
 onMounted(async () => {
@@ -287,7 +307,6 @@ const debouncedFilterFetch = useDebounceFn(async () => {
 }, 300)
 
 async function loadProducts() {
-  loading.value = true
   try {
     await catalogStore.fetchProducts()
     emitTelemetryEvent('catalog:list:load', {
@@ -303,8 +322,6 @@ async function loadProducts() {
       detail: 'Failed to load products. Please try again.',
       life: 5000,
     })
-  } finally {
-    loading.value = false
   }
 }
 

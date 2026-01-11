@@ -69,6 +69,12 @@ const router = createRouter({
           component: () => import('@/views/SettingsView.vue'),
           meta: { title: 'Settings' },
         },
+        {
+          path: 'style-guide',
+          name: 'style-guide',
+          component: () => import('@/views/StyleGuideView.vue'),
+          meta: { title: 'Style Guide' },
+        },
         // Admin module routes
         ...ordersRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
         ...inventoryRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),

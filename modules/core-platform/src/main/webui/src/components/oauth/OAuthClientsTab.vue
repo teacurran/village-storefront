@@ -291,7 +291,7 @@ import { useToast } from 'primevue/usetoast'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Dialog from 'primevue/dialog'
-import BaseButton from '../BaseButton.vue'
+import BaseButton from '@/components/base/BaseButton.vue'
 
 interface OAuthClient {
   id: string

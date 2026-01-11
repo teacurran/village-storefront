@@ -146,6 +146,31 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function bootstrapDemoSession(): void {
+    if (isAuthenticated.value) {
+      return
+    }
+
+    const mockTokens: AuthTokens = {
+      accessToken: 'mock-access-token',
+      refreshToken: 'mock-refresh-token',
+      expiresIn: 3600,
+    }
+
+    const mockUser: UserProfile = {
+      id: 'demo-admin',
+      email: 'admin@demo-store.com',
+      firstName: 'Demo',
+      lastName: 'Admin',
+      roles: ['ADMIN', 'STORE_OWNER'],
+      tenantId: 'tenant-demo',
+    }
+
+    setTokens(mockTokens)
+    user.value = mockUser
+    persistAuth()
+  }
+
   return {
     // State
     accessToken,
@@ -169,5 +194,6 @@ export const useAuthStore = defineStore('auth', () => {
     hasAnyRole,
     persistAuth,
     restoreAuth,
+    bootstrapDemoSession,
   }
 })

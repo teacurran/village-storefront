@@ -12,6 +12,9 @@ import ToastService from 'primevue/toastservice'
 import App from './App.vue'
 import router from './router'
 import { emitTelemetryEvent } from '@/telemetry'
+import { useTenantStore } from '@/stores/tenant'
+import { useAuthStore } from '@/stores/auth'
+import { useTheme } from '@/composables/useTheme'
 
 import 'primevue/resources/themes/lara-light-blue/theme.css'
 import 'primevue/resources/primevue.min.css'
@@ -38,6 +41,25 @@ app.directive('ripple', Ripple)
 
 // Mount app
 app.mount('#app')
+
+// Initialize stores after mount
+const authStore = useAuthStore()
+const tenantStore = useTenantStore()
+const theme = useTheme()
+
+// Restore authentication state
+authStore.restoreAuth()
+if (!authStore.isAuthenticated) {
+  authStore.bootstrapDemoSession()
+}
+
+// Load tenant context and design tokens
+tenantStore
+  .loadTenant()
+  .then(() => theme.loadTheme())
+  .catch((error) => {
+    console.error('Failed to load tenant context or theme:', error)
+  })
 
 const loadTimeMs = Math.round(performance.now() - appBootStart)
 
