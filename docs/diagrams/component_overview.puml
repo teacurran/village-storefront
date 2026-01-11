@@ -24,6 +24,9 @@ legend top left
   See docs/architecture_overview.md
     - #section-3-layered-modular-monolith
     - #section-4-tenant-isolation
+  See .codemachine/artifacts/architecture/02_System_Structure_and_Data.md
+    - #2-architectural-drivers (Section 2 narrative)
+    - #3-proposed-architecture (module/technology stack)
   See docs/adr/ADR-001-tenancy.md
     - Shared database tenancy model
     - TenantContext propagation
@@ -166,6 +169,61 @@ package "Service Layer - Logical Modules" as ServiceLayer #E6F3FF {
       Background processing
     end note
   }
+
+  package "Loyalty Module" as LoyaltyModule #E6E6FF {
+    component [LoyaltyService] as LoyaltyService
+    component [GiftCardService] as GiftCardService
+    component [StoreCreditService] as StoreCreditService
+
+    note bottom of LoyaltyModule
+      Entities: LoyaltyProgram, GiftCard, StoreCredit
+      Depends on: Orders, Payments, Tenancy
+      Phase 2+ extensibility
+    end note
+  }
+
+  package "POS Module" as POSModule #E6E6FF {
+    component [POSService] as POSService
+    component [OfflineSyncService] as OfflineSyncService
+
+    note bottom of POSModule
+      Entities: POSTransaction, OfflineBlob
+      Depends on: Orders, Catalog, Payments
+      Encrypted offline replay
+    end note
+  }
+
+  package "Media Module" as MediaModule #FFE6E6 {
+    component [MediaService] as MediaService
+    component [ImageProcessor] as ImageProcessor
+    component [VideoTranscoder] as VideoTranscoder
+
+    note bottom of MediaModule
+      Entities: Media, MediaVariant
+      Depends on: Tenancy
+      FFmpeg + Thumbnailator processing
+    end note
+  }
+
+  package "Platform-Ops Module" as PlatformOpsModule #FFFFCC {
+    component [FeatureFlagService] as FeatureFlagService
+    component [AuditLogService] as AuditLogService
+    component [ReportingService] as ReportingService
+
+    note bottom of PlatformOpsModule
+      Entities: FeatureFlag, AuditLog, Report
+      Cross-cutting concerns
+      Kill switches + observability
+    end note
+  }
+
+  ' CDI Event Bus (Cross-cutting)
+  component [CDI Event Bus] as EventBus #FFCCCC
+  note right of EventBus
+    TenantResolved, TenantMissing events
+    Decouples tenant resolution from
+    feature flags, auditing, observability
+  end note
 }
 
 ' ============================================================================
@@ -175,24 +233,79 @@ package "Infrastructure Layer" as InfraLayer #F0F0F0 {
   database "PostgreSQL\n(Shared Schema)" as PostgreSQL
   note right of PostgreSQL
     All tables include tenant_id
-    Composite unique constraints
+    Composite unique constraints + RLS policies
+    Partitioned session/audit tables
     See ADR-001 shared database model
   end note
 
-  queue "Background Job Queue" as JobQueue
+  queue "Background Job Queue\n(DelayedJob Tables)" as JobQueue
   note right of JobQueue
-    Delayed job processing
-    Email sending, webhooks
+    Database-backed job queue
+    Handles: emails, payouts, media work,
+    reporting, cleanup
+    No external broker dependency
+  end note
+
+  package "Worker Pods" as WorkerPods #E0E0E0 {
+    component [Media Worker] as MediaWorker
+    component [Report Worker] as ReportWorker
+    component [Payout Worker] as PayoutWorker
+    component [Scheduled Maintenance] as MaintenanceWorker
+
+    note bottom of WorkerPods
+      Quarkus Scheduler-driven workers
+      Process DelayedJob queue items
+      Scale independently via replicas
+    end note
+  }
+
+  database "Caffeine Cache\n(In-Memory)" as CaffeineCache
+  note right of CaffeineCache
+    Product fragments, rate limits,
+    feature flags, tenant metadata
+    No Redis dependency
   end note
 }
 
 ' ============================================================================
 ' EXTERNAL SYSTEMS
 ' ============================================================================
-cloud "Stripe API" as Stripe #FFD700
+cloud "Stripe API\n(Payments + Connect)" as Stripe #FFD700
 cloud "Email Provider\n(SMTP/Mailpit)" as Mailer #FFD700
-cloud "Object Storage\n(S3/R2)" as ObjectStorage #FFD700
+cloud "Cloudflare R2\n(S3-Compatible)" as ObjectStorage #FFD700
 cloud "Shipping APIs\n(UPS/FedEx/USPS)" as ShippingAPIs #FFD700
+cloud "FFmpeg\n(Media Processing)" as FFmpeg #FFD700
+cloud "Address Validation\n(SmartyStreets/USPS)" as AddressValidation #FFD700
+
+' ============================================================================
+' OBSERVABILITY & OPERATIONS
+' ============================================================================
+package "Observability Stack" as ObservabilityStack #E6F7FF {
+  component [OpenTelemetry\nCollector] as OTelCollector
+  component [Prometheus] as Prometheus
+  component [Jaeger] as Jaeger
+  component [Grafana\nDashboards] as Grafana
+  component [Structured\nJSON Logging] as StructuredLogging
+
+  note bottom of ObservabilityStack
+    Tenant-aware tracing + metrics
+    Liveness/readiness probes
+    Audit trail for RISK-001/002
+    See: docs/operations/observability.md
+  end note
+}
+
+package "CI/CD & Runtime Platform" as CICDPlatform #FFF4E6 {
+  component [GitHub Actions] as GitHubActions
+  component [Kubernetes\n(k3s Cluster)] as Kubernetes
+  component [Container Registry] as Registry
+
+  note bottom of CICDPlatform
+    Native image builds (GraalVM)
+    Kubernetes extension generates manifests
+    <100ms cold start, 50-100MB images
+  end note
+}
 
 ' ============================================================================
 ' PRESENTATION -> GATEWAY DEPENDENCIES
@@ -202,10 +315,13 @@ AdminSPA --> TenantFilter : HTTP Request
 RestAPI --> TenantFilter : HTTP Request
 
 ' ============================================================================
-' GATEWAY -> INNER MODULES
+' GATEWAY -> INNER MODULES & CDI EVENTS
 ' ============================================================================
 TenantContext ..> TenantService : Get tenant metadata
 TenantContext ..> IdentityModule : Propagate tenant_id
+TenantFilter ..> EventBus : Emit TenantResolved
+EventBus ..> FeatureFlagService : Load feature snapshot
+EventBus ..> AuditLogService : Log tenant access
 
 ' ============================================================================
 ' MODULE DEPENDENCIES (Following Dependency Rule)
@@ -246,6 +362,22 @@ NotificationsModule ..> OrdersModule : Order events
 NotificationsModule ..> PaymentsModule : Payment events
 NotificationsModule ..> ConsignmentModule : Payout events
 
+' Loyalty depends on Orders, Payments
+LoyaltyModule --> OrdersModule : Reward on purchase
+LoyaltyModule --> PaymentsModule : Gift card/credit payments
+
+' POS depends on Orders, Catalog, Payments
+POSModule --> OrdersModule : Create in-store orders
+POSModule --> CatalogModule : Inventory lookup
+POSModule --> PaymentsModule : Process payments
+
+' Media depends on Tenancy
+MediaModule --> TenancyModule : Tenant-scoped media
+
+' Platform-Ops spans all modules (cross-cutting)
+PlatformOpsModule ..> TenancyModule : Feature flags per tenant
+PlatformOpsModule ..> IdentityModule : Audit user actions
+
 ' ============================================================================
 ' INFRASTRUCTURE DEPENDENCIES
 ' ============================================================================
@@ -256,17 +388,58 @@ OrdersModule --> PostgreSQL : CRUD operations
 PaymentsModule --> PostgreSQL : CRUD operations
 ConsignmentModule --> PostgreSQL : CRUD operations
 NotificationsModule --> PostgreSQL : CRUD operations
+LoyaltyModule --> PostgreSQL : CRUD operations
+POSModule --> PostgreSQL : CRUD operations
+MediaModule --> PostgreSQL : CRUD operations
+PlatformOpsModule --> PostgreSQL : CRUD operations
 
+' Cache dependencies
+TenantCache --> CaffeineCache : Store tenant metadata
+FeatureFlagService --> CaffeineCache : Cache flag state
+CatalogModule --> CaffeineCache : Product fragments
+
+' Object storage
 CatalogModule --> ObjectStorage : Product images
+MediaModule --> ObjectStorage : Media variants
+
+' Background job processing
 NotificationsModule --> JobQueue : Enqueue jobs
+ConsignmentModule --> JobQueue : Enqueue payout jobs
+MediaModule --> JobQueue : Enqueue media jobs
+ReportingService --> JobQueue : Enqueue report jobs
 JobWorker --> JobQueue : Consume jobs
+
+' Worker pod processing
+MediaWorker --> JobQueue : Process media tasks
+ReportWorker --> JobQueue : Generate reports
+PayoutWorker --> JobQueue : Execute payouts
+MaintenanceWorker --> PostgreSQL : Cleanup/archival
 
 ' ============================================================================
 ' EXTERNAL SYSTEM DEPENDENCIES
 ' ============================================================================
-StripeAdapter --> Stripe : Payment processing
+StripeAdapter --> Stripe : Payment processing + webhooks
+PayoutService --> Stripe : Vendor payouts via Connect
 EmailService --> Mailer : Send emails
 ShipmentService --> ShippingAPIs : Generate labels
+ShipmentService --> AddressValidation : Validate addresses
+VideoTranscoder --> FFmpeg : Video processing
+ImageProcessor --> FFmpeg : Thumbnail generation
+
+' Observability integrations
+ServiceLayer ..> OTelCollector : Emit traces/metrics
+InfraLayer ..> OTelCollector : Emit traces/metrics
+OTelCollector --> Prometheus : Export metrics
+OTelCollector --> Jaeger : Export traces
+Prometheus --> Grafana : Visualize metrics
+Jaeger --> Grafana : Visualize traces
+ServiceLayer ..> StructuredLogging : JSON logs
+
+' CI/CD & Deployment
+GitHubActions --> Registry : Push container images
+Kubernetes --> Registry : Pull images
+Kubernetes ..> Prometheus : Scrape metrics
+Kubernetes ..> ServiceLayer : Liveness/readiness probes
 
 ' ============================================================================
 ' FLOW ANNOTATIONS
@@ -302,7 +475,30 @@ note as Flow2
   - docs/adr/ADR-001-tenancy.md
 end note
 
+note as Flow3
+  **Flow 3: Background Media Processing (Queues + Feature Flags)**
+  1. Admin uploads video via MediaService
+  2. MediaService checks feature flag: tenant.media.video_processing
+  3. FeatureFlagService reads from Caffeine cache (fallback: PostgreSQL)
+  4. MediaService enqueues DelayedJob → JobQueue (PostgreSQL table)
+  5. MediaWorker polls JobQueue, acquires lock
+  6. VideoTranscoder invokes FFmpeg (external process)
+  7. Processed variants uploaded to R2 with signed URLs
+  8. OpenTelemetry traces span across all steps (tenant_id tag)
+  9. Prometheus metrics: job_processing_duration_seconds
+  10. Structured JSON logs written with tenant context
+  **Key Components:**
+  - **Feature Flags:** Kill switches for progressive rollout
+  - **Queues:** Database-backed DelayedJob (no external broker)
+  - **Observability:** OTel traces, Prometheus metrics, JSON logs
+  **Anchors:**
+  - docs/architecture/tenant_isolation.md#tenant-access-gateway
+  - docs/operations/observability.md
+  - docs/feature_flags/governance.md
+end note
+
 Flow1 .. QuteStorefront
 Flow2 .. AdminSPA
+Flow3 .. MediaModule
 
 @enduml

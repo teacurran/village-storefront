@@ -1115,6 +1115,7 @@ mvn migration:up -Dmigration.env=development
 ### Architecture & Design
 
 - **[Architecture Overview](docs/architecture_overview.md)** - System design, data model, deployment architecture
+- **[Component Diagram](docs/diagrams/component_overview.puml)** ([PNG](docs/diagrams/component_overview.png)) - Layered modular monolith architecture showing all modules, worker pods, integrations (Stripe, carriers, R2, FFmpeg, GitHub Actions, Kubernetes), queues, feature flags, and observability toolchain
 - **[Storefront Theming](docs/storefront-theming.md)** - Tailwind, design tokens, localization
 - **[Feature Flag Governance](docs/feature_flags/governance.md)** - Kill switches, rollout process, flag lifecycle
 - **[API Spec](api/v1/openapi.yaml)** - OpenAPI specification
