@@ -6,6 +6,17 @@ import type { RouteRecordRaw } from 'vue-router'
 
 export const platformRoutes: RouteRecordRaw[] = [
   {
+    path: '/admin/platform',
+    name: 'platform-dashboard',
+    component: () => import('./views/PlatformDashboard.vue'),
+    meta: {
+      requiresAuth: true,
+      requiredRole: 'PLATFORM_ADMIN',
+      featureFlag: 'platformConsole',
+      title: 'Platform Dashboard',
+    },
+  },
+  {
     path: '/admin/platform/stores',
     name: 'platform-stores',
     component: () => import('./views/StoreDirectoryView.vue'),
@@ -47,6 +58,17 @@ export const platformRoutes: RouteRecordRaw[] = [
       requiredRole: 'PLATFORM_ADMIN',
       featureFlag: 'platformConsole',
       title: 'Impersonation Control',
+    },
+  },
+  {
+    path: '/admin/platform/feature-flags',
+    name: 'platform-feature-flags',
+    component: () => import('./views/FeatureFlagManagementView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiredRole: 'PLATFORM_ADMIN',
+      featureFlag: 'platformConsole',
+      title: 'Feature Flags',
     },
   },
 ]

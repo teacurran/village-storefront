@@ -19,6 +19,7 @@ import type {
   FeatureFlagDto,
   UpdateFeatureFlagRequest,
   StaleFlagReport,
+  SupportQueueSnapshot,
 } from './types'
 
 const BASE_PATH = '/api/v1/platform'
@@ -234,6 +235,33 @@ export async function updateFeatureFlag(
 export async function getFeatureFlagHistory(flagId: string): Promise<any[]> {
   const response = await fetch(`${BASE_PATH}/feature-flags/${flagId}/history`)
   if (!response.ok) throw new Error(`Failed to fetch flag history: ${response.statusText}`)
+
+  return response.json()
+}
+
+/**
+ * Get snapshot of the support queue for platform admins.
+ */
+export async function getSupportQueue(limit = 5, status = 'open'): Promise<SupportQueueSnapshot> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    status,
+  })
+
+  const response = await fetch(`${BASE_PATH}/support/queue?${params.toString()}`)
+
+  if (response.status === 404) {
+    // Support queue endpoint may be disabled in lower environments; fall back to empty snapshot
+    return {
+      tickets: [],
+      totalOpen: 0,
+      urgentCount: 0,
+      awaitingReplyCount: 0,
+      lastUpdated: new Date().toISOString(),
+    }
+  }
+
+  if (!response.ok) throw new Error(`Failed to fetch support queue: ${response.statusText}`)
 
   return response.json()
 }

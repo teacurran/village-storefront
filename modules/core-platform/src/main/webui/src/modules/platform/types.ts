@@ -97,6 +97,7 @@ export interface FeatureFlagDto {
   tenantId?: string // null for global flags
   flagKey: string
   enabled: boolean
+  defaultValue?: boolean
   config: string
   owner: string
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
@@ -104,6 +105,7 @@ export interface FeatureFlagDto {
   expiryDate?: string
   lastReviewedAt?: string
   description?: string
+  rolloutPlan?: string
   rollbackInstructions?: string
   stale?: boolean
   staleReason?: string
@@ -118,6 +120,7 @@ export interface UpdateFeatureFlagRequest {
   reviewCadenceDays?: number
   expiryDate?: string
   description?: string
+  rolloutPlan?: string
   rollbackInstructions?: string
   markReviewed?: boolean
   reason?: string
@@ -129,4 +132,32 @@ export interface StaleFlagReport {
   needsReviewCount: number
   needsReviewFlags: FeatureFlagDto[]
   generatedAt: string
+}
+
+export type SupportTicketPriority = 'low' | 'normal' | 'high' | 'urgent'
+export type SupportTicketStatus = 'open' | 'pending' | 'waiting_on_customer' | 'resolved'
+
+export interface SupportTicketSummary {
+  id: string
+  reference: string
+  subject: string
+  tenantId: string
+  tenantName: string
+  priority: SupportTicketPriority
+  status: SupportTicketStatus
+  channel: 'email' | 'chat' | 'phone' | 'portal'
+  updatedAt: string
+  slaMinutesRemaining: number
+  waitingSince: string
+  assignedTo?: string
+  requesterEmail?: string
+  unreadCount?: number
+}
+
+export interface SupportQueueSnapshot {
+  tickets: SupportTicketSummary[]
+  totalOpen: number
+  urgentCount: number
+  awaitingReplyCount: number
+  lastUpdated: string
 }

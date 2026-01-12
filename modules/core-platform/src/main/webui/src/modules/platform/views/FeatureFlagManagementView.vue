@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <div v-if="loading" class="loading-state">
+    <div v-if="loading && featureFlags.length === 0" class="loading-state">
       <i class="pi pi-spin pi-spinner" /> Loading feature flags...
     </div>
     <div v-else-if="error" class="error-state">
@@ -27,45 +27,73 @@
       {{ error }}
     </div>
 
-    <div v-else class="flag-table">
-      <table>
-        <thead>
-          <tr>
-            <th>Flag Key</th>
-            <th>Description</th>
-            <th>Default Value</th>
-            <th>Overrides</th>
-            <th>Last Reviewed</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="flag in displayedFlags" :key="flag.id">
-            <td>
-              <code>{{ flag.flagKey }}</code>
-              <span v-if="flag.stale" class="stale-tag">Stale</span>
-            </td>
-            <td>{{ flag.description || '—' }}</td>
-            <td>
-              <span :class="['flag-value', flag.defaultValue ? 'enabled' : 'disabled']">
-                {{ flag.defaultValue ? 'Enabled' : 'Disabled' }}
-              </span>
-            </td>
-            <td>{{ flag.tenantOverrideCount || 0 }}</td>
-            <td>{{ flag.lastReviewedAt ? formatDate(flag.lastReviewedAt) : 'Never' }}</td>
-            <td>
-              <button class="action-btn" @click="invalidateFlag(flag.id)">
-                <i class="pi pi-trash" />
-                Invalidate Cache
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-if="displayedFlags.length === 0" class="empty-state">
-        <i class="pi pi-inbox" />
-        No feature flags found
+    <div v-else class="flag-management-layout">
+      <div class="flag-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Flag Key</th>
+              <th>Description</th>
+              <th>Default Value</th>
+              <th>Overrides</th>
+              <th>Last Reviewed</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="flag in displayedFlags"
+              :key="flag.id"
+              :class="{ active: selectedFlag?.id === flag.id }"
+              class="flag-row"
+              data-test="flag-row"
+              @click="selectFlag(flag)"
+            >
+              <td>
+                <code>{{ flag.flagKey }}</code>
+                <span v-if="flag.stale" class="stale-tag">Stale</span>
+              </td>
+              <td>{{ flag.description || '—' }}</td>
+              <td>
+                <span :class="['flag-value', flag.defaultValue ? 'enabled' : 'disabled']">
+                  {{ flag.defaultValue ? 'Enabled' : 'Disabled' }}
+                </span>
+              </td>
+              <td>{{ flag.tenantOverrideCount || 0 }}</td>
+              <td>{{ flag.lastReviewedAt ? formatDate(flag.lastReviewedAt) : 'Never' }}</td>
+              <td>
+                <button
+                  class="action-btn"
+                  type="button"
+                  @click.stop="invalidateFlag(flag.id)"
+                >
+                  <i class="pi pi-trash" />
+                  Invalidate Cache
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="displayedFlags.length === 0" class="empty-state">
+          <i class="pi pi-inbox" />
+          No feature flags found
+        </div>
       </div>
+      <aside class="flag-panel">
+        <FeatureFlagPanel
+          v-if="selectedFlag"
+          :flag="selectedFlag"
+          :loading="loading"
+          @close="clearSelectedFlag"
+          @update="handleUpdateFlag"
+          @toggle="handleToggleFlag"
+          @review="handleReviewFlag"
+        />
+        <div v-else class="panel-placeholder">
+          <i class="pi pi-flag" />
+          <p>Select a feature flag to review governance metadata.</p>
+        </div>
+      </aside>
     </div>
   </div>
 </template>
@@ -75,9 +103,11 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePlatformStore } from '../store'
 import ImpersonationBanner from '../components/ImpersonationBanner.vue'
+import FeatureFlagPanel from '../components/FeatureFlagPanel.vue'
+import type { FeatureFlagDto, UpdateFeatureFlagRequest } from '../types'
 
 const platformStore = usePlatformStore()
-const { featureFlags, loading, error, staleFlagCount } = storeToRefs(platformStore)
+const { featureFlags, loading, error, staleFlagCount, selectedFlag } = storeToRefs(platformStore)
 
 const showStaleOnly = ref(false)
 
@@ -90,10 +120,17 @@ const displayedFlags = computed(() => {
 
 onMounted(async () => {
   await platformStore.loadFeatureFlags()
+  if (!selectedFlag.value && featureFlags.value.length > 0) {
+    selectedFlag.value = featureFlags.value[0]
+  }
 })
 
 async function refreshFlags() {
   await platformStore.loadFeatureFlags(showStaleOnly.value)
+  if (selectedFlag.value) {
+    const updated = featureFlags.value.find((flag) => flag.id === selectedFlag.value?.id)
+    selectedFlag.value = updated ?? null
+  }
 }
 
 async function invalidateFlag(flagId: string) {
@@ -121,6 +158,27 @@ function formatDate(value: string): string {
   if (diffDays < 30) return `${diffDays} days ago`
   if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`
   return date.toLocaleDateString()
+}
+
+function selectFlag(flag: FeatureFlagDto) {
+  selectedFlag.value = flag
+}
+
+function clearSelectedFlag() {
+  selectedFlag.value = null
+}
+
+async function handleUpdateFlag(flagId: string, request: UpdateFeatureFlagRequest) {
+  await platformStore.updateFeatureFlag(flagId, request)
+}
+
+async function handleToggleFlag(flagId: string, enabled: boolean, reason?: string) {
+  const auditReason = reason || (enabled ? 'Enabled via console' : 'Disabled via console')
+  await platformStore.toggleFeatureFlag(flagId, enabled, auditReason)
+}
+
+async function handleReviewFlag(flagId: string, notes?: string) {
+  await platformStore.reviewFeatureFlag(flagId, notes || 'Reviewed from admin console')
 }
 </script>
 
@@ -173,6 +231,13 @@ function formatDate(value: string): string {
   padding: 0.1rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.flag-management-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 1.5rem;
+  align-items: flex-start;
 }
 
 .flag-table {
@@ -236,6 +301,15 @@ code {
   color: #991b1b;
 }
 
+.flag-row {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.flag-row.active {
+  background: #eef2ff;
+}
+
 .action-btn {
   display: inline-flex;
   align-items: center;
@@ -250,6 +324,29 @@ code {
 
 .action-btn:hover {
   background: #f9fafb;
+}
+
+.flag-panel {
+  position: sticky;
+  top: 5rem;
+}
+
+.panel-placeholder {
+  background: #f8fafc;
+  border: 2px dashed #cbd5f5;
+  border-radius: 8px;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.panel-placeholder i {
+  font-size: 2rem;
+  color: #94a3b8;
 }
 
 .loading-state,

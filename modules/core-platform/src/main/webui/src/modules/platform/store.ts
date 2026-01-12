@@ -23,6 +23,7 @@ import type {
   FeatureFlagDto,
   UpdateFeatureFlagRequest,
   StaleFlagReport,
+  SupportQueueSnapshot,
 } from './types'
 import * as platformApi from './api'
 import { emitTelemetryEvent } from '@/telemetry'
@@ -44,9 +45,18 @@ export const usePlatformStore = defineStore('platform', () => {
   const featureFlags = ref<FeatureFlagDto[]>([])
   const selectedFlag = ref<FeatureFlagDto | null>(null)
   const staleFlagReport = ref<StaleFlagReport | null>(null)
+  const supportQueue = ref<SupportQueueSnapshot>({
+    tickets: [],
+    totalOpen: 0,
+    urgentCount: 0,
+    awaitingReplyCount: 0,
+    lastUpdated: '',
+  })
 
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const supportQueueLoading = ref(false)
+  const supportQueueError = ref<string | null>(null)
 
   // SSE connection state
   const eventSource = ref<EventSource | null>(null)
@@ -59,6 +69,15 @@ export const usePlatformStore = defineStore('platform', () => {
   const flagCount = computed(() => featureFlags.value.length)
   const staleFlags = computed(() => featureFlags.value.filter((f) => f.stale))
   const staleFlagCount = computed(() => staleFlags.value.length)
+  const canPerformDestructiveActions = computed(() => {
+    if (!impersonation.value) {
+      return true
+    }
+
+    const reasonValid = impersonation.value.reason?.trim().length >= 10
+    const ticketPresent = Boolean(impersonation.value.ticketNumber?.trim())
+    return Boolean(reasonValid && ticketPresent)
+  })
 
   // --- Actions: Store Directory ---
 
@@ -358,13 +377,42 @@ export const usePlatformStore = defineStore('platform', () => {
   async function toggleFeatureFlag(
     flagId: string,
     enabled: boolean,
-    reason: string
+    reason?: string
   ): Promise<void> {
     await updateFeatureFlag(flagId, { enabled, reason })
   }
 
-  async function reviewFeatureFlag(flagId: string, reason: string): Promise<void> {
+  async function reviewFeatureFlag(flagId: string, reason?: string): Promise<void> {
     await updateFeatureFlag(flagId, { markReviewed: true, reason })
+  }
+
+  // --- Actions: Support Queue ---
+
+  async function loadSupportQueue(limit = 5): Promise<void> {
+    supportQueueLoading.value = true
+    supportQueueError.value = null
+
+    try {
+      const snapshot = await platformApi.getSupportQueue(limit)
+      supportQueue.value = snapshot
+
+      emitTelemetryEvent('platform_view_support_queue', {
+        totalOpen: snapshot.totalOpen,
+        urgentCount: snapshot.urgentCount,
+        awaitingReply: snapshot.awaitingReplyCount,
+      })
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+            ? err
+            : 'Failed to load support queue'
+      supportQueueError.value = message
+      console.warn('Support queue not available:', err)
+    } finally {
+      supportQueueLoading.value = false
+    }
   }
 
   // --- Actions: SSE Connection ---
@@ -455,6 +503,15 @@ export const usePlatformStore = defineStore('platform', () => {
     selectedFlag.value = null
     staleFlagReport.value = null
     error.value = null
+    supportQueue.value = {
+      tickets: [],
+      totalOpen: 0,
+      urgentCount: 0,
+      awaitingReplyCount: 0,
+      lastUpdated: '',
+    }
+    supportQueueError.value = null
+    supportQueueLoading.value = false
   }
 
   return {
@@ -474,6 +531,9 @@ export const usePlatformStore = defineStore('platform', () => {
     loading,
     error,
     sseConnected,
+    supportQueue,
+    supportQueueLoading,
+    supportQueueError,
 
     // Computed
     isImpersonating,
@@ -482,6 +542,7 @@ export const usePlatformStore = defineStore('platform', () => {
     flagCount,
     staleFlags,
     staleFlagCount,
+    canPerformDestructiveActions,
 
     // Actions
     loadStores,
@@ -503,6 +564,7 @@ export const usePlatformStore = defineStore('platform', () => {
     reviewFeatureFlag,
     connectSSE,
     disconnectSSE,
+    loadSupportQueue,
     clearError,
     reset,
   }

@@ -1,5 +1,5 @@
 <template>
-  <div class="store-directory">
+  <div class="store-directory" data-test="store-directory">
     <ImpersonationBanner />
     <div class="directory-header">
       <h1>Store Directory</h1>
@@ -13,9 +13,15 @@
           type="text"
           placeholder="Search by subdomain or name..."
           class="search-input"
+          data-test="search-stores"
           @input="handleSearchChange"
         />
-        <select v-model="statusFilter" class="status-filter" @change="handleFilterChange">
+        <select
+          v-model="statusFilter"
+          class="status-filter"
+          data-test="filter-status"
+          @change="handleFilterChange"
+        >
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
@@ -33,7 +39,7 @@
       {{ error }}
     </div>
 
-    <div v-else class="stores-table">
+    <div v-else class="stores-table" data-test="stores-table">
       <table>
         <thead>
           <tr>
@@ -47,7 +53,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="store in stores" :key="store.id" class="store-row">
+          <tr v-for="store in stores" :key="store.id" class="store-row" data-test="store-row">
             <td class="subdomain-cell">
               <code>{{ store.subdomain }}</code>
             </td>
@@ -66,6 +72,14 @@
               <div class="action-buttons">
                 <button
                   class="btn-secondary"
+                  title="Impersonate Tenant"
+                  data-test="impersonate-btn"
+                  @click="showImpersonateDialog(store)"
+                >
+                  <i class="pi pi-user-edit"></i>
+                </button>
+                <button
+                  class="btn-secondary"
                   title="View Details"
                   @click="viewStoreDetails(store.id)"
                 >
@@ -75,6 +89,7 @@
                   v-if="store.status === 'active'"
                   class="btn-danger"
                   title="Suspend Store"
+                  :disabled="!canPerformDestructiveActions"
                   @click="showSuspendDialog(store)"
                 >
                   <i class="pi pi-ban"></i>
@@ -83,6 +98,7 @@
                   v-if="store.status === 'suspended'"
                   class="btn-success"
                   title="Reactivate Store"
+                  :disabled="!canPerformDestructiveActions"
                   @click="handleReactivate(store.id)"
                 >
                   <i class="pi pi-check"></i>
@@ -116,8 +132,53 @@
       </button>
     </div>
 
+    <!-- Impersonate Dialog -->
+    <dialog ref="impersonateDialog" class="modal" data-test="impersonate-dialog">
+      <div class="modal-content">
+        <h2>Impersonate Tenant</h2>
+        <p>
+          You are about to impersonate <strong>{{ selectedStore?.name }}</strong> ({{
+            selectedStore?.subdomain
+          }})
+        </p>
+        <div class="form-field">
+          <label for="impersonate-reason">Reason (required):</label>
+          <textarea
+            id="impersonate-reason"
+            v-model="impersonateReason"
+            placeholder="Enter reason for impersonation (e.g., customer support ticket #12345)..."
+            class="reason-textarea"
+            data-test="impersonate-reason"
+            rows="3"
+          ></textarea>
+        </div>
+        <div class="form-field">
+          <label for="impersonate-ticket">Support Ticket Number (required):</label>
+          <input
+            id="impersonate-ticket"
+            v-model="impersonateTicket"
+            type="text"
+            placeholder="e.g., TICKET-12345"
+            class="ticket-input"
+            data-test="impersonate-ticket"
+          />
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" @click="closeImpersonateDialog">Cancel</button>
+          <button
+            :disabled="!isImpersonateValid"
+            class="btn-primary"
+            data-test="start-impersonate"
+            @click="handleImpersonate"
+          >
+            Start Impersonation
+          </button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- Suspend Dialog -->
-    <dialog ref="suspendDialog" class="modal">
+    <dialog ref="suspendDialog" class="modal" data-test="suspend-dialog">
       <div class="modal-content">
         <h2>Suspend Store</h2>
         <p>
@@ -128,6 +189,7 @@
           v-model="suspendReason"
           placeholder="Enter suspension reason (required)..."
           class="reason-textarea"
+          data-test="suspend-reason"
           rows="4"
         ></textarea>
         <div class="modal-actions">
@@ -135,6 +197,7 @@
           <button
             :disabled="suspendReason.trim().length < 10"
             class="btn-danger"
+            data-test="confirm-suspend"
             @click="handleSuspend"
           >
             Suspend Store
@@ -153,19 +216,26 @@ import type { StoreDirectoryEntry } from '../types'
 import ImpersonationBanner from '../components/ImpersonationBanner.vue'
 
 const platformStore = usePlatformStore()
-const { stores, storePagination, loading, error } = storeToRefs(platformStore)
+const { stores, storePagination, loading, error, canPerformDestructiveActions } =
+  storeToRefs(platformStore)
 
 const searchQuery = ref('')
 const statusFilter = ref('')
 const suspendDialog = ref<HTMLDialogElement | null>(null)
+const impersonateDialog = ref<HTMLDialogElement | null>(null)
 const selectedStore = ref<StoreDirectoryEntry | null>(null)
 const suspendReason = ref('')
+const impersonateReason = ref('')
+const impersonateTicket = ref('')
 
 const totalPages = computed(() =>
   Math.ceil(storePagination.value.total / storePagination.value.size)
 )
 const hasNextPage = computed(
   () => (storePagination.value.page + 1) * storePagination.value.size < storePagination.value.total
+)
+const isImpersonateValid = computed(
+  () => impersonateReason.value.trim().length >= 10 && impersonateTicket.value.trim().length >= 3
 )
 
 onMounted(() => {
@@ -197,6 +267,33 @@ function loadNextPage() {
 function viewStoreDetails(storeId: string) {
   // Navigate to store details view
   console.log('View store details:', storeId)
+}
+
+function showImpersonateDialog(store: StoreDirectoryEntry) {
+  selectedStore.value = store
+  impersonateReason.value = ''
+  impersonateTicket.value = ''
+  impersonateDialog.value?.showModal()
+}
+
+function closeImpersonateDialog() {
+  impersonateDialog.value?.close()
+  selectedStore.value = null
+}
+
+async function handleImpersonate() {
+  if (!selectedStore.value || !isImpersonateValid.value) return
+
+  try {
+    await platformStore.startImpersonation({
+      targetTenantId: selectedStore.value.id,
+      reason: impersonateReason.value,
+      ticketNumber: impersonateTicket.value,
+    })
+    closeImpersonateDialog()
+  } catch (err) {
+    console.error('Failed to start impersonation:', err)
+  }
 }
 
 function showSuspendDialog(store: StoreDirectoryEntry) {
@@ -360,6 +457,26 @@ td {
   transition: all 0.2s;
 }
 
+.action-buttons button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #6366f1;
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-secondary {
   background: #6c757d;
   color: white;
@@ -414,13 +531,33 @@ td {
   margin-top: 0;
 }
 
-.reason-textarea {
+.form-field {
+  margin: 1rem 0;
+}
+
+.form-field label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #374151;
+}
+
+.reason-textarea,
+.ticket-input {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-family: inherit;
-  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+.reason-textarea {
+  resize: vertical;
+}
+
+.ticket-input {
+  margin-bottom: 0.5rem;
 }
 
 .modal-actions {

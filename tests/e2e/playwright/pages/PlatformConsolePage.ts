@@ -19,17 +19,17 @@ export class PlatformConsolePage extends BasePage {
 
   constructor(page: Page) {
     super(page);
-    this.tenantList = page.locator('[data-test="tenant-list"]');
+    this.tenantList = page.locator('[data-test="stores-table"]');
     this.createTenantButton = page.locator('[data-test="create-tenant"]');
-    this.searchTenantsInput = page.locator('[data-test="search-tenants"]');
-    this.impersonateButtons = page.locator('[data-test="impersonate-tenant"]');
+    this.searchTenantsInput = page.locator('[data-test="search-stores"]');
+    this.impersonateButtons = page.locator('[data-test="impersonate-btn"]');
     this.auditLogLink = page.locator('[data-test="audit-log"]');
     this.metricsLink = page.locator('[data-test="platform-metrics"]');
-    this.exitImpersonationButton = page.locator('[data-test="exit-impersonation"]');
+    this.exitImpersonationButton = page.locator('[data-test="end-impersonation"]');
     this.impersonationBanner = page.locator('[data-test="impersonation-banner"]');
-    this.impersonationReasonModal = page.locator('[data-test="impersonation-reason-modal"]');
-    this.reasonTextarea = page.locator('[data-test="impersonation-reason"]');
-    this.confirmImpersonationButton = page.locator('[data-test="confirm-impersonation"]');
+    this.impersonationReasonModal = page.locator('[data-test="impersonate-dialog"]');
+    this.reasonTextarea = page.locator('[data-test="impersonate-reason"]');
+    this.confirmImpersonationButton = page.locator('[data-test="start-impersonate"]');
   }
 
   async gotoPlatformConsole(): Promise<void> {
@@ -47,12 +47,13 @@ export class PlatformConsolePage extends BasePage {
     return tenants.length;
   }
 
-  async impersonateTenant(tenantIndex: number, reason: string): Promise<void> {
+  async impersonateTenant(tenantIndex: number, reason: string, ticketNumber: string = 'TICKET-12345'): Promise<void> {
     const buttons = await this.impersonateButtons.all();
     if (buttons[tenantIndex]) {
       await buttons[tenantIndex].click();
-      await this.page.waitForSelector('[data-test="impersonation-reason-modal"]');
+      await this.page.waitForSelector('[data-test="impersonate-dialog"]');
       await this.fillField(this.reasonTextarea, reason);
+      await this.fillField(this.page.locator('[data-test="impersonate-ticket"]'), ticketNumber);
       await this.clickButton(this.confirmImpersonationButton);
       await this.page.waitForTimeout(1000);
     }
@@ -141,34 +142,19 @@ export class PlatformConsolePage extends BasePage {
   }
 
   /**
-   * Get impersonation session TTL
-   * @returns TTL in seconds
+   * Get impersonation session elapsed time
+   * @returns Elapsed time string (e.g. "5m 23s")
    */
-  async getImpersonationTTL(): Promise<number> {
+  async getImpersonationElapsedTime(): Promise<string> {
     if (!(await this.isImpersonating())) {
-      return 0;
+      return '';
     }
 
-    const ttlText = await this.impersonationBanner
-      .locator('[data-test="impersonation-ttl"]')
+    const timerText = await this.impersonationBanner
+      .locator('[data-test="impersonation-timer"]')
       .textContent();
 
-    if (!ttlText) {
-      return 0;
-    }
-
-    // Extract TTL from text like "Session expires in 3600s" or "30:00 remaining"
-    const secondsMatch = ttlText.match(/(\d+)s/);
-    if (secondsMatch) {
-      return parseInt(secondsMatch[1]);
-    }
-
-    const minutesMatch = ttlText.match(/(\d+):(\d+)/);
-    if (minutesMatch) {
-      return parseInt(minutesMatch[1]) * 60 + parseInt(minutesMatch[2]);
-    }
-
-    return 0;
+    return timerText || '';
   }
 
   async createTenant(tenantData: {
