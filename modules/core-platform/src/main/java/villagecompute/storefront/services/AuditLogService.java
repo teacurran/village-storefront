@@ -62,6 +62,36 @@ public class AuditLogService {
         return entry;
     }
 
+    /**
+     * Record an order-level audit entry.
+     *
+     * @param action
+     *            audit action identifier
+     * @param orderId
+     *            order UUID
+     * @param userId
+     *            associated user (nullable)
+     * @param changes
+     *            context payload
+     * @return persisted entry
+     */
+    @Transactional
+    public AuditLogEntry recordOrderAction(String action, UUID orderId, UUID userId, Map<String, Object> changes) {
+        AuditLogEntry entry = new AuditLogEntry();
+        entry.action = action;
+        entry.entityType = "Order";
+        entry.entityId = orderId;
+        entry.userId = userId;
+        entry.tenantId = TenantContext.hasContext() ? TenantContext.getCurrentTenantId() : null;
+        entry.changes = serializeChanges(changes);
+
+        auditLogRepository.persist(entry);
+
+        LOG.infof("Order audit log recorded - tenantId=%s, orderId=%s, action=%s", entry.tenantId, orderId, action);
+
+        return entry;
+    }
+
     private String serializeChanges(Map<String, Object> changes) {
         try {
             Map<String, Object> safeChanges = changes != null ? changes : Collections.emptyMap();

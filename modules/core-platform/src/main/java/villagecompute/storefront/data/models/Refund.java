@@ -191,6 +191,20 @@ public class Refund extends PanacheEntityBase {
     }
 
     /**
+     * Find the most recent refund for a payment intent.
+     *
+     * @param tenantId
+     *            tenant identifier
+     * @param paymentIntentId
+     *            payment intent ID
+     * @return latest refund or null
+     */
+    public static Refund findLatestByPaymentIntent(UUID tenantId, Long paymentIntentId) {
+        return find("paymentIntent.id = ?1 and tenant.id = ?2 order by createdAt desc", paymentIntentId, tenantId)
+                .firstResult();
+    }
+
+    /**
      * Find refunds by order ID.
      *
      * @param tenantId

@@ -3,9 +3,11 @@ package villagecompute.storefront.api.rest;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -16,11 +18,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.models.Tenant;
+import villagecompute.storefront.services.returns.ReturnInventoryTask;
+import villagecompute.storefront.services.returns.ReturnInventoryTaskQueue;
+import villagecompute.storefront.services.returns.ReturnNotificationTask;
+import villagecompute.storefront.services.returns.ReturnNotificationTaskQueue;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 
@@ -50,6 +57,12 @@ class OrderResourceTest {
     @Inject
     EntityManager entityManager;
 
+    @Inject
+    ReturnInventoryTaskQueue returnInventoryTaskQueue;
+
+    @Inject
+    ReturnNotificationTaskQueue returnNotificationTaskQueue;
+
     private String tenantSubdomain;
     private UUID orderId;
     private String orderNumber;
@@ -73,6 +86,17 @@ class OrderResourceTest {
 
         // Set tenant context
         TenantContext.setCurrentTenant(new TenantInfo(tenant.id, tenant.subdomain, tenant.name, tenant.status));
+        returnInventoryTaskQueue.clear();
+        returnNotificationTaskQueue.clear();
+
+        Consignor consignor = new Consignor();
+        consignor.tenant = tenant;
+        consignor.name = "Order Test Consignor";
+        consignor.contactInfo = "{\"email\":\"consignor@example.com\"}";
+        consignor.status = "active";
+        consignor.createdAt = OffsetDateTime.now();
+        consignor.updatedAt = OffsetDateTime.now();
+        entityManager.persist(consignor);
 
         // Create test product and variant
         Product product = new Product();
@@ -127,6 +151,7 @@ class OrderResourceTest {
         lineItem.variantName = variant.name;
         lineItem.sku = variant.sku;
         lineItem.quantity = 1;
+        lineItem.vendorId = consignor.id;
         lineItem.unitPrice = variant.price;
         lineItem.calculateSubtotal();
         lineItem.createdAt = OffsetDateTime.now();
@@ -142,10 +167,16 @@ class OrderResourceTest {
     @Transactional
     void tearDown() {
         TenantContext.clear();
+        returnInventoryTaskQueue.clear();
+        returnNotificationTaskQueue.clear();
         purgeTestData();
     }
 
     private void purgeTestData() {
+        entityManager.createQuery("DELETE FROM ReturnAuthorization ra WHERE ra.tenant.subdomain = :subdomain")
+                .setParameter("subdomain", TEST_TENANT_SUBDOMAIN).executeUpdate();
+        entityManager.createQuery("DELETE FROM Refund r WHERE r.tenant.subdomain = :subdomain")
+                .setParameter("subdomain", TEST_TENANT_SUBDOMAIN).executeUpdate();
         entityManager.createQuery("DELETE FROM OrderLineItem oli WHERE oli.tenant.subdomain = :subdomain")
                 .setParameter("subdomain", TEST_TENANT_SUBDOMAIN).executeUpdate();
         entityManager.createQuery("DELETE FROM Order o WHERE o.tenant.subdomain = :subdomain")
@@ -377,5 +408,168 @@ class OrderResourceTest {
 
         request().body(requestBody).when().post("/api/v1/admin/orders/" + orderId + "/refund").then().statusCode(400)
                 .body("title", equalTo("Bad Request"));
+    }
+
+    @Test
+    void adminRefundOrder_shouldHandleIdempotencyDuplicates() {
+        // Setup payment intent for refund
+        setupPaymentIntentTransactionally();
+
+        String idempotencyKey = UUID.randomUUID().toString();
+        String requestBody = """
+                {
+                  "amount": "10.00",
+                  "reason": "Test refund"
+                }
+                """;
+
+        // First request
+        request().header("X-Idempotency-Key", idempotencyKey).body(requestBody).when()
+                .post("/api/v1/admin/orders/" + orderId + "/refund").then().statusCode(201)
+                .body("refundId", notNullValue());
+
+        // Duplicate request with same idempotency key should return cached result
+        request().header("X-Idempotency-Key", idempotencyKey).body(requestBody).when()
+                .post("/api/v1/admin/orders/" + orderId + "/refund").then().statusCode(200)
+                .body("refundId", notNullValue());
+    }
+
+    @Test
+    void adminRefundOrder_shouldReturn404ForInvalidOrder() {
+        UUID invalidId = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "amount": "10.00",
+                  "reason": "Test refund"
+                }
+                """;
+
+        request().header("X-Idempotency-Key", UUID.randomUUID().toString()).body(requestBody).when()
+                .post("/api/v1/admin/orders/" + invalidId + "/refund").then().statusCode(404);
+    }
+
+    @Test
+    void adminRefundOrder_withRestockQueuesInventoryTasks() {
+        setupPaymentIntentTransactionally();
+
+        String body = """
+                {
+                  "amount": "10.00",
+                  "reason": "Test refund",
+                  "restock": true
+                }
+                """;
+
+        request().header("X-Idempotency-Key", UUID.randomUUID().toString()).body(body).when()
+                .post("/api/v1/admin/orders/" + orderId + "/refund").then().statusCode(201)
+                .body("refundId", notNullValue());
+
+        List<ReturnInventoryTask> tasks = returnInventoryTaskQueue.snapshot();
+        assertEquals(1, tasks.size());
+        assertEquals(orderId, tasks.get(0).getOrderId());
+    }
+
+    // ========================================
+    // POST /admin/orders/{orderId}/returns Tests
+    // ========================================
+
+    @Test
+    void adminInitiateReturn_shouldCreateReturnAuthorization() {
+        String requestBody = """
+                {
+                  "items": [
+                    {
+                      "lineItemId": "%s",
+                      "quantity": 1,
+                      "reasonCode": "defective",
+                      "notes": "Item arrived damaged"
+                    }
+                  ]
+                }
+                """;
+
+        // Get line item ID
+        UUID lineItemId = entityManager
+                .createQuery("SELECT oli.id FROM OrderLineItem oli WHERE oli.order.id = :orderId", UUID.class)
+                .setParameter("orderId", orderId).getSingleResult();
+
+        request().body(String.format(requestBody, lineItemId.toString())).when()
+                .post("/api/v1/admin/orders/" + orderId + "/returns").then().statusCode(201)
+                .body("returnId", notNullValue()).body("orderId", equalTo(orderId.toString()))
+                .body("status", equalTo("requested")).body("restockDecision", equalTo("pending_inspection"));
+
+        List<ReturnInventoryTask> inventoryTasks = returnInventoryTaskQueue.snapshot();
+        assertEquals(1, inventoryTasks.size());
+        assertEquals(lineItemId, inventoryTasks.get(0).getLineItemId());
+
+        List<ReturnNotificationTask> notificationTasks = returnNotificationTaskQueue.snapshot();
+        assertEquals(1, notificationTasks.size());
+        assertEquals("Order Test Consignor", notificationTasks.get(0).getConsignorName());
+    }
+
+    @Test
+    void adminInitiateReturn_shouldRequireItems() {
+        String requestBody = """
+                {
+                  "items": []
+                }
+                """;
+
+        request().body(requestBody).when().post("/api/v1/admin/orders/" + orderId + "/returns").then().statusCode(400)
+                .body("title", equalTo("Bad Request"));
+    }
+
+    @Test
+    void adminInitiateReturn_shouldReturn404ForInvalidOrder() {
+        UUID invalidId = UUID.randomUUID();
+        UUID lineItemId = entityManager
+                .createQuery("SELECT oli.id FROM OrderLineItem oli WHERE oli.order.id = :orderId", UUID.class)
+                .setParameter("orderId", orderId).getSingleResult();
+        String requestBody = """
+                {
+                  "items": [
+                    {
+                      "lineItemId": "%s",
+                      "quantity": 1,
+                      "reasonCode": "defective"
+                    }
+                  ]
+                }
+                """;
+
+        request().body(String.format(requestBody, lineItemId)).when()
+                .post("/api/v1/admin/orders/" + invalidId + "/returns").then().statusCode(404);
+    }
+
+    // ========================================
+    // Helper Methods
+    // ========================================
+
+    @Transactional
+    void setupPaymentIntentTransactionally() {
+        villagecompute.storefront.data.models.PaymentIntent paymentIntent = new villagecompute.storefront.data.models.PaymentIntent();
+        Tenant tenant = entityManager.createQuery("SELECT t FROM Tenant t WHERE t.subdomain = :subdomain", Tenant.class)
+                .setParameter("subdomain", TEST_TENANT_SUBDOMAIN).getSingleResult();
+
+        paymentIntent.tenant = tenant;
+        paymentIntent.provider = "stripe";
+        paymentIntent.providerPaymentId = "pi_test_" + UUID.randomUUID();
+        paymentIntent.orderId = orderId;
+        paymentIntent.amount = new BigDecimal("64.24");
+        paymentIntent.currency = "USD";
+        paymentIntent.status = villagecompute.storefront.data.models.PaymentIntent.PaymentStatus.CAPTURED;
+        paymentIntent.captureMethod = villagecompute.storefront.data.models.PaymentIntent.CaptureMethod.AUTOMATIC;
+        paymentIntent.amountCaptured = new BigDecimal("64.24");
+        paymentIntent.amountRefunded = BigDecimal.ZERO;
+        paymentIntent.createdAt = java.time.Instant.now();
+        paymentIntent.updatedAt = java.time.Instant.now();
+        entityManager.persist(paymentIntent);
+        entityManager.flush();
+
+        // Link to order
+        Order order = entityManager.find(Order.class, orderId);
+        order.paymentIntentId = paymentIntent.providerPaymentId;
+        entityManager.persist(order);
+        entityManager.flush();
     }
 }

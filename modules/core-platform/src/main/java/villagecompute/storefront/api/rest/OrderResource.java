@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
@@ -38,10 +39,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import villagecompute.storefront.api.types.Money;
+import villagecompute.storefront.api.types.RefundResponse;
 import villagecompute.storefront.api.types.UpdateOrderRequest;
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.services.OrderService;
+import villagecompute.storefront.services.RefundService;
+import villagecompute.storefront.services.ReturnService;
+import villagecompute.storefront.services.returns.ReturnWorkflowItem;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.util.ProblemDetailsUtil;
 
@@ -84,6 +90,12 @@ public class OrderResource {
 
     @Inject
     OrderService orderService;
+
+    @Inject
+    RefundService refundService;
+
+    @Inject
+    ReturnService returnService;
 
     @Inject
     ObjectMapper objectMapper;
@@ -662,6 +674,7 @@ public class OrderResource {
     @POST
     @Path("/admin/orders/{orderId}/refund")
     @Consumes(MediaType.APPLICATION_JSON)
+    @Transactional
     @Tag(
             name = "Admin",
             description = "Store administration operations")
@@ -673,7 +686,7 @@ public class OrderResource {
                     **Authentication:** Requires admin role.
                     **Idempotent:** Requires X-Idempotency-Key header to prevent duplicate refunds.
                     **Payment Provider:** Integrates with Stripe Refunds API.
-                    **Status:** Currently returns placeholder response (full implementation pending in I3.T3).
+                    **Audit Trail:** Emits domain events for compliance and reporting.
                     """)
     @APIResponses(
             value = {@APIResponse(
@@ -684,6 +697,13 @@ public class OrderResource {
                             schema = @Schema(
                                     ref = "#/components/schemas/RefundResponse"))),
                     @APIResponse(
+                            responseCode = "200",
+                            description = "Cached refund response (duplicate request)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON,
+                                    schema = @Schema(
+                                            ref = "#/components/schemas/RefundResponse"))),
+                    @APIResponse(
                             responseCode = "400",
                             description = "Invalid request (missing idempotency key, invalid refund amount)",
                             content = @Content(
@@ -691,6 +711,11 @@ public class OrderResource {
                     @APIResponse(
                             responseCode = "404",
                             description = "Order not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "409",
+                            description = "Idempotency conflict (request still processing)",
                             content = @Content(
                                     mediaType = MediaType.APPLICATION_JSON)),
                     @APIResponse(
@@ -716,16 +741,169 @@ public class OrderResource {
                     .entity(ProblemDetailsUtil.badRequest("X-Idempotency-Key header is required")).build();
         }
 
-        // TODO: Implement refund logic via payment service
-        // This is a placeholder implementation
+        try {
+            // Parse request parameters
+            BigDecimal amountToRefund = null;
+            if (request.get("amount") != null) {
+                if (request.get("amount") instanceof Number) {
+                    amountToRefund = BigDecimal.valueOf(((Number) request.get("amount")).doubleValue());
+                } else if (request.get("amount") instanceof String) {
+                    amountToRefund = new BigDecimal((String) request.get("amount"));
+                }
+            }
 
-        Map<String, Object> refundResponse = new HashMap<>();
-        refundResponse.put("refundId", UUID.randomUUID().toString());
-        refundResponse.put("amount", request.get("amount"));
-        refundResponse.put("status", "pending");
-        refundResponse.put("createdAt", java.time.OffsetDateTime.now().toString());
+            String reason = (String) request.getOrDefault("reason", "requested_by_customer");
+            boolean restockItems = request.containsKey("restock") && Boolean.TRUE.equals(request.get("restock"));
 
-        return Response.status(Status.CREATED).entity(refundResponse).build();
+            // Initiate refund via service
+            RefundService.RefundResult result = refundService.initiateRefund(orderId, amountToRefund, reason,
+                    idempotencyKey, restockItems);
+
+            RefundResponse refundResponse = toRefundResponse(result);
+            Status status = result.fromCache() ? Status.OK : Status.CREATED;
+            return Response.status(status).entity(refundResponse).build();
+
+        } catch (villagecompute.storefront.exceptions.IdempotencyConflictException e) {
+            LOG.warnf("Idempotency conflict - tenantId=%s, orderId=%s, idempotencyKey=%s", tenantId, orderId,
+                    idempotencyKey);
+            return Response.status(Status.CONFLICT)
+                    .entity(ProblemDetailsUtil.conflict("Request with this idempotency key is still being processed"))
+                    .build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Refund validation failed - tenantId=%s, orderId=%s, error=%s", tenantId, orderId,
+                    e.getMessage());
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
+
+        } catch (EntityNotFoundException e) {
+            LOG.warnf("Refund order not found - tenantId=%s, orderId=%s, error=%s", tenantId, orderId, e.getMessage());
+            return Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())).build();
+
+        } catch (IllegalStateException e) {
+            LOG.warnf("Refund state error - tenantId=%s, orderId=%s, error=%s", tenantId, orderId, e.getMessage());
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
+
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Refund processing failed - tenantId=%s, orderId=%s", tenantId, orderId);
+            return Response.status(Status.INTERNAL_SERVER_ERROR)
+                    .entity(ProblemDetailsUtil.internalServerError("Failed to process refund. Please contact support."))
+                    .build();
+        }
+    }
+
+    /**
+     * Initiate return for order (admin).
+     *
+     * @param orderId
+     *            order UUID
+     * @param request
+     *            return request with items and reasons
+     * @return return authorization details
+     */
+    @POST
+    @Path("/admin/orders/{orderId}/returns")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Transactional
+    @Tag(
+            name = "Admin",
+            description = "Store administration operations")
+    @Operation(
+            summary = "Initiate return (Admin)",
+            description = """
+                    Initiates a product return authorization for an order. Admin can specify which line items
+                    to return along with reason codes.
+
+                    **Authentication:** Requires admin role.
+                    **Workflow:** Creates return authorization → Admin approves → Items received → Inventory restocked → Refund issued.
+                    **Audit Trail:** Emits RETURN_INITIATED domain event.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "201",
+                    description = "Return authorization created successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request (invalid line items, quantities)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Order not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response adminInitiateReturn(@Parameter(
+            description = "Order UUID",
+            required = true) @PathParam("orderId") UUID orderId,
+            @Parameter(
+                    description = "Return request with items array",
+                    required = true) Map<String, Object> request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /admin/orders/%s/returns - tenantId=%s", orderId, tenantId);
+
+        try {
+            // Parse return items from request
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> itemsRaw = (List<Map<String, Object>>) request.get("items");
+
+            if (itemsRaw == null || itemsRaw.isEmpty()) {
+                return Response.status(Status.BAD_REQUEST)
+                        .entity(ProblemDetailsUtil.badRequest("Return items are required")).build();
+            }
+
+            List<ReturnWorkflowItem> returnItems = itemsRaw.stream().map(item -> {
+                UUID lineItemId = item.get("lineItemId") instanceof String
+                        ? UUID.fromString((String) item.get("lineItemId"))
+                        : UUID.fromString(item.get("lineItemId").toString());
+                int quantity = item.get("quantity") instanceof Number ? ((Number) item.get("quantity")).intValue()
+                        : Integer.parseInt(item.get("quantity").toString());
+                String reasonCode = (String) item.getOrDefault("reasonCode", "customer_request");
+                String notes = (String) item.get("notes");
+                return new ReturnWorkflowItem(lineItemId, quantity, reasonCode, notes);
+            }).collect(Collectors.toList());
+
+            // TODO: Extract requesting user ID from auth context
+            UUID requestedBy = UUID.randomUUID(); // Placeholder
+
+            // Initiate return via service
+            villagecompute.storefront.data.models.ReturnAuthorization authorization = returnService
+                    .initiateReturn(orderId, returnItems, requestedBy);
+
+            // Build response
+            Map<String, Object> returnResponse = new HashMap<>();
+            returnResponse.put("returnId", authorization.id.toString());
+            returnResponse.put("orderId", authorization.order.id.toString());
+            returnResponse.put("status", authorization.status.name().toLowerCase());
+            returnResponse.put("restockDecision", authorization.restockDecision.name().toLowerCase());
+            returnResponse.put("createdAt", authorization.createdAt.toString());
+
+            return Response.status(Status.CREATED).entity(returnResponse).build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Return validation failed - tenantId=%s, orderId=%s, error=%s", tenantId, orderId,
+                    e.getMessage());
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
+
+        } catch (EntityNotFoundException e) {
+            LOG.warnf("Return order not found - tenantId=%s, orderId=%s, error=%s", tenantId, orderId, e.getMessage());
+            return Response.status(Status.NOT_FOUND).entity(ProblemDetailsUtil.notFound(e.getMessage())).build();
+
+        } catch (IllegalStateException e) {
+            LOG.warnf("Return state error - tenantId=%s, orderId=%s, error=%s", tenantId, orderId, e.getMessage());
+            return Response.status(Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage())).build();
+
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Return initiation failed - tenantId=%s, orderId=%s", tenantId, orderId);
+            return Response.status(Status.INTERNAL_SERVER_ERROR).entity(
+                    ProblemDetailsUtil.internalServerError("Failed to initiate return. Please contact support."))
+                    .build();
+        }
     }
 
     // ========================================
@@ -838,6 +1016,19 @@ public class OrderResource {
         money.put("amount", amount != null ? amount.toPlainString() : "0.00");
         money.put("currency", currency != null ? currency : "USD");
         return money;
+    }
+
+    private RefundResponse toRefundResponse(RefundService.RefundResult result) {
+        RefundResponse response = new RefundResponse();
+        response.setRefundId(result.referenceId());
+        response.setPaymentIntentId(result.paymentIntentId());
+        response.setProviderReference(result.providerRefundId());
+        response.setAmount(new Money(result.amount(), result.currency()));
+        response.setStatus(result.status());
+        response.setReason(result.reason());
+        response.setCreatedAt(result.createdAt());
+        response.setProcessedAt(result.processedAt());
+        return response;
     }
 
     /**

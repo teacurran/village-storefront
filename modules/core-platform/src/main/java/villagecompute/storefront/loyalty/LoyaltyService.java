@@ -280,6 +280,94 @@ public class LoyaltyService {
     }
 
     /**
+     * Reverse loyalty points previously earned for an order when a refund is issued.
+     *
+     * @param userId
+     *            user UUID associated with the order
+     * @param orderId
+     *            order identifier
+     * @param orderTotal
+     *            total order amount used to calculate original points
+     * @param refundAmount
+     *            amount being refunded
+     * @param reason
+     *            reason for reversal
+     * @return reversal transaction if points were adjusted
+     */
+    @Transactional
+    public Optional<LoyaltyTransaction> reversePointsForOrderRefund(UUID userId, UUID orderId, BigDecimal orderTotal,
+            BigDecimal refundAmount, String reason) {
+        if (userId == null || orderId == null || orderTotal == null || refundAmount == null) {
+            return Optional.empty();
+        }
+        if (orderTotal.compareTo(BigDecimal.ZERO) <= 0 || refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return Optional.empty();
+        }
+
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Reversing loyalty points for refund - tenantId=%s, userId=%s, orderId=%s, refund=%s", tenantId,
+                userId, orderId, refundAmount);
+
+        LoyaltyMember member = getMemberByUser(userId).orElse(null);
+        if (member == null) {
+            return Optional.empty();
+        }
+
+        List<LoyaltyTransaction> transactions = transactionRepository.findByOrder(orderId);
+        int earnedPoints = transactions.stream().filter(tx -> "earned".equalsIgnoreCase(tx.transactionType))
+                .mapToInt(tx -> tx.pointsDelta != null ? tx.pointsDelta : 0).sum();
+        if (earnedPoints <= 0) {
+            return Optional.empty();
+        }
+
+        int alreadyReversed = transactions.stream().filter(tx -> "reversed".equalsIgnoreCase(tx.transactionType))
+                .mapToInt(tx -> Math.abs(tx.pointsDelta != null ? tx.pointsDelta : 0)).sum();
+        int remaining = earnedPoints - alreadyReversed;
+        if (remaining <= 0) {
+            return Optional.empty();
+        }
+
+        BigDecimal ratio = refundAmount.divide(orderTotal, 6, RoundingMode.DOWN);
+        int targetTotal = ratio.multiply(BigDecimal.valueOf(earnedPoints)).setScale(0, RoundingMode.DOWN).intValue();
+        int incremental = targetTotal - alreadyReversed;
+        if (incremental <= 0) {
+            return Optional.empty();
+        }
+        int pointsToReverse = Math.min(incremental, remaining);
+        if (pointsToReverse <= 0) {
+            return Optional.empty();
+        }
+        int actualReversal = Math.min(pointsToReverse, member.pointsBalance);
+        if (actualReversal <= 0) {
+            return Optional.empty();
+        }
+
+        member.pointsBalance -= actualReversal;
+        member.lifetimePointsEarned = Math.max(0, member.lifetimePointsEarned - actualReversal);
+
+        LoyaltyTransaction transaction = new LoyaltyTransaction();
+        transaction.member = member;
+        transaction.orderId = orderId;
+        transaction.pointsDelta = -actualReversal;
+        transaction.transactionType = "reversed";
+        transaction.reason = reason != null ? reason : "Refund reversal";
+        transaction.source = "order_refund";
+        transaction.balanceAfter = member.pointsBalance;
+
+        transactionRepository.persist(transaction);
+        memberRepository.persist(member);
+        updateMemberTier(member);
+        reportingProjectionService.recordLoyaltyLedgerEvent(transaction);
+
+        meterRegistry.counter("loyalty.points.reversed", "tenant_id", tenantId.toString()).increment(actualReversal);
+
+        LOG.infof("Loyalty points reversed - tenantId=%s, userId=%s, orderId=%s, points=%d", tenantId, userId, orderId,
+                actualReversal);
+
+        return Optional.of(transaction);
+    }
+
+    /**
      * Award points manually (admin adjustment).
      *
      * @param userId

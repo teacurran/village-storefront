@@ -2434,6 +2434,128 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /admin/orders/{orderId}/returns:
+    post:
+      operationId: adminInitiateReturn
+      summary: Initiate product return (admin)
+      description: |
+        Creates a return authorization for an order allowing customer to return items.
+        Requires `admin` role.
+
+        **Workflow:**
+        1. Admin initiates return with line items and reasons
+        2. Return authorization created in REQUESTED status
+        3. Admin approves return (separate endpoint)
+        4. Items physically received and inspected
+        5. Inventory restocked based on decision
+        6. Refund issued if applicable
+      tags: [Admin]
+      security:
+        - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - orders.returns.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - orders:returns
+        - orders:write
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+              properties:
+                items:
+                  type: array
+                  description: Line items to return
+                  items:
+                    type: object
+                    required:
+                      - lineItemId
+                      - quantity
+                      - reasonCode
+                    properties:
+                      lineItemId:
+                        type: string
+                        format: uuid
+                        description: Order line item ID
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        description: Quantity to return
+                      reasonCode:
+                        type: string
+                        description: Return reason code
+                        enum:
+                          - defective
+                          - wrong_item
+                          - not_as_described
+                          - no_longer_needed
+                          - customer_request
+                        example: "defective"
+                      notes:
+                        type: string
+                        description: Additional notes about return
+                        maxLength: 1000
+      responses:
+        '201':
+          description: Return authorization created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  returnId:
+                    type: string
+                    format: uuid
+                  orderId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum:
+                      - requested
+                      - approved
+                      - received
+                      - restocked
+                      - rejected
+                      - completed
+                  restockDecision:
+                    type: string
+                    enum:
+                      - restock
+                      - discard
+                      - pending_inspection
+                      - no_restock
+                  createdAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: Invalid return request (invalid line items, quantities exceed ordered)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   # ============================================================================
   # WEBHOOK ENDPOINTS
   # ============================================================================

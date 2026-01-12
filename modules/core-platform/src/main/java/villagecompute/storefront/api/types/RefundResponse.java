@@ -24,8 +24,14 @@ public class RefundResponse {
     @JsonProperty("refundId")
     private UUID refundId;
 
+    @JsonProperty("paymentIntentId")
+    private String paymentIntentId;
+
     @JsonProperty("amount")
     private Money amount;
+
+    @JsonProperty("providerReference")
+    private String providerReference;
 
     @JsonProperty("status")
     private String status; // PENDING, SUCCEEDED, FAILED
@@ -60,12 +66,28 @@ public class RefundResponse {
         this.refundId = refundId;
     }
 
+    public String getPaymentIntentId() {
+        return paymentIntentId;
+    }
+
+    public void setPaymentIntentId(String paymentIntentId) {
+        this.paymentIntentId = paymentIntentId;
+    }
+
     public Money getAmount() {
         return amount;
     }
 
     public void setAmount(Money amount) {
         this.amount = amount;
+    }
+
+    public String getProviderReference() {
+        return providerReference;
+    }
+
+    public void setProviderReference(String providerReference) {
+        this.providerReference = providerReference;
     }
 
     public String getStatus() {

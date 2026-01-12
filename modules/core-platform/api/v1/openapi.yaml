@@ -2343,7 +2343,7 @@ paths:
         **Authentication:** Requires admin role.
         **Idempotent:** Requires X-Idempotency-Key header to prevent duplicate refunds.
         **Payment Provider:** Integrates with Stripe Refunds API.
-        **Status:** Currently returns placeholder response (full implementation pending in I3.T3).
+        **Audit Trail:** Emits domain events for compliance and reporting.
       tags:
       - Admin
       parameters:
@@ -2373,8 +2373,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RefundResponse"
+        "200":
+          description: Cached refund response (duplicate request)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundResponse"
         "400":
           description: "Invalid request (missing idempotency key, invalid refund amount)"
+          content:
+            application/json: {}
+        "404":
+          description: Order not found
+          content:
+            application/json: {}
+        "409":
+          description: Idempotency conflict (request still processing)
+          content:
+            application/json: {}
+        "500":
+          description: Internal server error
+          content:
+            application/json: {}
+  /api/v1/admin/orders/{orderId}/returns:
+    post:
+      summary: Initiate return (Admin)
+      description: |
+        Initiates a product return authorization for an order. Admin can specify which line items
+        to return along with reason codes.
+
+        **Authentication:** Requires admin role.
+        **Workflow:** Creates return authorization → Admin approves → Items received → Inventory restocked → Refund issued.
+        **Audit Trail:** Emits RETURN_INITIATED domain event.
+      tags:
+      - Admin
+      parameters:
+      - description: Order UUID
+        required: true
+        name: orderId
+        in: path
+        schema:
+          $ref: "#/components/schemas/UUID"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "201":
+          description: Return authorization created successfully
+          content:
+            application/json: {}
+        "400":
+          description: "Invalid request (invalid line items, quantities)"
           content:
             application/json: {}
         "404":
