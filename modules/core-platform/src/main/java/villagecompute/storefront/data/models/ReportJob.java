@@ -96,4 +96,33 @@ public class ReportJob extends PanacheEntityBase {
             name = "updated_at",
             nullable = false)
     public OffsetDateTime updatedAt;
+
+    /**
+     * Manifest metadata for archived data pulls (JSON).
+     *
+     * <p>
+     * Stores retention policy info, partition ranges, and archive flags for auditing and compliance.
+     */
+    @Column(
+            name = "manifest_metadata",
+            length = 5000)
+    public String manifestMetadata;
+
+    /**
+     * Download URL expiry timestamp (TTL).
+     *
+     * <p>
+     * Signed URL expires after this time; client must request new export if expired.
+     */
+    @Column(
+            name = "url_expires_at")
+    public OffsetDateTime urlExpiresAt;
+
+    /**
+     * Flag to allow job cancellation before completion.
+     */
+    @Column(
+            name = "cancelled",
+            nullable = false)
+    public boolean cancelled = false;
 }

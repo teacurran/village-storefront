@@ -1,6 +1,7 @@
 package villagecompute.storefront.api.rest;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.UUID;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -245,25 +247,9 @@ public class ReportsResource {
             return Response.status(Status.FORBIDDEN).entity(error).build();
         }
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("jobId", job.id);
-        response.put("reportType", job.reportType);
-        response.put("status", job.status);
-        response.put("createdAt", job.createdAt);
-        response.put("startedAt", job.startedAt);
-        response.put("completedAt", job.completedAt);
-
-        if ("completed".equals(job.status)) {
-            response.put("downloadUrl", job.resultUrl);
-        }
-
-        if ("failed".equals(job.status)) {
-            response.put("error", job.errorMessage);
-        }
-
         LOG.infof("Retrieved job status - jobId=%s, status=%s", jobId, job.status);
 
-        return Response.ok(response).build();
+        return Response.ok(toJobResponse(job)).build();
     }
 
     /**
@@ -288,12 +274,104 @@ public class ReportsResource {
         List<ReportJob> jobs = reportJobRepository.findByCurrentTenant(pageNum, pageSize);
         long totalCount = reportJobRepository.countByCurrentTenant();
 
+        List<Map<String, Object>> jobResponses = jobs.stream().map(this::toJobResponse).toList();
+
         Map<String, Object> response = new HashMap<>();
-        response.put("jobs", jobs);
+        response.put("jobs", jobResponses);
         response.put("page", pageNum);
         response.put("size", pageSize);
         response.put("totalCount", totalCount);
 
         return Response.ok(response).build();
+    }
+
+    /**
+     * Cancel a pending or running export job.
+     *
+     * @param jobId
+     *            job UUID
+     * @return cancellation status
+     */
+    @DELETE
+    @Path("/jobs/{jobId}")
+    public Response cancelExportJob(@PathParam("jobId") UUID jobId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("DELETE /admin/reports/jobs/%s - tenantId=%s", jobId, tenantId);
+
+        Optional<ReportJob> jobOptional = reportJobRepository.findByIdOptional(jobId);
+
+        if (jobOptional.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Job not found");
+            error.put("jobId", jobId);
+            return Response.status(Status.NOT_FOUND).entity(error).build();
+        }
+
+        ReportJob job = jobOptional.get();
+
+        // Verify tenant ownership
+        if (!job.tenant.id.equals(tenantId)) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Unauthorized");
+            error.put("message", "Job does not belong to current tenant");
+            return Response.status(Status.FORBIDDEN).entity(error).build();
+        }
+
+        // Can only cancel pending or running jobs
+        if (!"pending".equals(job.status) && !"running".equals(job.status)) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Cannot cancel job");
+            error.put("message", "Job is already " + job.status);
+            error.put("status", job.status);
+            return Response.status(Status.BAD_REQUEST).entity(error).build();
+        }
+
+        // Mark as cancelled
+        job.cancelled = true;
+        job.status = "cancelled";
+        job.updatedAt = java.time.OffsetDateTime.now();
+        job.persist();
+
+        LOG.infof("Cancelled export job - jobId=%s, tenantId=%s", jobId, tenantId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("jobId", job.id);
+        response.put("status", "cancelled");
+        response.put("message", "Export job cancelled successfully");
+
+        return Response.ok(response).build();
+    }
+
+    private Map<String, Object> toJobResponse(ReportJob job) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("jobId", job.id);
+        response.put("reportType", job.reportType);
+        response.put("status", job.status);
+        response.put("createdAt", job.createdAt);
+        response.put("startedAt", job.startedAt);
+        response.put("completedAt", job.completedAt);
+        response.put("manifestMetadata", job.manifestMetadata);
+        response.put("urlExpiresAt", job.urlExpiresAt);
+        response.put("cancelled", job.cancelled);
+
+        boolean downloadReady = isDownloadReady(job);
+        response.put("downloadReady", downloadReady);
+
+        if (downloadReady) {
+            response.put("downloadUrl", job.resultUrl);
+        }
+
+        if (job.errorMessage != null) {
+            response.put("error", job.errorMessage);
+        }
+
+        return response;
+    }
+
+    private boolean isDownloadReady(ReportJob job) {
+        if (!"completed".equals(job.status) || job.resultUrl == null || job.urlExpiresAt == null) {
+            return false;
+        }
+        return job.urlExpiresAt.isAfter(OffsetDateTime.now());
     }
 }

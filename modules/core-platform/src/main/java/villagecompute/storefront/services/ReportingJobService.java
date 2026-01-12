@@ -8,13 +8,23 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.Json;
+import jakarta.json.JsonArrayBuilder;
+import jakarta.json.JsonObjectBuilder;
 import jakarta.transaction.Transactional;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -24,13 +34,16 @@ import com.opencsv.CSVWriter;
 
 import villagecompute.storefront.data.models.ConsignmentPayoutAggregate;
 import villagecompute.storefront.data.models.InventoryAgingAggregate;
+import villagecompute.storefront.data.models.LoyaltyAggregate;
 import villagecompute.storefront.data.models.ReportJob;
 import villagecompute.storefront.data.models.SalesByPeriodAggregate;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.repositories.ConsignmentPayoutAggregateRepository;
 import villagecompute.storefront.data.repositories.InventoryAgingAggregateRepository;
+import villagecompute.storefront.data.repositories.LoyaltyAggregateRepository;
 import villagecompute.storefront.data.repositories.ReportJobRepository;
 import villagecompute.storefront.data.repositories.SalesByPeriodAggregateRepository;
+import villagecompute.storefront.reporting.ConsignmentAggregateView;
 import villagecompute.storefront.reporting.ReportStorageClient;
 import villagecompute.storefront.services.jobs.ReportExportJobPayload;
 import villagecompute.storefront.services.jobs.ReportRefreshJobPayload;
@@ -78,10 +91,16 @@ public class ReportingJobService {
     InventoryAgingAggregateRepository agingAggregateRepo;
 
     @Inject
+    LoyaltyAggregateRepository loyaltyAggregateRepo;
+
+    @Inject
     ReportingProjectionService projectionService;
 
     @Inject
     ReportStorageClient storageClient;
+
+    @Inject
+    ConsignmentAggregateView consignmentAggregateView;
 
     @Inject
     MeterRegistry meterRegistry;
@@ -110,6 +129,21 @@ public class ReportingJobService {
             name = "jobs.queue.capacity.bulk",
             defaultValue = "20000")
     int bulkQueueCapacity;
+
+    @ConfigProperty(
+            name = "reporting.exports.hot_retention_days",
+            defaultValue = "90")
+    int hotStorageRetentionDays;
+
+    @ConfigProperty(
+            name = "reporting.exports.default_range_days",
+            defaultValue = "30")
+    int defaultRangeDays;
+
+    @ConfigProperty(
+            name = "reporting.exports.max_range_days",
+            defaultValue = "365")
+    int maxRangeDays;
 
     @ConfigProperty(
             name = "jobs.retry.max_attempts.critical",
@@ -203,6 +237,8 @@ public class ReportingJobService {
     @Transactional
     public UUID enqueueExport(String reportType, String format, Map<String, String> parameters, String requestedBy) {
         UUID tenantId = TenantContext.getCurrentTenantId();
+        String normalizedFormat = normalizeFormat(format);
+        Map<String, String> normalizedParams = normalizeParameters(parameters);
 
         // Create ReportJob entity
         ReportJob reportJob = new ReportJob();
@@ -210,15 +246,15 @@ public class ReportingJobService {
         reportJob.reportType = reportType;
         reportJob.status = "pending";
         reportJob.requestedBy = requestedBy;
-        reportJob.parameters = parameters != null ? parameters.toString() : "{}";
+        reportJob.parameters = toJsonString(normalizedParams);
         reportJob.createdAt = OffsetDateTime.now();
         reportJob.updatedAt = OffsetDateTime.now();
 
         reportJobRepository.persist(reportJob);
 
         // Enqueue export job payload
-        ReportExportJobPayload payload = ReportExportJobPayload.create(tenantId, reportJob.id, reportType, format,
-                parameters, requestedBy);
+        ReportExportJobPayload payload = ReportExportJobPayload.create(tenantId, reportJob.id, reportType,
+                normalizedFormat, normalizedParams, requestedBy);
 
         JobPriority priority = priorityForExport(reportType);
         boolean enqueued = exportQueue.enqueue(payload, priority);
@@ -256,76 +292,290 @@ public class ReportingJobService {
         return exportProcessor.processNext();
     }
 
-    /**
-     * Generate report data based on payload parameters.
-     *
-     * @param payload
-     *            export job payload
-     * @return report data as byte array
-     */
-    private byte[] generateReportData(ReportExportJobPayload payload) {
+    private ReportGenerationResult generateReport(ReportExportJobPayload payload) {
+        Map<String, String> parameters = payload.getParameters() != null ? payload.getParameters()
+                : Collections.emptyMap();
+        DateRange dateRange = null;
+        ReportDataset dataset;
+
+        switch (payload.getReportType()) {
+            case "sales_by_period" :
+                dateRange = resolveDateRange(parameters);
+                dataset = buildSalesDataset(dateRange);
+                break;
+            case "consignment_payout" :
+                dateRange = resolveDateRange(parameters);
+                dataset = buildConsignmentDataset(dateRange);
+                break;
+            case "inventory_aging" :
+                dataset = buildInventoryDataset();
+                break;
+            case "loyalty_summary" :
+                dateRange = resolveDateRange(parameters);
+                dataset = buildLoyaltyDataset(dateRange);
+                break;
+            default :
+                throw new IllegalArgumentException("Unknown report type: " + payload.getReportType());
+        }
+
+        byte[] data = formatDataset(dataset, payload.getFormat());
+        return new ReportGenerationResult(data, dateRange);
+    }
+
+    private ReportDataset buildSalesDataset(DateRange dateRange) {
+        List<SalesByPeriodAggregate> aggregates = dateRange != null && dateRange.hasHotWindow()
+                ? salesAggregateRepo.findByPeriodRange(dateRange.hotQueryStart(), dateRange.hotQueryEnd())
+                : Collections.emptyList();
+
+        List<Map<String, Object>> rows = new ArrayList<>(aggregates.size());
+        for (SalesByPeriodAggregate aggregate : aggregates) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("periodStart", aggregate.periodStart);
+            row.put("periodEnd", aggregate.periodEnd);
+            row.put("totalAmount", aggregate.totalAmount);
+            row.put("itemCount", aggregate.itemCount);
+            row.put("orderCount", aggregate.orderCount);
+            row.put("dataFreshnessTimestamp", aggregate.dataFreshnessTimestamp);
+            rows.add(row);
+        }
+
+        List<String> headers = List.of("periodStart", "periodEnd", "totalAmount", "itemCount", "orderCount",
+                "dataFreshnessTimestamp");
+        return new ReportDataset(headers, rows);
+    }
+
+    private ReportDataset buildConsignmentDataset(DateRange dateRange) {
+        List<ConsignmentPayoutAggregate> aggregates = dateRange != null && dateRange.hasHotWindow()
+                ? consignmentAggregateView.queryByDateRange(dateRange.hotQueryStart(), dateRange.hotQueryEnd())
+                : Collections.emptyList();
+
+        List<Map<String, Object>> rows = new ArrayList<>(aggregates.size());
+        for (ConsignmentPayoutAggregate aggregate : aggregates) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("consignorId", aggregate.consignor.id);
+            row.put("periodStart", aggregate.periodStart);
+            row.put("periodEnd", aggregate.periodEnd);
+            row.put("totalOwed", aggregate.totalOwed);
+            row.put("itemCount", aggregate.itemCount);
+            row.put("itemsSold", aggregate.itemsSold);
+            row.put("dataFreshnessTimestamp", aggregate.dataFreshnessTimestamp);
+            rows.add(row);
+        }
+
+        List<String> headers = List.of("consignorId", "periodStart", "periodEnd", "totalOwed", "itemCount", "itemsSold",
+                "dataFreshnessTimestamp");
+        return new ReportDataset(headers, rows);
+    }
+
+    private ReportDataset buildInventoryDataset() {
+        List<InventoryAgingAggregate> aggregates = agingAggregateRepo.findByCurrentTenant();
+        List<Map<String, Object>> rows = new ArrayList<>(aggregates.size());
+
+        for (InventoryAgingAggregate aggregate : aggregates) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("variantSku", aggregate.variant != null ? aggregate.variant.sku : null);
+            row.put("variantId", aggregate.variant != null ? aggregate.variant.id : null);
+            row.put("locationId", aggregate.location != null ? aggregate.location.id : null);
+            row.put("locationName", aggregate.location != null ? aggregate.location.name : null);
+            row.put("daysInStock", aggregate.daysInStock);
+            row.put("quantity", aggregate.quantity);
+            row.put("firstReceivedAt", aggregate.firstReceivedAt);
+            row.put("dataFreshnessTimestamp", aggregate.dataFreshnessTimestamp);
+            rows.add(row);
+        }
+
+        List<String> headers = List.of("variantSku", "variantId", "locationId", "locationName", "daysInStock",
+                "quantity", "firstReceivedAt", "dataFreshnessTimestamp");
+        return new ReportDataset(headers, rows);
+    }
+
+    private ReportDataset buildLoyaltyDataset(DateRange dateRange) {
+        List<LoyaltyAggregate> aggregates = dateRange != null && dateRange.hasHotWindow()
+                ? loyaltyAggregateRepo.findByCurrentTenantAndPeriod(dateRange.hotQueryStart(), dateRange.hotQueryEnd())
+                : Collections.emptyList();
+
+        List<Map<String, Object>> rows = new ArrayList<>(aggregates.size());
+        for (LoyaltyAggregate aggregate : aggregates) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("periodDate", aggregate.periodDate);
+            row.put("pointsEarned", aggregate.pointsEarned);
+            row.put("pointsRedeemed", aggregate.pointsRedeemed);
+            row.put("activeMembers", aggregate.activeMembers);
+            row.put("tierDistribution", aggregate.tierDistribution);
+            row.put("dataFreshnessTimestamp", aggregate.dataFreshnessTimestamp);
+            rows.add(row);
+        }
+
+        List<String> headers = List.of("periodDate", "pointsEarned", "pointsRedeemed", "activeMembers",
+                "tierDistribution", "dataFreshnessTimestamp");
+        return new ReportDataset(headers, rows);
+    }
+
+    private byte[] formatDataset(ReportDataset dataset, String format) {
+        String normalizedFormat = format != null ? format.toLowerCase(Locale.ROOT) : "csv";
+        if ("json".equals(normalizedFormat)) {
+            JsonArrayBuilder arrayBuilder = Json.createArrayBuilder();
+            for (Map<String, Object> row : dataset.rows()) {
+                JsonObjectBuilder rowBuilder = Json.createObjectBuilder();
+                row.forEach((key, value) -> addJsonValue(rowBuilder, key, value));
+                arrayBuilder.add(rowBuilder);
+            }
+            return arrayBuilder.build().toString().getBytes(StandardCharsets.UTF_8);
+        }
+
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 OutputStreamWriter writer = new OutputStreamWriter(outputStream, StandardCharsets.UTF_8);
                 CSVWriter csvWriter = new CSVWriter(writer)) {
 
-            switch (payload.getReportType()) {
-                case "sales_by_period" :
-                    generateSalesReport(csvWriter, payload.getParameters());
-                    break;
-                case "consignment_payout" :
-                    generatePayoutReport(csvWriter, payload.getParameters());
-                    break;
-                case "inventory_aging" :
-                    generateAgingReport(csvWriter, payload.getParameters());
-                    break;
-                default :
-                    throw new IllegalArgumentException("Unknown report type: " + payload.getReportType());
+            csvWriter.writeNext(dataset.headers().toArray(new String[0]));
+            for (Map<String, Object> row : dataset.rows()) {
+                String[] values = new String[dataset.headers().size()];
+                for (int i = 0; i < dataset.headers().size(); i++) {
+                    Object value = row.get(dataset.headers().get(i));
+                    values[i] = value != null ? value.toString() : "";
+                }
+                csvWriter.writeNext(values);
             }
-
             csvWriter.flush();
             return outputStream.toByteArray();
-
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate report data", e);
         }
     }
 
-    private void generateSalesReport(CSVWriter csvWriter, Map<String, String> parameters) {
-        csvWriter.writeNext(new String[]{"Period Start", "Period End", "Total Amount", "Item Count", "Order Count",
-                "Data Freshness"});
+    private void addJsonValue(JsonObjectBuilder builder, String key, Object value) {
+        if (value == null) {
+            builder.addNull(key);
+            return;
+        }
 
-        List<SalesByPeriodAggregate> aggregates = salesAggregateRepo.findByCurrentTenant();
-        for (SalesByPeriodAggregate agg : aggregates) {
-            csvWriter.writeNext(new String[]{agg.periodStart.toString(), agg.periodEnd.toString(),
-                    agg.totalAmount.toString(), String.valueOf(agg.itemCount), String.valueOf(agg.orderCount),
-                    agg.dataFreshnessTimestamp.toString()});
+        if (value instanceof Integer intValue) {
+            builder.add(key, intValue);
+        } else if (value instanceof Long longValue) {
+            builder.add(key, longValue);
+        } else if (value instanceof Double doubleValue) {
+            builder.add(key, doubleValue);
+        } else if (value instanceof Float floatValue) {
+            builder.add(key, floatValue.doubleValue());
+        } else if (value instanceof Boolean boolValue) {
+            builder.add(key, boolValue);
+        } else {
+            builder.add(key, value.toString());
         }
     }
 
-    private void generatePayoutReport(CSVWriter csvWriter, Map<String, String> parameters) {
-        csvWriter.writeNext(new String[]{"Consignor ID", "Period Start", "Period End", "Total Owed", "Item Count",
-                "Items Sold", "Data Freshness"});
+    private DateRange resolveDateRange(Map<String, String> parameters) {
+        LocalDate today = LocalDate.now();
+        LocalDate requestedEnd = parseDate("endDate", parameters.get("endDate"));
+        if (requestedEnd == null) {
+            requestedEnd = today;
+        }
+        if (requestedEnd.isAfter(today)) {
+            requestedEnd = today;
+        }
 
-        List<ConsignmentPayoutAggregate> aggregates = payoutAggregateRepo.findByCurrentTenant();
-        for (ConsignmentPayoutAggregate agg : aggregates) {
-            csvWriter.writeNext(new String[]{agg.consignor.id.toString(), agg.periodStart.toString(),
-                    agg.periodEnd.toString(), agg.totalOwed.toString(), String.valueOf(agg.itemCount),
-                    String.valueOf(agg.itemsSold), agg.dataFreshnessTimestamp.toString()});
+        int normalizedDefaultRange = Math.max(defaultRangeDays, 1);
+        LocalDate requestedStart = parseDate("startDate", parameters.get("startDate"));
+        if (requestedStart == null) {
+            requestedStart = requestedEnd.minusDays(normalizedDefaultRange - 1L);
+        }
+
+        int normalizedMaxRange = Math.max(maxRangeDays, normalizedDefaultRange);
+        long rangeDays = ChronoUnit.DAYS.between(requestedStart, requestedEnd);
+        if (rangeDays > normalizedMaxRange) {
+            requestedStart = requestedEnd.minusDays(normalizedMaxRange);
+        }
+
+        if (requestedStart.isAfter(requestedEnd)) {
+            throw new IllegalArgumentException("startDate must be on or before endDate");
+        }
+
+        LocalDate hotCutoff = LocalDate.now().minusDays(hotStorageRetentionDays);
+        boolean includesArchived = requestedStart.isBefore(hotCutoff);
+        boolean archiveOnly = requestedEnd.isBefore(hotCutoff);
+
+        LocalDate hotQueryStart = archiveOnly ? null
+                : (requestedStart.isBefore(hotCutoff) ? hotCutoff : requestedStart);
+        LocalDate hotQueryEnd = archiveOnly ? null : requestedEnd;
+
+        LocalDate archivedStart = includesArchived ? requestedStart : null;
+        LocalDate archivedEnd = includesArchived
+                ? (requestedEnd.isBefore(hotCutoff) ? requestedEnd : hotCutoff.minusDays(1))
+                : null;
+
+        return new DateRange(requestedStart, requestedEnd, hotQueryStart, hotQueryEnd, archivedStart, archivedEnd,
+                includesArchived, archiveOnly);
+    }
+
+    private LocalDate parseDate(String fieldName, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("Invalid " + fieldName + ": " + value, e);
         }
     }
 
-    private void generateAgingReport(CSVWriter csvWriter, Map<String, String> parameters) {
-        csvWriter.writeNext(new String[]{"Variant SKU", "Location", "Days In Stock", "Quantity", "First Received",
-                "Data Freshness"});
+    private String contentTypeForFormat(String format) {
+        if (format != null && "json".equalsIgnoreCase(format)) {
+            return "application/json";
+        }
+        return "text/csv";
+    }
 
-        List<InventoryAgingAggregate> aggregates = agingAggregateRepo.findByCurrentTenant();
-        for (InventoryAgingAggregate agg : aggregates) {
-            String sku = agg.variant != null ? agg.variant.sku : "N/A";
-            String locationName = agg.location != null ? agg.location.name : "N/A";
-            String firstReceived = agg.firstReceivedAt != null ? agg.firstReceivedAt.toString() : "N/A";
+    private String normalizeFormat(String format) {
+        String normalized = format != null ? format.trim().toLowerCase(Locale.ROOT) : "csv";
+        if (!"csv".equals(normalized) && !"json".equals(normalized)) {
+            throw new IllegalArgumentException("Unsupported export format: " + format);
+        }
+        return normalized;
+    }
 
-            csvWriter.writeNext(new String[]{sku, locationName, String.valueOf(agg.daysInStock),
-                    String.valueOf(agg.quantity), firstReceived, agg.dataFreshnessTimestamp.toString()});
+    private Map<String, String> normalizeParameters(Map<String, String> parameters) {
+        Map<String, String> normalized = new HashMap<>();
+        if (parameters != null) {
+            parameters.forEach((key, value) -> {
+                if (key != null && value != null) {
+                    normalized.put(key.trim(), value.trim());
+                }
+            });
+        }
+        return normalized;
+    }
+
+    private String toJsonString(Map<String, String> parameters) {
+        JsonObjectBuilder builder = Json.createObjectBuilder();
+        parameters.forEach(builder::add);
+        return builder.build().toString();
+    }
+
+    private String resolveDataSource(DateRange dateRange) {
+        if (dateRange == null) {
+            return "hot_only";
+        }
+        if (dateRange.archiveOnly()) {
+            return "archived_only";
+        }
+        if (dateRange.includesArchived()) {
+            return "mixed";
+        }
+        return "hot_only";
+    }
+
+    private record ReportDataset(List<String> headers, List<Map<String, Object>> rows) {
+    }
+
+    private record ReportGenerationResult(byte[] data, DateRange dateRange) {
+    }
+
+    private record DateRange(LocalDate requestedStart, LocalDate requestedEnd, LocalDate hotQueryStart,
+            LocalDate hotQueryEnd, LocalDate archivedStart, LocalDate archivedEnd, boolean includesArchived,
+            boolean archiveOnly) {
+
+        boolean hasHotWindow() {
+            return hotQueryStart != null && hotQueryEnd != null && !hotQueryStart.isAfter(hotQueryEnd);
         }
     }
 
@@ -435,9 +685,17 @@ public class ReportingJobService {
 
     private void handleExportJob(ReportExportJobPayload payload) throws Exception {
         Timer.Sample sample = Timer.start(meterRegistry);
+        OffsetDateTime queuedAt = payload.getCreatedAt();
+        OffsetDateTime processingStartedAt = OffsetDateTime.now();
 
-        LOG.infof("Processing export job - jobId=%s, reportJobId=%s, tenantId=%s, reportType=%s", payload.getJobId(),
-                payload.getReportJobId(), payload.getTenantId(), payload.getReportType());
+        // Record queue wait time
+        long queueWaitMillis = java.time.Duration.between(queuedAt, processingStartedAt).toMillis();
+        meterRegistry.timer("reporting.job.queue_time", "type", "export", "report_type", payload.getReportType())
+                .record(java.time.Duration.ofMillis(queueWaitMillis));
+
+        LOG.infof("Processing export job - jobId=%s, reportJobId=%s, tenantId=%s, reportType=%s, queueWaitMs=%d",
+                payload.getJobId(), payload.getReportJobId(), payload.getTenantId(), payload.getReportType(),
+                queueWaitMillis);
 
         meterRegistry.counter("reporting.job.started", "type", "export", "report_type", payload.getReportType())
                 .increment();
@@ -447,32 +705,56 @@ public class ReportingJobService {
             throw new IllegalStateException("ReportJob not found: " + payload.getReportJobId());
         }
 
+        // Check if job was cancelled
+        if (reportJob.cancelled) {
+            LOG.infof("Export job cancelled - jobId=%s, reportJobId=%s", payload.getJobId(), payload.getReportJobId());
+            meterRegistry.counter("reporting.job.cancelled", "type", "export", "report_type", payload.getReportType())
+                    .increment();
+            sample.stop(meterRegistry.timer("reporting.job.duration", "type", "export", "report_type",
+                    payload.getReportType()));
+            return;
+        }
+
         reportJob.status = "running";
-        reportJob.startedAt = OffsetDateTime.now();
-        reportJob.updatedAt = OffsetDateTime.now();
+        reportJob.startedAt = processingStartedAt;
+        reportJob.updatedAt = processingStartedAt;
         reportJob.persist();
 
         try {
-            byte[] reportData = generateReportData(payload);
+            ReportGenerationResult generationResult = generateReport(payload);
+            byte[] reportData = generationResult.data();
             String objectKey = String.format("%s/%s/%s.%s", payload.getTenantId(), payload.getReportType(),
                     payload.getJobId(), payload.getFormat());
 
-            String contentType = "text/csv"; // MVP: CSV only
+            String contentType = contentTypeForFormat(payload.getFormat());
             storageClient.uploadReport(objectKey, new ByteArrayInputStream(reportData), contentType, reportData.length);
 
             String signedUrl = storageClient.getSignedDownloadUrl(objectKey, DEFAULT_SIGNED_URL_EXPIRY);
 
+            // Build manifest metadata
+            OffsetDateTime urlExpiresAt = OffsetDateTime.now().plus(DEFAULT_SIGNED_URL_EXPIRY);
+            String manifestMetadata = buildManifestMetadata(payload, reportData.length, generationResult.dateRange(),
+                    urlExpiresAt);
+
             reportJob.status = "completed";
             reportJob.resultUrl = signedUrl;
+            reportJob.urlExpiresAt = urlExpiresAt;
+            reportJob.manifestMetadata = manifestMetadata;
             reportJob.completedAt = OffsetDateTime.now();
             reportJob.updatedAt = OffsetDateTime.now();
             reportJob.persist();
 
-            LOG.infof("Export job completed - jobId=%s, reportJobId=%s, resultUrl=%s", payload.getJobId(),
-                    payload.getReportJobId(), signedUrl);
+            LOG.infof("Export job completed - jobId=%s, reportJobId=%s, resultUrl=%s, fileSizeBytes=%d",
+                    payload.getJobId(), payload.getReportJobId(), signedUrl, reportData.length);
+
+            // Record file size metric
+            meterRegistry.summary("reports.export.file_size_bytes", "report_type", payload.getReportType())
+                    .record(reportData.length);
 
             sample.stop(meterRegistry.timer("reporting.job.duration", "type", "export", "report_type",
                     payload.getReportType()));
+            meterRegistry.counter("reporting.job.completed", "type", "export", "report_type", payload.getReportType())
+                    .increment();
         } catch (Exception e) {
             LOG.errorf(e, "Export job failed - jobId=%s, reportJobId=%s", payload.getJobId(), payload.getReportJobId());
 
@@ -486,5 +768,60 @@ public class ReportingJobService {
                     .increment();
             throw e;
         }
+    }
+
+    /**
+     * Build manifest metadata JSON for archived/hot data ranges.
+     *
+     * @param payload
+     *            export job payload
+     * @param fileSizeBytes
+     *            generated file size
+     * @return JSON manifest metadata
+     */
+    private String buildManifestMetadata(ReportExportJobPayload payload, long fileSizeBytes, DateRange dateRange,
+            OffsetDateTime urlExpiresAt) {
+        JsonObjectBuilder builder = Json.createObjectBuilder();
+        builder.add("tenantId", payload.getTenantId().toString());
+        builder.add("reportType", payload.getReportType());
+        builder.add("format", payload.getFormat());
+        builder.add("fileSizeBytes", fileSizeBytes);
+        builder.add("generatedAt", OffsetDateTime.now().toString());
+        builder.add("retentionPolicyDays", hotStorageRetentionDays);
+        builder.add("partitionAware", true);
+        builder.add("dataSource", resolveDataSource(dateRange));
+
+        if (urlExpiresAt != null) {
+            builder.add("downloadExpiresAt", urlExpiresAt.toString());
+        }
+
+        if (dateRange != null && dateRange.requestedStart() != null && dateRange.requestedEnd() != null) {
+            JsonObjectBuilder requested = Json.createObjectBuilder()
+                    .add("startDate", dateRange.requestedStart().toString())
+                    .add("endDate", dateRange.requestedEnd().toString());
+            builder.add("requestedRange", requested);
+
+            if (dateRange.hasHotWindow()) {
+                JsonObjectBuilder hotRange = Json.createObjectBuilder()
+                        .add("startDate", dateRange.hotQueryStart().toString())
+                        .add("endDate", dateRange.hotQueryEnd().toString());
+                builder.add("hotStorageRange", hotRange);
+            }
+
+            builder.add("archivalLookupRequired", dateRange.includesArchived());
+            builder.add("archiveOnly", dateRange.archiveOnly());
+
+            if (dateRange.includesArchived() && dateRange.archivedStart() != null && dateRange.archivedEnd() != null) {
+                JsonObjectBuilder archivedRange = Json.createObjectBuilder()
+                        .add("startDate", dateRange.archivedStart().toString())
+                        .add("endDate", dateRange.archivedEnd().toString());
+                builder.add("archivedRange", archivedRange);
+            }
+        } else {
+            builder.add("archivalLookupRequired", false);
+            builder.add("archiveOnly", false);
+        }
+
+        return builder.build().toString();
     }
 }

@@ -1,6 +1,9 @@
 package villagecompute.storefront.services.jobs;
 
 import java.time.OffsetDateTime;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -35,8 +38,9 @@ public final class ReportExportJobPayload {
         this.tenantId = tenantId;
         this.reportJobId = reportJobId;
         this.reportType = reportType;
-        this.format = format;
-        this.parameters = parameters;
+        this.format = format != null ? format.toLowerCase(Locale.ROOT) : "csv";
+        this.parameters = parameters != null ? Collections.unmodifiableMap(new HashMap<>(parameters))
+                : Collections.emptyMap();
         this.requestedBy = requestedBy;
         this.createdAt = createdAt;
     }
