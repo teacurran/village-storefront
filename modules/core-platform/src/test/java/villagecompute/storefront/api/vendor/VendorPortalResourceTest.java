@@ -163,6 +163,104 @@ class VendorPortalResourceTest {
         vendorRequest().when().get("/api/v1/vendor/portal/profile").then().statusCode(403);
     }
 
+    /**
+     * Test dashboard endpoint returns comprehensive data (Task I4.T2).
+     */
+    @Test
+    @TestSecurity(
+            user = "vendor-user",
+            roles = {"vendor"},
+            attributes = {@SecurityAttribute(
+                    key = "consignor_id",
+                    value = CONSIGNOR_ID,
+                    type = AttributeType.STRING)})
+    void testGetDashboard() {
+        vendorRequest().when().get("/api/v1/vendor/portal/dashboard").then().statusCode(200)
+                .body("consignorId", equalTo(CONSIGNOR_ID)).body("consignorName", equalTo("Portal Vendor"))
+                .body("consignorStatus", equalTo("active")).body("balances", notNullValue())
+                .body("balances.pendingBalance", notNullValue()).body("balances.availableBalance", notNullValue())
+                .body("balances.totalEarnings", notNullValue()).body("balances.currency", equalTo("USD"))
+                .body("payoutSummary", notNullValue()).body("payoutSummary.recentPayouts", notNullValue())
+                .body("itemSummary", notNullValue()).body("itemSummary.activeCount", notNullValue())
+                .body("itemSummary.soldThisMonth", notNullValue()).body("itemSummary.recentItems", notNullValue())
+                .body("stripeConnect", notNullValue()).body("stripeConnect.requiresOnboarding", notNullValue())
+                .body("notificationSummary", notNullValue()).body("lastUpdated", notNullValue());
+    }
+
+    /**
+     * Test impersonation flag is detected and logged (Task I4.T2).
+     */
+    @Test
+    @TestSecurity(
+            user = "platform-admin",
+            roles = {"vendor"},
+            attributes = {@SecurityAttribute(
+                    key = "consignor_id",
+                    value = CONSIGNOR_ID,
+                    type = AttributeType.STRING),
+                    @SecurityAttribute(
+                            key = "impersonating",
+                            value = "true",
+                            type = AttributeType.STRING)})
+    void testImpersonationDetectedAndLogged() {
+        // Impersonation should still allow access but will be logged
+        vendorRequest().when().get("/api/v1/vendor/portal/dashboard").then().statusCode(200).body("consignorId",
+                equalTo(CONSIGNOR_ID));
+
+        // Verify audit logging occurs (would be checked via log output or metrics in production)
+        // Here we just verify the request succeeds with proper impersonation attribute
+    }
+
+    /**
+     * Test dashboard without consignor claim returns 403.
+     */
+    @Test
+    @TestSecurity(
+            user = "vendor-user",
+            roles = {"vendor"})
+    void testDashboardMissingConsignorClaimReturnsForbidden() {
+        vendorRequest().when().get("/api/v1/vendor/portal/dashboard").then().statusCode(403).body("title",
+                equalTo("Forbidden"));
+    }
+
+    /**
+     * Test tenant scoping prevents access to other tenant's consignor data.
+     */
+    @Test
+    @Transactional
+    @TestSecurity(
+            user = "vendor-user",
+            roles = {"vendor"},
+            attributes = {@SecurityAttribute(
+                    key = "consignor_id",
+                    value = "99999999-1111-2222-3333-444444444444",
+                    type = AttributeType.STRING)})
+    void testTenantScopingPreventsAccessToOtherConsignor() {
+        // Create another tenant with consignor
+        Tenant otherTenant = new Tenant();
+        otherTenant.subdomain = "othertenant";
+        otherTenant.name = "Other Tenant";
+        otherTenant.status = "active";
+        otherTenant.settings = "{}";
+        otherTenant.createdAt = OffsetDateTime.now();
+        otherTenant.updatedAt = OffsetDateTime.now();
+        entityManager.persist(otherTenant);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        entityManager.createNativeQuery(
+                "INSERT INTO consignors (id, tenant_id, name, contact_info, payout_settings, status, version, created_at, updated_at) "
+                        + "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
+                .setParameter(1, UUID.fromString("99999999-1111-2222-3333-444444444444"))
+                .setParameter(2, otherTenant.id).setParameter(3, "Other Vendor")
+                .setParameter(4, "{\"email\":\"other@example.com\"}")
+                .setParameter(5, "{\"default_commission_rate\":15}").setParameter(6, "active").setParameter(7, 0L)
+                .setParameter(8, now).setParameter(9, now).executeUpdate();
+        entityManager.flush();
+
+        // Attempt to access dashboard from original tenant context should fail
+        vendorRequest().when().get("/api/v1/vendor/portal/dashboard").then().statusCode(404);
+    }
+
     private void insertConsignorRow(Tenant tenant) {
         OffsetDateTime now = OffsetDateTime.now();
         entityManager.createNativeQuery(

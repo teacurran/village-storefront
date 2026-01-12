@@ -19,47 +19,69 @@ import { emitTelemetryEvent } from '@/telemetry'
 
 // Mock API responses
 vi.mock('@/modules/consignor/api', () => {
-  const profile = {
-    id: 'consignor-123',
-    tenantId: 'tenant-1',
-    displayName: 'Jane Vendor',
-    email: 'jane@example.com',
-    commissionRate: 25,
-    balanceOwed: { amount: 12500, currency: 'USD' },
-    lifetimeEarnings: { amount: 450000, currency: 'USD' },
-    activeItemCount: 42,
-    soldItemCount: 128,
-    status: 'ACTIVE',
-    createdAt: '2024-01-01T00:00:00Z',
-    updatedAt: '2026-01-01T00:00:00Z',
+  const vendorDashboard = {
+    consignorId: 'consignor-123',
+    consignorName: 'Jane Vendor',
+    consignorStatus: 'active',
+    balances: {
+      pendingBalance: { amount: 250000, currency: 'USD' },
+      availableBalance: { amount: 12500, currency: 'USD' },
+      totalEarnings: { amount: 450000, currency: 'USD' },
+      currency: 'USD',
+      nextSettlementDate: '2026-01-15',
+    },
+    payoutSummary: {
+      recentPayouts: [],
+      lastPayoutDate: '2025-12-15T10:00:00Z',
+      lastPayoutAmount: { amount: 25000, currency: 'USD' },
+      nextPayoutSchedule: 'Monthly on the 15th',
+    },
+    itemSummary: {
+      activeCount: 42,
+      soldThisMonth: 18,
+      totalSold: 128,
+      recentItems: [
+        {
+          id: 'item-1',
+          consignorId: 'consignor-123',
+          variantId: 'variant-1',
+          productName: 'Vintage Leather Jacket',
+          variantSku: 'VLJ-001-M',
+          variantAttributes: { size: 'M', color: 'Brown' },
+          consignmentPrice: { amount: 15000, currency: 'USD' },
+          commissionRate: 25,
+          status: 'AVAILABLE',
+          consignedAt: '2025-11-01T00:00:00Z',
+          soldAt: undefined,
+          withdrawnAt: undefined,
+        },
+        {
+          id: 'item-2',
+          consignorId: 'consignor-123',
+          variantId: 'variant-2',
+          productName: 'Retro Sunglasses',
+          variantSku: 'RS-002',
+          consignmentPrice: { amount: 4500, currency: 'USD' },
+          commissionRate: 20,
+          status: 'SOLD',
+          consignedAt: '2025-10-15T00:00:00Z',
+          soldAt: '2025-12-20T00:00:00Z',
+          withdrawnAt: undefined,
+        },
+      ],
+    },
+    stripeConnect: {
+      accountId: null,
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      detailsSubmitted: false,
+      onboardingUrl: 'https://stripe.test/onboard',
+      requiresOnboarding: true,
+      onboardingMessage: 'Complete Stripe Express onboarding to receive payouts.',
+    },
+    notificationSummary: { unreadCount: 1, recentNotifications: [] },
+    lastUpdated: '2026-01-01T00:00:00Z',
   }
-
-  const items = [
-    {
-      id: 'item-1',
-      consignorId: 'consignor-123',
-      variantId: 'variant-1',
-      productName: 'Vintage Leather Jacket',
-      variantSku: 'VLJ-001-M',
-      variantAttributes: { size: 'M', color: 'Brown' },
-      consignmentPrice: { amount: 15000, currency: 'USD' },
-      commissionRate: 25,
-      status: 'AVAILABLE',
-      consignedAt: '2025-11-01T00:00:00Z',
-    },
-    {
-      id: 'item-2',
-      consignorId: 'consignor-123',
-      variantId: 'variant-2',
-      productName: 'Retro Sunglasses',
-      variantSku: 'RS-002',
-      consignmentPrice: { amount: 4500, currency: 'USD' },
-      commissionRate: 20,
-      status: 'SOLD',
-      consignedAt: '2025-10-15T00:00:00Z',
-      soldAt: '2025-12-20T00:00:00Z',
-    },
-  ]
 
   const notifications = [
     {
@@ -75,41 +97,73 @@ vi.mock('@/modules/consignor/api', () => {
   ]
 
   return {
-    getConsignorProfile: vi.fn(() => Promise.resolve(profile)),
+    getVendorDashboard: vi.fn(() => Promise.resolve(JSON.parse(JSON.stringify(vendorDashboard)))),
+    getConsignorProfile: vi.fn(() =>
+      Promise.resolve({
+        id: vendorDashboard.consignorId,
+        tenantId: 'tenant-1',
+        displayName: vendorDashboard.consignorName,
+        email: 'jane@example.com',
+        commissionRate: 25,
+        balanceOwed: vendorDashboard.balances.availableBalance,
+        lifetimeEarnings: vendorDashboard.balances.totalEarnings,
+        activeItemCount: vendorDashboard.itemSummary.activeCount,
+        soldItemCount: vendorDashboard.itemSummary.totalSold,
+        status: 'ACTIVE',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: vendorDashboard.lastUpdated,
+      })
+    ),
     getConsignorDashboardSnapshot: vi.fn(() =>
       Promise.resolve({
-        profile,
-        items,
-        payouts: [],
+        profile: {
+          id: vendorDashboard.consignorId,
+          tenantId: 'tenant-1',
+          displayName: vendorDashboard.consignorName,
+          email: 'jane@example.com',
+          commissionRate: 25,
+          balanceOwed: vendorDashboard.balances.availableBalance,
+          lifetimeEarnings: vendorDashboard.balances.totalEarnings,
+          activeItemCount: vendorDashboard.itemSummary.activeCount,
+          soldItemCount: vendorDashboard.itemSummary.totalSold,
+          status: 'ACTIVE',
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: vendorDashboard.lastUpdated,
+        },
+        items: vendorDashboard.itemSummary.recentItems,
+        payouts: vendorDashboard.payoutSummary.recentPayouts,
         stats: {
-          balanceOwed: profile.balanceOwed,
+          balanceOwed: vendorDashboard.balances.availableBalance,
           pendingPayoutCount: 1,
-          activeItemCount: profile.activeItemCount,
-          soldThisMonth: 18,
-          lifetimeEarnings: profile.lifetimeEarnings,
-          avgCommissionRate: profile.commissionRate,
-          lastPayoutDate: '2025-12-15T10:00:00Z',
+          activeItemCount: vendorDashboard.itemSummary.activeCount,
+          soldThisMonth: vendorDashboard.itemSummary.soldThisMonth,
+          lifetimeEarnings: vendorDashboard.balances.totalEarnings,
+          avgCommissionRate: 25,
+          lastPayoutDate: vendorDashboard.payoutSummary.lastPayoutDate,
           nextPayoutEligible: true,
         },
       })
     ),
-    getConsignorItems: vi.fn(() => Promise.resolve(items)),
-    getConsignorPayouts: vi.fn(() => Promise.resolve([])),
+    getConsignorItems: vi.fn(() => Promise.resolve(vendorDashboard.itemSummary.recentItems)),
+    getConsignorPayouts: vi.fn(() => Promise.resolve(vendorDashboard.payoutSummary.recentPayouts)),
     getConsignorNotifications: vi.fn(() => Promise.resolve(notifications)),
     markNotificationRead: vi.fn(() => Promise.resolve()),
-    requestPayout: vi.fn((request) =>
-      Promise.resolve({
-        id: 'payout-new',
-        consignorId: 'consignor-123',
+    requestPayout: vi.fn((request) => {
+      const payout = {
+        id: crypto.randomUUID(),
+        consignorId: vendorDashboard.consignorId,
         tenantId: 'tenant-1',
         amount: request.amount,
-        status: 'PENDING',
+        status: 'PENDING' as const,
         itemCount: 0,
         method: request.method,
         requestedAt: new Date().toISOString(),
         notes: request.notes,
-      })
-    ),
+      }
+      vendorDashboard.payoutSummary.recentPayouts.unshift(payout)
+      vendorDashboard.balances.availableBalance.amount -= request.amount.amount
+      return Promise.resolve(payout)
+    }),
   }
 })
 
@@ -168,7 +222,7 @@ describe('ConsignorPortal', () => {
 
     expect(store.profile).toBeDefined()
     expect(store.profile?.displayName).toBe('Jane Vendor')
-    expect(store.profile?.balanceOwed.amount).toBe(12500)
+    expect(store.profile?.balanceOwed.amount).toBe(12500 + 250000)
   })
 
   it('displays consignment items table', async () => {
@@ -212,8 +266,8 @@ describe('ConsignorPortal', () => {
 
   it('handles error states gracefully', async () => {
     // Mock snapshot API to throw error
-    const { getConsignorDashboardSnapshot } = await import('@/modules/consignor/api')
-    vi.mocked(getConsignorDashboardSnapshot).mockRejectedValueOnce(new Error('Network error'))
+    const { getVendorDashboard } = await import('@/modules/consignor/api')
+    vi.mocked(getVendorDashboard).mockRejectedValueOnce(new Error('Network error'))
 
     const wrapper = mount(ConsignorDashboard, {
       global: {
@@ -285,7 +339,8 @@ describe('ConsignorPortal', () => {
       'consignor:portal-loaded',
       expect.objectContaining({
         consignorId: 'consignor-123',
-        balanceOwed: 12500,
+        availableBalanceCents: 12500,
+        currency: 'USD',
       })
     )
   })

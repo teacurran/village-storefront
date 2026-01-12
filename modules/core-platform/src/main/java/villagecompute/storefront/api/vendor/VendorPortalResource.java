@@ -24,6 +24,7 @@ import org.jboss.logging.Logger;
 import villagecompute.storefront.api.types.ConsignmentItemDto;
 import villagecompute.storefront.api.types.ConsignorDto;
 import villagecompute.storefront.api.types.PayoutBatchDto;
+import villagecompute.storefront.api.types.VendorDashboardDto;
 import villagecompute.storefront.data.models.ConsignmentItem;
 import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.PayoutBatch;
@@ -72,6 +73,42 @@ public class VendorPortalResource {
 
     @Inject
     Instance<JsonWebToken> jsonWebToken;
+
+    /**
+     * Get aggregated dashboard data for consignor portal.
+     *
+     * <p>
+     * Provides comprehensive dashboard view including balances (pending/available), payout history, item summaries,
+     * Stripe Express onboarding status, and notifications. Designed to minimize API round-trips for initial portal
+     * load.
+     *
+     * <p>
+     * References:
+     * <ul>
+     * <li>Task I4.T2: Consignment vendor portal implementation</li>
+     * <li>Architecture §3.5: Consignment Experience Touchpoints</li>
+     * </ul>
+     *
+     * @return aggregated dashboard data
+     */
+    @GET
+    @Path("/dashboard")
+    public Response getDashboard() {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        UUID consignorId = resolveConsignorId();
+        boolean impersonating = detectImpersonation();
+
+        LOG.infof("GET /vendor/portal/dashboard - tenantId=%s, consignorId=%s, impersonating=%b", tenantId, consignorId,
+                impersonating);
+        auditPortalAccess("dashboard", consignorId, impersonating);
+
+        VendorDashboardDto dashboard = consignmentService.buildVendorDashboard(consignorId);
+        if (dashboard == null) {
+            return problem(Status.NOT_FOUND, "Not Found", "Consignor dashboard not available");
+        }
+
+        return Response.ok(dashboard).build();
+    }
 
     /**
      * Get consignor profile. TODO: Extract consignorId from JWT vendor token claims.
@@ -184,13 +221,71 @@ public class VendorPortalResource {
         }
     }
 
+    /**
+     * Detect if the current request is an impersonation scenario.
+     *
+     * <p>
+     * Checks for impersonation indicator in JWT claims or security attributes. Platform admins can impersonate
+     * consignors for support purposes, and all impersonation actions must be logged.
+     *
+     * @return true if impersonating
+     */
+    private boolean detectImpersonation() {
+        // Check JWT claim for impersonation flag
+        if (jsonWebToken != null && !jsonWebToken.isUnsatisfied()) {
+            JsonWebToken token = jsonWebToken.get();
+            if (token != null) {
+                Object impersonatingClaim = token.getClaim("impersonating");
+                if (isTruthyFlag(impersonatingClaim)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check security attribute for impersonation flag
+        if (securityIdentity != null) {
+            Object attribute = securityIdentity.getAttribute("impersonating");
+            if (isTruthyFlag(attribute)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isTruthyFlag(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof String str) {
+            return Boolean.parseBoolean(str);
+        }
+        if (value instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        return false;
+    }
+
     private void auditPortalAccess(String action, UUID consignorId) {
+        auditPortalAccess(action, consignorId, false);
+    }
+
+    private void auditPortalAccess(String action, UUID consignorId, boolean impersonating) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         String principal = securityIdentity != null && securityIdentity.getPrincipal() != null
                 ? securityIdentity.getPrincipal().getName()
                 : "unknown";
-        LOG.infof("AUDIT vendor_portal.%s - tenantId=%s, consignorId=%s, principal=%s", action, tenantId, consignorId,
-                principal);
+
+        String impersonationMarker = impersonating ? " [IMPERSONATION]" : "";
+        LOG.infof("AUDIT vendor_portal.%s - tenantId=%s, consignorId=%s, principal=%s%s", action, tenantId, consignorId,
+                principal, impersonationMarker);
+
+        // Additional audit logging for impersonation
+        if (impersonating) {
+            LOG.warnf(
+                    "SECURITY AUDIT: Platform admin impersonation detected - action=%s, targetConsignor=%s, actor=%s, tenantId=%s",
+                    action, consignorId, principal, tenantId);
+        }
     }
 
     private Response problem(Status status, String title, String detail) {

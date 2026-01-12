@@ -7,7 +7,7 @@
         <h1 class="dashboard-title">{{ t('consignor.dashboard.title') }}</h1>
         <p class="dashboard-subtitle">
           {{
-            t('consignor.dashboard.welcome', { name: consignorStore.profile?.displayName || '' })
+            t('consignor.dashboard.welcome', { name: dashboardDisplayName })
           }}
         </p>
       </div>
@@ -42,6 +42,15 @@
 
     <!-- Dashboard Content -->
     <div v-else class="dashboard-content">
+      <!-- Stripe Connect Banner (Task I4.T2) -->
+      <StripeConnectBanner
+        v-if="consignorStore.stripeConnect"
+        :stripe-info="consignorStore.stripeConnect"
+        :consignor-id="consignorStore.vendorDashboard?.consignorId || consignorStore.profile?.id"
+        :mock-mode="!consignorStore.stripeConnect?.onboardingUrl"
+        @onboarding-started="handleStripeOnboardingStarted"
+      />
+
       <!-- Stats Grid -->
       <div class="stats-grid">
         <DashboardStatsCard
@@ -130,6 +139,7 @@ import BalanceChart from '../components/BalanceChart.vue'
 import ConsignmentItemsTable from '../components/ConsignmentItemsTable.vue'
 import NotificationCenter from '../components/NotificationCenter.vue'
 import PayoutRequestModal from '../components/PayoutRequestModal.vue'
+import StripeConnectBanner from '../components/StripeConnectBanner.vue'
 import type { Money } from '@/api/types'
 import { useTenantStore } from '@/stores/tenant'
 
@@ -143,6 +153,9 @@ const liveRegionMessage = ref('')
 
 const stats = computed(() => consignorStore.dashboardStats)
 const defaultCurrency = computed(() => stats.value?.balanceOwed.currency || 'USD')
+const dashboardDisplayName = computed(
+  () => consignorStore.profile?.displayName || consignorStore.vendorDashboard?.consignorName || ''
+)
 
 onMounted(async () => {
   if (!tenantStore.currentTenant) {
@@ -154,16 +167,20 @@ onMounted(async () => {
 async function loadDashboard() {
   isLoading.value = true
   try {
+    // Use enhanced vendor dashboard endpoint (Task I4.T2)
     await Promise.all([
-      consignorStore.loadDashboardStats(),
+      consignorStore.loadVendorDashboard(),
       consignorStore.loadNotifications(0, 10),
     ])
 
-    if (consignorStore.profile && consignorStore.dashboardStats) {
+    if (consignorStore.vendorDashboard) {
       emitTelemetryEvent('consignor:portal-loaded', {
-        consignorId: consignorStore.profile.id,
-        balanceOwed: consignorStore.dashboardStats.balanceOwed.amount,
-        activeItemCount: consignorStore.dashboardStats.activeItemCount,
+        consignorId: consignorStore.vendorDashboard.consignorId,
+        availableBalanceCents: consignorStore.vendorDashboard.balances.availableBalance.amount,
+        pendingBalanceCents: consignorStore.vendorDashboard.balances.pendingBalance.amount,
+        currency: consignorStore.vendorDashboard.balances.availableBalance.currency,
+        activeItemCount: consignorStore.vendorDashboard.itemSummary.activeCount,
+        stripeOnboardingRequired: consignorStore.vendorDashboard.stripeConnect.requiresOnboarding,
       })
     }
   } catch (error) {
@@ -194,6 +211,11 @@ async function handleLoadMoreNotifications() {
 
 async function handleMarkNotificationRead(notificationId: string) {
   await consignorStore.markNotificationRead(notificationId)
+}
+
+async function handleStripeOnboardingStarted() {
+  liveRegionMessage.value = t('consignor.stripe.onboardingStartedAnnouncement')
+  // The banner component handles the actual navigation
 }
 
 async function handlePayoutRequest(payload: {

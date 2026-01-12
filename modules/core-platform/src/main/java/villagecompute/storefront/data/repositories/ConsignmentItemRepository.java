@@ -1,5 +1,6 @@
 package villagecompute.storefront.data.repositories;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -181,5 +182,20 @@ public class ConsignmentItemRepository implements PanacheRepositoryBase<Consignm
         UUID tenantId = TenantContext.getCurrentTenantId();
         return count(QUERY_FIND_SOLD_BY_CONSIGNOR,
                 Parameters.with("tenantId", tenantId).and("consignorId", consignorId).and("status", "sold"));
+    }
+
+    /**
+     * Count sold items for a consignor since a specific timestamp.
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @param since
+     *            starting timestamp (inclusive)
+     * @return count of sold items since the timestamp
+     */
+    public long countSoldSince(UUID consignorId, OffsetDateTime since) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return count("tenant.id = :tenantId and consignor.id = :consignorId and status = 'sold' and soldAt >= :since",
+                Parameters.with("tenantId", tenantId).and("consignorId", consignorId).and("since", since));
     }
 }

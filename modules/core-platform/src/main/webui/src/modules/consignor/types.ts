@@ -83,6 +83,55 @@ export interface ConsignorDashboardStats {
   nextPayoutEligible: boolean
 }
 
+export interface VendorDashboard {
+  consignorId: string
+  consignorName: string
+  consignorStatus: string
+  balances: BalanceInfo
+  payoutSummary: PayoutSummary
+  itemSummary: ItemSummary
+  stripeConnect: StripeConnectInfo
+  notificationSummary: NotificationSummary
+  lastUpdated: string
+}
+
+export interface BalanceInfo {
+  pendingBalance: Money
+  availableBalance: Money
+  totalEarnings: Money
+  currency: string
+  nextSettlementDate: string
+}
+
+export interface PayoutSummary {
+  recentPayouts: PayoutBatch[]
+  lastPayoutDate?: string
+  lastPayoutAmount?: Money
+  nextPayoutSchedule: string
+}
+
+export interface ItemSummary {
+  activeCount: number
+  soldThisMonth: number
+  totalSold: number
+  recentItems: ConsignmentItem[]
+}
+
+export interface StripeConnectInfo {
+  accountId?: string
+  chargesEnabled: boolean
+  payoutsEnabled: boolean
+  detailsSubmitted: boolean
+  onboardingUrl?: string
+  requiresOnboarding: boolean
+  onboardingMessage: string
+}
+
+export interface NotificationSummary {
+  unreadCount: number
+  recentNotifications: string[]
+}
+
 export interface ConsignorDashboardSnapshot {
   profile: ConsignorProfile
   items: ConsignmentItem[]

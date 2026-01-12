@@ -16,14 +16,19 @@ import type {
   PayoutBatch,
   ConsignorNotification,
   ConsignorDashboardStats,
+  VendorDashboard,
+  StripeConnectInfo,
 } from './types'
 import * as consignorApi from './api'
 import { emitTelemetryEvent } from '@/telemetry'
+import { MIN_PAYOUT_CENTS } from './constants'
 
 export const useConsignorStore = defineStore('consignor', () => {
   // State
   const profile = ref<ConsignorProfile | null>(null)
   const dashboardStats = ref<ConsignorDashboardStats | null>(null)
+  const vendorDashboard = ref<VendorDashboard | null>(null)
+  const stripeConnect = ref<StripeConnectInfo | null>(null)
   const items = ref<ConsignmentItem[]>([])
   const payouts = ref<PayoutBatch[]>([])
   const notifications = ref<ConsignorNotification[]>([])
@@ -77,6 +82,97 @@ export const useConsignorStore = defineStore('consignor', () => {
       throw err
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * Load enhanced vendor dashboard with Stripe Connect info (Task I4.T2)
+   */
+  async function loadVendorDashboard(): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const dashboard = await consignorApi.getVendorDashboard()
+      vendorDashboard.value = dashboard
+      stripeConnect.value = dashboard.stripeConnect
+
+      // Normalize profile for downstream consumers
+      profile.value = {
+        id: dashboard.consignorId,
+        tenantId: profile.value?.tenantId || 'tenant',
+        displayName: dashboard.consignorName,
+        email: profile.value?.email || '',
+        phone: profile.value?.phone,
+        businessName: profile.value?.businessName,
+        taxId: profile.value?.taxId,
+        commissionRate: profile.value?.commissionRate ?? 0,
+        balanceOwed: {
+          amount: dashboard.balances.availableBalance.amount + dashboard.balances.pendingBalance.amount,
+          currency: dashboard.balances.availableBalance.currency,
+        },
+        lifetimeEarnings: dashboard.balances.totalEarnings,
+        activeItemCount: dashboard.itemSummary.activeCount,
+        soldItemCount: dashboard.itemSummary.totalSold,
+        status: (dashboard.consignorStatus?.toUpperCase() as ConsignorProfile['status']) || 'ACTIVE',
+        createdAt: profile.value?.createdAt || dashboard.lastUpdated,
+        updatedAt: dashboard.lastUpdated,
+      }
+
+      // Update legacy state for backward compatibility
+      items.value = dashboard.itemSummary.recentItems
+      payouts.value = dashboard.payoutSummary.recentPayouts
+
+      // Build legacy dashboard stats from new structure
+      dashboardStats.value = {
+        balanceOwed: {
+          amount: dashboard.balances.availableBalance.amount + dashboard.balances.pendingBalance.amount,
+          currency: dashboard.balances.availableBalance.currency,
+        },
+        pendingPayoutCount: dashboard.payoutSummary.recentPayouts.filter(
+          (p) => p.status === 'PENDING' || p.status === 'PROCESSING'
+        ).length,
+        activeItemCount: dashboard.itemSummary.activeCount,
+        soldThisMonth: dashboard.itemSummary.soldThisMonth,
+        lifetimeEarnings: dashboard.balances.totalEarnings,
+        avgCommissionRate: profile.value?.commissionRate ?? 0,
+        lastPayoutDate: dashboard.payoutSummary.lastPayoutDate,
+        nextPayoutEligible: dashboard.balances.availableBalance.amount >= MIN_PAYOUT_CENTS,
+      }
+
+      emitTelemetryEvent('consignor:vendor-dashboard-loaded', {
+        consignorId: dashboard.consignorId,
+        availableBalanceCents: dashboard.balances.availableBalance.amount,
+        pendingBalanceCents: dashboard.balances.pendingBalance.amount,
+        currency: dashboard.balances.availableBalance.currency,
+        stripeOnboardingRequired: dashboard.stripeConnect.requiresOnboarding,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to load vendor dashboard'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Initiate Stripe Express onboarding flow
+   */
+  async function startStripeOnboarding(): Promise<string | null> {
+    try {
+      if (stripeConnect.value?.onboardingUrl) {
+        const consignorId = profile.value?.id || vendorDashboard.value?.consignorId
+        if (consignorId) {
+          emitTelemetryEvent('consignor:stripe-onboarding-started', {
+            consignorId,
+          })
+        }
+        return stripeConnect.value.onboardingUrl
+      }
+      return null
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to start Stripe onboarding'
+      throw err
     }
   }
 
@@ -175,14 +271,12 @@ export const useConsignorStore = defineStore('consignor', () => {
         notes,
       })
 
-      payouts.value.unshift(newPayout)
+      await loadVendorDashboard()
 
-      // Reload stats to reflect new balance
-      await loadDashboardStats()
-
-      if (profile.value) {
+      const consignorId = profile.value?.id || vendorDashboard.value?.consignorId
+      if (consignorId) {
         emitTelemetryEvent('consignor:payout-requested', {
-          consignorId: profile.value.id,
+          consignorId,
           amount: newPayout.amount.amount,
           method: newPayout.method,
         })
@@ -203,6 +297,8 @@ export const useConsignorStore = defineStore('consignor', () => {
     // State
     profile,
     dashboardStats,
+    vendorDashboard,
+    stripeConnect,
     items,
     payouts,
     notifications,
@@ -218,6 +314,8 @@ export const useConsignorStore = defineStore('consignor', () => {
     // Actions
     loadProfile,
     loadDashboardStats,
+    loadVendorDashboard,
+    startStripeOnboarding,
     loadItems,
     loadPayouts,
     loadNotifications,

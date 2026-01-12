@@ -102,6 +102,17 @@ public class PayoutBatchRepository implements PanacheRepositoryBase<PayoutBatch,
     }
 
     /**
+     * Find completed payout batches for a consignor.
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @return list of completed batches
+     */
+    public List<PayoutBatch> findCompletedByConsignor(UUID consignorId) {
+        return findByConsignorAndStatus(consignorId, "completed");
+    }
+
+    /**
      * Find existing batch for a consignor and period.
      *
      * @param consignorId

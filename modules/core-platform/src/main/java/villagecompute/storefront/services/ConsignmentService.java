@@ -22,6 +22,7 @@ import villagecompute.storefront.data.models.Consignor;
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.PayoutBatch;
+import villagecompute.storefront.data.models.PayoutLedger;
 import villagecompute.storefront.data.models.PayoutLineItem;
 import villagecompute.storefront.data.models.Product;
 import villagecompute.storefront.data.models.ProductVariant;
@@ -1315,6 +1316,214 @@ public class ConsignmentService {
             LOG.warnf(e, "Failed to parse Stripe account ID for consignor %s", consignor.id);
             return null;
         }
+    }
+
+    // ========================================
+    // Vendor Portal Dashboard (Task I4.T2)
+    // ========================================
+
+    /**
+     * Build comprehensive vendor dashboard data.
+     *
+     * <p>
+     * Aggregates balance information, payout history, item summaries, Stripe Express onboarding status, and
+     * notifications into a single response for efficient portal initialization.
+     *
+     * <p>
+     * References:
+     * <ul>
+     * <li>Task I4.T2: Consignment vendor portal implementation</li>
+     * <li>Architecture §3.5: Consignment Experience Touchpoints</li>
+     * </ul>
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @return aggregated dashboard data or null if consignor not found
+     */
+    public villagecompute.storefront.api.types.VendorDashboardDto buildVendorDashboard(UUID consignorId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.debugf("Building vendor dashboard - tenantId=%s, consignorId=%s", tenantId, consignorId);
+
+        // Load consignor
+        Consignor consignor = consignorRepository.findByIdAndTenant(consignorId).orElse(null);
+        if (consignor == null) {
+            return null;
+        }
+
+        // Build DTO
+        villagecompute.storefront.api.types.VendorDashboardDto dashboard = new villagecompute.storefront.api.types.VendorDashboardDto();
+        dashboard.setConsignorId(consignor.id);
+        dashboard.setConsignorName(consignor.name);
+        dashboard.setConsignorStatus(consignor.status);
+        dashboard.setLastUpdated(OffsetDateTime.now());
+
+        // Build balance info
+        dashboard.setBalances(buildBalanceInfo(consignorId));
+
+        // Build payout summary
+        dashboard.setPayoutSummary(buildPayoutSummary(consignorId));
+
+        // Build item summary
+        dashboard.setItemSummary(buildItemSummary(consignorId));
+
+        // Build Stripe Connect info
+        dashboard.setStripeConnect(buildStripeConnectInfo(consignor));
+
+        // Build notification summary (placeholder)
+        villagecompute.storefront.api.types.VendorDashboardDto.NotificationSummary notificationSummary = new villagecompute.storefront.api.types.VendorDashboardDto.NotificationSummary();
+        notificationSummary.setUnreadCount(0);
+        notificationSummary.setRecentNotifications(java.util.Collections.emptyList());
+        dashboard.setNotificationSummary(notificationSummary);
+
+        LOG.debugf("Vendor dashboard built successfully - tenantId=%s, consignorId=%s", tenantId, consignorId);
+        return dashboard;
+    }
+
+    private villagecompute.storefront.api.types.VendorDashboardDto.BalanceInfo buildBalanceInfo(UUID consignorId) {
+        villagecompute.storefront.api.types.VendorDashboardDto.BalanceInfo balanceInfo = new villagecompute.storefront.api.types.VendorDashboardDto.BalanceInfo();
+
+        // Get ledger balances
+        Optional<PayoutLedger> ledger = payoutLedgerService.getLedgerByConsignor(consignorId);
+        if (ledger.isPresent()) {
+            balanceInfo.setPendingBalance(ledger.get().pendingBalance);
+            balanceInfo.setAvailableBalance(ledger.get().availableBalance);
+            balanceInfo.setCurrency(ledger.get().currency);
+        } else {
+            balanceInfo.setPendingBalance(BigDecimal.ZERO);
+            balanceInfo.setAvailableBalance(BigDecimal.ZERO);
+            balanceInfo.setCurrency("USD");
+        }
+
+        // Calculate total earnings from completed payouts
+        List<PayoutBatch> completedPayouts = payoutBatchRepository.findCompletedByConsignor(consignorId);
+        BigDecimal totalEarnings = completedPayouts.stream().map(batch -> batch.totalAmount).reduce(BigDecimal.ZERO,
+                BigDecimal::add);
+        balanceInfo.setTotalEarnings(totalEarnings);
+
+        // Calculate next settlement date (placeholder - would integrate with settlement schedule)
+        balanceInfo.setNextSettlementDate(LocalDate.now().plusDays(7));
+
+        return balanceInfo;
+    }
+
+    private villagecompute.storefront.api.types.VendorDashboardDto.PayoutSummary buildPayoutSummary(UUID consignorId) {
+        villagecompute.storefront.api.types.VendorDashboardDto.PayoutSummary payoutSummary = new villagecompute.storefront.api.types.VendorDashboardDto.PayoutSummary();
+
+        // Get recent payouts (last 5)
+        List<PayoutBatch> recentBatches = payoutBatchRepository.findByConsignor(consignorId, 0, 5);
+        List<villagecompute.storefront.api.types.PayoutBatchDto> recentDtos = recentBatches.stream()
+                .map(batch -> mapPayoutBatchToDto(batch)).collect(java.util.stream.Collectors.toList());
+        payoutSummary.setRecentPayouts(recentDtos);
+
+        // Get last completed payout
+        recentBatches.stream().filter(batch -> "completed".equalsIgnoreCase(batch.status)).findFirst()
+                .ifPresent(lastPayout -> {
+                    payoutSummary.setLastPayoutDate(lastPayout.processedAt);
+                    payoutSummary.setLastPayoutAmount(lastPayout.totalAmount);
+                });
+
+        // Set next payout schedule (placeholder - would integrate with payout config)
+        payoutSummary.setNextPayoutSchedule("Monthly on the 15th");
+
+        return payoutSummary;
+    }
+
+    private villagecompute.storefront.api.types.VendorDashboardDto.ItemSummary buildItemSummary(UUID consignorId) {
+        villagecompute.storefront.api.types.VendorDashboardDto.ItemSummary itemSummary = new villagecompute.storefront.api.types.VendorDashboardDto.ItemSummary();
+
+        // Count active items
+        long activeCount = consignmentItemRepository.countActiveByConsignor(consignorId);
+        itemSummary.setActiveCount((int) activeCount);
+
+        // Count sold items this month
+        OffsetDateTime firstOfMonth = OffsetDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        long soldThisMonth = consignmentItemRepository.countSoldSince(consignorId, firstOfMonth);
+        itemSummary.setSoldThisMonth((int) soldThisMonth);
+
+        // Count total sold items
+        long totalSold = consignmentItemRepository.countSoldByConsignor(consignorId);
+        itemSummary.setTotalSold((int) totalSold);
+
+        // Get recent items (last 10)
+        List<ConsignmentItem> recentItems = consignmentItemRepository.findByConsignor(consignorId, 0, 10);
+        List<villagecompute.storefront.api.types.ConsignmentItemDto> recentDtos = recentItems.stream()
+                .map(item -> mapConsignmentItemToDto(item)).collect(java.util.stream.Collectors.toList());
+        itemSummary.setRecentItems(recentDtos);
+
+        return itemSummary;
+    }
+
+    private villagecompute.storefront.api.types.VendorDashboardDto.StripeConnectInfo buildStripeConnectInfo(
+            Consignor consignor) {
+        villagecompute.storefront.api.types.VendorDashboardDto.StripeConnectInfo stripeInfo = new villagecompute.storefront.api.types.VendorDashboardDto.StripeConnectInfo();
+
+        String accountId = extractStripeAccountId(consignor);
+        stripeInfo.setAccountId(accountId);
+
+        String payoutSettings = consignor.payoutSettings != null ? consignor.payoutSettings : "";
+
+        if (accountId == null || accountId.isBlank()) {
+            // No Stripe account linked yet
+            stripeInfo.setRequiresOnboarding(true);
+            stripeInfo.setChargesEnabled(false);
+            stripeInfo.setPayoutsEnabled(false);
+            stripeInfo.setDetailsSubmitted(false);
+            stripeInfo.setOnboardingMessage(
+                    "Complete Stripe Express onboarding to receive direct payouts to your bank account.");
+            stripeInfo.setOnboardingUrl(null); // Would be generated by Stripe API
+        } else {
+            // Parse capabilities from payout settings
+            boolean chargesEnabled = payoutSettings.contains("\"stripe_charges_enabled\":true");
+            boolean payoutsEnabled = payoutSettings.contains("\"stripe_payouts_enabled\":true");
+            boolean detailsSubmitted = payoutSettings.contains("\"stripe_details_submitted\":true");
+
+            stripeInfo.setChargesEnabled(chargesEnabled);
+            stripeInfo.setPayoutsEnabled(payoutsEnabled);
+            stripeInfo.setDetailsSubmitted(detailsSubmitted);
+            stripeInfo.setRequiresOnboarding(!chargesEnabled || !payoutsEnabled);
+
+            if (stripeInfo.isRequiresOnboarding()) {
+                stripeInfo.setOnboardingMessage("Your Stripe Express account requires additional information.");
+                stripeInfo.setOnboardingUrl(null); // Would be generated by Stripe API
+            } else {
+                stripeInfo.setOnboardingMessage("Your Stripe Express account is fully verified.");
+                stripeInfo.setOnboardingUrl(null);
+            }
+        }
+
+        return stripeInfo;
+    }
+
+    private villagecompute.storefront.api.types.PayoutBatchDto mapPayoutBatchToDto(PayoutBatch batch) {
+        villagecompute.storefront.api.types.PayoutBatchDto dto = new villagecompute.storefront.api.types.PayoutBatchDto();
+        dto.setId(batch.id);
+        dto.setConsignorId(batch.consignor.id);
+        dto.setPeriodStart(batch.periodStart);
+        dto.setPeriodEnd(batch.periodEnd);
+        dto.setTotalAmount(new villagecompute.storefront.api.types.Money(batch.totalAmount, batch.currency));
+        dto.setStatus(batch.status);
+        dto.setPaymentReference(batch.paymentReference);
+        dto.setCreatedAt(batch.createdAt);
+        dto.setProcessedAt(batch.processedAt);
+        dto.setUpdatedAt(batch.updatedAt);
+        return dto;
+    }
+
+    private villagecompute.storefront.api.types.ConsignmentItemDto mapConsignmentItemToDto(ConsignmentItem item) {
+        villagecompute.storefront.api.types.ConsignmentItemDto dto = new villagecompute.storefront.api.types.ConsignmentItemDto();
+        dto.setId(item.id);
+        dto.setConsignorId(item.consignor.id);
+        dto.setProductId(item.product.id);
+        if (item.variant != null) {
+            dto.setVariantId(item.variant.id);
+        }
+        dto.setCommissionRate(item.commissionRate);
+        dto.setStatus(item.status);
+        dto.setCostBasis(item.costBasis);
+        dto.setCreatedAt(item.createdAt);
+        dto.setSoldAt(item.soldAt);
+        dto.setUpdatedAt(item.updatedAt);
+        return dto;
     }
 
     /**

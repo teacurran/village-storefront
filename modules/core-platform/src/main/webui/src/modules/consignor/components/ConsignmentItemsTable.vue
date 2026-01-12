@@ -52,7 +52,12 @@
               <code class="text-sm text-neutral-700">{{ item.variantSku }}</code>
             </td>
             <td class="table-cell">
-              <span class="font-semibold">{{ formatCurrency(item.consignmentPrice) }}</span>
+              <span v-if="item.consignmentPrice" class="font-semibold">
+                {{ formatCurrency(item.consignmentPrice) }}
+              </span>
+              <span v-else class="text-sm text-neutral-500">
+                {{ t('consignor.items.pricePending') }}
+              </span>
             </td>
             <td class="table-cell">
               <span class="text-neutral-700">{{ item.commissionRate }}%</span>

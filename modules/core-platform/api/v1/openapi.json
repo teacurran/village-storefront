@@ -6743,6 +6743,38 @@
         }
       }
     },
+    "/vendor/portal/dashboard": {
+      "get": {
+        "operationId": "getVendorDashboard",
+        "summary": "Get vendor dashboard snapshot",
+        "description": "Returns aggregated balances, items, payouts, and Stripe onboarding status for the authenticated consignor.",
+        "tags": [
+          "Vendor"
+        ],
+        "responses": {
+          "200": {
+            "description": "Vendor dashboard snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VendorDashboard"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden or missing consignor claim",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/vendor/portal/profile": {
       "get": {
         "operationId": "getVendorProfile",
@@ -10552,6 +10584,195 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "VendorDashboard": {
+        "type": "object",
+        "required": [
+          "consignorId",
+          "consignorName",
+          "consignorStatus",
+          "balances",
+          "payoutSummary",
+          "itemSummary",
+          "stripeConnect",
+          "notificationSummary",
+          "lastUpdated"
+        ],
+        "properties": {
+          "consignorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "consignorName": {
+            "type": "string"
+          },
+          "consignorStatus": {
+            "type": "string",
+            "example": "active"
+          },
+          "balances": {
+            "$ref": "#/components/schemas/VendorDashboardBalances"
+          },
+          "payoutSummary": {
+            "$ref": "#/components/schemas/VendorDashboardPayoutSummary"
+          },
+          "itemSummary": {
+            "$ref": "#/components/schemas/VendorDashboardItemSummary"
+          },
+          "stripeConnect": {
+            "$ref": "#/components/schemas/VendorDashboardStripeInfo"
+          },
+          "notificationSummary": {
+            "$ref": "#/components/schemas/VendorNotificationSummary"
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "VendorDashboardBalances": {
+        "type": "object",
+        "required": [
+          "pendingBalance",
+          "availableBalance",
+          "totalEarnings",
+          "currency"
+        ],
+        "properties": {
+          "pendingBalance": {
+            "type": "number",
+            "format": "double",
+            "description": "Pending balance awaiting settlement"
+          },
+          "availableBalance": {
+            "type": "number",
+            "format": "double",
+            "description": "Balance available for payout"
+          },
+          "totalEarnings": {
+            "type": "number",
+            "format": "double",
+            "description": "Lifetime earnings across payouts"
+          },
+          "currency": {
+            "type": "string",
+            "example": "USD"
+          },
+          "nextSettlementDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          }
+        }
+      },
+      "VendorDashboardPayoutSummary": {
+        "type": "object",
+        "required": [
+          "recentPayouts",
+          "nextPayoutSchedule"
+        ],
+        "properties": {
+          "recentPayouts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayoutBatch"
+            }
+          },
+          "lastPayoutDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastPayoutAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "nextPayoutSchedule": {
+            "type": "string",
+            "description": "Friendly description of payout cadence"
+          }
+        }
+      },
+      "VendorDashboardItemSummary": {
+        "type": "object",
+        "required": [
+          "activeCount",
+          "soldThisMonth",
+          "totalSold",
+          "recentItems"
+        ],
+        "properties": {
+          "activeCount": {
+            "type": "integer"
+          },
+          "soldThisMonth": {
+            "type": "integer"
+          },
+          "totalSold": {
+            "type": "integer"
+          },
+          "recentItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsignmentItem"
+            }
+          }
+        }
+      },
+      "VendorDashboardStripeInfo": {
+        "type": "object",
+        "required": [
+          "chargesEnabled",
+          "payoutsEnabled",
+          "detailsSubmitted",
+          "requiresOnboarding"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "nullable": true
+          },
+          "chargesEnabled": {
+            "type": "boolean"
+          },
+          "payoutsEnabled": {
+            "type": "boolean"
+          },
+          "detailsSubmitted": {
+            "type": "boolean"
+          },
+          "onboardingUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "requiresOnboarding": {
+            "type": "boolean"
+          },
+          "onboardingMessage": {
+            "type": "string"
+          }
+        }
+      },
+      "VendorNotificationSummary": {
+        "type": "object",
+        "required": [
+          "unreadCount",
+          "recentNotifications"
+        ],
+        "properties": {
+          "unreadCount": {
+            "type": "integer"
+          },
+          "recentNotifications": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
