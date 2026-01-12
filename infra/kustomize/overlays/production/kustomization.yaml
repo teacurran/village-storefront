@@ -1,0 +1,147 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: village-storefront
+
+resources:
+  - ../../base
+  - deployment-workers-critical.yaml
+  - ingress.yaml
+  - network-policy.yaml
+  - priority-class.yaml
+  - service-monitor.yaml
+  - sealed-secrets/stripe.yaml
+  - sealed-secrets/smtp.yaml
+
+commonLabels:
+  environment: production
+
+commonAnnotations:
+  managed-by: kustomize
+  environment: production
+  deployment-strategy: blue-green
+
+configMapGenerator:
+  - name: village-storefront-config
+    behavior: merge
+    literals:
+      - r2-bucket-name=village-media-prod
+      - r2-endpoint=https://r2.cloudflare.com
+      - mailer-host=smtp.sendgrid.net
+      - mailer-from=noreply@villagecompute.com
+      - otel-endpoint=http://jaeger-collector.observability:4317
+      - quarkus-profile=production
+
+images:
+  - name: ghcr.io/villagecompute/village-storefront
+    newTag: latest
+
+patchesStrategicMerge:
+  - patches/deployment-workers-prod.yaml
+  - patches/deployment-workers-critical-prod.yaml
+
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 20
+      - op: replace
+        path: /spec/metrics/0/resource/target/averageUtilization
+        value: 70
+      - op: replace
+        path: /spec/metrics/1/resource/target/averageUtilization
+        value: 80
+      - op: replace
+        path: /spec/behavior/scaleUp/stabilizationWindowSeconds
+        value: 60
+      - op: replace
+        path: /spec/behavior/scaleDown/stabilizationWindowSeconds
+        value: 300
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 5
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-gateway-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 5
+      - op: replace
+        path: /spec/maxReplicas
+        value: 30
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-gateway-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 3
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-media-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-media-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 15
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-media-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+
+# Secrets: Stripe + SMTP sealed secrets are committed as placeholders above. Replace encryptedData per cluster using kubeseal.

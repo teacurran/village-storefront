@@ -1,0 +1,128 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: village-storefront-dev
+
+resources:
+  - ../../base
+  - ingress.yaml
+
+commonLabels:
+  environment: dev
+
+commonAnnotations:
+  managed-by: kustomize
+  environment: development
+
+configMapGenerator:
+  - name: village-storefront-config
+    behavior: merge
+    literals:
+      - r2-bucket-name=village-media-dev
+      - r2-endpoint=http://minio.village-storefront-dev.svc.cluster.local:9000
+      - mailer-host=mailpit.village-storefront-dev.svc.cluster.local
+      - mailer-from=noreply@dev.villagecompute.local
+      - otel-endpoint=http://jaeger-collector.observability:4317
+      - quarkus-profile=dev
+
+images:
+  - name: ghcr.io/villagecompute/village-storefront
+    newTag: dev
+
+patchesStrategicMerge:
+  - patches/deployment-workers-dev.yaml
+
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-gateway-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-gateway-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-media-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-media-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-media-workers-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 0
+
+# Development secrets are managed manually (no sealed secrets in dev to keep setup simple)
+# Use `kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -` as needed.

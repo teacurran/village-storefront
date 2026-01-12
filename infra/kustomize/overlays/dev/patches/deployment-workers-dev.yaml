@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-workers
+spec:
+  template:
+    spec:
+      containers:
+      - name: worker
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 5
+        env:
+        - name: QUARKUS_PROFILE
+          value: "dev"
+        - name: QUARKUS_LOG_LEVEL
+          value: "DEBUG"
+        - name: QUARKUS_LOG_CONSOLE_JSON
+          value: "false"
+        - name: JOBS_QUEUE_CAPACITY_CRITICAL
+          value: "100"
+        - name: JOBS_QUEUE_CAPACITY_HIGH
+          value: "500"
+        - name: JOBS_QUEUE_CAPACITY_DEFAULT
+          value: "1000"
+        - name: JOBS_RETRY_MAX_ATTEMPTS_CRITICAL
+          value: "3"
+        - name: JOBS_RETRY_MAX_ATTEMPTS_DEFAULT
+          value: "2"
+        - name: JAVA_OPTS
+          value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -Xlog:gc*:stdout:time,level,tags"

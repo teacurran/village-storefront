@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-gateway
+spec:
+  template:
+    spec:
+      containers:
+      - name: gateway
+        env:
+        # Override log level for staging
+        - name: QUARKUS_LOG_LEVEL
+          value: "DEBUG"
+        # Staging-specific database connection pool tuning
+        - name: QUARKUS_DATASOURCE_JDBC_MAX_SIZE
+          value: "10"

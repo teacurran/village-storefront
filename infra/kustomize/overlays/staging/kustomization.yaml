@@ -1,0 +1,171 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging environment overlay
+# Production-like configuration with sandbox external services
+# Used for final validation before production deployment
+
+namespace: village-storefront-staging
+
+# Reference base manifests
+resources:
+  - ../../base
+  - ingress.yaml
+  - network-policy.yaml
+  - sealed-secrets/stripe.yaml
+  - sealed-secrets/smtp.yaml
+
+# Override common labels for environment
+commonLabels:
+  environment: staging
+
+# Add environment annotations
+commonAnnotations:
+  managed-by: kustomize
+  environment: staging
+  deployment-strategy: blue-green
+
+# ConfigMap for staging-specific values
+configMapGenerator:
+  - name: village-storefront-config
+    behavior: merge
+    literals:
+      - r2-bucket-name=village-storefront-staging-media
+      - r2-endpoint=https://staging-r2.cloudflare.com
+      - mailer-host=smtp.sendgrid.net
+      - mailer-from=staging@villagecompute.com
+      - otel-endpoint=http://otel-collector.observability.svc:4317
+      - quarkus-profile=staging
+
+# Image tag override (staging builds from CI)
+images:
+  - name: ghcr.io/villagecompute/village-storefront
+    newTag: staging
+
+# Strategic merge patches
+patchesStrategicMerge:
+  - patches/gateway-staging.yaml
+  - patches/workers-staging.yaml
+  - patches/media-workers-staging.yaml
+
+# JSON patches for replica/resource tuning
+patchesJson6902:
+  # Gateway deployment patches
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  # Gateway HPA patches
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-gateway-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 10
+
+  # Gateway PDB patches
+  - target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: village-storefront-gateway-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 1
+
+  # Workers deployment patches
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: village-storefront-workers
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  # Workers HPA patches
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 10
+      - op: replace
+        path: /spec/metrics/0/resource/target/averageUtilization
+        value: 70
+      - op: replace
+        path: /spec/metrics/1/resource/target/averageUtilization
+        value: 80
+
+  # Media workers HPA patches
+  - target:
+      group: autoscaling
+      version: v2
+      kind: HorizontalPodAutoscaler
+      name: village-storefront-media-workers-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 5
+
+# Note: Staging secrets should be created via Sealed Secrets or External Secrets Operator
+# Secrets are NOT checked into git. Use the placeholder manifests under sealed-secrets/ as templates
+# and regenerate `encryptedData` using kubeseal before deploying:
+#
+# Database (staging PostgreSQL):
+# kubectl create secret generic village-storefront-db \
+#   --namespace village-storefront-staging \
+#   --from-literal=jdbc-url='jdbc:postgresql://postgres-staging.internal:5432/storefront_staging' \
+#   --from-literal=username='storefront_staging' \
+#   --from-literal=password='<STAGING_DB_PASSWORD>' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > sealed-secrets/db.yaml
+#
+# Cloudflare R2 (use sandbox account):
+# kubectl create secret generic village-storefront-r2 \
+#   --namespace village-storefront-staging \
+#   --from-literal=access-key-id='<R2_STAGING_ACCESS_KEY>' \
+#   --from-literal=secret-access-key='<R2_STAGING_SECRET_KEY>' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > sealed-secrets/r2.yaml
+#
+# Stripe (use test mode keys):
+# kubectl create secret generic village-storefront-stripe \
+#   --namespace village-storefront-staging \
+#   --from-literal=api-key='sk_test_...' \
+#   --from-literal=webhook-secret='whsec_test_...' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > sealed-secrets/stripe.yaml
+#
+# SMTP credentials (SendGrid or chosen provider):
+# kubectl create secret generic village-storefront-mailer \
+#   --namespace village-storefront-staging \
+#   --from-literal=username='apikey' \
+#   --from-literal=password='<STAGING_SMTP_TOKEN>' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > sealed-secrets/smtp.yaml
+#
+# Apply sealed secrets:
+# kubectl apply -f sealed-secrets/db.yaml
+# kubectl apply -f sealed-secrets/r2.yaml
+# kubectl apply -f sealed-secrets/stripe.yaml
+# kubectl apply -f sealed-secrets/smtp.yaml

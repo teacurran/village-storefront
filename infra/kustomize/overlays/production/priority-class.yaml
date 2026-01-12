@@ -1,0 +1,30 @@
+---
+# High-priority class for critical workers
+# Ensures critical payment/order processing pods get scheduled first
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for critical worker pods (payment webhooks, order processing)"
+
+---
+# Standard priority for regular application pods
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: standard-priority
+value: 100000
+globalDefault: false
+description: "Standard priority for application workloads"
+
+---
+# Low priority for background/batch jobs
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 10000
+globalDefault: false
+description: "Low priority for background jobs and bulk processing"

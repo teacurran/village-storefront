@@ -1,0 +1,62 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base resources for Village Storefront deployment
+# Includes gateway, workers, media-workers with HPAs and PDBs
+resources:
+  - deployment.yaml
+  - workers-deployment.yaml
+  - media-worker-deployment.yaml
+
+namespace: village-storefront
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/name: village-storefront
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/version: "1.0.0"
+
+# ConfigMap for application configuration
+# Overlays will merge additional values or override these defaults
+configMapGenerator:
+  - name: village-storefront-config
+    literals:
+      - r2-bucket-name=village-media
+      - r2-endpoint=https://r2.example.com
+      - mailer-host=smtp.sendgrid.net
+      - mailer-from=noreply@villagecompute.com
+      - otel-endpoint=http://otel-collector:4317
+
+# Note: Secrets MUST be created via Sealed Secrets or External Secrets Operator
+# DO NOT commit secrets to git. Use overlays to reference environment-specific secrets.
+#
+# Example commands for creating secrets:
+#
+# Database credentials:
+# kubectl create secret generic village-storefront-db \
+#   --namespace village-storefront \
+#   --from-literal=jdbc-url='jdbc:postgresql://postgres.production.internal:5432/storefront' \
+#   --from-literal=username='storefront_app' \
+#   --from-literal=password='<DB_PASSWORD>' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > overlays/production/sealed-secret-db.yaml
+#
+# Cloudflare R2 credentials:
+# kubectl create secret generic village-storefront-r2 \
+#   --namespace village-storefront \
+#   --from-literal=access-key-id='<R2_ACCESS_KEY_ID>' \
+#   --from-literal=secret-access-key='<R2_SECRET_ACCESS_KEY>' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > overlays/production/sealed-secret-r2.yaml
+#
+# Stripe API keys:
+# kubectl create secret generic village-storefront-stripe \
+#   --namespace village-storefront \
+#   --from-literal=api-key='sk_live_...' \
+#   --from-literal=webhook-secret='whsec_...' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > overlays/production/sealed-secret-stripe.yaml
+#
+# SMTP credentials:
+# kubectl create secret generic village-storefront-mailer \
+#   --namespace village-storefront \
+#   --from-literal=username='apikey' \
+#   --from-literal=password='<SENDGRID_API_KEY>' \
+#   --dry-run=client -o yaml | kubeseal -o yaml > overlays/production/sealed-secret-smtp.yaml

@@ -1,0 +1,131 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: village-storefront-prod-ingress
+  annotations:
+    # NGINX ingress production configuration
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
+    # Rate limiting (production)
+    nginx.ingress.kubernetes.io/limit-rps: "500"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # Connection settings
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "50"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: SAMEORIGIN";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: geolocation=(), microphone=(), camera=()";
+
+    # TLS configuration with cert-manager
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    cert-manager.io/acme-challenge-type: "dns01"
+
+    # Cloudflare proxy mode (orange cloud)
+    # Assumes Cloudflare is the authoritative DNS
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+
+    # Monitoring
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "10254"
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+  # Production domains with wildcard support
+  - hosts:
+    - villagecompute.com
+    - "*.villagecompute.com"
+    secretName: village-storefront-prod-tls
+
+  rules:
+  # Main production domain
+  - host: villagecompute.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-workers
+            port:
+              number: 8080
+
+  # Tenant subdomain wildcard
+  - host: "*.villagecompute.com"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-workers
+            port:
+              number: 8080
+
+  # Health check endpoint (for monitoring, no auth required)
+  - host: villagecompute.com
+    http:
+      paths:
+      - path: /q/health
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-workers
+            port:
+              number: 8080
+
+---
+# Optional: Separate ingress for admin subdomain with stricter security
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: village-storefront-admin-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Stricter rate limiting for admin
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+
+    # WAF rules for admin endpoints (if ModSecurity enabled)
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
+
+    # IP allowlist for admin (optional, uncomment and configure)
+    # nginx.ingress.kubernetes.io/whitelist-source-range: "203.0.113.0/24,198.51.100.0/24"
+
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+  - hosts:
+    - admin.villagecompute.com
+    secretName: village-storefront-admin-tls
+
+  rules:
+  - host: admin.villagecompute.com
+    http:
+      paths:
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: village-storefront-workers
+            port:
+              number: 8080

@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: village-storefront-media-workers
+spec:
+  template:
+    spec:
+      containers:
+      - name: media-worker
+        env:
+        # Override log level for staging
+        - name: QUARKUS_LOG_LEVEL
+          value: "DEBUG"
+        # Reduced FFmpeg concurrency for staging
+        - name: MEDIA_PROCESSING_FFMPEG_MAX_CONCURRENT
+          value: "1"
+        # Smaller queue capacities for staging
+        - name: JOBS_QUEUE_CAPACITY_CRITICAL
+          value: "25"
+        - name: JOBS_QUEUE_CAPACITY_HIGH
+          value: "100"

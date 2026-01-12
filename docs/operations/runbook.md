@@ -119,16 +119,31 @@ Village Storefront uses blue/green deployments to minimize downtime and enable i
 1. **Deploy Green Environment:**
 
    ```bash
-   # Tag new image
+   # Set environment and image tag
+   export ENVIRONMENT="staging"  # or "production"
    export NEW_VERSION="v1.2.3"
-   docker build -t villagecompute/storefront:$NEW_VERSION .
-   docker push villagecompute/storefront:$NEW_VERSION
 
-   # Deploy to green namespace
-   kubectl create namespace storefront-green --dry-run=client -o yaml | kubectl apply -f -
-   kubectl apply -f k8s/base/ -n storefront-green
-   kubectl set image deployment/village-storefront \
-     app=villagecompute/storefront:$NEW_VERSION -n storefront-green
+   # Option A: Using GitHub Actions (recommended)
+   # Trigger deployment workflow via GitHub UI or gh CLI:
+   gh workflow run deploy.yaml \
+     -f environment=$ENVIRONMENT \
+     -f image_tag=$NEW_VERSION
+
+   # Option B: Manual deployment with kustomize
+   export GREEN_NAMESPACE="village-storefront-${ENVIRONMENT}-green"
+
+   # Create green namespace
+   kubectl create namespace $GREEN_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
+   # Retarget overlay namespace + image tag without touching git
+   TMP_DIR=$(mktemp -d)
+   cp -R infra/kustomize "$TMP_DIR/infra"
+   pushd "$TMP_DIR/infra/kustomize/overlays/$ENVIRONMENT"
+   kustomize edit set namespace $GREEN_NAMESPACE
+   kustomize edit set image ghcr.io/villagecompute/village-storefront=ghcr.io/villagecompute/village-storefront:$NEW_VERSION
+   kustomize build . | kubectl apply --dry-run=server -f - >/dev/null
+   kustomize build . | kubectl apply -f -
+   popd
    ```
 
 2. **Run Database Migrations:**
@@ -137,6 +152,8 @@ Village Storefront uses blue/green deployments to minimize downtime and enable i
    # Migrations are forward-compatible (safe to run before blue cutover)
    cd migrations
    mvn migration:up -Dmigration.env=production
+
+   # GitHub Actions workflow runs migrations automatically for production
    ```
 
 3. **Health Check Green Environment:**
@@ -144,15 +161,26 @@ Village Storefront uses blue/green deployments to minimize downtime and enable i
    ```bash
    # Wait for pods ready
    kubectl wait --for=condition=ready pod \
-     -l app=village-storefront -n storefront-green \
+     -l app=village-storefront,component=gateway \
+     -n village-storefront-${ENVIRONMENT}-green \
+     --timeout=300s
+
+   kubectl wait --for=condition=ready pod \
+     -l app=village-storefront,component=workers \
+     -n village-storefront-${ENVIRONMENT}-green \
+     --timeout=300s
+
+   kubectl wait --for=condition=ready pod \
+     -l app=village-storefront,component=media-workers \
+     -n village-storefront-${ENVIRONMENT}-green \
      --timeout=300s
 
    # Verify health endpoints
-   kubectl port-forward -n storefront-green svc/village-storefront 8080:8080 &
+   kubectl port-forward -n village-storefront-${ENVIRONMENT}-green svc/village-storefront-gateway 8080:8080 &
    curl http://localhost:8080/q/health/live
    curl http://localhost:8080/q/health/ready
 
-   # Run smoke tests
+   # GitHub Actions workflow runs automated smoke tests
    npm run smoke-test -- --env=green
    ```
 
@@ -160,50 +188,66 @@ Village Storefront uses blue/green deployments to minimize downtime and enable i
 
    ```bash
    # Update ingress to point to green service
-   kubectl patch ingress village-storefront \
-     -p '{"spec":{"rules":[{"host":"*.villagecompute.com","http":{"paths":[{"backend":{"service":{"name":"village-storefront-green"}}}]}}]}}' \
-     -n storefront
+   kubectl patch ingress village-storefront-ingress \
+     -n village-storefront-${ENVIRONMENT} \
+     --type='json' \
+     -p='[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value":"village-storefront-gateway"}]'
 
    # Verify traffic flowing to green
-   kubectl logs -l app=village-storefront -n storefront-green --tail=100 | grep "HTTP"
+   kubectl logs -l app=village-storefront,component=gateway \
+     -n village-storefront-${ENVIRONMENT}-green --tail=100 | grep "HTTP"
+
+   # Note: GitHub Actions workflow includes manual approval gate before cutover
    ```
 
 5. **Monitor Green Environment (15 minutes):**
 
    ```bash
    # Watch key metrics
-   watch -n 10 'kubectl top pods -l app=village-storefront -n storefront-green'
+   watch -n 10 'kubectl top pods -l app=village-storefront -n village-storefront-${ENVIRONMENT}-green'
 
    # Check error rates
    # Open Grafana Platform Overview dashboard
    # Alert on error rate > 1% or p95 latency spike
+
+   # GitHub Actions workflow monitors for 15 minutes automatically
    ```
 
 6. **Decommission Blue (After Successful Monitoring):**
 
    ```bash
    # Scale down blue environment
-   kubectl scale deployment/village-storefront --replicas=0 -n storefront
+   kubectl scale deployment/village-storefront-gateway --replicas=0 -n village-storefront-${ENVIRONMENT}
+   kubectl scale deployment/village-storefront-workers --replicas=0 -n village-storefront-${ENVIRONMENT}
+   kubectl scale deployment/village-storefront-media-workers --replicas=0 -n village-storefront-${ENVIRONMENT}
 
    # Delete blue namespace after 24 hours (allows rollback window)
-   kubectl delete namespace storefront --wait=false
+   kubectl delete namespace village-storefront-${ENVIRONMENT} --wait=false
+
+   # GitHub Actions workflow scales down blue automatically after monitoring
    ```
 
 **Rollback Procedure (if issues detected):**
 
 ```bash
 # Immediate rollback (< 5 minutes)
-kubectl patch ingress village-storefront \
-  -p '{"spec":{"rules":[{"host":"*.villagecompute.com","http":{"paths":[{"backend":{"service":{"name":"village-storefront"}}}]}}]}}' \
-  -n storefront
+export ENVIRONMENT="staging"  # or "production"
+
+kubectl patch ingress village-storefront-ingress \
+  -n village-storefront-${ENVIRONMENT} \
+  --type='json' \
+  -p='[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value":"village-storefront-gateway"}]'
 
 # Verify traffic back to blue
-kubectl logs -l app=village-storefront -n storefront --tail=100 | grep "HTTP"
+kubectl logs -l app=village-storefront,component=gateway \
+  -n village-storefront-${ENVIRONMENT} --tail=100 | grep "HTTP"
 
 # Scale down green
-kubectl scale deployment/village-storefront --replicas=0 -n storefront-green
+kubectl scale deployment/village-storefront-gateway --replicas=0 -n village-storefront-${ENVIRONMENT}-green
+kubectl scale deployment/village-storefront-workers --replicas=0 -n village-storefront-${ENVIRONMENT}-green
 
 # Document rollback reason in incident channel
+# GitHub Actions workflow automatically rolls back on smoke test or monitoring failures
 ```
 
 ### Rolling Update (Minor Patches)
@@ -234,6 +278,141 @@ kubectl set image deployment/village-storefront-workers \
 # Workers use graceful shutdown (60s drain period)
 # Monitor queue depth during rollout
 watch -n 5 'kubectl logs -l component=worker --tail=20 -n storefront | grep "Shutdown"'
+```
+
+### Kustomize Overlay Quick Reference
+
+**Directory Structure:**
+```
+infra/kustomize/
+├── base/                          # Base manifests (gateway, workers, media-workers)
+│   ├── deployment.yaml            # Gateway deployment + Service + HPA + PDB
+│   ├── workers-deployment.yaml    # Job workers deployment + Service + HPA + PDB
+│   ├── media-worker-deployment.yaml  # Media processing workers
+│   └── kustomization.yaml         # Base kustomization config
+├── overlays/
+│   ├── dev/                       # Dev overlay (min resources)
+│   │   ├── kustomization.yaml
+│   │   ├── ingress.yaml
+│   │   └── patches/
+│   ├── staging/                   # Staging environment overlay
+│   │   ├── kustomization.yaml     # Staging-specific patches
+│   │   ├── ingress.yaml           # Staging ingress rules
+│   │   ├── network-policy.yaml    # Network policies
+│   │   ├── sealed-secrets/        # Placeholder sealed secrets (Stripe/SMTP)
+│   │   └── patches/               # Strategic merge patches
+│   └── production/                # Production overlay (full HA, sealed secrets)
+│       ├── kustomization.yaml
+│       ├── ingress.yaml
+│       ├── network-policy.yaml
+│       ├── priority-class.yaml
+│       ├── service-monitor.yaml
+│       ├── sealed-secrets/
+│       └── patches/
+```
+
+**Common Commands:**
+
+```bash
+# Validate manifests without applying
+kustomize build infra/kustomize/overlays/staging | kubectl apply --dry-run=client -f -
+
+# Build and preview manifests
+kustomize build infra/kustomize/overlays/staging > /tmp/manifests.yaml
+cat /tmp/manifests.yaml
+
+# Apply overlay to cluster
+kubectl apply -k infra/kustomize/overlays/staging
+
+# Diff against current cluster state
+kustomize build infra/kustomize/overlays/staging | kubectl diff -f -
+
+# Delete all resources from overlay
+kubectl delete -k infra/kustomize/overlays/staging
+```
+
+**Secrets Management:**
+
+Secrets are NOT stored in git. Use Sealed Secrets or External Secrets Operator. The `infra/kustomize/overlays/*/sealed-secrets/` directories contain placeholders for Stripe + SMTP—regenerate `encryptedData` with `kubeseal` before applying.
+
+```bash
+# Create sealed secret for database credentials
+kubectl create secret generic village-storefront-db \
+  --namespace village-storefront-staging \
+  --from-literal=jdbc-url='jdbc:postgresql://postgres-staging.internal:5432/storefront_staging' \
+  --from-literal=username='storefront_staging' \
+  --from-literal=password='<STAGING_DB_PASSWORD>' \
+  --dry-run=client -o yaml | \
+  kubeseal -o yaml > infra/kustomize/overlays/staging/sealed-secrets/db.yaml
+
+# Cloudflare R2 access
+kubectl create secret generic village-storefront-r2 \
+  --namespace village-storefront-staging \
+  --from-literal=access-key-id='<R2_ACCESS_KEY>' \
+  --from-literal=secret-access-key='<R2_SECRET_KEY>' \
+  --dry-run=client -o yaml | \
+  kubeseal -o yaml > infra/kustomize/overlays/staging/sealed-secrets/r2.yaml
+
+# Stripe (test mode) API keys
+kubectl create secret generic village-storefront-stripe \
+  --namespace village-storefront-staging \
+  --from-literal=api-key='sk_test_...' \
+  --from-literal=webhook-secret='whsec_test_...' \
+  --dry-run=client -o yaml | \
+  kubeseal -o yaml > infra/kustomize/overlays/staging/sealed-secrets/stripe.yaml
+
+# SMTP credentials (SendGrid token etc.)
+kubectl create secret generic village-storefront-mailer \
+  --namespace village-storefront-staging \
+  --from-literal=username='apikey' \
+  --from-literal=password='<STAGING_SMTP_TOKEN>' \
+  --dry-run=client -o yaml | \
+  kubeseal -o yaml > infra/kustomize/overlays/staging/sealed-secrets/smtp.yaml
+
+# Apply sealed secrets
+kubectl apply -f infra/kustomize/overlays/staging/sealed-secrets/db.yaml
+kubectl apply -f infra/kustomize/overlays/staging/sealed-secrets/r2.yaml
+kubectl apply -f infra/kustomize/overlays/staging/sealed-secrets/stripe.yaml
+kubectl apply -f infra/kustomize/overlays/staging/sealed-secrets/smtp.yaml
+
+# Verify secrets created
+kubectl get secrets -n village-storefront-staging | grep village-storefront
+```
+
+**Updating Overlays:**
+
+```bash
+# Edit base manifests (affects all environments)
+vim infra/kustomize/base/deployment.yaml
+
+# Edit environment-specific patches
+vim infra/kustomize/overlays/staging/patches/gateway-staging.yaml
+
+# Update image tags in kustomization.yaml
+vim infra/kustomize/overlays/staging/kustomization.yaml
+# Change: newTag: staging-abc123
+
+# Apply changes
+kubectl apply -k infra/kustomize/overlays/staging
+```
+
+**Troubleshooting:**
+
+```bash
+# Validate kustomization syntax
+kustomize build infra/kustomize/overlays/staging > /dev/null
+
+# Check which resources will be created
+kustomize build infra/kustomize/overlays/staging | kubectl apply --dry-run=server -f - -o json | \
+  jq -r '.items[] | "\(.kind)/\(.metadata.name)"'
+
+# Find mismatched labels/selectors
+kustomize build infra/kustomize/overlays/staging | \
+  grep -E "selector|matchLabels" -A 3
+
+# Verify ConfigMap merging
+kustomize build infra/kustomize/overlays/staging | \
+  grep -A 20 "kind: ConfigMap"
 ```
 
 ### Verification Script
