@@ -2,6 +2,14 @@
 openapi: 3.1.0
 components:
   schemas:
+    AddDomainRequest:
+      type: object
+      required:
+      - domain
+      properties:
+        domain:
+          type: string
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9-.]{0,251}[a-zA-Z0-9]$"
     AddIntakeBatchItemsRequest:
       type: object
       required:
@@ -2070,6 +2078,88 @@ paths:
       summary: Delete Consignor
       tags:
       - Consignment Resource
+  /api/v1/admin/custom-domains:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Domains
+      tags:
+      - Custom Domain Resource
+      security:
+      - SecurityScheme:
+        - ADMIN
+        - PLATFORM_ADMIN
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddDomainRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Add Domain
+      tags:
+      - Custom Domain Resource
+      security:
+      - SecurityScheme:
+        - ADMIN
+        - PLATFORM_ADMIN
+  /api/v1/admin/custom-domains/{domainId}:
+    delete:
+      parameters:
+      - name: domainId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Remove Domain
+      tags:
+      - Custom Domain Resource
+      security:
+      - SecurityScheme:
+        - ADMIN
+        - PLATFORM_ADMIN
+    get:
+      parameters:
+      - name: domainId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Domain
+      tags:
+      - Custom Domain Resource
+      security:
+      - SecurityScheme:
+        - ADMIN
+        - PLATFORM_ADMIN
   /api/v1/admin/gift-cards:
     get:
       parameters:
@@ -3717,6 +3807,52 @@ paths:
       summary: Get Product
       tags:
       - Headless Catalog Resource
+  /api/v1/headless/customer/profile:
+    patch:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "200":
+          description: OK
+      summary: Update Profile
+      tags:
+      - Test Headless Customer Resource
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: Get Profile
+      tags:
+      - Test Headless Customer Resource
+  /api/v1/headless/orders:
+    get:
+      responses:
+        "200":
+          description: OK
+      summary: List Orders
+      tags:
+      - Test Headless Orders Resource
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+      summary: Create Order
+      tags:
+      - Test Headless Orders Resource
   /api/v1/health:
     get:
       responses:

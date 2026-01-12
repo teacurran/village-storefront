@@ -1,0 +1,150 @@
+---
+# cert-manager ClusterIssuer for Let's Encrypt SSL certificates
+# Provisions TLS certificates for custom domains via ACME DNS-01 challenge
+#
+# References:
+# - Task I5.T4: Custom Domain SSL Automation
+# - cert-manager docs: https://cert-manager.io/docs/configuration/acme/
+# - ACME protocol: https://datatracker.ietf.org/doc/html/rfc8555
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app: village-storefront
+    component: ssl-provisioning
+spec:
+  acme:
+    # Let's Encrypt production endpoint
+    # IMPORTANT: Rate limited (50 certs/week per domain)
+    # Use letsencrypt-staging for testing
+    server: https://acme-v02.api.letsencrypt.org/directory
+
+    # Email for certificate expiry notifications
+    # TODO: Replace with operations team email
+    email: ops@villagecompute.com
+
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+
+    # DNS-01 challenge solver configuration
+    # Validates domain ownership via DNS TXT records
+    solvers:
+      - dns01:
+          # Example: Cloudflare DNS provider
+          # Uncomment and configure based on your DNS provider
+          cloudflare:
+            email: ops@villagecompute.com
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+
+          # Example: Route53 DNS provider (AWS)
+          # route53:
+          #   region: us-east-1
+          #   accessKeyID: AKIAIOSFODNN7EXAMPLE
+          #   secretAccessKeySecretRef:
+          #     name: route53-credentials
+          #     key: secret-access-key
+
+          # Example: Google Cloud DNS provider
+          # cloudDNS:
+          #   project: village-storefront-prod
+          #   serviceAccountSecretRef:
+          #     name: clouddns-service-account
+          #     key: key.json
+
+---
+# Staging ClusterIssuer for testing (higher rate limits)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app: village-storefront
+    component: ssl-provisioning
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ops@villagecompute.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            email: ops@villagecompute.com
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+
+---
+# ServiceAccount for cert-manager to manage Certificate resources
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cert-manager-controller
+  namespace: cert-manager
+  labels:
+    app: village-storefront
+    component: ssl-provisioning
+
+---
+# ClusterRole granting cert-manager permissions to manage certificates
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cert-manager-controller
+  labels:
+    app: village-storefront
+    component: ssl-provisioning
+rules:
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates", "certificaterequests", "orders", "challenges"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+# ClusterRoleBinding associating ServiceAccount with ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cert-manager-controller
+  labels:
+    app: village-storefront
+    component: ssl-provisioning
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cert-manager-controller
+subjects:
+  - kind: ServiceAccount
+    name: cert-manager-controller
+    namespace: cert-manager
+
+---
+# Example: Cloudflare API token Secret (create manually or via sealed-secrets)
+# kubectl create secret generic cloudflare-api-token \
+#   --from-literal=api-token=YOUR_CLOUDFLARE_API_TOKEN \
+#   --namespace cert-manager
+#
+# Cloudflare API token requires:
+# - Zone:Read permissions
+# - DNS:Edit permissions for all zones
+#
+# To create token: https://dash.cloudflare.com/profile/api-tokens
+
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: cloudflare-api-token
+#   namespace: cert-manager
+# type: Opaque
+# stringData:
+#   api-token: YOUR_CLOUDFLARE_API_TOKEN

@@ -1262,36 +1262,125 @@ kubectl exec -it postgres-pod -n storefront -- psql -U storefront -d storefront 
 # Flag accounts accessing multiple tenants (potential impersonation abuse)
 ```
 
-### Custom Domain SSL Certificate Renewal
+### Custom Domain SSL Certificate Management
 
-**Cert-Manager Automation:**
+**Automated Workflow (Task I5.T4):**
 
-Village Storefront uses cert-manager for automatic Let's Encrypt certificate provisioning. Manual intervention rarely needed.
+Village Storefront automates custom domain SSL provisioning using cert-manager + Let's Encrypt. The workflow is:
 
-**Force Certificate Renewal (if expiring):**
+1. **Admin adds domain** via Platform Admin UI → Domain Settings (`/admin/platform/domains`)
+2. **DNS verification** runs hourly via `DomainValidationJob` (queries TXT record at `_acme-challenge.<domain>`)
+3. **Certificate provisioning** triggers automatically when verification succeeds (fires `CustomDomainVerified` CDI event)
+4. **cert-manager** creates Let's Encrypt certificate via ACME DNS-01 challenge
+5. **Certificate renewal** managed by cert-manager (auto-renews 30 days before expiry)
+
+**Domain State Machine:**
+
+- **PENDING** → Awaiting DNS verification (admin must add TXT record)
+- **ACTIVE** → Verified and certificate issued
+- **FAILED** → Verification failed (see error message in UI for resolution steps)
+
+**Admin Interface:**
 
 ```bash
-# Check certificate expiry
-kubectl get certificate -n storefront
+# Access domain management UI
+open https://platform.villagecompute.com/admin/platform/domains
 
-# Force renewal
-kubectl delete certificate <custom-domain> -n storefront
-kubectl apply -f k8s/certificates/<custom-domain>.yaml
+# View domain status via API
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://api.villagecompute.com/api/v1/admin/custom-domains
 
-# Verify renewal
-kubectl describe certificate <custom-domain> -n storefront | grep "Not After"
+# Check verification job logs
+kubectl logs -l app=village-storefront,component=domain-validation -n storefront --tail=100
+```
+
+**Manual Certificate Operations:**
+
+```bash
+# Check certificate status for all domains
+kubectl get certificate -n storefront -o custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type==\"Ready\")].status,SECRET:.spec.secretName,EXPIRY:.status.notAfter
+
+# Check specific domain certificate
+kubectl describe certificate shop-example-com -n storefront
+
+# Force certificate renewal (if stuck or expiring)
+kubectl delete certificate shop-example-com -n storefront
+# cert-manager will automatically recreate from Certificate CRD
+
+# Verify certificate secret created
+kubectl get secret shop-example-com-tls -n storefront -o yaml
 ```
 
 **Troubleshooting DNS Verification Failures:**
 
 ```bash
-# Check ACME challenge records
-dig _acme-challenge.<custom-domain> TXT
+# 1. Check domain status in database
+kubectl exec -it postgres-pod -n storefront -- psql -U storefront -d storefront -c \
+  "SELECT domain, status, verification_error_message, verification_retry_count, last_verification_attempt
+   FROM custom_domains
+   WHERE domain = 'shop.example.com';"
 
-# Verify Cloudflare DNS settings
-# Ensure A/CNAME record points to ingress IP
+# 2. Verify DNS TXT record exists and matches verification token
+dig _acme-challenge.shop.example.com TXT +short
+# Should return: "verification-token-from-database"
+
+# 3. Check domain verification job logs for specific error
+kubectl logs -l app=village-storefront,job=domain-validation -n storefront --tail=200 | grep "shop.example.com"
+
+# 4. Manually trigger verification job (instead of waiting for hourly schedule)
+kubectl exec -it village-storefront-pod -n storefront -- \
+  curl -X POST http://localhost:8080/q/scheduler/trigger/verify-custom-domains
+
+# 5. Common DNS issues:
+# - TXT record not propagated (wait up to 24h)
+# - Wrong record name (must be _acme-challenge.<domain>)
+# - Wrong record value (copy from Platform Admin UI)
+# - DNS provider doesn't support TXT records (use different provider)
+
+# 6. Verify Ingress points to correct load balancer IP
 kubectl get ingress village-storefront -n storefront -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+# Admin must point A/CNAME record to this IP
 ```
+
+**cert-manager Troubleshooting:**
+
+```bash
+# Check cert-manager pod logs
+kubectl logs -n cert-manager deploy/cert-manager --tail=100
+
+# Check ACME Order status (shows challenge progression)
+kubectl get orders -n storefront
+kubectl describe order shop-example-com-1234567890 -n storefront
+
+# Check Challenge status (DNS-01 validation details)
+kubectl get challenges -n storefront
+kubectl describe challenge shop-example-com-1234567890-challenge -n storefront
+
+# Verify ClusterIssuer configuration
+kubectl get clusterissuer letsencrypt-prod -o yaml
+
+# Check rate limits (Let's Encrypt: 50 certs/week per domain)
+# If rate limited, use staging issuer for testing:
+kubectl patch certificate shop-example-com -n storefront \
+  --type='json' -p='[{"op": "replace", "path": "/spec/issuerRef/name", "value":"letsencrypt-staging"}]'
+```
+
+**Retry Backoff Schedule:**
+
+DomainValidationJob implements exponential backoff for failed verifications:
+
+- **Retry 0:** Immediate (at domain creation)
+- **Retry 1:** 1 hour after first failure
+- **Retry 2:** 4 hours after retry 1
+- **Retry 3:** 12 hours after retry 2
+- **Retry 4+:** 24 hours between attempts (indefinite)
+
+**Related Files:**
+
+- Backend: `CustomDomainResource.java`, `DomainValidationJob.java`, `CertificateEventHandler.java`
+- Frontend: `DomainSettingsView.vue` (Platform Admin UI)
+- Infra: `infra/kustomize/base/cert-manager/issuer.yaml`
+- Migration: `V20260132__custom_domain_ssl_automation.sql`
 
 ### Background Job Maintenance Windows
 
