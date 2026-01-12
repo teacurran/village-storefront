@@ -719,6 +719,216 @@ sum(rate(media_storage_upload_bytes_total[5m])) + sum(rate(media_storage_downloa
    - Check external service status pages (Stripe, R2)
    - Investigate code path in failed job type
 
+### Playbook: Checkout Saga Failure Patterns (P2)
+
+**Alert Name:** `CheckoutCompensationRateHigh`
+**Trigger:** `rate(checkout_compensation_triggered_total[5m]) > 0.1` for 10 minutes
+**Related Diagram:** [Checkout Sequence Diagram](../diagrams/checkout_sequence.puml)
+
+**Response Steps:**
+
+1. **Identify Saga Stage Failure Pattern:**
+   ```bash
+   # Query audit log for compensation events
+   kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+     "SELECT event_type, COUNT(*) \
+      FROM audit_log \
+      WHERE event_type LIKE 'checkout.compensation.%' \
+        AND timestamp > NOW() - INTERVAL '15 minutes' \
+      GROUP BY event_type \
+      ORDER BY COUNT(*) DESC \
+      LIMIT 5;"
+   ```
+
+2. **Check Compensation Trigger Distribution:**
+   ```promql
+   sum by (stage) (rate(checkout_compensation_triggered_total[5m]))
+   ```
+
+**Common Failure Scenarios & Compensation Hooks:**
+
+#### Scenario A: Payment Decline Surge
+
+**Indicators:**
+- High `checkout.payment.declined` metric
+- Compensation events: `inventory_released`, `loyalty_released`, `order.cancelled`
+
+**Root Causes:**
+- Card processing issues (bank outages, fraud detection spikes)
+- Incorrect payment method configuration
+- Stripe API degradation
+
+**Response:**
+```bash
+# Check Stripe API status
+curl https://status.stripe.com/api/v2/status.json | jq
+
+# Review decline codes distribution
+kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+  "SELECT metadata->>'decline_code' AS decline_code, COUNT(*) \
+   FROM audit_log \
+   WHERE event_type = 'payment.declined' \
+     AND timestamp > NOW() - INTERVAL '1 hour' \
+   GROUP BY decline_code \
+   ORDER BY COUNT(*) DESC;"
+```
+
+**Action:**
+- If specific decline_code dominates (e.g., `card_declined`): Customer-side issue, no action
+- If `api_error` or timeouts: Check Stripe status, enable circuit breaker if needed
+- If fraud filters too aggressive: Review Stripe Radar rules
+
+**Compensation Verification:**
+- Inventory reservations released (no ghost holds)
+- Loyalty points restored to customer accounts
+- Orders marked CANCELLED, not stuck in PENDING_PAYMENT
+
+#### Scenario B: Shipping Rate Adapter Failure
+
+**Indicators:**
+- High `checkout.shipping.fallback` metric
+- Compensation: None (fallback strategy activates)
+
+**Root Causes:**
+- Carrier API outages (UPS/FedEx/USPS)
+- Network connectivity issues
+- Rate limiting by carrier APIs
+
+**Response:**
+```bash
+# Check carrier adapter error distribution
+kubectl logs -l app=village-storefront --tail=500 -n storefront | \
+  grep "CarrierAdapter" | grep "error" | jq -r '.carrier' | sort | uniq -c
+
+# Verify fallback rate usage
+kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+  "SELECT COUNT(*) \
+   FROM audit_log \
+   WHERE event_type = 'checkout.shipping.fallback_used' \
+     AND timestamp > NOW() - INTERVAL '1 hour';"
+```
+
+**Action:**
+- Check carrier status pages: UPS, FedEx, USPS
+- If single carrier down: Expected, fallback handles gracefully
+- If all carriers down: Notify merchants, consider disabling checkout temporarily
+- Monitor orders: Actual shipping cost reconciled at fulfillment
+
+**No Compensation Required:**
+- Fallback rate is estimate, no money collected yet
+- Customer sees warning: "Shipping calculated at fulfillment"
+
+#### Scenario C: Inventory Reservation Deadlock
+
+**Indicators:**
+- High `checkout.inventory.reservation_timeout` metric
+- Compensation: Partial reservations released
+
+**Root Causes:**
+- Database lock contention (high-demand variants)
+- Slow queries blocking SELECT FOR UPDATE
+- Concurrent checkouts for same variant
+
+**Response:**
+```bash
+# Check for long-running transactions
+kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+  "SELECT pid, usename, state, query_start, state_change, query \
+   FROM pg_stat_activity \
+   WHERE state != 'idle' \
+     AND query LIKE '%inventory_reservations%' \
+   ORDER BY query_start ASC;"
+
+# Check lock wait times
+kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+  "SELECT locktype, relation::regclass, mode, granted \
+   FROM pg_locks \
+   WHERE NOT granted \
+     AND relation::regclass::text LIKE '%inventory%';"
+```
+
+**Action:**
+- If deadlock persists: Consider increasing `lock_timeout` config
+- Review inventory query optimization (add indexes on hot variants)
+- Implement optimistic locking for high-contention variants
+
+**Compensation Verification:**
+- Failed reservations cleaned up (no orphaned rows)
+- Customer sees clear "Out of stock" or "Try again" message
+
+#### Scenario D: Loyalty Hold Expiration
+
+**Indicators:**
+- Audit events: `checkout.loyalty.hold_expired`
+- Customer complaints about points deducted but order failed
+
+**Root Causes:**
+- Checkout took > 15 minutes (hold TTL expired)
+- Background job delay in releasing expired holds
+- Race condition between hold expiry and payment processing
+
+**Response:**
+```bash
+# Find expired holds not yet released
+kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+  "SELECT id, customer_id, points, created_at, expires_at \
+   FROM loyalty_holds \
+   WHERE expires_at < NOW() \
+     AND status = 'active' \
+   LIMIT 10;"
+
+# Manually release expired holds (emergency)
+kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
+  "DELETE FROM loyalty_holds \
+   WHERE expires_at < NOW() - INTERVAL '1 hour' \
+     AND status = 'active';"
+```
+
+**Action:**
+- Verify loyalty hold cleanup job running (scheduled every 5 minutes)
+- Review checkout duration metrics (p95 should be < 5 minutes)
+- Increase hold TTL if legitimate slow checkouts common
+
+**Compensation Verification:**
+- Expired holds released automatically
+- Customer loyalty balance accurate (no phantom deductions)
+
+### Playbook: Address Validation API Failure (P3)
+
+**Alert Name:** `AddressValidationUnavailable`
+**Trigger:** `rate(checkout.address_validation_failures[5m]) > 0.5` for 15 minutes
+
+**Response Steps:**
+
+1. **Check Address Validation Provider:**
+   ```bash
+   # Test USPS/Lob.com API directly
+   curl -X POST https://api.lob.com/v1/us_verifications \
+     -u "$LOB_API_KEY:" \
+     -d "primary_line=185 Berry St" \
+     -d "city=San Francisco" \
+     -d "state=CA" \
+     -d "zip_code=94107"
+   ```
+
+2. **If Provider Down:**
+   - Enable bypass mode (accept unvalidated addresses with warning)
+   - Notify merchants: "Address validation temporarily disabled"
+   - Mark orders for manual review before shipment
+
+3. **Configuration Override (Emergency):**
+   ```bash
+   # Disable strict address validation
+   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -d '{"flag": "checkout.address_validation.required", "enabled": false}' \
+     https://api.villagecompute.com/admin/feature-flags
+   ```
+
+4. **Recovery:**
+   - Monitor provider status page
+   - Re-enable strict validation after confirmed recovery
+   - Review orders placed during bypass for shipping issues
+
 ### Playbook: Worker Pod OOMKilled (P2)
 
 **Alert Name:** `WorkerPodOOMKilled`

@@ -1,0 +1,769 @@
+@startuml checkout_sequence
+' ============================================================================
+' Village Storefront - Checkout & Payment Sequence Diagram (PlantUML)
+' ============================================================================
+' Description: Authoritative checkout orchestration flow documenting tenant
+'              resolution, saga-pattern compensations, Stripe integration,
+'              loyalty operations, and audit logging.
+'
+' References:
+'   - ADR-003: Checkout Saga Pattern (Orchestration & Compensation)
+'   - Architecture: docs/architecture/04_Operational_Architecture.md §3.2.7
+'   - Mermaid Version: docs/diagrams/sequence_checkout_payment.mmd
+'   - OpenAPI: /checkout/preview, /checkout/commit
+'
+' Render with PlantUML:
+'   plantuml docs/diagrams/checkout_sequence.puml
+'   or
+'   java -jar plantuml.jar docs/diagrams/checkout_sequence.puml
+'
+' Operational Use: This diagram is the authoritative reference for ops
+'   and QA teams understanding checkout failure modes and compensations.
+'   See platform_ops.md §5 for related runbooks.
+' ============================================================================
+
+!define SUCCESS_COLOR #E8F5E9
+!define ERROR_COLOR #FFEBEE
+!define WARNING_COLOR #FFF3E0
+!define INFO_COLOR #E3F2FD
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam BoxPadding 10
+skinparam ParticipantPadding 10
+
+title Village Storefront - Checkout & Payment Orchestration Flow
+
+actor "Shopper" as Shopper
+participant "Tenant Access\nGateway" as TAG
+participant "TenantContext\nResolver" as TenantContext
+participant "Feature Toggle\nService" as FeatureFlags
+participant "Qute Storefront\nTemplate" as Storefront
+participant "Checkout\nOrchestrator" as Checkout
+participant "Idempotency\nStore (DB)" as IdempotencyStore
+participant "Address\nValidator" as AddressValidator
+participant "Carrier Rate\nAdapter" as CarrierAdapter
+participant "Rate Cache\n(Caffeine)" as RateCache
+participant "Inventory\nService" as Inventory
+participant "Loyalty\nService" as Loyalty
+participant "Stripe\nAdapter" as StripeAdapter
+participant "Stripe API" as Stripe
+participant "Audit Log\nService" as AuditLog
+participant "PostgreSQL" as Database
+participant "Background\nJob Queue" as JobQueue
+
+' ============================================================================
+' SCENARIO 1: HAPPY PATH - CHECKOUT PREVIEW
+' ============================================================================
+
+box "SCENARIO 1: Checkout Preview (Happy Path)" SUCCESS_COLOR
+    note over Shopper, JobQueue
+        Customer views checkout with shipping rates
+        Demonstrates tenant resolution + address validation + rate shopping
+    end note
+end box
+
+Shopper -> TAG: HTTPS GET {tenant}.platform.com/checkout
+activate TAG
+
+note right of TAG
+    Extract subdomain or resolve custom domain
+    Enforce suspension/billing status
+end note
+
+TAG -> TenantContext: resolveTenant(domain)
+activate TenantContext
+TenantContext -> Database: SELECT * FROM stores\nWHERE subdomain = ? OR custom_domain = ?
+activate Database
+Database --> TenantContext: Store(id, tenantId, status)
+deactivate Database
+TenantContext --> TAG: TenantContext(tenantId, storeId)
+deactivate TenantContext
+
+note right of TAG
+    TenantContext propagated via CDI RequestScoped bean
+    Available to all downstream services
+end note
+
+TAG -> FeatureFlags: publishTenantResolvedEvent(TenantContext)
+activate FeatureFlags
+FeatureFlags --> TAG: Feature snapshot loaded
+deactivate FeatureFlags
+
+TAG -> Storefront: forward(request, TenantContext, flags)
+activate Storefront
+
+Storefront -> Checkout: POST /api/v1/checkout/preview\n(cart, shippingAddress)
+activate Checkout
+
+' SAGA STAGE 1: Address Validation
+group SAGA STAGE 1: Address Validation [read-only, no compensation]
+    note over Checkout, AddressValidator
+        Span: CheckoutSaga.addressValidation
+        Metric: checkout.address_validation_latency
+    end note
+
+    Checkout -> AddressValidator: validate(Address)
+    activate AddressValidator
+    AddressValidator -> AddressValidator: Normalize via USPS/Lob.com API\nTimeout: 5s, Retry: 2x
+
+    alt Address Valid
+        AddressValidator --> Checkout: ValidatedAddress\n(normalized, confidence: high)
+        deactivate AddressValidator
+
+        note right of Checkout
+            Audit event: checkout.address.validated
+            TenantContext: tenantId captured in event
+        end note
+
+        Checkout -> AuditLog: logEvent("checkout.address.validated", tenantContext)
+        activate AuditLog
+        AuditLog -> Database: INSERT INTO audit_log\n(tenant_id, event_type, metadata)
+        activate Database
+        deactivate Database
+        deactivate AuditLog
+
+    else Address Invalid/Ambiguous
+        AddressValidator --> Checkout: ValidationError\n(suggestions, confidence: low)
+        deactivate AddressValidator
+
+        Checkout -> AuditLog: logEvent("checkout.address.invalid", tenantContext, suggestions)
+        activate AuditLog
+        deactivate AuditLog
+
+        Checkout --> Storefront: HTTP 400 ProblemDetails\ntype: address-validation-failed
+        deactivate Checkout
+        Storefront --> Shopper: Show address corrections UI
+        deactivate Storefront
+        deactivate TAG
+
+        note over Checkout
+            NO COMPENSATION NEEDED
+            Read-only operation, no state changed
+        end note
+        [o<- Shopper: Flow ends
+    end
+end
+
+' SAGA STAGE 2: Shipping Rate Shopping
+group SAGA STAGE 2: Shipping Rate Calculation [cached, fallback on failure]
+    note over Checkout, CarrierAdapter
+        Span: ShippingRateAdapter.quote
+        Metric: checkout.rate_cache_hit_ratio
+    end note
+
+    Checkout -> RateCache: get(cartHash + addressHash)
+    activate RateCache
+
+    alt Cache HIT
+        RateCache --> Checkout: CachedRates(rates[], TTL: 15min)
+        deactivate RateCache
+
+        note right of Checkout
+            Metric: checkout.rate_cache_hit++
+            No external API call needed
+        end note
+
+    else Cache MISS
+        RateCache --> Checkout: null
+        deactivate RateCache
+
+        Checkout -> CarrierAdapter: getRates(address, packages)
+        activate CarrierAdapter
+        CarrierAdapter -> CarrierAdapter: Call UPS/FedEx/USPS APIs\nTimeout: 5s per carrier, Retry: 2x
+
+        alt Carriers Respond Successfully
+            CarrierAdapter --> Checkout: ShippingRates[]\n(carrier, service, cost, ETA)
+            deactivate CarrierAdapter
+
+            Checkout -> RateCache: put(rates, TTL: 15min)
+            activate RateCache
+            deactivate RateCache
+
+            Checkout -> AuditLog: logEvent("checkout.rates.fetched", tenantContext, rateCount)
+            activate AuditLog
+            deactivate AuditLog
+
+        else All Carriers Timeout/Unavailable
+            CarrierAdapter --> Checkout: CarrierError(allFailed)
+            deactivate CarrierAdapter
+
+            note right of Checkout: FALLBACK STRATEGY ACTIVATED
+
+            Checkout -> Database: SELECT fallback_shipping_rate\nFROM tenant_settings\nWHERE tenant_id = ?
+            activate Database
+            Database --> Checkout: FallbackRate($5.00 flat rate)
+            deactivate Database
+
+            Checkout -> AuditLog: logEvent("checkout.shipping.fallback", tenantContext)
+            activate AuditLog
+            deactivate AuditLog
+
+            note right of Checkout
+                Metric: checkout.shipping_api_errors++
+                Alert: shipping.rate.fallback (P2)
+            end note
+        end
+    end
+end
+
+' Calculate totals and return preview
+Checkout -> Checkout: Calculate totals\n(subtotal + tax + shipping)
+Checkout --> Storefront: CheckoutPreview\n(total, lineItems, rates[], warnings[])
+deactivate Checkout
+
+Storefront --> Shopper: Render review page\n(totals, shipping options, payment form)
+deactivate Storefront
+deactivate TAG
+
+' ============================================================================
+' SCENARIO 2: HAPPY PATH - CHECKOUT COMMIT WITH LOYALTY
+' ============================================================================
+
+box "SCENARIO 2: Checkout Commit (Happy Path with Loyalty)" SUCCESS_COLOR
+    note over Shopper, JobQueue
+        Customer completes payment with loyalty points redemption
+        Demonstrates full saga with inventory hold + loyalty hold + payment
+    end note
+end box
+
+Shopper -> TAG: POST /checkout/commit\nX-Idempotency-Key: {UUID}\n(paymentMethodId, selectedRate, loyaltyPoints: 500)
+activate TAG
+
+TAG -> TenantContext: resolveTenant(domain)
+activate TenantContext
+TenantContext --> TAG: TenantContext(tenantId)
+deactivate TenantContext
+
+TAG -> Storefront: forward(request, TenantContext)
+activate Storefront
+
+Storefront -> Checkout: commitCheckout(CheckoutCommitRequest)
+activate Checkout
+
+' Idempotency check
+group Idempotency Guard
+    note over Checkout, IdempotencyStore
+        Prevents duplicate order creation on network retries
+        24-hour idempotency window per RFC 7231
+    end note
+
+    Checkout -> IdempotencyStore: findByKey(idempotencyKey)
+    activate IdempotencyStore
+
+    alt Key Exists (Duplicate Request)
+        IdempotencyStore --> Checkout: ExistingResult(orderId, status: SUCCESS)
+        deactivate IdempotencyStore
+
+        Checkout --> Storefront: HTTP 409 Conflict\nLocation: /orders/{orderId}
+        deactivate Checkout
+        Storefront --> Shopper: Redirect to existing order
+        deactivate Storefront
+        deactivate TAG
+        [o<- Shopper: Flow ends (idempotent response)
+
+    else Key Not Found (New Request)
+        IdempotencyStore --> Checkout: null
+        deactivate IdempotencyStore
+
+        Checkout -> IdempotencyStore: store(key, status: PENDING, timestamp)
+        activate IdempotencyStore
+        deactivate IdempotencyStore
+    end
+end
+
+' SAGA STAGE 3: Re-validate address (defensive)
+group SAGA STAGE 3: Address Re-validation [defensive check]
+    note over Checkout, AddressValidator: Defensive check to catch client-side manipulation
+
+    Checkout -> AddressValidator: validate(shippingAddress)
+    activate AddressValidator
+    AddressValidator --> Checkout: ValidatedAddress
+    deactivate AddressValidator
+end
+
+' SAGA STAGE 4: Inventory Reservation
+group SAGA STAGE 4: Inventory Hold [COMPENSATION POINT: release on failure]
+    note over Checkout, Inventory
+        Span: CheckoutSaga.inventoryReservation
+        CRITICAL: Must compensate if subsequent stages fail
+    end note
+
+    Checkout -> Inventory: reserveStock(lineItems[], tenantId)
+    activate Inventory
+
+    Inventory -> Database: BEGIN TRANSACTION\nSELECT FOR UPDATE inventory_levels\nWHERE variant_id IN (...) AND tenant_id = ?
+    activate Database
+
+    alt Stock Available
+        Database --> Inventory: Rows locked (qty sufficient)
+        Inventory -> Database: INSERT inventory_reservations\n(cart_id, variant_id, qty, expires_at: +15min)
+        Database --> Inventory: Reservation IDs
+        deactivate Database
+
+        Inventory --> Checkout: ReservationIds[]\n(expires in 15 minutes)
+        deactivate Inventory
+
+        Checkout -> AuditLog: logEvent("checkout.inventory.reserved", tenantContext, reservationIds)
+        activate AuditLog
+        deactivate AuditLog
+
+    else Out of Stock
+        Database --> Inventory: Insufficient stock for variant XYZ
+        deactivate Database
+        Inventory --> Checkout: OutOfStockError(variantId, available, requested)
+        deactivate Inventory
+
+        Checkout -> AuditLog: logEvent("checkout.inventory.insufficient", tenantContext, variantId)
+        activate AuditLog
+        deactivate AuditLog
+
+        Checkout -> IdempotencyStore: update(key, status: FAILED, error)
+        activate IdempotencyStore
+        deactivate IdempotencyStore
+
+        Checkout --> Storefront: HTTP 400 ProblemDetails\ntype: out-of-stock
+        deactivate Checkout
+        Storefront --> Shopper: Show stock error + refresh cart
+        deactivate Storefront
+        deactivate TAG
+        [o<- Shopper: Flow ends
+
+        note over Checkout
+            NO COMPENSATION NEEDED
+            No reservations created, transaction rolled back
+        end note
+    end
+end
+
+' SAGA STAGE 5: Loyalty Point Hold
+group SAGA STAGE 5: Loyalty Hold [COMPENSATION POINT: release on failure]
+    note over Checkout, Loyalty
+        Hold loyalty points during checkout
+        CRITICAL: Must release if payment fails
+    end note
+
+    alt Loyalty Points Requested (500 points = $5.00)
+        Checkout -> Loyalty: holdPoints(customerId, tenantId, points: 500)
+        activate Loyalty
+
+        Loyalty -> Database: BEGIN TRANSACTION\nSELECT FOR UPDATE loyalty_accounts\nWHERE customer_id = ? AND tenant_id = ?
+        activate Database
+
+        alt Sufficient Points
+            Database --> Loyalty: Account balance: 1200 points
+            Loyalty -> Database: INSERT loyalty_holds\n(customer_id, points, expires_at: +15min, reason: "checkout")
+            Database --> Loyalty: Hold ID
+            deactivate Database
+
+            Loyalty --> Checkout: LoyaltyHold(holdId, points: 500, discount: $5.00)
+            deactivate Loyalty
+
+            Checkout -> AuditLog: logEvent("checkout.loyalty.held", tenantContext, holdId, points)
+            activate AuditLog
+            deactivate AuditLog
+
+        else Insufficient Points
+            Database --> Loyalty: Account balance: 200 points (insufficient)
+            deactivate Database
+            Loyalty --> Checkout: InsufficientPointsError
+            deactivate Loyalty
+
+            note over Checkout: COMPENSATION SAGA BEGINS
+
+            Checkout -> Inventory: releaseReservations(reservationIds)
+            activate Inventory
+            Inventory -> Database: DELETE FROM inventory_reservations\nWHERE id IN (?)
+            activate Database
+            deactivate Database
+            deactivate Inventory
+
+            Checkout -> AuditLog: logEvent("checkout.compensation.inventory_released", tenantContext)
+            activate AuditLog
+            deactivate AuditLog
+
+            Checkout -> IdempotencyStore: update(key, status: FAILED)
+            activate IdempotencyStore
+            deactivate IdempotencyStore
+
+            Checkout --> Storefront: HTTP 400 ProblemDetails\ntype: insufficient-loyalty-points
+            deactivate Checkout
+            Storefront --> Shopper: Show loyalty error
+            deactivate Storefront
+            deactivate TAG
+            [o<- Shopper: Flow ends
+        end
+
+    else No Loyalty Points Requested
+        note over Checkout: Skip loyalty hold stage
+    end
+end
+
+' SAGA STAGE 6: Order Creation (tentative)
+group SAGA STAGE 6: Order Creation [COMPENSATION POINT: mark CANCELLED on payment failure]
+    note over Checkout, Database
+        Create order in PENDING_PAYMENT status
+        Will transition to PROCESSING on payment success
+    end note
+
+    Checkout -> Database: BEGIN TRANSACTION\nINSERT INTO orders\n(tenant_id, status: PENDING_PAYMENT, total, loyalty_discount)\nINSERT INTO order_items
+    activate Database
+    Database --> Checkout: Order(id, orderNumber, status)
+    deactivate Database
+
+    Checkout -> AuditLog: logEvent("order.created", tenantContext, orderId, status: PENDING_PAYMENT)
+    activate AuditLog
+    deactivate AuditLog
+end
+
+' SAGA STAGE 7: Payment Processing
+group SAGA STAGE 7: Payment Authorization [CRITICAL FAILURE POINT]
+    note over Checkout, Stripe
+        Span: StripeIntentService.commit
+        Idempotency: Stripe API uses orderId as idempotency key
+        CRITICAL: Requires full compensation on failure
+    end note
+
+    Checkout -> StripeAdapter: createPaymentIntent(\norder, paymentMethodId,\nidempotencyKey: orderId)
+    activate StripeAdapter
+
+    StripeAdapter -> Stripe: POST /v1/payment_intents\namount: $45.00 (total - loyalty discount)\npayment_method: pm_xxx\nidempotency_key: order_{orderId}\nmetadata: {tenantId, orderId}
+    activate Stripe
+
+    alt Payment Authorized Successfully
+        Stripe --> StripeAdapter: PaymentIntent\n(status: succeeded, charge_id)
+        deactivate Stripe
+        StripeAdapter --> Checkout: PaymentIntent(succeeded, chargeId)
+        deactivate StripeAdapter
+
+        Checkout -> AuditLog: logEvent("payment.authorized", tenantContext, orderId, chargeId)
+        activate AuditLog
+        deactivate AuditLog
+
+        ' Finalize order
+        Checkout -> Database: BEGIN TRANSACTION\nUPDATE orders\nSET status = PROCESSING, payment_intent_id = ?, paid_at = NOW()\nUPDATE inventory_reservations SET status = COMMITTED\nDELETE FROM loyalty_holds WHERE id = ? (convert to transaction)
+        activate Database
+        Database --> Checkout: Commit successful
+        deactivate Database
+
+        Checkout -> Loyalty: commitHold(holdId) -- converts hold to points deduction
+        activate Loyalty
+        Loyalty -> Database: UPDATE loyalty_accounts\nSET balance = balance - 500\nWHERE customer_id = ? AND tenant_id = ?
+        activate Database
+        deactivate Database
+        deactivate Loyalty
+
+        Checkout -> AuditLog: logEvent("order.paid", tenantContext, orderId, paymentMethod)
+        activate AuditLog
+        deactivate AuditLog
+
+        Checkout -> IdempotencyStore: update(key, status: SUCCESS, orderId)
+        activate IdempotencyStore
+        deactivate IdempotencyStore
+
+        ' Enqueue background jobs
+        Checkout -> JobQueue: enqueue(SendOrderConfirmationEmail, orderId)
+        activate JobQueue
+        deactivate JobQueue
+
+        Checkout -> JobQueue: enqueue(CreateShippingLabel, orderId)
+        activate JobQueue
+        deactivate JobQueue
+
+        Checkout -> JobQueue: enqueue(AwardLoyaltyPoints, customerId, points: 45)
+        activate JobQueue
+        deactivate JobQueue
+
+        Checkout --> Storefront: OrderCreatedResponse\n(orderId, orderNumber, total)
+        deactivate Checkout
+
+        Storefront --> Shopper: HTTP 201 Created\nLocation: /orders/{orderId}\nRedirect to confirmation page
+        deactivate Storefront
+        deactivate TAG
+
+    else Payment Declined
+        Stripe --> StripeAdapter: PaymentError\n(decline_code: insufficient_funds, message)
+        deactivate Stripe
+        StripeAdapter --> Checkout: PaymentError(decline_code, message)
+        deactivate StripeAdapter
+
+        note over Checkout: *** COMPENSATION SAGA BEGINS ***
+
+        box "COMPENSATION FLOW" ERROR_COLOR
+            note over Checkout, Database
+                Roll back all saga stages in reverse order
+                Ensure no partial state remains
+            end note
+        end box
+
+        ' Compensation 1: Release loyalty hold
+        alt Loyalty Hold Exists
+            Checkout -> Loyalty: releaseHold(holdId)
+            activate Loyalty
+            Loyalty -> Database: DELETE FROM loyalty_holds WHERE id = ?
+            activate Database
+            deactivate Database
+            deactivate Loyalty
+
+            Checkout -> AuditLog: logEvent("checkout.compensation.loyalty_released", tenantContext, holdId)
+            activate AuditLog
+            deactivate AuditLog
+        end
+
+        ' Compensation 2: Release inventory reservations
+        Checkout -> Inventory: releaseReservations(reservationIds)
+        activate Inventory
+        Inventory -> Database: DELETE FROM inventory_reservations WHERE id IN (?)
+        activate Database
+        deactivate Database
+        deactivate Inventory
+
+        Checkout -> AuditLog: logEvent("checkout.compensation.inventory_released", tenantContext, reservationIds)
+        activate AuditLog
+        deactivate AuditLog
+
+        ' Compensation 3: Cancel order
+        Checkout -> Database: UPDATE orders\nSET status = CANCELLED, cancellation_reason = 'payment_failed'\nWHERE id = ?
+        activate Database
+        deactivate Database
+
+        Checkout -> AuditLog: logEvent("order.cancelled", tenantContext, orderId, reason: payment_failed)
+        activate AuditLog
+        deactivate AuditLog
+
+        ' Update idempotency key
+        Checkout -> IdempotencyStore: update(key, status: FAILED, error: decline_code)
+        activate IdempotencyStore
+        deactivate IdempotencyStore
+
+        note over Checkout
+            Metric: checkout.payment.declined++
+            Alert: None (customer-side error, expected)
+        end note
+
+        Checkout --> Storefront: HTTP 402 Payment Required\ntype: payment-declined\ndetail: {decline_code, message}
+        deactivate Checkout
+
+        Storefront --> Shopper: Show payment error\n(retry with different method)
+        deactivate Storefront
+        deactivate TAG
+    end
+end
+
+' ============================================================================
+' SCENARIO 3: CARRIER API FAILURE WITH FALLBACK
+' ============================================================================
+
+box "SCENARIO 3: Carrier API Failure (Fallback Strategy)" WARNING_COLOR
+    note over Shopper, JobQueue
+        All shipping carriers unavailable during preview
+        System falls back to tenant-configured flat rate
+    end note
+end box
+
+Shopper -> TAG: POST /checkout/preview
+activate TAG
+TAG -> TenantContext: resolveTenant(domain)
+activate TenantContext
+TenantContext --> TAG: TenantContext
+deactivate TenantContext
+TAG -> Storefront: forward(request, TenantContext)
+activate Storefront
+Storefront -> Checkout: previewCheckout(cart, address)
+activate Checkout
+
+group Address Validation (succeeds)
+    Checkout -> AddressValidator: validate(address)
+    activate AddressValidator
+    AddressValidator --> Checkout: ValidatedAddress
+    deactivate AddressValidator
+end
+
+group Shipping Rate Fetch (all carriers fail)
+    Checkout -> CarrierAdapter: getRates(address, packages)
+    activate CarrierAdapter
+
+    CarrierAdapter -> CarrierAdapter: UPS API: Timeout (5s)\nFedEx API: HTTP 503\nUSPS API: Network error
+
+    CarrierAdapter --> Checkout: AllCarriersFailedError
+    deactivate CarrierAdapter
+
+    note right of Checkout: FALLBACK STRATEGY
+
+    Checkout -> Database: SELECT fallback_shipping_rate\nFROM tenant_settings WHERE tenant_id = ?
+    activate Database
+    Database --> Checkout: FallbackRate($5.00, name: "Standard Shipping (estimated)")
+    deactivate Database
+
+    Checkout -> AuditLog: logEvent("checkout.shipping.fallback_used", tenantContext)
+    activate AuditLog
+    deactivate AuditLog
+
+    note right of Checkout
+        Metric: checkout.shipping.fallback++
+        Alert: shipping.rate.fallback (P2 warning)
+        Ops Action: Check carrier status pages
+    end note
+
+    Checkout -> Checkout: Build preview with fallback rate + warning flag
+end
+
+Checkout --> Storefront: CheckoutPreview\n(total with $5.00 shipping,\nwarning: "Shipping estimate, actual cost calculated at fulfillment")
+deactivate Checkout
+
+Storefront --> Shopper: Show totals + warning banner:\n"Shipping carriers temporarily unavailable, estimated rate shown"
+deactivate Storefront
+deactivate TAG
+
+' ============================================================================
+' SCENARIO 4: WEBHOOK RECONCILIATION (PAYMENT SUCCESS BUT NETWORK TIMEOUT)
+' ============================================================================
+
+box "SCENARIO 4: Payment Success + Network Failure (Webhook Reconciliation)" INFO_COLOR
+    note over Shopper, JobQueue
+        Payment succeeds at Stripe but HTTP response lost
+        Client retries with same idempotency key
+        Stripe's idempotency ensures no double-charge
+    end note
+end box
+
+Shopper -> TAG: POST /checkout/commit\nX-Idempotency-Key: abc-123 (first attempt)
+activate TAG
+TAG -> Storefront: forward(request, TenantContext)
+activate Storefront
+Storefront -> Checkout: commitCheckout(request)
+activate Checkout
+
+note over Checkout: Idempotency key stored, saga executes...\nInventory reserved, order created, payment initiated...
+
+Checkout -> StripeAdapter: createPaymentIntent(order, paymentMethod,\nidempotencyKey: order_789)
+activate StripeAdapter
+StripeAdapter -> Stripe: POST /v1/payment_intents\n(idempotency_key: order_789)
+activate Stripe
+
+note over Stripe: Payment succeeds, charge created\n$45.00 captured from customer card
+
+Stripe --x StripeAdapter: Network timeout\n(HTTP response lost)
+deactivate Stripe
+
+note over StripeAdapter: TCP connection broken before response read
+
+StripeAdapter --x Checkout: NetworkException (timeout)
+deactivate StripeAdapter
+
+note over Checkout: Exception propagates up\nOrder remains in PENDING_PAYMENT status\nIdempotency key status: PENDING
+
+Checkout --x Storefront: HTTP 500 (timeout)
+deactivate Checkout
+Storefront --x Shopper: Error: "Unable to process payment"
+deactivate Storefront
+deactivate TAG
+
+note over Shopper
+    Client retries checkout with SAME idempotency key
+    Stripe will return existing PaymentIntent (idempotent)
+end note
+
+Shopper -> TAG: POST /checkout/commit\nX-Idempotency-Key: abc-123 (retry with same key)
+activate TAG
+TAG -> Storefront: forward(request, TenantContext)
+activate Storefront
+Storefront -> Checkout: commitCheckout(request)
+activate Checkout
+
+Checkout -> IdempotencyStore: findByKey(abc-123)
+activate IdempotencyStore
+IdempotencyStore --> Checkout: Entry(status: PENDING, orderId: 789)
+deactivate IdempotencyStore
+
+note over Checkout
+    Idempotency key exists but status still PENDING
+    Re-attempt checkout saga from payment stage
+end note
+
+Checkout -> StripeAdapter: createPaymentIntent(order_789, ...,\nidempotencyKey: order_789)
+activate StripeAdapter
+StripeAdapter -> Stripe: POST /v1/payment_intents\n(idempotency_key: order_789)
+activate Stripe
+
+note over Stripe
+    Stripe recognizes idempotency key
+    Returns EXISTING PaymentIntent (no new charge)
+end note
+
+Stripe --> StripeAdapter: PaymentIntent\n(status: succeeded, charge_id: ch_xyz)\n[Idempotent response]
+deactivate Stripe
+StripeAdapter --> Checkout: PaymentIntent(succeeded)
+deactivate StripeAdapter
+
+note over Checkout
+    Detect payment already succeeded
+    Finalize order normally (idempotent operations)
+end note
+
+Checkout -> Database: UPDATE orders SET status = PROCESSING\nWHERE id = 789 AND status = PENDING_PAYMENT
+activate Database
+Database --> Checkout: 1 row updated
+deactivate Database
+
+Checkout -> IdempotencyStore: update(key: abc-123, status: SUCCESS, orderId: 789)
+activate IdempotencyStore
+deactivate IdempotencyStore
+
+Checkout -> AuditLog: logEvent("order.reconciled_from_webhook", tenantContext, orderId)
+activate AuditLog
+deactivate AuditLog
+
+Checkout --> Storefront: OrderCreatedResponse(orderId: 789)
+deactivate Checkout
+Storefront --> Shopper: HTTP 201 Created\nLocation: /orders/789
+deactivate Storefront
+deactivate TAG
+
+note over Shopper, Stripe
+    Alternative reconciliation path:
+    Stripe webhook "payment_intent.succeeded" received asynchronously
+    Webhook handler queries orders table for PENDING_PAYMENT + matching payment_intent_id
+    Transitions order to PROCESSING if found (same result)
+end note
+
+' ============================================================================
+' LEGEND & NOTES
+' ============================================================================
+
+legend right
+    **Saga Stages & Compensation Summary**
+
+    | Stage | Operation | Compensation on Failure |
+    |-------|-----------|------------------------|
+    | 1. Address Validation | Normalize address (USPS) | None (read-only) |
+    | 2. Shipping Rate Fetch | Query carriers (UPS/FedEx) | Fallback to flat rate |
+    | 3. Address Re-validation | Defensive check | None (read-only) |
+    | 4. Inventory Hold | Reserve stock (15min TTL) | DELETE reservations |
+    | 5. Loyalty Hold | Hold points (15min TTL) | DELETE holds |
+    | 6. Order Creation | INSERT order (PENDING_PAYMENT) | UPDATE status = CANCELLED |
+    | 7. Payment Processing | Stripe PaymentIntent | Release inventory + loyalty + cancel order |
+
+    **Observability**
+    - Spans: CheckoutSaga.{addressValidation, inventoryReservation, payment}
+    - Metrics: checkout.{rate_cache_hit_ratio, shipping_api_errors, payment.declined}
+    - Audit Events: All saga stages + compensations logged with TenantContext
+
+    **Idempotency**
+    - Client-provided X-Idempotency-Key (UUID, 24-hour window)
+    - Stripe API: orderId used as idempotency key (prevents double-charge)
+    - Network retry safety: Same key returns existing result
+
+    **Operational Runbooks**
+    - Shipping fallback: See platform_ops.md §5 "Carrier API Failure"
+    - Payment decline: Expected behavior, no ops action (customer retry)
+    - Webhook reconciliation: Automatic, orphaned orders reconciled within 5 minutes
+
+    **References**
+    - ADR-003: Checkout Saga Pattern & Compensation
+    - Architecture: docs/architecture/04_Operational_Architecture.md §3.2.7-3.2.8
+    - Mermaid Version: docs/diagrams/sequence_checkout_payment.mmd (design artifact)
+    - Platform Ops: docs/architecture/platform_ops.md §5-7
+end legend
+
+@enduml
