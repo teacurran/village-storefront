@@ -24,14 +24,17 @@ import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.PayoutBatch;
 import villagecompute.storefront.data.models.PayoutLineItem;
 import villagecompute.storefront.data.models.Product;
+import villagecompute.storefront.data.models.ProductVariant;
 import villagecompute.storefront.data.repositories.ConsignmentItemRepository;
 import villagecompute.storefront.data.repositories.ConsignorRepository;
 import villagecompute.storefront.data.repositories.PayoutBatchRepository;
 import villagecompute.storefront.data.repositories.PayoutLineItemRepository;
 import villagecompute.storefront.data.repositories.ProductRepository;
+import villagecompute.storefront.data.repositories.ProductVariantRepository;
 import villagecompute.storefront.services.events.ConsignmentItemReceivedPayload;
 import villagecompute.storefront.services.events.ConsignmentPayoutDuePayload;
 import villagecompute.storefront.tenant.TenantContext;
+import villagecompute.storefront.util.PgCryptoUtil;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -73,6 +76,9 @@ public class ConsignmentService {
     ProductRepository productRepository;
 
     @Inject
+    ProductVariantRepository productVariantRepository;
+
+    @Inject
     MeterRegistry meterRegistry;
 
     @Inject
@@ -96,6 +102,12 @@ public class ConsignmentService {
     @Inject
     villagecompute.storefront.notifications.NotificationService notificationService;
 
+    @Inject
+    villagecompute.storefront.data.repositories.CommissionScheduleRepository commissionScheduleRepository;
+
+    @Inject
+    PgCryptoUtil pgCryptoUtil;
+
     private final ConcurrentMap<UUID, AtomicReference<BigDecimal>> pendingPayoutGauges = new ConcurrentHashMap<>();
 
     // ========================================
@@ -109,10 +121,16 @@ public class ConsignmentService {
      *            consignor to create
      * @return created consignor with generated ID
      */
-    @Transactional
     public Consignor createConsignor(Consignor consignor) {
+        return createConsignor(consignor, null, null);
+    }
+
+    @Transactional
+    public Consignor createConsignor(Consignor consignor, String taxIdPlaintext, String keyVersion) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("Creating consignor - tenantId=%s, name=%s", tenantId, consignor.name);
+
+        applyEncryptedTaxId(consignor, taxIdPlaintext, keyVersion);
 
         consignorRepository.persist(consignor);
 
@@ -132,8 +150,13 @@ public class ConsignmentService {
      *            updated consignor data
      * @return updated consignor
      */
-    @Transactional
     public Consignor updateConsignor(UUID consignorId, Consignor updatedConsignor) {
+        return updateConsignor(consignorId, updatedConsignor, null, null);
+    }
+
+    @Transactional
+    public Consignor updateConsignor(UUID consignorId, Consignor updatedConsignor, String taxIdPlaintext,
+            String keyVersion) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         LOG.infof("Updating consignor - tenantId=%s, consignorId=%s", tenantId, consignorId);
 
@@ -145,6 +168,9 @@ public class ConsignmentService {
         consignor.payoutSettings = updatedConsignor.payoutSettings;
         consignor.status = updatedConsignor.status;
         consignor.updatedAt = OffsetDateTime.now();
+        if (taxIdPlaintext != null && !taxIdPlaintext.isBlank()) {
+            applyEncryptedTaxId(consignor, taxIdPlaintext, keyVersion);
+        }
 
         consignorRepository.persist(consignor);
 
@@ -225,6 +251,156 @@ public class ConsignmentService {
         LOG.infof("Consignor deleted successfully - tenantId=%s, consignorId=%s", tenantId, consignorId);
     }
 
+    private void applyEncryptedTaxId(Consignor consignor, String taxIdPlaintext, String keyVersion) {
+        if (consignor == null || taxIdPlaintext == null || taxIdPlaintext.isBlank()) {
+            return;
+        }
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        String effectiveVersion = (keyVersion != null && !keyVersion.isBlank()) ? keyVersion
+                : pgCryptoUtil.getDefaultKeyVersion();
+        consignor.taxIdEncrypted = pgCryptoUtil.encrypt(taxIdPlaintext.trim(), tenantId, effectiveVersion);
+        consignor.taxIdKeyVersion = effectiveVersion;
+        consignor.taxIdLastRotated = OffsetDateTime.now();
+        LOG.debugf("Applied encrypted tax ID - tenantId=%s, consignorId=%s, keyVersion=%s", tenantId, consignor.id,
+                effectiveVersion);
+    }
+
+    // ========================================
+    // Commission Schedule Operations
+    // ========================================
+
+    /**
+     * Create a commission schedule for a consignor.
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @param schedule
+     *            commission schedule to create
+     * @return created schedule
+     */
+    @Transactional
+    public villagecompute.storefront.data.models.CommissionSchedule createCommissionSchedule(UUID consignorId,
+            villagecompute.storefront.data.models.CommissionSchedule schedule) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Creating commission schedule - tenantId=%s, consignorId=%s, rate=%s", tenantId, consignorId,
+                schedule.commissionRate);
+
+        Consignor consignor = consignorRepository.findByIdAndTenant(consignorId)
+                .orElseThrow(() -> new IllegalArgumentException("Consignor not found: " + consignorId));
+
+        // Validate commission rate
+        if (schedule.commissionRate.compareTo(BigDecimal.ZERO) < 0
+                || schedule.commissionRate.compareTo(MAX_COMMISSION_RATE) > 0) {
+            throw new IllegalArgumentException("Commission rate must be between 0 and 100");
+        }
+        validateCommissionSchedule(consignor.id, schedule, null);
+
+        schedule.consignor = consignor;
+        commissionScheduleRepository.persist(schedule);
+
+        LOG.infof("Commission schedule created - tenantId=%s, scheduleId=%s, consignorId=%s", tenantId, schedule.id,
+                consignorId);
+        meterRegistry.counter("consignment.commission_schedule.created", "tenant_id", tenantId.toString()).increment();
+
+        return schedule;
+    }
+
+    /**
+     * Get active commission schedules for a consignor.
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @return list of active schedules
+     */
+    public List<villagecompute.storefront.data.models.CommissionSchedule> getActiveCommissionSchedules(
+            UUID consignorId) {
+        return commissionScheduleRepository.findActiveForConsignor(consignorId, java.time.LocalDate.now());
+    }
+
+    /**
+     * Get all commission schedules for a consignor.
+     *
+     * @param consignorId
+     *            consignor UUID
+     * @return list of schedules
+     */
+    public List<villagecompute.storefront.data.models.CommissionSchedule> getAllCommissionSchedules(UUID consignorId) {
+        return commissionScheduleRepository.findByConsignor(consignorId);
+    }
+
+    /**
+     * Update a commission schedule.
+     *
+     * @param scheduleId
+     *            schedule UUID
+     * @param updates
+     *            updated schedule data
+     * @return updated schedule
+     */
+    @Transactional
+    public villagecompute.storefront.data.models.CommissionSchedule updateCommissionSchedule(UUID scheduleId,
+            villagecompute.storefront.data.models.CommissionSchedule updates) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Updating commission schedule - tenantId=%s, scheduleId=%s", tenantId, scheduleId);
+
+        villagecompute.storefront.data.models.CommissionSchedule schedule = commissionScheduleRepository
+                .findByIdAndTenant(scheduleId)
+                .orElseThrow(() -> new IllegalArgumentException("Commission schedule not found: " + scheduleId));
+
+        validateCommissionSchedule(schedule.consignor.id, updates, scheduleId);
+        schedule.commissionRate = updates.commissionRate;
+        schedule.effectiveFrom = updates.effectiveFrom;
+        schedule.effectiveUntil = updates.effectiveUntil;
+        schedule.priority = updates.priority;
+        schedule.categoryId = updates.categoryId;
+        schedule.metadata = updates.metadata;
+        schedule.notes = updates.notes;
+        schedule.status = updates.status;
+        schedule.updatedAt = OffsetDateTime.now();
+
+        commissionScheduleRepository.persist(schedule);
+
+        LOG.infof("Commission schedule updated - tenantId=%s, scheduleId=%s", tenantId, scheduleId);
+        return schedule;
+    }
+
+    private void validateCommissionSchedule(UUID consignorId,
+            villagecompute.storefront.data.models.CommissionSchedule schedule, UUID existingId) {
+        if (schedule.effectiveFrom == null) {
+            throw new IllegalArgumentException("effectiveFrom is required");
+        }
+        if (schedule.effectiveUntil != null && schedule.effectiveUntil.isBefore(schedule.effectiveFrom)) {
+            throw new IllegalArgumentException("effectiveUntil must be on or after effectiveFrom");
+        }
+        List<villagecompute.storefront.data.models.CommissionSchedule> existing = commissionScheduleRepository
+                .findByConsignor(consignorId);
+        LocalDate newStart = schedule.effectiveFrom;
+        LocalDate newEnd = schedule.effectiveUntil != null ? schedule.effectiveUntil : LocalDate.MAX;
+
+        for (villagecompute.storefront.data.models.CommissionSchedule other : existing) {
+            if (existingId != null && existingId.equals(other.id)) {
+                continue;
+            }
+            if (!"active".equalsIgnoreCase(other.status)) {
+                continue;
+            }
+            boolean sameCategory = (other.categoryId == null && schedule.categoryId == null)
+                    || (other.categoryId != null && other.categoryId.equals(schedule.categoryId));
+            if (!sameCategory) {
+                continue;
+            }
+            LocalDate otherStart = other.effectiveFrom;
+            LocalDate otherEnd = other.effectiveUntil != null ? other.effectiveUntil : LocalDate.MAX;
+            if (datesOverlap(newStart, newEnd, otherStart, otherEnd)) {
+                throw new IllegalArgumentException("Overlapping commission schedule already exists for category");
+            }
+        }
+    }
+
+    private boolean datesOverlap(LocalDate start1, LocalDate end1, LocalDate start2, LocalDate end2) {
+        return !(end1.isBefore(start2) || end2.isBefore(start1));
+    }
+
     // ========================================
     // Consignment Item Operations
     // ========================================
@@ -242,6 +418,12 @@ public class ConsignmentService {
      */
     @Transactional
     public ConsignmentItem createConsignmentItem(UUID consignorId, UUID productId, BigDecimal commissionRate) {
+        return createConsignmentItem(consignorId, productId, null, commissionRate, null, null);
+    }
+
+    @Transactional
+    public ConsignmentItem createConsignmentItem(UUID consignorId, UUID productId, UUID variantId,
+            BigDecimal commissionRate, BigDecimal costBasis, String status) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         BigDecimal normalizedRate = normalizeCommissionRate(commissionRate);
         LOG.infof("Creating consignment item - tenantId=%s, productId=%s, consignorId=%s, commissionRate=%s", tenantId,
@@ -251,12 +433,22 @@ public class ConsignmentService {
                 .orElseThrow(() -> new IllegalArgumentException("Consignor not found: " + consignorId));
         Product product = productRepository.findByIdAndTenant(productId)
                 .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
+        ProductVariant variant = null;
+        if (variantId != null) {
+            variant = productVariantRepository.findByIdForTenant(variantId)
+                    .orElseThrow(() -> new IllegalArgumentException("Variant not found: " + variantId));
+            if (variant.product == null || !variant.product.id.equals(productId)) {
+                throw new IllegalArgumentException("Variant does not belong to provided product");
+            }
+        }
 
         ConsignmentItem item = new ConsignmentItem();
         item.consignor = consignor;
         item.product = product;
+        item.variant = variant;
         item.commissionRate = normalizedRate;
-        item.status = "active";
+        item.status = status != null && !status.isBlank() ? status : "active";
+        item.costBasis = costBasis;
 
         consignmentItemRepository.persist(item);
 
@@ -297,8 +489,15 @@ public class ConsignmentService {
         ConsignmentItem item = consignmentItemRepository.findByIdAndTenant(itemId)
                 .orElseThrow(() -> new IllegalArgumentException("Consignment item not found: " + itemId));
 
-        item.commissionRate = updatedItem.commissionRate;
-        item.status = updatedItem.status;
+        if (updatedItem.commissionRate != null) {
+            item.commissionRate = updatedItem.commissionRate;
+        }
+        if (updatedItem.status != null && !updatedItem.status.isBlank()) {
+            item.status = updatedItem.status;
+        }
+        if (updatedItem.costBasis != null) {
+            item.costBasis = updatedItem.costBasis;
+        }
         item.updatedAt = OffsetDateTime.now();
 
         consignmentItemRepository.persistAndFlush(item);

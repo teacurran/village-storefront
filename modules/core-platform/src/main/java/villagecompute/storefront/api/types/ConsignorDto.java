@@ -42,6 +42,12 @@ public class ConsignorDto {
     @JsonProperty("updatedAt")
     private OffsetDateTime updatedAt;
 
+    @JsonProperty("taxIdMasked")
+    private String taxIdMasked;
+
+    @JsonProperty("taxIdLastRotated")
+    private OffsetDateTime taxIdLastRotated;
+
     // Getters and setters
 
     public UUID getId() {
@@ -98,5 +104,21 @@ public class ConsignorDto {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getTaxIdMasked() {
+        return taxIdMasked;
+    }
+
+    public void setTaxIdMasked(String taxIdMasked) {
+        this.taxIdMasked = taxIdMasked;
+    }
+
+    public OffsetDateTime getTaxIdLastRotated() {
+        return taxIdLastRotated;
+    }
+
+    public void setTaxIdLastRotated(OffsetDateTime taxIdLastRotated) {
+        this.taxIdLastRotated = taxIdLastRotated;
     }
 }

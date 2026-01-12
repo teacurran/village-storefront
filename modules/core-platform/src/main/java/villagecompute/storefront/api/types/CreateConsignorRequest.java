@@ -30,6 +30,12 @@ public class CreateConsignorRequest {
     @JsonProperty("payoutSettings")
     private String payoutSettings;
 
+    @JsonProperty("taxId")
+    private String taxId;
+
+    @JsonProperty("taxIdKeyVersion")
+    private String taxIdKeyVersion;
+
     // Getters and setters
 
     public String getName() {
@@ -54,5 +60,21 @@ public class CreateConsignorRequest {
 
     public void setPayoutSettings(String payoutSettings) {
         this.payoutSettings = payoutSettings;
+    }
+
+    public String getTaxId() {
+        return taxId;
+    }
+
+    public void setTaxId(String taxId) {
+        this.taxId = taxId;
+    }
+
+    public String getTaxIdKeyVersion() {
+        return taxIdKeyVersion;
+    }
+
+    public void setTaxIdKeyVersion(String taxIdKeyVersion) {
+        this.taxIdKeyVersion = taxIdKeyVersion;
     }
 }

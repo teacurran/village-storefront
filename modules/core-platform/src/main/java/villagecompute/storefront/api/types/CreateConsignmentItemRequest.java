@@ -37,6 +37,9 @@ public class CreateConsignmentItemRequest {
     @JsonProperty("consignorId")
     private UUID consignorId;
 
+    @JsonProperty("variantId")
+    private UUID variantId;
+
     @JsonProperty("commissionRate")
     @NotNull(
             message = "Commission rate is required")
@@ -47,6 +50,12 @@ public class CreateConsignmentItemRequest {
             value = "100.00",
             message = "Commission rate cannot exceed 100%")
     private BigDecimal commissionRate;
+
+    @JsonProperty("costBasis")
+    private BigDecimal costBasis;
+
+    @JsonProperty("status")
+    private String status;
 
     // Getters and setters
 
@@ -66,11 +75,35 @@ public class CreateConsignmentItemRequest {
         this.consignorId = consignorId;
     }
 
+    public UUID getVariantId() {
+        return variantId;
+    }
+
+    public void setVariantId(UUID variantId) {
+        this.variantId = variantId;
+    }
+
     public BigDecimal getCommissionRate() {
         return commissionRate;
     }
 
     public void setCommissionRate(BigDecimal commissionRate) {
         this.commissionRate = commissionRate;
+    }
+
+    public BigDecimal getCostBasis() {
+        return costBasis;
+    }
+
+    public void setCostBasis(BigDecimal costBasis) {
+        this.costBasis = costBasis;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

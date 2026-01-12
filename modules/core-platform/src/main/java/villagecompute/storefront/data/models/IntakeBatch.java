@@ -15,32 +15,27 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 
 /**
- * Consignor entity representing a vendor who provides consignment inventory.
+ * IntakeBatch entity representing a batch of consignment items received from a vendor.
  *
  * <p>
- * Consignors are vendors who place items in the store for sale on consignment. The store handles sales and pays the
- * consignor their share based on commission agreements.
+ * Tracks the intake workflow for groups of consignment items, allowing bulk processing and audit trails.
  *
  * <p>
  * References:
  * <ul>
- * <li>ERD: datamodel_erd.puml (consignors table)</li>
- * <li>ADR-001: Multi-tenant data isolation via tenant_id</li>
- * <li>Task I3.T1: Consignment domain implementation</li>
+ * <li>Task I4.T1: Batch intake implementation</li>
+ * <li>Clarification 4: Batch intake workflows</li>
  * </ul>
  */
 @Entity
 @Table(
-        name = "consignors")
-public class Consignor extends PanacheEntityBase {
+        name = "intake_batches")
+public class IntakeBatch extends PanacheEntityBase {
 
     @Id
     @GeneratedValue
@@ -54,56 +49,43 @@ public class Consignor extends PanacheEntityBase {
             nullable = false)
     public Tenant tenant;
 
+    @ManyToOne(
+            fetch = FetchType.LAZY,
+            optional = false)
+    @JoinColumn(
+            name = "consignor_id",
+            nullable = false)
+    public Consignor consignor;
+
     @Column(
+            name = "batch_name",
             nullable = false,
             length = 255)
-    public String name;
+    public String batchName;
 
-    /**
-     * Contact information stored as JSONB. Expected fields: email, phone, address, etc.
-     */
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(
-            name = "contact_info",
-            columnDefinition = "jsonb")
-    public String contactInfo;
-
-    /**
-     * Payout settings stored as JSONB. Expected fields: default_commission_rate, payment_method, tax_info (encrypted),
-     * etc.
-     */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(
-            name = "payout_settings",
-            columnDefinition = "jsonb")
-    public String payoutSettings;
+            name = "notes",
+            length = 2000)
+    public String notes;
 
     @Column(
             nullable = false,
             length = 20)
-    public String status = "active"; // active|suspended|deleted
+    public String status = "pending"; // pending|completed|cancelled
 
-    /**
-     * Encrypted tax identifier (SSN/EIN) stored via pgcrypto (BYTEA).
-     */
     @Column(
-            name = "tax_id_encrypted")
-    public byte[] taxIdEncrypted;
+            name = "total_items",
+            nullable = false)
+    public Integer totalItems = 0;
 
-    /**
-     * Encryption key version for the current encrypted tax identifier.
-     */
     @Column(
-            name = "tax_id_key_version",
-            length = 20)
-    public String taxIdKeyVersion = "v1";
+            name = "processed_items",
+            nullable = false)
+    public Integer processedItems = 0;
 
-    /**
-     * Timestamp when the tax identifier was last rotated/re-encrypted.
-     */
     @Column(
-            name = "tax_id_last_rotated")
-    public OffsetDateTime taxIdLastRotated;
+            name = "completed_at")
+    public OffsetDateTime completedAt;
 
     @Version
     @Column(

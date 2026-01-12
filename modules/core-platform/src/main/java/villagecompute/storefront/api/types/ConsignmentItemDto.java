@@ -37,6 +37,15 @@ public class ConsignmentItemDto {
     @JsonProperty("consignorName")
     private String consignorName;
 
+    @JsonProperty("variantId")
+    private UUID variantId;
+
+    @JsonProperty("variantSku")
+    private String variantSku;
+
+    @JsonProperty("variantTitle")
+    private String variantTitle;
+
     @JsonProperty("commissionRate")
     private BigDecimal commissionRate;
 
@@ -45,6 +54,12 @@ public class ConsignmentItemDto {
 
     @JsonProperty("soldAt")
     private OffsetDateTime soldAt;
+
+    @JsonProperty("costBasis")
+    private BigDecimal costBasis;
+
+    @JsonProperty("intakeBatchId")
+    private UUID intakeBatchId;
 
     @JsonProperty("createdAt")
     private OffsetDateTime createdAt;
@@ -94,6 +109,30 @@ public class ConsignmentItemDto {
         this.consignorName = consignorName;
     }
 
+    public UUID getVariantId() {
+        return variantId;
+    }
+
+    public void setVariantId(UUID variantId) {
+        this.variantId = variantId;
+    }
+
+    public String getVariantSku() {
+        return variantSku;
+    }
+
+    public void setVariantSku(String variantSku) {
+        this.variantSku = variantSku;
+    }
+
+    public String getVariantTitle() {
+        return variantTitle;
+    }
+
+    public void setVariantTitle(String variantTitle) {
+        this.variantTitle = variantTitle;
+    }
+
     public BigDecimal getCommissionRate() {
         return commissionRate;
     }
@@ -132,5 +171,21 @@ public class ConsignmentItemDto {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public BigDecimal getCostBasis() {
+        return costBasis;
+    }
+
+    public void setCostBasis(BigDecimal costBasis) {
+        this.costBasis = costBasis;
+    }
+
+    public UUID getIntakeBatchId() {
+        return intakeBatchId;
+    }
+
+    public void setIntakeBatchId(UUID intakeBatchId) {
+        this.intakeBatchId = intakeBatchId;
     }
 }

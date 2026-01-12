@@ -4292,6 +4292,198 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateConsignmentItem
+      summary: Update consignment item
+      description: |
+        Updates commission rate, status, or cost basis for a consignment item.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConsignmentItemRequest'
+      responses:
+        '200':
+          description: Item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsignmentItem'
+        '404':
+          description: Consignment item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/intake-batches:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+    post:
+      operationId: createIntakeBatch
+      summary: Create intake batch
+      description: Creates a new intake batch to receive multiple consignment items.
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIntakeBatchRequest'
+      responses:
+        '201':
+          description: Intake batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntakeBatch'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/intake-batches/{batchId}/items:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+      - name: batchId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: addIntakeBatchItems
+      summary: Add items to intake batch
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddIntakeBatchItemsRequest'
+      responses:
+        '200':
+          description: List of created consignment items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConsignmentItem'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/intake-batches/{batchId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+      - name: batchId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: completeIntakeBatch
+      summary: Complete intake batch
+      tags: [Admin]
+      responses:
+        '200':
+          description: Completed intake batch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntakeBatch'
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /admin/consignors/{consignorId}/commission-schedules:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+    get:
+      operationId: listCommissionSchedules
+      summary: List commission schedules
+      tags: [Admin]
+      responses:
+        '200':
+          description: Array of commission schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommissionSchedule'
+    post:
+      operationId: createCommissionSchedule
+      summary: Create commission schedule
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommissionScheduleRequest'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommissionSchedule'
+
+  /admin/consignors/{consignorId}/commission-schedules/{scheduleId}:
+    parameters:
+      - $ref: '#/components/parameters/ConsignorIdParam'
+      - name: scheduleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updateCommissionSchedule
+      summary: Update commission schedule
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommissionScheduleRequest'
+      responses:
+        '200':
+          description: Schedule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommissionSchedule'
+        '404':
+          description: Schedule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     post:
       operationId: createConsignmentItem
       summary: Create consignment item
@@ -6936,6 +7128,13 @@ components:
         updatedAt:
           type: string
           format: date-time
+        taxIdMasked:
+          type: string
+          description: Masked tax identifier (last 4 digits only)
+        taxIdLastRotated:
+          type: string
+          format: date-time
+          description: Timestamp when the tax identifier was last rotated
 
     CreateConsignorRequest:
       type: object
@@ -6952,6 +7151,12 @@ components:
         payoutSettings:
           type: string
           description: JSON-encoded payout/tax preferences
+        taxId:
+          type: string
+          description: Plaintext tax identifier (encrypted at rest)
+        taxIdKeyVersion:
+          type: string
+          description: Optional encryption key version override
 
     ConsignmentItem:
       type: object
@@ -6981,6 +7186,13 @@ components:
           type: number
           format: double
           example: 15.0
+        variantId:
+          type: string
+          format: uuid
+        variantSku:
+          type: string
+        variantTitle:
+          type: string
         status:
           type: string
           enum: [active, sold, returned, deleted]
@@ -6988,6 +7200,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        costBasis:
+          type: number
+          format: double
+        intakeBatchId:
+          type: string
+          format: uuid
         createdAt:
           type: string
           format: date-time
@@ -7013,6 +7231,199 @@ components:
           type: string
           format: uuid
           description: Optional duplicate safeguard (must match path parameter if provided)
+        variantId:
+          type: string
+          format: uuid
+          description: Optional variant identifier when linking to existing catalog variant
+        costBasis:
+          type: number
+          format: double
+          description: Consignor-provided cost basis for the item
+        status:
+          type: string
+          enum: [active, sold, returned, deleted]
+
+    UpdateConsignmentItemRequest:
+      type: object
+      properties:
+        commissionRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [active, sold, returned, deleted]
+        costBasis:
+          type: number
+          format: double
+
+    IntakeBatch:
+      type: object
+      required: [id, batchName, status, totalItems, processedItems, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        batchName:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed, cancelled]
+        totalItems:
+          type: integer
+        processedItems:
+          type: integer
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateIntakeBatchRequest:
+      type: object
+      required: [batchName]
+      properties:
+        batchName:
+          type: string
+        notes:
+          type: string
+
+    AddIntakeBatchItemsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [productName, price]
+            properties:
+              productName:
+                type: string
+              description:
+                type: string
+              sku:
+                type: string
+              barcode:
+                type: string
+              price:
+                type: number
+                format: double
+              compareAtPrice:
+                type: number
+                format: double
+              costBasis:
+                type: number
+                format: double
+              commissionRate:
+                type: number
+                format: double
+              quantity:
+                type: integer
+              variantTitle:
+                type: string
+              metadata:
+                type: object
+
+    CommissionSchedule:
+      type: object
+      required: [id, consignorId, commissionRate, effectiveFrom, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        consignorId:
+          type: string
+          format: uuid
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        commissionRate:
+          type: number
+          format: double
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveUntil:
+          type: string
+          format: date
+          nullable: true
+        priority:
+          type: integer
+        notes:
+          type: string
+        metadata:
+          type: string
+          description: JSON metadata blob
+        status:
+          type: string
+          enum: [active, expired, superseded]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCommissionScheduleRequest:
+      type: object
+      required: [commissionRate, effectiveFrom]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        commissionRate:
+          type: number
+          format: double
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveUntil:
+          type: string
+          format: date
+          nullable: true
+        priority:
+          type: integer
+        notes:
+          type: string
+        metadata:
+          type: string
+
+    UpdateCommissionScheduleRequest:
+      type: object
+      required: [commissionRate, effectiveFrom]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        commissionRate:
+          type: number
+          format: double
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveUntil:
+          type: string
+          format: date
+          nullable: true
+        priority:
+          type: integer
+        notes:
+          type: string
+        metadata:
+          type: string
+        status:
+          type: string
+          enum: [active, expired, superseded]
 
     PayoutBatch:
       type: object
