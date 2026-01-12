@@ -470,6 +470,36 @@ public class GiftCardService {
     }
 
     /**
+     * Resend gift card code to recipient email (audit trail created).
+     */
+    @Transactional
+    public GiftCard resendGiftCard(Long giftCardId, String recipientEmail) {
+        Objects.requireNonNull(recipientEmail, "Recipient email is required");
+        GiftCard card = getGiftCard(giftCardId);
+
+        if (card.recipientEmail == null || card.recipientEmail.isBlank()) {
+            card.recipientEmail = recipientEmail;
+        }
+
+        GiftCardTransaction audit = new GiftCardTransaction();
+        audit.tenant = card.tenant;
+        audit.giftCard = card;
+        audit.amount = BigDecimal.ZERO;
+        audit.transactionType = "resent";
+        audit.balanceAfter = card.currentBalance;
+        audit.reason = "Gift card code resent to " + recipientEmail;
+        audit.persist();
+
+        reportingProjectionService.recordGiftCardLedgerEvent(audit);
+        LOG.infof("Resent gift card - tenantId=%s, giftCardId=%s, email=%s", TenantContext.getCurrentTenantId(),
+                giftCardId, recipientEmail);
+        meterRegistry.counter("giftcard.resent", "tenant_id", TenantContext.getCurrentTenantId().toString())
+                .increment();
+
+        return card;
+    }
+
+    /**
      * Value object describing redemption outcomes (amount applied and transaction reference).
      */
     public record GiftCardRedemptionResult(GiftCardTransaction transaction, BigDecimal amountRedeemed,

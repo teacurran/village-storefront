@@ -18,8 +18,7 @@ const fs = require('fs');
 const MODULES = ['modules/core-platform'];
 
 // Ensure Quarkus devservices (LocalStack) stay disabled during automated runs
-process.env.QUARKUS_AWS_DEVSERVICES_LOCALSTACK_ENABLED = 'false';
-process.env.QUARKUS_AMAZON_S3_DEVSERVICES_ENABLED = 'false';
+process.env.QUARKUS_S3_DEVSERVICES_ENABLED = 'false';
 
 function getModuleSelector() {
   return MODULES.join(',');
@@ -122,8 +121,7 @@ function runTests() {
     [
       '-pl', getModuleSelector(),
       '-am',
-      '-Dquarkus.aws.devservices.localstack.enabled=false',
-      '-Dquarkus.amazon.s3.devservices.enabled=false',
+      '-Dquarkus.s3.devservices.enabled=false',
       '-B',              // Batch mode (non-interactive)
       '-T', '1C',        // Parallel builds (1 thread per CPU core)
       ...(isNative ? ['-Pnative'] : []),

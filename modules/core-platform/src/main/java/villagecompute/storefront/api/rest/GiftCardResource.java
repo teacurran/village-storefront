@@ -28,6 +28,7 @@ import villagecompute.storefront.api.types.GiftCardTransactionDto;
 import villagecompute.storefront.api.types.IssueGiftCardRequest;
 import villagecompute.storefront.api.types.PaginationMetadata;
 import villagecompute.storefront.api.types.RedeemGiftCardRequest;
+import villagecompute.storefront.api.types.ResendGiftCardRequest;
 import villagecompute.storefront.api.types.UpdateGiftCardRequest;
 import villagecompute.storefront.data.models.GiftCard;
 import villagecompute.storefront.data.models.GiftCardTransaction;
@@ -167,6 +168,21 @@ public class GiftCardResource {
             GiftCard card = giftCardService.updateGiftCard(giftCardId, request);
             return Response.ok(giftCardMapper.toDto(card)).build();
         } catch (IllegalArgumentException | IllegalStateException ex) {
+            return Response.status(Status.BAD_REQUEST).entity(createError(ex.getMessage())).build();
+        }
+    }
+
+    @POST
+    @Path("/admin/gift-cards/{giftCardId}/resend")
+    @RolesAllowed({"admin"})
+    public Response resendGiftCard(@PathParam("giftCardId") Long giftCardId, @Valid ResendGiftCardRequest request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /admin/gift-cards/%s/resend - tenantId=%s", giftCardId, tenantId);
+
+        try {
+            GiftCard card = giftCardService.resendGiftCard(giftCardId, request.recipientEmail);
+            return Response.ok(giftCardMapper.toDto(card)).build();
+        } catch (IllegalArgumentException ex) {
             return Response.status(Status.BAD_REQUEST).entity(createError(ex.getMessage())).build();
         }
     }

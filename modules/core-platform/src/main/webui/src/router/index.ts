@@ -18,6 +18,7 @@ import { reportingRoutes } from '@/modules/reporting/routes'
 import { loyaltyRoutes } from '@/modules/loyalty/routes'
 import { notificationsRoutes } from '@/modules/notifications/routes'
 import { platformRoutes } from '@/modules/platform/routes'
+import { giftcardRoutes } from '@/modules/giftcard/routes'
 
 const router = createRouter({
   history: createWebHistory('/admin'),
@@ -80,6 +81,7 @@ const router = createRouter({
         ...inventoryRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
         ...reportingRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
         ...loyaltyRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
+        ...giftcardRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
         ...notificationsRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
         ...platformRoutes.map((r) => ({ ...r, path: r.path.replace('/admin/', '') })),
       ],
