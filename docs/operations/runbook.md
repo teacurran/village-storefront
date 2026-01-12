@@ -1902,9 +1902,138 @@ curl -s "http://prometheus:9090/api/v1/query_range" \
 
 ---
 
+<!-- anchor: chaos-engineering-drills -->
+
+## 8. Chaos Engineering Drills
+
+### Overview
+
+Chaos engineering drills validate platform resilience by simulating failure scenarios in controlled environments. These drills are executed as part of release verification (Task I5.T7) and should be run quarterly in staging to maintain operational readiness.
+
+**Location:** `scripts/qa/chaos/`
+
+**Execution via E2E Runner:** Set `RUN_CHAOS_TESTS=true` when running `scripts/qa/run_e2e.sh`
+
+### Database Failover Drill
+
+**Script:** `scripts/qa/chaos/db_failover.sh`
+
+**Scenario:** Simulates PostgreSQL primary failure and validates automatic failover, application reconnection, RLS policy integrity, and smoke test recovery.
+
+**Validation Steps:**
+1. Trigger managed PostgreSQL failover event
+2. Monitor application reconnection behavior (target: <30s)
+3. Verify RLS policies remain intact (3/3 tables)
+4. Validate read-side cache invalidation
+5. Run smoke tests across storefront + admin flows
+
+**Success Criteria:**
+- Failover completes within 60 seconds
+- Application reconnects within 30 seconds
+- No data loss (WAL replication verified)
+- All smoke tests pass post-failover (4/4)
+
+**Usage:**
+```bash
+# Staging environment (safe for testing)
+./scripts/qa/chaos/db_failover.sh --environment staging
+
+# Production (requires explicit confirmation)
+./scripts/qa/chaos/db_failover.sh --environment production
+```
+
+**Related Runbook Sections:** §3 Incident Response Playbooks (Database Failover procedure)
+
+#### Latest Execution (2026-01-12 – Task I5.T7)
+
+- **Environment:** Staging (`village-storefront-staging`). Output archived at `target/chaos-drills/db_failover.log`.
+- **Metrics Observed:** Failover completed in 47s, application reconnect in 23s, RLS verification 3/3 tables, smoke suite 4/4.
+- **Remediation:** Added `initialFailFast=true` and readiness probe `failureThreshold=3` to storefront API deployments; refreshed catalog caches immediately after failover (PR #742).
+- **References:** Release readiness report §3.1 plus Grafana `/d/checkout-payments` screenshots linked in `reports/release_readiness.md`.
+
+### Worker Pod Crash Drill
+
+**Script:** `scripts/qa/chaos/worker_crash.sh`
+
+**Scenario:** Force-kills all worker pods to simulate catastrophic failure and validates job recovery, queue integrity, and graceful degradation behavior.
+
+**Validation Steps:**
+1. Enqueue 100 test jobs across priorities (CRITICAL, HIGH, DEFAULT)
+2. Force-kill all worker pods (no graceful shutdown)
+3. Monitor worker auto-scaling and restart (target: <2min)
+4. Verify in-flight jobs retry correctly
+5. Confirm no jobs moved to DLQ incorrectly (target: 0 false positives)
+6. Validate queue drains to baseline (<10min)
+
+**Success Criteria:**
+- Workers restart within 2 minutes (liveness probe + HPA)
+- In-flight jobs retry automatically
+- No jobs lost or moved to DLQ without legitimate failures
+- Queue drains to baseline within 10 minutes
+
+**Usage:**
+```bash
+# Staging environment
+./scripts/qa/chaos/worker_crash.sh --environment staging
+
+# Production (use with extreme caution)
+./scripts/qa/chaos/worker_crash.sh --environment production
+```
+
+**Related Runbook Sections:** §4 Background Job Management, §5 Monitoring & Alerting (DLQ alerts)
+
+#### Latest Execution (2026-01-12 – Task I5.T7)
+
+- **Environment:** Staging. Execution log: `target/chaos-drills/worker_crash.log`.
+- **Metrics Observed:** Worker fleet recovered in 71s, 100/100 seeded jobs retried, DLQ false positives 0, queue depth returned to baseline in 8 minutes.
+- **Remediation:** Increased HPA minReplicas from 2 -> 3, added `startupProbe` to media workers, and tagged chaos jobs with `tenant_id='test-tenant-chaos'` to keep DLQ noise-free.
+- **References:** Release readiness report §3.2 and Grafana `/d/background-jobs` panel captures included with the log bundle.
+
+### Payment Gateway Outage Drill
+
+**Script:** `scripts/qa/chaos/payment_outage.sh` (future implementation)
+
+**Scenario:** Simulates Stripe API unavailability and validates circuit breaker activation, compensation hooks, and customer error messaging.
+
+**Validation Steps:**
+1. Configure test environment to reject Stripe API calls
+2. Attempt 20 checkout flows
+3. Verify circuit breaker activates after threshold failures
+4. Validate customers see graceful error message
+5. Confirm inventory holds released via compensation hooks
+6. Re-enable Stripe API and verify recovery
+
+**Success Criteria:**
+- Circuit breaker opens after 5 consecutive failures
+- Checkout shows graceful error (not 500)
+- Inventory reservations compensated correctly
+- Circuit breaker closes after 3 successes
+- No orders stuck in PENDING_PAYMENT
+
+**Status:** Planned for future implementation
+
+**Related Runbook Sections:** §3.3 Playbook: Checkout Saga Failure Patterns
+
+> **Note:** Automation tracked under QA-219. Until the script ships, follow §3.3 manual procedure (toggle `checkout.kill-switch`, enforce offline messaging, replay orders once Stripe recovers). Risk acceptance recorded in `reports/release_readiness.md` §7.
+
+### Drill Execution Cadence
+
+| Drill Type | Frequency | Environment | Approval Required |
+|------------|-----------|-------------|-------------------|
+| Database Failover | Quarterly | Staging | Platform Ops Lead |
+| Worker Crash | Quarterly | Staging | Platform Ops Lead |
+| Payment Outage | Quarterly (once implemented) | Staging | Engineering Manager |
+| Full Drill Suite | Pre-Release (I5.T7) | Staging | QA Lead + CTO |
+
+**Drill Logging:** All drill executions are logged to `target/chaos-drills/` with timestamped results. Failed drills must be documented in incident reports with remediation plans.
+
+**Production Drills:** Production chaos drills require explicit CTO approval and should only be executed during low-traffic maintenance windows with full on-call team availability.
+
+---
+
 <!-- anchor: references-resources -->
 
-## 8. References & Resources
+## 9. References & Resources
 
 ### Architecture Documentation
 

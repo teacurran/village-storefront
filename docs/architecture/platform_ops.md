@@ -1483,10 +1483,39 @@ kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
 | CTO | SEV-1 incidents affecting revenue or data loss | Escalation after 30 minutes |
 
 ---
+<!-- anchor: verification-release-readiness -->
+
+## 8. Verification & Release Readiness Evidence
+
+### 8.1 Automation Hooks
+
+- **Full Plan Runner:** `scripts/qa/run_e2e.sh` accepts `RUN_PERF_TESTS`, `RUN_CHAOS_TESTS`, and `GENERATE_REPORT` flags. Chaos scripts respect `--auto-approve` for CI safety and write logs under `target/chaos-drills/`.
+- **Load Testing:** k6 scripts live in `tests/load/k6/` (checkout, POS, media). Results exported to `target/load-tests/*.json` and summarized in `docs/quality/performance-test-report.md`.
+- **Release Artifact:** `reports/release_readiness.md` aggregates coverage, regression matrix, load benchmarks, chaos outcomes, and governance sign-offs.
+
+### 8.2 Coverage & Performance Snapshot (I5.T7 – 2026-01-12)
+
+| Metric | Result |
+|--------|--------|
+| Unit Coverage | 86.1% line / 82.0% branch (Consignment branch 79.4% risk accepted – QA-218) |
+| Integration Coverage | 614/616 REST-assured scenarios passed (Shipping fallback pending OPS-641) |
+| E2E Coverage | 143/143 Playwright specs green across Chromium/Firefox/WebKit + mobile |
+| Load | Checkout p95 preview 248 ms, commit 412 ms; 118 checkouts/min sustained |
+| POS Offline | Batch validation 1.4 s, replay p95 92 ms, offline switch 420 ms |
+| Lighthouse | Weighted score 93 (LCP <= 1.92 s on all key pages) |
+
+### 8.3 Chaos & Operational Drills
+
+- **Database Failover:** `scripts/qa/chaos/db_failover.sh --auto-approve` validated failover (47 s) + reconnection (23 s). Remediation: enable Hikari `initialFailFast`, document cache flush.
+- **Worker Crash:** `scripts/qa/chaos/worker_crash.sh --auto-approve` forced pod deletions, recovered in 71 s with no DLQ pollution. Resulting actions: HPA minReplicas 3, `startupProbe` added.
+- **Payment Outage:** Automation deferred to QA-219; manual fallback described in runbook §3.3 until Stripe sandbox supports TLS reset simulation.
+- **Artifacts:** Logs archived under `target/chaos-drills/` and referenced by runbook §8; measurements summarized in `reports/release_readiness.md` §3.
+
+---
 
 <!-- anchor: references-related-documents -->
 
-## 8. References & Related Documents
+## 9. References & Related Documents
 
 ### Architecture Documents
 
