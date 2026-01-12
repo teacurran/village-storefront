@@ -92,7 +92,7 @@ class StripeIntegrationTest {
 
         PaymentProvider.CreatePaymentIntentRequest createRequest = new PaymentProvider.CreatePaymentIntentRequest(
                 amount, "USD", null, null, false, Map.of("order_id", "ORDER-123", "test", "integration"),
-                idempotencyKey);
+                idempotencyKey, null, null);
 
         PaymentProvider.PaymentIntentResult createResult = stripeProvider.createIntent(createRequest);
 
@@ -130,7 +130,7 @@ class StripeIntegrationTest {
         BigDecimal amount = new BigDecimal("200.00");
 
         PaymentProvider.CreatePaymentIntentRequest createRequest = new PaymentProvider.CreatePaymentIntentRequest(
-                amount, "USD", null, null, true, Map.of("test", "refund-flow"), idempotencyKey);
+                amount, "USD", null, null, true, Map.of("test", "refund-flow"), idempotencyKey, null, null);
 
         PaymentProvider.PaymentIntentResult createResult = stripeProvider.createIntent(createRequest);
         String paymentIntentId = createResult.paymentIntentId();
@@ -158,7 +158,8 @@ class StripeIntegrationTest {
         String idempotencyKey = "test-cancel-" + System.currentTimeMillis();
 
         PaymentProvider.CreatePaymentIntentRequest createRequest = new PaymentProvider.CreatePaymentIntentRequest(
-                new BigDecimal("75.00"), "USD", null, null, false, Map.of("test", "cancellation"), idempotencyKey);
+                new BigDecimal("75.00"), "USD", null, null, false, Map.of("test", "cancellation"), idempotencyKey, null,
+                null);
 
         PaymentProvider.PaymentIntentResult createResult = stripeProvider.createIntent(createRequest);
         String paymentIntentId = createResult.paymentIntentId();
@@ -244,7 +245,7 @@ class StripeIntegrationTest {
         BigDecimal amount = new BigDecimal("99.99");
 
         PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(amount,
-                "USD", null, null, false, Map.of("test", "idempotency"), idempotencyKey);
+                "USD", null, null, false, Map.of("test", "idempotency"), idempotencyKey, null, null);
 
         PaymentProvider.PaymentIntentResult result1 = stripeProvider.createIntent(request);
         PaymentProvider.PaymentIntentResult result2 = stripeProvider.createIntent(request);
@@ -263,7 +264,7 @@ class StripeIntegrationTest {
     @Test
     void testStubModeBehavior() {
         PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(
-                new BigDecimal("10.00"), "USD", null, null, true, Map.of("test", "stub"), "stub-key-123");
+                new BigDecimal("10.00"), "USD", null, null, true, Map.of("test", "stub"), "stub-key-123", null, null);
 
         PaymentProvider.PaymentIntentResult result = stripeProvider.createIntent(request);
 
@@ -286,7 +287,8 @@ class StripeIntegrationTest {
         BigDecimal authorizedAmount = new BigDecimal("100.00");
 
         PaymentProvider.CreatePaymentIntentRequest createRequest = new PaymentProvider.CreatePaymentIntentRequest(
-                authorizedAmount, "USD", null, null, false, Map.of("test", "partial-capture"), idempotencyKey);
+                authorizedAmount, "USD", null, null, false, Map.of("test", "partial-capture"), idempotencyKey, null,
+                null);
 
         PaymentProvider.PaymentIntentResult createResult = stripeProvider.createIntent(createRequest);
         String paymentIntentId = createResult.paymentIntentId();
@@ -312,7 +314,7 @@ class StripeIntegrationTest {
                 "web");
 
         PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(
-                new BigDecimal("125.00"), "USD", null, null, false, metadata, idempotencyKey);
+                new BigDecimal("125.00"), "USD", null, null, false, metadata, idempotencyKey, null, null);
 
         PaymentProvider.PaymentIntentResult result = stripeProvider.createIntent(request);
 

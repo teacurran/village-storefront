@@ -2,7 +2,7 @@ package villagecompute.storefront.services;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -11,6 +11,9 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.PaymentIntent;
@@ -49,6 +52,9 @@ public class PaymentService {
     @Inject
     ConsignmentService consignmentService;
 
+    @Inject
+    ObjectMapper objectMapper;
+
     /**
      * Create a payment intent and persist it locally.
      *
@@ -84,16 +90,32 @@ public class PaymentService {
                 }
             }
 
+            MarketplaceProvider.PlatformFeeCalculation feeCalculation = stripeMarketplaceProvider
+                    .calculatePlatformFee(tenantId, amount);
+            BigDecimal applicationFeeAmount = feeCalculation.platformFeeAmount();
+
             // Create payment intent via provider
-            Map<String, String> metadata = new HashMap<>();
+            Map<String, String> metadata = new LinkedHashMap<>();
             if (orderId != null) {
                 metadata.put("order_id", orderId.toString());
+            }
+            if (applicationFeeAmount != null) {
+                metadata.put("platform_fee_amount", applicationFeeAmount.toPlainString());
+            }
+            if (feeCalculation.platformFeePercentage() != null) {
+                metadata.put("platform_fee_percentage", feeCalculation.platformFeePercentage().toPlainString());
+            }
+            if (feeCalculation.netAmount() != null) {
+                metadata.put("platform_net_amount", feeCalculation.netAmount().toPlainString());
+            }
+            if (feeCalculation.calculationNote() != null) {
+                metadata.put("platform_fee_note", feeCalculation.calculationNote());
             }
 
             PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(amount,
                     currency, null, // customerId - TODO: lookup from order
                     null, // paymentMethodId - will be provided by client
-                    captureImmediately, metadata, idempotencyKey);
+                    captureImmediately, metadata, idempotencyKey, applicationFeeAmount, null);
 
             PaymentProvider.PaymentIntentResult result = stripePaymentProvider.createIntent(request);
 
@@ -112,6 +134,7 @@ public class PaymentService {
             paymentIntent.idempotencyKey = idempotencyKey;
             paymentIntent.createdAt = Instant.now();
             paymentIntent.updatedAt = Instant.now();
+            serializeMetadata(tenantId, paymentIntent, metadata);
             paymentIntent.persist();
 
             LOGGER.infof("[Tenant: %s] Created payment intent: id=%d, provider_id=%s, amount=%s %s", tenantId,
@@ -294,5 +317,18 @@ public class PaymentService {
                 config.feePercentage.multiply(BigDecimal.valueOf(100)), config.fixedFeeAmount, config.currency);
 
         return config;
+    }
+
+    private void serializeMetadata(UUID tenantId, PaymentIntent paymentIntent, Map<String, String> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            paymentIntent.metadata = null;
+            return;
+        }
+        try {
+            paymentIntent.metadata = objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException e) {
+            LOGGER.warnf(e, "[Tenant: %s] Failed to serialize payment metadata for intent %s", tenantId,
+                    paymentIntent.providerPaymentId);
+        }
     }
 }

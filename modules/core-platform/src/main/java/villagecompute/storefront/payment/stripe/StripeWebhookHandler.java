@@ -18,10 +18,12 @@ import com.stripe.exception.SignatureVerificationException;
 import com.stripe.net.Webhook;
 
 import villagecompute.storefront.data.models.ConnectAccount;
+import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.PayoutBatch;
 import villagecompute.storefront.data.models.WebhookEvent;
 import villagecompute.storefront.payment.WebhookHandler;
+import villagecompute.storefront.services.OrderService;
 import villagecompute.storefront.services.PaymentJobService;
 import villagecompute.storefront.tenant.TenantContext;
 
@@ -51,6 +53,9 @@ public class StripeWebhookHandler implements WebhookHandler {
 
     @Inject
     PaymentJobService paymentJobService;
+
+    @Inject
+    OrderService orderService;
 
     @Override
     public boolean verifySignature(String payload, String signature, String secret) {
@@ -195,6 +200,7 @@ public class StripeWebhookHandler implements WebhookHandler {
             }
         }
         paymentIntent.updatedAt = Instant.now();
+        syncOrderState(paymentIntent);
     }
 
     private void handleChargeRefunded(UUID tenantId, JsonNode payload) {
@@ -216,6 +222,7 @@ public class StripeWebhookHandler implements WebhookHandler {
             paymentIntent.amountRefunded = refunded;
         }
         paymentIntent.updatedAt = Instant.now();
+        updateOrderRefundState(paymentIntent);
     }
 
     private void handleDisputeCreated(UUID tenantId, JsonNode payload) {
@@ -313,5 +320,38 @@ public class StripeWebhookHandler implements WebhookHandler {
             return BigDecimal.valueOf(amountNode.asLong()).movePointLeft(2);
         }
         return null;
+    }
+
+    private void syncOrderState(PaymentIntent paymentIntent) {
+        if (paymentIntent.orderId == null) {
+            return;
+        }
+        try {
+            if (paymentIntent.status == PaymentIntent.PaymentStatus.CAPTURED) {
+                orderService.markOrderPaid(paymentIntent.orderId, paymentIntent.providerPaymentId);
+            } else if (paymentIntent.status == PaymentIntent.PaymentStatus.CANCELLED
+                    || paymentIntent.status == PaymentIntent.PaymentStatus.FAILED) {
+                orderService.updateOrderStatus(paymentIntent.orderId, Order.OrderStatus.PENDING_PAYMENT);
+            }
+        } catch (Exception e) {
+            LOGGER.warnf(e, "Failed to synchronize order %s for payment intent %s", paymentIntent.orderId,
+                    paymentIntent.providerPaymentId);
+        }
+    }
+
+    private void updateOrderRefundState(PaymentIntent paymentIntent) {
+        if (paymentIntent.orderId == null || paymentIntent.amountCaptured == null
+                || paymentIntent.amountRefunded == null) {
+            return;
+        }
+        if (paymentIntent.amountRefunded.compareTo(paymentIntent.amountCaptured) < 0) {
+            return;
+        }
+        try {
+            orderService.updateOrderStatus(paymentIntent.orderId, Order.OrderStatus.REFUNDED);
+        } catch (Exception e) {
+            LOGGER.warnf(e, "Failed to mark order %s refunded for payment intent %s", paymentIntent.orderId,
+                    paymentIntent.providerPaymentId);
+        }
     }
 }

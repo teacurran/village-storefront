@@ -97,10 +97,8 @@ class StripeProviderTest {
     void testCreatePaymentIntent_AutomaticCapture() {
         // Given
         PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(
-                new BigDecimal("100.00"), "USD", null, // No customer
-                null, // No payment method (will be added by client)
-                true, // Capture immediately
-                Map.of("test", "true", "order_id", "12345"), "test-idempotency-key-" + System.currentTimeMillis());
+                new BigDecimal("100.00"), "USD", null, null, true, Map.of("test", "true", "order_id", "12345"),
+                "test-idempotency-key-" + System.currentTimeMillis(), null, null);
 
         // When
         PaymentProvider.PaymentIntentResult result = stripePaymentProvider.createIntent(request);
@@ -124,8 +122,8 @@ class StripeProviderTest {
     void testCreatePaymentIntent_ManualCapture() {
         // Given
         PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(
-                new BigDecimal("50.00"), "USD", null, null, false, // Manual capture
-                Map.of("test", "true"), "test-manual-" + System.currentTimeMillis());
+                new BigDecimal("50.00"), "USD", null, null, false, Map.of("test", "true"),
+                "test-manual-" + System.currentTimeMillis(), null, null);
 
         // When
         PaymentProvider.PaymentIntentResult result = stripePaymentProvider.createIntent(request);
@@ -206,7 +204,8 @@ class StripeProviderTest {
         // Given
         String idempotencyKey = "test-idempotent-" + System.currentTimeMillis();
         PaymentProvider.CreatePaymentIntentRequest request = new PaymentProvider.CreatePaymentIntentRequest(
-                new BigDecimal("25.00"), "USD", null, null, true, Map.of("test", "idempotency"), idempotencyKey);
+                new BigDecimal("25.00"), "USD", null, null, true, Map.of("test", "idempotency"), idempotencyKey, null,
+                null);
 
         // When - create payment twice with same idempotency key
         PaymentProvider.PaymentIntentResult result1 = stripePaymentProvider.createIntent(request);

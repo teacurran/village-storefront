@@ -113,6 +113,14 @@
           }
         }
       },
+      "CapturePaymentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "amountToCapture" : {
+            "type" : "number"
+          }
+        }
+      },
       "CartDto" : {
         "type" : "object",
         "properties" : {
@@ -601,6 +609,29 @@
           }
         }
       },
+      "CreatePaymentIntentRequest" : {
+        "type" : "object",
+        "required" : [ "amount", "currency" ],
+        "properties" : {
+          "amount" : {
+            "type" : "number",
+            "minimum" : 0.01
+          },
+          "currency" : {
+            "type" : "string",
+            "pattern" : "\\S"
+          },
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "captureImmediately" : {
+            "type" : "boolean"
+          },
+          "idempotencyKey" : {
+            "type" : "string"
+          }
+        }
+      },
       "CspReport" : {
         "type" : "object",
         "properties" : {
@@ -905,6 +936,37 @@
           }
         }
       },
+      "PaymentIntentResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "providerPaymentId" : {
+            "type" : "string"
+          },
+          "clientSecret" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "amount" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "orderId" : {
+            "$ref" : "#/components/schemas/UUID"
+          },
+          "metadata" : {
+            "type" : "object",
+            "additionalProperties" : { }
+          }
+        }
+      },
       "PlatformEvent" : {
         "type" : "object"
       },
@@ -1120,6 +1182,19 @@
           },
           "offlineSyncedAt" : {
             "$ref" : "#/components/schemas/OffsetDateTime"
+          }
+        }
+      },
+      "RefundPaymentRequest" : {
+        "type" : "object",
+        "required" : [ "amountToRefund" ],
+        "properties" : {
+          "amountToRefund" : {
+            "type" : "number",
+            "minimum" : 0.01
+          },
+          "reason" : {
+            "type" : "string"
           }
         }
       },
@@ -4817,6 +4892,215 @@
         }
       }
     },
+    "/api/v1/payments/intents" : {
+      "post" : {
+        "summary" : "Create payment intent",
+        "description" : "Creates a Stripe payment intent with platform fee calculation and metadata.\nReturns client secret for use with Stripe.js or mobile SDKs.\n\n**Idempotency:** Supply Idempotency-Key header to safely retry requests.\n**Feature Flags:** Respects `payments.stripe.enabled` kill switch.\n**Authentication:** Requires valid session or guest checkout token.\n",
+        "operationId" : "createPaymentIntent",
+        "tags" : [ "Payments" ],
+        "parameters" : [ {
+          "description" : "Idempotency key ensuring safe retries",
+          "required" : false,
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreatePaymentIntentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Payment intent created successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentIntentResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Invalid request parameters",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "409" : {
+            "description" : "Idempotency key conflict - different request body with same key",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Payment provider error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/intents/{id}" : {
+      "get" : {
+        "summary" : "Get payment intent details",
+        "description" : "Retrieves payment intent details by local ID.\n\n**Authorization:** Requires admin or order owner permissions.\n",
+        "operationId" : "getPaymentIntent",
+        "tags" : [ "Payments" ],
+        "parameters" : [ {
+          "description" : "Payment intent ID",
+          "required" : true,
+          "name" : "id",
+          "in" : "path",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Payment intent found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentIntentResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Payment intent not found",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/intents/{id}/capture" : {
+      "post" : {
+        "summary" : "Capture authorized payment",
+        "description" : "Captures a payment intent that was created with manual capture mode.\nUsed for delayed capture flows (e.g., after fulfillment).\n\n**Authorization:** Requires admin or order owner permissions.\n**Feature Flags:** Respects `payments.stripe.enabled` kill switch.\n",
+        "operationId" : "capturePayment",
+        "tags" : [ "Payments" ],
+        "parameters" : [ {
+          "description" : "Payment intent ID",
+          "required" : true,
+          "name" : "id",
+          "in" : "path",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CapturePaymentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Payment captured successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentIntentResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Payment not in authorized state",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Payment intent not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Payment provider error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/intents/{id}/refund" : {
+      "post" : {
+        "summary" : "Refund captured payment",
+        "description" : "Refunds a captured payment, either fully or partially.\nAutomatically handles consignment commission reversals.\n\n**Authorization:** Requires admin permissions.\n**Feature Flags:** Respects `payments.stripe.enabled` kill switch.\n**Side Effects:** Triggers order refund workflow and consignment adjustments.\n",
+        "operationId" : "refundPayment",
+        "tags" : [ "Payments" ],
+        "parameters" : [ {
+          "description" : "Payment intent ID",
+          "required" : true,
+          "name" : "id",
+          "in" : "path",
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundPaymentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Refund processed successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentIntentResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Payment not in captured state or invalid amount",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "404" : {
+            "description" : "Payment intent not found",
+            "content" : {
+              "application/json" : { }
+            }
+          },
+          "500" : {
+            "description" : "Payment provider error",
+            "content" : {
+              "application/json" : { }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/audit" : {
       "get" : {
         "parameters" : [ {
@@ -6328,6 +6612,9 @@
   }, {
     "name" : "POS Offline",
     "description" : "POS device management and offline transaction sync"
+  }, {
+    "name" : "Payments",
+    "description" : "Payment intent creation, capture, and refund operations"
   }, {
     "name" : "Storefront",
     "description" : "Customer-facing order operations"

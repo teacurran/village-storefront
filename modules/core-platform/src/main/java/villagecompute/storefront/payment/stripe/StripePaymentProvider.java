@@ -18,6 +18,7 @@ import com.stripe.net.RequestOptions;
 import com.stripe.param.PaymentIntentCancelParams;
 import com.stripe.param.PaymentIntentCaptureParams;
 import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.PaymentIntentCreateParams.TransferData;
 import com.stripe.param.RefundCreateParams;
 
 import villagecompute.storefront.featureflags.FeatureFlagged;
@@ -85,8 +86,7 @@ public class StripePaymentProvider implements PaymentProvider {
             init();
 
             // Convert amount to cents (Stripe requires smallest currency unit)
-            Long amountInCents = request.amount().multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP)
-                    .longValueExact();
+            Long amountInCents = toStripeAmount(request.amount());
 
             PaymentIntentCreateParams.Builder paramsBuilder = PaymentIntentCreateParams.builder()
                     .setAmount(amountInCents).setCurrency(request.currency().toLowerCase())
@@ -108,6 +108,16 @@ public class StripePaymentProvider implements PaymentProvider {
 
             // Add tenant ID to metadata for tracking
             paramsBuilder.putMetadata("tenant_id", tenantTag);
+
+            if (request.applicationFeeAmount() != null && stripeConfig.connectEnabled()) {
+                paramsBuilder.setApplicationFeeAmount(toStripeAmount(request.applicationFeeAmount()));
+            }
+
+            if (request.transferDestinationAccountId() != null && stripeConfig.connectEnabled()) {
+                TransferData transferData = TransferData.builder()
+                        .setDestination(request.transferDestinationAccountId()).build();
+                paramsBuilder.setTransferData(transferData);
+            }
 
             RequestOptions requestOptions = null;
             if (request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
@@ -158,7 +168,7 @@ public class StripePaymentProvider implements PaymentProvider {
             PaymentIntentCaptureParams.Builder paramsBuilder = PaymentIntentCaptureParams.builder();
 
             if (amountToCapture != null) {
-                Long amountInCents = amountToCapture.multiply(BigDecimal.valueOf(100)).longValue();
+                Long amountInCents = toStripeAmount(amountToCapture);
                 paramsBuilder.setAmountToCapture(amountInCents);
             }
 
@@ -204,8 +214,7 @@ public class StripePaymentProvider implements PaymentProvider {
         try {
             init();
 
-            Long amountInCents = amountToRefund.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP)
-                    .longValueExact();
+            Long amountInCents = toStripeAmount(amountToRefund);
 
             RefundCreateParams.Builder paramsBuilder = RefundCreateParams.builder().setPaymentIntent(paymentIntentId)
                     .setAmount(amountInCents);
@@ -355,6 +364,13 @@ public class StripePaymentProvider implements PaymentProvider {
         BigDecimal refundedAmount = amountToRefund != null ? amountToRefund : BigDecimal.ZERO;
         return new RefundResult("re_stub_" + UUID.randomUUID(), refundedAmount, RefundStatus.SUCCEEDED,
                 Map.of("mode", "stub"));
+    }
+
+    private Long toStripeAmount(BigDecimal amount) {
+        if (amount == null) {
+            return null;
+        }
+        return amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).longValueExact();
     }
 
     /**

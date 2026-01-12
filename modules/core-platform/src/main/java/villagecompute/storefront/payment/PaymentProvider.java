@@ -71,7 +71,9 @@ public interface PaymentProvider {
             String paymentMethodId, // Provider-specific payment method ID
             boolean captureImmediately, // true = authorize+capture, false = authorize only
             Map<String, String> metadata, // Custom metadata (order ID, etc.)
-            String idempotencyKey // Client-provided idempotency key
+            String idempotencyKey, // Client-provided idempotency key
+            BigDecimal applicationFeeAmount, // Platform fee amount (if Stripe Connect enabled)
+            String transferDestinationAccountId // Connected account to receive funds
     ) {
     }
 

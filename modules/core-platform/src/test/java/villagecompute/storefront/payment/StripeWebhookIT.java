@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 
 import villagecompute.storefront.data.models.ConnectAccount;
 import villagecompute.storefront.data.models.Consignor;
+import villagecompute.storefront.data.models.Order;
 import villagecompute.storefront.data.models.PaymentIntent;
 import villagecompute.storefront.data.models.PayoutBatch;
 import villagecompute.storefront.data.models.Tenant;
@@ -151,7 +152,10 @@ class StripeWebhookIT {
     @Test
     @Transactional
     void testPaymentIntentSucceededWebhookUpdatesEntity() {
+        Order order = createTestOrder();
         PaymentIntent paymentIntent = createPaymentIntent("pi_webhook_123");
+        paymentIntent.orderId = order.id;
+        paymentIntent.persist();
 
         WebhookHandler.WebhookRequest request = new WebhookHandler.WebhookRequest("evt_pi_success",
                 "payment_intent.succeeded", createPaymentIntentPayload("evt_pi_success", "payment_intent.succeeded",
@@ -164,6 +168,9 @@ class StripeWebhookIT {
         PaymentIntent updated = PaymentIntent.findById(paymentIntent.id);
         assertEquals(PaymentIntent.PaymentStatus.CAPTURED, updated.status);
         assertEquals(0, new BigDecimal("100.00").compareTo(updated.amountCaptured));
+
+        Order updatedOrder = Order.findById(order.id);
+        assertEquals(Order.OrderStatus.PAID, updatedOrder.status);
     }
 
     /**
@@ -183,6 +190,30 @@ class StripeWebhookIT {
         PayoutBatch updated = PayoutBatch.findById(batch.id);
         assertEquals("completed", updated.status);
         assertNotNull(updated.processedAt);
+    }
+
+    /**
+     * Test charge.refunded webhook marks order as refunded when full amount returned.
+     */
+    @Test
+    @Transactional
+    void testChargeRefundedUpdatesOrderStatus() {
+        Order order = createTestOrder();
+        PaymentIntent paymentIntent = createPaymentIntent("pi_refund_123");
+        paymentIntent.orderId = order.id;
+        paymentIntent.status = PaymentIntent.PaymentStatus.CAPTURED;
+        paymentIntent.amountCaptured = new BigDecimal("50.00");
+        paymentIntent.persist();
+
+        WebhookHandler.WebhookRequest request = new WebhookHandler.WebhookRequest("evt_charge_refund",
+                "charge.refunded", createChargeRefundPayload(paymentIntent.providerPaymentId, 5000), "test-signature",
+                Map.of());
+
+        WebhookHandler.WebhookProcessingResult result = webhookHandler.processWebhook(request);
+        assertTrue(result.success());
+
+        Order updatedOrder = Order.findById(order.id);
+        assertEquals(Order.OrderStatus.REFUNDED, updatedOrder.status);
     }
 
     /**
@@ -226,6 +257,27 @@ class StripeWebhookIT {
         paymentIntent.updatedAt = Instant.now();
         paymentIntent.persist();
         return paymentIntent;
+    }
+
+    private Order createTestOrder() {
+        Order order = new Order();
+        order.tenant = testTenant;
+        order.orderNumber = "ORD-" + System.currentTimeMillis();
+        order.customerEmail = "customer@example.com";
+        String addressJson = """
+                {"line1":"123 Main","city":"Austin","state":"TX","postalCode":"73301","country":"US"}
+                """;
+        order.shippingAddress = addressJson;
+        order.billingAddress = addressJson;
+        order.subtotalAmount = new BigDecimal("100.00");
+        order.discountAmount = BigDecimal.ZERO;
+        order.shippingAmount = BigDecimal.ZERO;
+        order.taxAmount = BigDecimal.ZERO;
+        order.totalAmount = new BigDecimal("100.00");
+        order.currency = "USD";
+        order.status = Order.OrderStatus.PENDING_PAYMENT;
+        order.persist();
+        return order;
     }
 
     private PayoutBatch createPayoutBatch(String payoutId) {
@@ -296,5 +348,22 @@ class StripeWebhookIT {
                   }
                 }
                 """, accountId);
+    }
+
+    private String createChargeRefundPayload(String paymentIntentId, int amountRefundedCents) {
+        return String.format("""
+                {
+                  "id": "evt_charge_refund",
+                  "object": "event",
+                  "type": "charge.refunded",
+                  "data": {
+                    "object": {
+                      "id": "ch_test",
+                      "payment_intent": "%s",
+                      "amount_refunded": %d
+                    }
+                  }
+                }
+                """, paymentIntentId, amountRefundedCents);
     }
 }

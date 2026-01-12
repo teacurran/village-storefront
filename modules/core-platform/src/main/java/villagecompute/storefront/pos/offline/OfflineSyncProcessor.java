@@ -149,11 +149,10 @@ public class OfflineSyncProcessor {
             // TODO: Call checkout service to create order + capture payment
             // For now, simulate payment provider call
             PaymentProvider.CreatePaymentIntentRequest paymentRequest = new PaymentProvider.CreatePaymentIntentRequest(
-                    txPayload.totalAmount, txPayload.currency, txPayload.customerId, txPayload.paymentMethodId, true, // capture
-                                                                                                                      // immediately
+                    txPayload.totalAmount, txPayload.currency, txPayload.customerId, txPayload.paymentMethodId, true,
                     java.util.Map.of("offline_tx_id", txPayload.localTransactionId, "device_id",
                             String.valueOf(payload.deviceId())),
-                    queueEntry.idempotencyKey);
+                    queueEntry.idempotencyKey, null, null);
 
             PaymentProvider.PaymentIntentResult paymentResult = paymentProvider.createIntent(paymentRequest);
 
