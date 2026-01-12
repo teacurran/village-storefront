@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -20,8 +21,8 @@ import javax.imageio.ImageIO;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
+import jakarta.inject.Inject;
 
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import net.coobird.thumbnailator.Thumbnails;
@@ -55,32 +56,34 @@ public class ThumbnailatorMediaProcessor implements MediaProcessor {
     private static final Pattern DIMENSION_PATTERN = Pattern.compile("Stream.*Video.*\\s(\\d+)x(\\d+)");
     private static final Pattern BITRATE_PATTERN = Pattern.compile("bitrate: (\\d+) kb/s");
 
-    @ConfigProperty(
-            name = "media.processing.ffmpeg.path",
-            defaultValue = "/usr/bin/ffmpeg")
-    String ffmpegPath;
+    @Inject
+    MediaWorkerConfig mediaConfig;
 
-    @ConfigProperty(
-            name = "media.processing.thumbnailator.quality",
-            defaultValue = "0.85")
-    float jpegQuality;
-
-    @ConfigProperty(
-            name = "media.processing.video.hls.segment-duration",
-            defaultValue = "6")
-    int hlsSegmentDuration;
-
-    @ConfigProperty(
-            name = "media.processing.image.sizes",
-            defaultValue = "thumbnail:150,small:400,medium:800,large:1600")
-    String imageSizesConfig;
-
+    private String ffmpegPath;
+    private float jpegQuality;
+    private int hlsSegmentDuration;
+    private String imageSizesConfig;
     private Map<String, Integer> imageSizes;
+    private Duration ffmpegTimeout;
+    private boolean hlsEnabled;
+    private boolean mp4Enabled;
+    private int posterTimestampSeconds;
 
     @PostConstruct
     void initialize() {
+        ffmpegPath = mediaConfig.ffmpeg().path();
+        jpegQuality = mediaConfig.thumbnailator().quality();
+        hlsSegmentDuration = mediaConfig.video().hls().segmentDuration();
+        imageSizesConfig = mediaConfig.image().sizes();
+        ffmpegTimeout = mediaConfig.ffmpeg().timeout();
+        hlsEnabled = mediaConfig.video().hls().enabled();
+        mp4Enabled = mediaConfig.video().mp4Enabled();
+        posterTimestampSeconds = mediaConfig.video().posterTimestamp();
+
         LOG.infof("Initializing media processor: ffmpeg=%s, quality=%.2f, hlsSegment=%ds", ffmpegPath, jpegQuality,
                 hlsSegmentDuration);
+        LOG.infof("Video config: hlsEnabled=%s, mp4Enabled=%s, timeout=%s, posterTimestamp=%ds", hlsEnabled, mp4Enabled,
+                ffmpegTimeout, posterTimestampSeconds);
 
         // Parse image sizes configuration
         imageSizes = new LinkedHashMap<>();
@@ -161,43 +164,54 @@ public class ThumbnailatorMediaProcessor implements MediaProcessor {
             LOG.infof("Video metadata: %dx%d, %ds, codec=%s", metadata.getWidth(), metadata.getHeight(),
                     metadata.getDurationSeconds(), metadata.getCodec());
 
-            // Generate HLS variants
             List<HLSVariant> variants = new ArrayList<>();
+            Path masterPlaylist = null;
 
-            // Define variant configurations (resolution:bitrate)
-            Map<String, String> variantConfigs = new LinkedHashMap<>();
-            variantConfigs.put("720p", "1280:720:2000k");
-            variantConfigs.put("480p", "854:480:1000k");
-            variantConfigs.put("360p", "640:360:500k");
+            if (hlsEnabled) {
+                // Define variant configurations (resolution:bitrate)
+                Map<String, String> variantConfigs = new LinkedHashMap<>();
+                variantConfigs.put("720p", "1280:720:2000k");
+                variantConfigs.put("480p", "854:480:1000k");
+                variantConfigs.put("360p", "640:360:500k");
 
-            for (Map.Entry<String, String> entry : variantConfigs.entrySet()) {
-                String variantName = entry.getKey();
-                String[] config = entry.getValue().split(":");
-                int width = Integer.parseInt(config[0]);
-                int height = Integer.parseInt(config[1]);
-                String bitrate = config[2];
+                for (Map.Entry<String, String> entry : variantConfigs.entrySet()) {
+                    String variantName = entry.getKey();
+                    String[] config = entry.getValue().split(":");
+                    int width = Integer.parseInt(config[0]);
+                    int height = Integer.parseInt(config[1]);
+                    String bitrate = config[2];
 
-                // Skip variants larger than source
-                if (width > metadata.getWidth()) {
-                    LOG.infof("Skipping %s variant (source width %d < target %d)", variantName, metadata.getWidth(),
-                            width);
-                    continue;
+                    // Skip variants larger than source
+                    if (width > metadata.getWidth()) {
+                        LOG.infof("Skipping %s variant (source width %d < target %d)", variantName, metadata.getWidth(),
+                                width);
+                        continue;
+                    }
+
+                    HLSVariant variant = generateHLSVariant(sourceFile, outputDir, variantName, width, height, bitrate);
+                    variants.add(variant);
                 }
 
-                HLSVariant variant = generateHLSVariant(sourceFile, outputDir, variantName, width, height, bitrate);
-                variants.add(variant);
+                masterPlaylist = outputDir.resolve("master.m3u8");
+                generateMasterPlaylist(masterPlaylist, variants);
+            } else {
+                LOG.info("HLS packaging disabled via configuration");
             }
 
-            // Generate master playlist
-            Path masterPlaylist = outputDir.resolve("master.m3u8");
-            generateMasterPlaylist(masterPlaylist, variants);
+            Path mp4File = null;
+            if (mp4Enabled) {
+                mp4File = generateMp4Derivative(sourceFile, outputDir, metadata);
+            } else {
+                LOG.info("MP4 output disabled via configuration");
+            }
 
             // Extract poster frame
             Path posterFrame = outputDir.resolve("poster.jpg");
             extractPosterFrame(sourceFile, posterFrame);
 
-            LOG.infof("Video processing complete: %d variants, master playlist, poster frame", variants.size());
-            return new VideoProcessingResult(masterPlaylist, variants, posterFrame);
+            LOG.infof("Video processing complete: variants=%d, masterPlaylist=%s, mp4=%s", variants.size(),
+                    masterPlaylist != null, mp4File != null);
+            return new VideoProcessingResult(masterPlaylist, variants, posterFrame, mp4File);
 
         } catch (IOException | InterruptedException e) {
             LOG.errorf(e, "Video processing failed: %s", sourceFile);
@@ -222,25 +236,7 @@ public class ThumbnailatorMediaProcessor implements MediaProcessor {
 
         LOG.infof("Executing FFmpeg for %s variant: %s", variantName, String.join(" ", command));
 
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-
-        // Capture output for debugging
-        StringBuilder output = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
-        }
-
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            LOG.errorf("FFmpeg failed with exit code %d:\n%s", exitCode, output);
-            throw new MediaProcessingException(
-                    "FFmpeg failed for " + variantName + " variant (exit code " + exitCode + ")");
-        }
+        runFfmpegCommand(command, variantName + " HLS variant");
 
         // Collect segment files
         List<Path> segmentFiles = new ArrayList<>();
@@ -264,6 +260,20 @@ public class ThumbnailatorMediaProcessor implements MediaProcessor {
         return new HLSVariant("hls_" + variantName, playlistPath, segmentFiles, width, height, totalSize);
     }
 
+    private Path generateMp4Derivative(Path sourceFile, Path outputDir, VideoMetadata metadata)
+            throws IOException, InterruptedException {
+        Path mp4Path = outputDir.resolve("transcoded.mp4");
+        List<String> command = new ArrayList<>(
+                List.of(ffmpegPath, "-i", sourceFile.toString(), "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", mp4Path.toString()));
+
+        LOG.infof("Executing FFmpeg for MP4 derivative: %s", String.join(" ", command));
+        runFfmpegCommand(command, "MP4 derivative");
+
+        LOG.infof("MP4 derivative generated: %s (%d bytes)", mp4Path, Files.size(mp4Path));
+        return mp4Path;
+    }
+
     private void generateMasterPlaylist(Path masterPlaylist, List<HLSVariant> variants) throws IOException {
         StringBuilder content = new StringBuilder();
         content.append("#EXTM3U\n");
@@ -282,6 +292,33 @@ public class ThumbnailatorMediaProcessor implements MediaProcessor {
         LOG.infof("Master playlist generated: %s (%d variants)", masterPlaylist, variants.size());
     }
 
+    private void runFfmpegCommand(List<String> command, String description) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+        }
+
+        boolean finished = process.waitFor(ffmpegTimeout.toSeconds(), TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            LOG.errorf("FFmpeg %s timed out after %s:%n%s", description, ffmpegTimeout, output);
+            throw new MediaProcessingException("FFmpeg " + description + " timed out after " + ffmpegTimeout);
+        }
+
+        int exitCode = process.exitValue();
+        if (exitCode != 0) {
+            LOG.errorf("FFmpeg %s failed (exit code %d):%n%s", description, exitCode, output);
+            throw new MediaProcessingException("FFmpeg failed for " + description + " (exit code " + exitCode + ")");
+        }
+    }
+
     private int estimateBandwidth(HLSVariant variant) {
         // Rough bandwidth estimate based on resolution
         if (variant.getWidth() >= 1280) {
@@ -294,19 +331,12 @@ public class ThumbnailatorMediaProcessor implements MediaProcessor {
     }
 
     private void extractPosterFrame(Path sourceFile, Path posterFrame) throws IOException, InterruptedException {
-        List<String> command = Arrays.asList(ffmpegPath, "-i", sourceFile.toString(), "-ss", "1", "-vframes", "1",
-                "-q:v", "2", posterFrame.toString());
+        List<String> command = Arrays.asList(ffmpegPath, "-i", sourceFile.toString(), "-ss",
+                String.valueOf(posterTimestampSeconds), "-vframes", "1", "-q:v", "2", posterFrame.toString());
 
         LOG.infof("Extracting poster frame: %s", String.join(" ", command));
 
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new MediaProcessingException("Failed to extract poster frame (exit code " + exitCode + ")");
-        }
+        runFfmpegCommand(command, "poster frame extraction");
 
         LOG.infof("Poster frame extracted: %s (%d bytes)", posterFrame, Files.size(posterFrame));
     }

@@ -2,6 +2,7 @@ package villagecompute.storefront.media;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Interface for media processing operations (image resizing, video transcoding).
@@ -109,18 +110,20 @@ public interface MediaProcessor {
      * Video processing result.
      */
     class VideoProcessingResult {
-        private final Path masterPlaylist; // HLS master .m3u8
+        private final Path masterPlaylist; // HLS master .m3u8 (optional when HLS disabled)
         private final List<HLSVariant> variants;
         private final Path posterFrame;
+        private final Path mp4File; // Optional MP4 derivative
 
-        public VideoProcessingResult(Path masterPlaylist, List<HLSVariant> variants, Path posterFrame) {
+        public VideoProcessingResult(Path masterPlaylist, List<HLSVariant> variants, Path posterFrame, Path mp4File) {
             this.masterPlaylist = masterPlaylist;
             this.variants = variants;
             this.posterFrame = posterFrame;
+            this.mp4File = mp4File;
         }
 
-        public Path getMasterPlaylist() {
-            return masterPlaylist;
+        public Optional<Path> getMasterPlaylist() {
+            return Optional.ofNullable(masterPlaylist);
         }
 
         public List<HLSVariant> getVariants() {
@@ -129,6 +132,10 @@ public interface MediaProcessor {
 
         public Path getPosterFrame() {
             return posterFrame;
+        }
+
+        public Optional<Path> getMp4File() {
+            return Optional.ofNullable(mp4File);
         }
     }
 

@@ -23,6 +23,7 @@ import villagecompute.storefront.data.repositories.MediaQuotaRepository;
 import villagecompute.storefront.media.MediaProcessor;
 import villagecompute.storefront.media.MediaStorageClient;
 import villagecompute.storefront.media.MediaStoragePathBuilder;
+import villagecompute.storefront.media.VideoJobHandler;
 import villagecompute.storefront.services.jobs.MediaProcessingJobPayload;
 import villagecompute.storefront.services.jobs.config.DeadLetterQueue;
 import villagecompute.storefront.services.jobs.config.JobConfig;
@@ -73,6 +74,9 @@ public class MediaJobService {
 
     @Inject
     MediaProcessor mediaProcessor;
+
+    @Inject
+    VideoJobHandler videoJobHandler;
 
     private PriorityJobQueue<MediaProcessingJobPayload> processingQueue;
     private DeadLetterQueue<MediaProcessingJobPayload> processingDlq;
@@ -184,7 +188,8 @@ public class MediaJobService {
             if ("image".equals(asset.assetType)) {
                 totalDerivativeSize = processImageDerivatives(asset, sourceFile, tempDir);
             } else if ("video".equals(asset.assetType)) {
-                totalDerivativeSize = processVideoDerivatives(asset, sourceFile, tempDir);
+                // Use VideoJobHandler for video processing (Task I4.T6)
+                totalDerivativeSize = videoJobHandler.processVideo(asset, sourceFile, tempDir, payload.getTenantId());
             } else {
                 throw new IllegalArgumentException("Unsupported asset type: " + asset.assetType);
             }
@@ -264,100 +269,7 @@ public class MediaJobService {
         return totalSize;
     }
 
-    private long processVideoDerivatives(MediaAsset asset, Path sourceFile, Path tempDir) throws IOException {
-        MediaProcessor.VideoMetadata metadata = mediaProcessor.extractVideoMetadata(sourceFile);
-        if (metadata != null) {
-            asset.width = metadata.getWidth();
-            asset.height = metadata.getHeight();
-            asset.durationSeconds = metadata.getDurationSeconds();
-        }
-
-        MediaProcessor.VideoProcessingResult result = mediaProcessor.processVideo(sourceFile, tempDir);
-        long totalSize = 0;
-
-        // Upload master playlist
-        String masterKey = buildDerivativeKey(asset, "hls_master", "master.m3u8");
-        try (InputStream data = Files.newInputStream(result.getMasterPlaylist())) {
-            long masterSize = Files.size(result.getMasterPlaylist());
-            storageClient.uploadMedia(masterKey, data, "application/vnd.apple.mpegurl", masterSize);
-
-            MediaDerivative masterEntity = new MediaDerivative();
-            masterEntity.asset = asset;
-            masterEntity.tenant = asset.tenant;
-            masterEntity.derivativeType = "hls_master";
-            masterEntity.storageKey = masterKey;
-            masterEntity.mimeType = "application/vnd.apple.mpegurl";
-            masterEntity.fileSize = masterSize;
-            mediaDerivativeRepository.persist(masterEntity);
-            totalSize += masterSize;
-        }
-
-        // Upload HLS variants (playlists + segments)
-        for (MediaProcessor.HLSVariant variant : result.getVariants()) {
-            // Upload variant playlist
-            String variantKey = buildDerivativeKey(asset, variant.getType(), variant.getType() + ".m3u8");
-            long playlistSize = Files.size(variant.getPlaylistPath());
-            try (InputStream data = Files.newInputStream(variant.getPlaylistPath())) {
-                storageClient.uploadMedia(variantKey, data, "application/vnd.apple.mpegurl", playlistSize);
-            }
-            totalSize += playlistSize;
-
-            MediaDerivative variantEntity = new MediaDerivative();
-            variantEntity.asset = asset;
-            variantEntity.tenant = asset.tenant;
-            variantEntity.derivativeType = variant.getType();
-            variantEntity.storageKey = variantKey;
-            variantEntity.mimeType = "application/vnd.apple.mpegurl";
-            variantEntity.fileSize = playlistSize;
-            variantEntity.width = variant.getWidth();
-            variantEntity.height = variant.getHeight();
-            mediaDerivativeRepository.persist(variantEntity);
-
-            if (variant.getSegmentFiles() != null) {
-                for (Path segment : variant.getSegmentFiles()) {
-                    String segmentKey = buildDerivativeKey(asset, variant.getType() + "_segment",
-                            segment.getFileName().toString());
-                    long segmentSize = Files.size(segment);
-                    try (InputStream data = Files.newInputStream(segment)) {
-                        storageClient.uploadMedia(segmentKey, data, "video/mp2t", segmentSize);
-                    }
-
-                    MediaDerivative segmentEntity = new MediaDerivative();
-                    segmentEntity.asset = asset;
-                    segmentEntity.tenant = asset.tenant;
-                    segmentEntity.derivativeType = variant.getType() + "_segment";
-                    segmentEntity.storageKey = segmentKey;
-                    segmentEntity.mimeType = "video/mp2t";
-                    segmentEntity.fileSize = segmentSize;
-                    segmentEntity.width = variant.getWidth();
-                    segmentEntity.height = variant.getHeight();
-                    mediaDerivativeRepository.persist(segmentEntity);
-                    totalSize += segmentSize;
-                }
-            }
-
-            LOG.infof("Uploaded HLS variant: type=%s", variant.getType());
-        }
-
-        // Upload poster frame
-        String posterKey = buildDerivativeKey(asset, "poster", "poster.jpg");
-        try (InputStream data = Files.newInputStream(result.getPosterFrame())) {
-            long posterSize = Files.size(result.getPosterFrame());
-            storageClient.uploadMedia(posterKey, data, "image/jpeg", posterSize);
-
-            MediaDerivative posterEntity = new MediaDerivative();
-            posterEntity.asset = asset;
-            posterEntity.tenant = asset.tenant;
-            posterEntity.derivativeType = "poster";
-            posterEntity.storageKey = posterKey;
-            posterEntity.mimeType = "image/jpeg";
-            posterEntity.fileSize = posterSize;
-            mediaDerivativeRepository.persist(posterEntity);
-            totalSize += posterSize;
-        }
-
-        return totalSize;
-    }
+    // Video processing now handled by VideoJobHandler (Task I4.T6)
 
     private String buildDerivativeKey(MediaAsset asset, String derivativeType, String filename) {
         return MediaStoragePathBuilder.buildDerivativeKey(asset.tenant.id, asset.assetType, asset.id, derivativeType,

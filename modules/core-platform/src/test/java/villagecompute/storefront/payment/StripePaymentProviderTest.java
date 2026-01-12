@@ -7,12 +7,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.Map;
-
-import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,53 +26,39 @@ import com.stripe.param.PaymentIntentCaptureParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.RefundCreateParams;
 
-import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.payment.stripe.StripeConfig;
 import villagecompute.storefront.payment.stripe.StripePaymentProvider;
 import villagecompute.storefront.tenant.TenantContext;
+import villagecompute.storefront.tenant.TenantInfo;
 
-import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.mockito.InjectMock;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 /**
- * Unit tests for StripePaymentProvider with mocked Stripe SDK. Tests payment intent lifecycle, error handling, and
- * idempotency without making real API calls.
+ * Unit tests for {@link StripePaymentProvider} using Mockito + Stripe SDK stubs (no Quarkus CDI).
  */
-@QuarkusTest
 class StripePaymentProviderTest {
 
-    @Inject
-    StripePaymentProvider stripePaymentProvider;
-
-    @InjectMock
-    StripeConfig stripeConfig;
-
-    private Tenant testTenant;
+    private StripePaymentProvider stripePaymentProvider;
+    private StripeConfig stripeConfigMock;
+    private SimpleMeterRegistry meterRegistry;
+    private UUID tenantId;
 
     @BeforeEach
-    @Transactional
     void setUp() {
-        if (testTenant == null) {
-            testTenant = Tenant.find("subdomain", "provider-test").firstResult();
-        }
+        stripePaymentProvider = new StripePaymentProvider();
+        stripeConfigMock = Mockito.mock(StripeConfig.class);
+        meterRegistry = new SimpleMeterRegistry();
+        injectDependency("stripeConfig", stripeConfigMock);
+        injectDependency("meterRegistry", meterRegistry);
 
-        if (testTenant == null) {
-            testTenant = new Tenant();
-            testTenant.subdomain = "provider-test";
-            testTenant.name = "Provider Test";
-            testTenant.status = "active";
-            OffsetDateTime now = OffsetDateTime.now();
-            testTenant.createdAt = now;
-            testTenant.updatedAt = now;
-            testTenant.persist();
-        }
-
-        TenantContext.setCurrentTenantId(testTenant.id);
+        tenantId = UUID.randomUUID();
+        TenantContext.setCurrentTenant(new TenantInfo(tenantId, "provider-test", "Provider Test", "active"));
     }
 
     @AfterEach
     void tearDown() {
         TenantContext.clear();
+        meterRegistry.close();
     }
 
     @Test
@@ -152,8 +136,18 @@ class StripePaymentProviderTest {
     }
 
     private void stubStripeConfig(boolean connectEnabled) {
-        when(stripeConfig.apiSecretKey()).thenReturn("sk_test_unit");
-        when(stripeConfig.maxRetries()).thenReturn(2);
-        when(stripeConfig.connectEnabled()).thenReturn(connectEnabled);
+        when(stripeConfigMock.apiSecretKey()).thenReturn("sk_test_unit");
+        when(stripeConfigMock.maxRetries()).thenReturn(2);
+        when(stripeConfigMock.connectEnabled()).thenReturn(connectEnabled);
+    }
+
+    private void injectDependency(String fieldName, Object value) {
+        try {
+            Field field = StripePaymentProvider.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(stripePaymentProvider, value);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException("Failed to inject dependency: " + fieldName, e);
+        }
     }
 }

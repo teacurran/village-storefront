@@ -45,7 +45,9 @@ import io.restassured.specification.RequestSpecification;
  * OpenAPI contract tests for catalog storefront endpoints.
  */
 @QuarkusTest
-@QuarkusTestResource(PostgresTenantTestResource.class)
+@QuarkusTestResource(
+        value = PostgresTenantTestResource.class,
+        restrictToAnnotatedClass = true)
 class CatalogContractIT {
 
     private static final String API_BASE_PATH = "/api/v1/catalog";

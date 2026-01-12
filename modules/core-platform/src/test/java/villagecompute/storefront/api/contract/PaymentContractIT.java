@@ -48,7 +48,9 @@ import io.restassured.specification.RequestSpecification;
  * </p>
  */
 @QuarkusTest
-@QuarkusTestResource(PostgresTenantTestResource.class)
+@QuarkusTestResource(
+        value = PostgresTenantTestResource.class,
+        restrictToAnnotatedClass = true)
 class PaymentContractIT {
 
     private static final String API_BASE_PATH = "/api/v1";

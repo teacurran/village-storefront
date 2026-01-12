@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
@@ -35,6 +36,9 @@ public class StubMediaProcessor implements MediaProcessor {
     private static final int[] IMAGE_SIZES = {150, 400, 800, 1600}; // thumbnail, small, medium, large
     private static final String[] IMAGE_SIZE_NAMES = {"thumbnail", "small", "medium", "large"};
 
+    @Inject
+    MediaWorkerConfig mediaConfig;
+
     @Override
     public List<ImageDerivative> processImage(Path sourceFile, Path outputDir) {
         LOG.infof("Stub image processing: source=%s, output=%s", sourceFile, outputDir);
@@ -44,6 +48,10 @@ public class StubMediaProcessor implements MediaProcessor {
         try {
             // Create output directory
             Files.createDirectories(outputDir);
+
+            if (!Files.exists(sourceFile)) {
+                throw new MediaProcessingException("Source file missing: " + sourceFile);
+            }
 
             // Generate fake derivatives at each size
             for (int i = 0; i < IMAGE_SIZES.length; i++) {
@@ -77,38 +85,55 @@ public class StubMediaProcessor implements MediaProcessor {
             // Create output directory
             Files.createDirectories(outputDir);
 
-            // Generate fake HLS master playlist
-            String masterFilename = "master.m3u8";
-            Path masterPlaylist = outputDir.resolve(masterFilename);
-            String masterContent = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\nhls_720p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480\nhls_480p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\nhls_360p.m3u8\n";
-            Files.writeString(masterPlaylist, masterContent);
-
-            // Generate fake HLS variants
             List<HLSVariant> variants = new ArrayList<>();
-            int[][] resolutions = {{1280, 720}, {854, 480}, {640, 360}};
-            String[] variantNames = {"hls_720p", "hls_480p", "hls_360p"};
+            Path masterPlaylist = null;
+            boolean hlsEnabled = mediaConfig == null || mediaConfig.video().hls().enabled();
+            boolean mp4Enabled = mediaConfig == null || mediaConfig.video().mp4Enabled();
 
-            for (int i = 0; i < variantNames.length; i++) {
-                String variantName = variantNames[i];
-                int width = resolutions[i][0];
-                int height = resolutions[i][1];
+            if (hlsEnabled) {
+                // Generate fake HLS master playlist
+                masterPlaylist = outputDir.resolve("master.m3u8");
+                String masterContent = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720\nhls_720p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480\nhls_480p.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360\nhls_360p.m3u8\n";
+                Files.writeString(masterPlaylist, masterContent);
 
-                Path variantPlaylist = outputDir.resolve(variantName + ".m3u8");
-                Path segmentDir = outputDir.resolve(variantName + "_segments");
-                Files.createDirectories(segmentDir);
+                // Generate fake HLS variants
+                int[][] resolutions = {{1280, 720}, {854, 480}, {640, 360}};
+                String[] variantNames = {"hls_720p", "hls_480p", "hls_360p"};
 
-                // Write fake variant playlist
-                String playlistContent = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nsegment_00.ts\n#EXT-X-ENDLIST\n";
-                Files.writeString(variantPlaylist, playlistContent);
+                for (int i = 0; i < variantNames.length; i++) {
+                    String variantName = variantNames[i];
+                    int width = resolutions[i][0];
+                    int height = resolutions[i][1];
 
-                // Write fake segment file
-                byte[] fakeSegment = generateFakeVideoSegment(width, height);
-                Path segmentFile = segmentDir.resolve("segment_00.ts");
-                Files.write(segmentFile, fakeSegment);
+                    Path variantPlaylist = outputDir.resolve(variantName + ".m3u8");
+                    Path segmentDir = outputDir.resolve(variantName + "_segments");
+                    Files.createDirectories(segmentDir);
 
-                variants.add(new HLSVariant(variantName, variantPlaylist, List.of(segmentFile), width, height,
-                        fakeSegment.length));
-                LOG.infof("Generated stub HLS variant: %s (%dx%d)", variantName, width, height);
+                    // Write fake variant playlist
+                    String playlistContent = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nsegment_00.ts\n#EXT-X-ENDLIST\n";
+                    Files.writeString(variantPlaylist, playlistContent);
+
+                    // Write fake segment file
+                    byte[] fakeSegment = generateFakeVideoSegment(width, height);
+                    Path segmentFile = segmentDir.resolve("segment_00.ts");
+                    Files.write(segmentFile, fakeSegment);
+
+                    variants.add(new HLSVariant(variantName, variantPlaylist, List.of(segmentFile), width, height,
+                            fakeSegment.length));
+                    LOG.infof("Generated stub HLS variant: %s (%dx%d)", variantName, width, height);
+                }
+            } else {
+                LOG.info("Stub HLS generation disabled via configuration");
+            }
+
+            Path mp4Path = null;
+            if (mp4Enabled) {
+                mp4Path = outputDir.resolve("transcoded.mp4");
+                byte[] fakeMp4 = generateFakeVideoSegment(1280, 720);
+                Files.write(mp4Path, fakeMp4);
+                LOG.infof("Generated stub MP4 derivative: %s (%d bytes)", mp4Path, fakeMp4.length);
+            } else {
+                LOG.info("Stub MP4 generation disabled via configuration");
             }
 
             // Generate fake poster frame
@@ -116,7 +141,7 @@ public class StubMediaProcessor implements MediaProcessor {
             byte[] fakePoster = generateFakeImageData(1280);
             Files.write(posterFrame, fakePoster);
 
-            return new VideoProcessingResult(masterPlaylist, variants, posterFrame);
+            return new VideoProcessingResult(masterPlaylist, variants, posterFrame, mp4Path);
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate stub video derivatives", e);
         }

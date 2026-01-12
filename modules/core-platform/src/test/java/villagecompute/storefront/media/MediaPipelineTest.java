@@ -132,8 +132,10 @@ public class MediaPipelineTest {
         List<MediaDerivative> derivatives = mediaDerivativeRepository.findByAsset(asset.id);
         long playlistCount = derivatives.stream().filter(d -> d.derivativeType.startsWith("hls_")).count();
         long segmentCount = derivatives.stream().filter(d -> d.derivativeType.endsWith("_segment")).count();
+        long mp4Count = derivatives.stream().filter(d -> "mp4".equals(d.derivativeType)).count();
         assertTrue(segmentCount > 0);
         assertTrue(playlistCount >= 4); // master + 3 variants
+        assertEquals(1, mp4Count, "MP4 fallback derivative should exist");
 
         mediaService.deleteAsset(asset.id);
         assertTrue(mediaAssetRepository.findByIdAndTenant(asset.id).isEmpty());

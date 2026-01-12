@@ -153,16 +153,17 @@ Uses **FFmpeg** for transcoding and HLS packaging.
 
 ### Processing Steps
 
-1. Extract video metadata (dimensions, duration, codec)
-2. Generate HLS master playlist (`master.m3u8`)
-3. For each variant resolution:
-   - Transcode video to target bitrate/resolution
-   - Segment into 6-second chunks
-   - Create variant playlist (e.g., `hls_720p.m3u8`)
-   - Upload playlist + segments to R2
-4. Extract poster frame (first frame at 1 second)
-5. Upload poster as JPEG derivative
-6. Persist all derivative metadata
+1. Extract video metadata (dimensions, duration, codec) via `ffprobe`.
+2. **MP4 fallback (optional):** When `media.processing.video.mp4.enabled=true`, transcode the source to a single
+   H.264/AAC MP4 (`transcoded.mp4`) using `libx264 -preset medium -crf 23 -movflags +faststart`.
+3. **HLS packaging (optional):** When `media.processing.video.hls.enabled=true`, generate a master playlist and the
+   configured variant playlists/segments. Variants larger than the source resolution are skipped automatically.
+4. Extract the poster frame at `media.processing.video.poster-timestamp` seconds (default 1s) as JPEG.
+5. Upload every derivative (MP4, master playlist, variant playlists/segments, poster) to R2.
+6. Persist all derivative metadata + sizes so the quota service can charge the tenant accurately.
+
+**Timeouts & Safety:** Each FFmpeg invocation is wrapped with the worker timeout
+(`media.processing.ffmpeg.timeout`, default 300s). Overruns are forcibly terminated and reported as retryable failures.
 
 **FFmpeg command example (720p variant):**
 ```bash
@@ -175,6 +176,29 @@ ffmpeg -i input.mp4 \
   -hls_segment_filename "segment_%03d.ts" \
   output_720p.m3u8
 ```
+
+## Worker Scaling & Troubleshooting
+
+- **Critical-only workers:** The `media-worker` Deployment subscribes exclusively to the CRITICAL queue via
+  `WORKER_PRIORITY_FILTER=CRITICAL`, ensuring video jobs run in isolation from general-purpose workers. Horizontal
+  scaling is achieved by increasing the `spec.replicas` in `k8s/base/deployment-media-workers.yaml` (or the corresponding
+  Kustomize overlay).
+- **Dedicated image:** `ghcr.io/villagecompute/village-storefront-media-worker:latest` bundles FFmpeg and only enables
+  the scheduled job dispatcher (`QUARKUS_SCHEDULER_ENABLED=true`) plus the media queue listener. The image honors
+  `MEDIA_PROCESSING_FFMPEG_*` and `MEDIA_PROCESSING_WORKER_*` environment variables for runtime tuning.
+- **Metrics:** `VideoJobHandler` emits `media.video.transcode.duration`, `media.video.transcode.success`,
+  `media.video.transcode.failed`, `media.video.transcode.timeout`, and `media.video.semaphore.blocked`. Alert on spikes
+  or latency regressions to detect FFmpeg starvation or runaway workloads.
+- **Retries & DLQ:** Failures throw `MediaProcessingException`, allowing `MediaJobService` to increment attempts and
+  retry using the exponential backoff described in `docs/architecture/background_jobs.md`. After the configured
+  `max_attempts`, jobs land in `dead_letter_queue` (tagged with `owning_module='media.processing'`) for manual diagnosis.
+- **Troubleshooting tips:**
+  1. Check the worker pod logs for FFmpeg command output (timeout and exit-code failures log the full stderr stream).
+  2. Validate container limits: Pods request 1 vCPU/1Gi and cap at 4 vCPU/4Gi; adjust if multi-variant videos are
+     starved.
+  3. Verify Cloudflare R2 credentials and throughput—upload failures increment `media.video.transcode.failed`.
+  4. Toggle `media.processing.worker.enabled=false` (kill switch) to drain job queues without spawning new FFmpeg
+     processes during incidents.
 
 ## Tenant Quotas
 

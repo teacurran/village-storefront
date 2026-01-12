@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import jakarta.inject.Inject;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +38,8 @@ import villagecompute.storefront.services.CheckoutService.CheckoutPreparationReq
 import villagecompute.storefront.services.CheckoutService.CheckoutSummary;
 import villagecompute.storefront.services.ShippingService.AggregatedRateResult;
 import villagecompute.storefront.services.ShippingService.ShippingRateRequest;
+import villagecompute.storefront.tenant.TenantContext;
+import villagecompute.storefront.tenant.TenantInfo;
 
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
@@ -77,11 +80,14 @@ class CheckoutServiceTest {
     private List<CartItem> testCartItems;
     private Address validatedAddress;
     private AggregatedRateResult testRates;
+    private TenantInfo tenantInfo;
 
     @BeforeEach
     void setUp() {
         testCartId = UUID.randomUUID();
         testUserId = UUID.randomUUID();
+        tenantInfo = new TenantInfo(UUID.randomUUID(), "checkout-test", "Checkout Test", "active");
+        TenantContext.setCurrentTenant(tenantInfo);
 
         // Setup test cart
         testCart = new Cart();
@@ -116,6 +122,11 @@ class CheckoutServiceTest {
                 OffsetDateTime.now().plusDays(2));
 
         testRates = new AggregatedRateResult(List.of(rate1, rate2), false, null);
+    }
+
+    @AfterEach
+    void tearDownTenantContext() {
+        TenantContext.clear();
     }
 
     @Test
