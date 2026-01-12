@@ -1,5 +1,6 @@
 package villagecompute.storefront.platformops.data.repositories;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -112,5 +113,16 @@ public class ImpersonationSessionRepository implements PanacheRepositoryBase<Imp
      */
     public List<ImpersonationSession> findByTicket(String ticketNumber) {
         return find("ticketNumber = :ticket ORDER BY startedAt DESC", Parameters.with("ticket", ticketNumber)).list();
+    }
+
+    /**
+     * Find sessions that have exceeded the active TTL threshold.
+     *
+     * @param threshold
+     *            timestamp; sessions with startedAt before this are considered expired
+     * @return list of expired sessions
+     */
+    public List<ImpersonationSession> findExpiredSessions(OffsetDateTime threshold) {
+        return find("endedAt IS NULL AND startedAt <= :threshold", Parameters.with("threshold", threshold)).list();
     }
 }

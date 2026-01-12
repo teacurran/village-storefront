@@ -1,7 +1,9 @@
 package villagecompute.storefront.platformops.services;
 
 import java.net.InetAddress;
+import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,6 +46,7 @@ import io.vertx.core.json.JsonObject;
 public class ImpersonationService {
 
     private static final Logger LOG = Logger.getLogger(ImpersonationService.class);
+    private static final Duration SESSION_TTL = Duration.ofHours(2);
 
     @Inject
     ImpersonationSessionRepository impersonationSessionRepo;
@@ -72,6 +75,7 @@ public class ImpersonationService {
     @Transactional
     public ImpersonationContext startImpersonation(UUID platformAdminId, String platformAdminEmail, UUID targetTenantId,
             UUID targetUserId, String reason, String ticketNumber, InetAddress ipAddress, String userAgent) {
+        expireStaleSessions();
 
         // Validation
         if (reason == null || reason.trim().length() < 10) {
@@ -121,10 +125,6 @@ public class ImpersonationService {
         startCommand.impersonationContext = String.format(
                 "{\"session_id\":\"%s\",\"target_tenant_id\":\"%s\",\"target_user_id\":\"%s\"}",
                 java.util.UUID.randomUUID(), targetTenantId, targetUserId);
-        JsonObject metadata = new JsonObject()
-                .put("target_user_id", targetUserId != null ? targetUserId.toString() : null)
-                .put("target_user_email", targetUserEmail).put("reason", reason);
-        startCommand.metadata = metadata.encode();
         startCommand.persist();
 
         // Create impersonation session
@@ -142,10 +142,18 @@ public class ImpersonationService {
         session.userAgent = userAgent;
         session.persist();
 
+        OffsetDateTime expiresAt = calculateExpiry(session.startedAt);
+
+        JsonObject metadata = new JsonObject()
+                .put("target_user_id", targetUserId != null ? targetUserId.toString() : null)
+                .put("target_user_email", targetUserEmail).put("reason", reason)
+                .put("expires_at", expiresAt.toString());
+        startCommand.metadata = metadata.encode();
         startCommand.impersonationContext = new JsonObject()
                 .put("session_id", session.id != null ? session.id.toString() : null)
                 .put("target_tenant_id", targetTenantId != null ? targetTenantId.toString() : null)
-                .put("target_user_id", targetUserId != null ? targetUserId.toString() : null).encode();
+                .put("target_user_id", targetUserId != null ? targetUserId.toString() : null)
+                .put("expires_at", expiresAt.toString()).encode();
 
         LOG.infof("Started impersonation session %s: admin %s -> tenant %s (user %s) - reason: %s", session.id,
                 platformAdminEmail, targetTenant.subdomain, targetUserId, reason);
@@ -168,6 +176,7 @@ public class ImpersonationService {
     @Transactional
     public void endImpersonation(UUID platformAdminId, String platformAdminEmail, InetAddress ipAddress,
             String userAgent) {
+        expireStaleSessions();
 
         Optional<ImpersonationSession> sessionOpt = impersonationSessionRepo.findCurrentSession(platformAdminId);
         if (sessionOpt.isEmpty()) {
@@ -213,6 +222,7 @@ public class ImpersonationService {
      */
     @Transactional
     public Optional<ImpersonationContext> getCurrentImpersonation(UUID platformAdminId) {
+        expireStaleSessions();
         return impersonationSessionRepo.findCurrentSession(platformAdminId).map(this::mapToContext);
     }
 
@@ -225,7 +235,59 @@ public class ImpersonationService {
      */
     @Transactional
     public boolean hasActiveSession(UUID platformAdminId) {
+        expireStaleSessions();
         return impersonationSessionRepo.findCurrentSession(platformAdminId).isPresent();
+    }
+
+    /**
+     * Renew an active impersonation session, extending its expiration window.
+     *
+     * @param platformAdminId
+     *            platform admin user ID
+     * @param platformAdminEmail
+     *            platform admin email
+     * @param ipAddress
+     *            request IP address
+     * @param userAgent
+     *            client user agent
+     * @return updated impersonation context
+     */
+    @Transactional
+    public ImpersonationContext renewImpersonation(UUID platformAdminId, String platformAdminEmail,
+            InetAddress ipAddress, String userAgent) {
+        expireStaleSessions();
+
+        Optional<ImpersonationSession> sessionOpt = impersonationSessionRepo.findCurrentSession(platformAdminId);
+        if (sessionOpt.isEmpty()) {
+            throw new IllegalStateException("No active impersonation session found");
+        }
+
+        ImpersonationSession session = sessionOpt.get();
+        OffsetDateTime previousStart = session.startedAt;
+        session.startedAt = OffsetDateTime.now();
+
+        PlatformCommand renewCommand = new PlatformCommand();
+        renewCommand.actorType = "platform_admin";
+        renewCommand.actorId = platformAdminId;
+        renewCommand.actorEmail = platformAdminEmail;
+        renewCommand.action = "impersonate_renew";
+        renewCommand.targetType = "tenant";
+        renewCommand.targetId = session.targetTenant.id;
+        renewCommand.reason = "Impersonation session renewed";
+        renewCommand.ticketNumber = session.ticketNumber;
+        renewCommand.ipAddress = ipAddress;
+        renewCommand.userAgent = userAgent;
+        renewCommand.metadata = new JsonObject().put("session_id", session.id.toString())
+                .put("previous_started_at", previousStart != null ? previousStart.toString() : null)
+                .put("expires_at", calculateExpiry(session.startedAt).toString()).encode();
+        renewCommand.impersonationContext = new JsonObject()
+                .put("session_id", session.id != null ? session.id.toString() : null)
+                .put("target_tenant_id", session.targetTenant != null ? session.targetTenant.id.toString() : null)
+                .put("target_user_id", session.targetUserId != null ? session.targetUserId.toString() : null).encode();
+        renewCommand.persist();
+
+        LOG.infof("Renewed impersonation session %s for admin %s", session.id, platformAdminEmail);
+        return mapToContext(session);
     }
 
     // --- Helper Methods ---
@@ -233,6 +295,39 @@ public class ImpersonationService {
     private ImpersonationContext mapToContext(ImpersonationSession session) {
         return new ImpersonationContext(session.id, session.platformAdminId, session.platformAdminEmail,
                 session.targetTenant.id, session.targetTenant.name, session.targetUserId, session.targetUserEmail,
-                session.reason, session.ticketNumber, session.startedAt);
+                session.reason, session.ticketNumber, session.startedAt, calculateExpiry(session.startedAt));
+    }
+
+    private void expireStaleSessions() {
+        OffsetDateTime threshold = OffsetDateTime.now().minus(SESSION_TTL);
+        List<ImpersonationSession> expired = impersonationSessionRepo.findExpiredSessions(threshold);
+        for (ImpersonationSession session : expired) {
+            LOG.warnf("Auto-expiring impersonation session %s (admin=%s)", session.id, session.platformAdminEmail);
+
+            PlatformCommand expireCommand = new PlatformCommand();
+            expireCommand.actorType = "system";
+            expireCommand.action = "impersonate_expire";
+            expireCommand.targetType = "tenant";
+            expireCommand.targetId = session.targetTenant.id;
+            expireCommand.reason = "Impersonation session auto-expired after TTL";
+            expireCommand.ticketNumber = session.ticketNumber;
+            expireCommand.impersonationContext = new JsonObject().put("session_id", session.id.toString())
+                    .put("target_tenant_id", session.targetTenant.id.toString())
+                    .put("target_user_id", session.targetUserId != null ? session.targetUserId.toString() : null)
+                    .encode();
+            expireCommand.metadata = new JsonObject().put("expired_at", OffsetDateTime.now().toString())
+                    .put("ttl_minutes", SESSION_TTL.toMinutes()).encode();
+            expireCommand.persist();
+
+            session.end(expireCommand);
+            session.persist();
+        }
+    }
+
+    private OffsetDateTime calculateExpiry(OffsetDateTime startedAt) {
+        if (startedAt == null) {
+            return OffsetDateTime.now().plus(SESSION_TTL);
+        }
+        return startedAt.plus(SESSION_TTL);
     }
 }

@@ -398,6 +398,371 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
 
   # ============================================================================
+  # PLATFORM ADMIN ENDPOINTS
+  # ============================================================================
+
+  /api/v1/platform/stores/{storeId}/suspend:
+    post:
+      operationId: suspendPlatformStore
+      summary: Suspend store
+      description: |
+        Suspends a tenant storefront, enabling emergency kill-switch feature flags (`checkout.kill-switch`,
+        `admin.access.disabled`, `storefront.maintenance-mode`). Requires justification and ticket number for audit logs.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:suspend_tenant
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: Tenant UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantLifecycleRequest'
+      responses:
+        '200':
+          description: Store suspended successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Store suspended successfully
+                  storeId:
+                    type: string
+                    format: uuid
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/stores/{storeId}/reactivate:
+    post:
+      operationId: reactivatePlatformStore
+      summary: Reactivate store
+      description: |
+        Reactivates a previously suspended tenant and clears emergency kill-switch feature flags. Requires reason and
+        ticket number for audit logging.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:suspend_tenant
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          description: Tenant UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantLifecycleRequest'
+      responses:
+        '200':
+          description: Store reactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  storeId:
+                    type: string
+                    format: uuid
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/stores/{storeId}/plan:
+    get:
+      operationId: getPlatformStorePlan
+      summary: Get store plan
+      description: Retrieve the current subscription plan for a tenant storefront.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:view_stores
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Tenant plan information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantPlanInfo'
+        '404':
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+    post:
+      operationId: changePlatformStorePlan
+      summary: Change store plan
+      description: |
+        Change a tenant's subscription plan. Requires justification and optional ticket number for audit logging.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:suspend_tenant
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanChangeRequest'
+      responses:
+        '200':
+          description: Plan changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  storeId:
+                    type: string
+                    format: uuid
+                  newPlan:
+                    type: string
+                    description: New plan identifier
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/impersonation/start:
+    post:
+      operationId: startPlatformImpersonation
+      summary: Start impersonation session
+      description: |
+        Starts an impersonation session for a tenant/user with mandatory reason (≥10 characters) and ticket number.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:impersonate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImpersonationRequest'
+      responses:
+        '200':
+          description: Impersonation session context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpersonationContext'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/impersonation/renew:
+    post:
+      operationId: renewPlatformImpersonation
+      summary: Renew impersonation session
+      description: Extends the expiration window (2 hour TTL) for the currently active impersonation session.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:impersonate
+      responses:
+        '200':
+          description: Updated impersonation context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpersonationContext'
+        '400':
+          description: No active session or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/impersonation/stop:
+    delete:
+      operationId: stopPlatformImpersonation
+      summary: End impersonation session
+      description: Ends the current impersonation session and logs the action.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:impersonate
+      responses:
+        '200':
+          description: Session ended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/impersonation/current:
+    get:
+      operationId: getCurrentPlatformImpersonation
+      summary: Get current impersonation session
+      description: Returns the active impersonation session context if one exists.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:impersonate
+      responses:
+        '200':
+          description: Active impersonation session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpersonationContext'
+        '404':
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  /api/v1/platform/metrics:
+    get:
+      operationId: getPlatformMetrics
+      summary: Get platform-wide metrics
+      description: |
+        Aggregates KPIs (stores, users, product count, order volume, revenue) using reporting read models. Supports
+        optional date range filtering.
+      tags: [Platform]
+      x-tenant-scope: none
+      x-required-scopes:
+        - platform:view_stores
+      x-rate-limit:
+        limit: 60
+        window: 60s
+        scope: user
+        note: Metrics aggregation is moderately expensive
+      parameters:
+        - name: startDate
+          in: query
+          required: false
+          description: Start date (inclusive) for metrics aggregation (ISO 8601)
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: false
+          description: End date (inclusive) for metrics aggregation (ISO 8601)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Platform metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformMetricsResponse'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Metrics computation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      security:
+        - bearerAuth: []
+
+  # ============================================================================
   # THEME ENDPOINTS
   # ============================================================================
 
@@ -5282,6 +5647,187 @@ components:
     # --------------------------------------------------------------------------
     # Core Domain Schemas
     # --------------------------------------------------------------------------
+
+    TenantLifecycleRequest:
+      type: object
+      required:
+        - reason
+        - ticketNumber
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          description: Business justification for the lifecycle action
+          example: "Violation of terms of service - incident #12345"
+        ticketNumber:
+          type: string
+          description: External support ticket reference
+          example: "OPS-12345"
+
+    TenantPlanInfo:
+      type: object
+      required:
+        - tenantId
+        - tenantName
+        - subdomain
+        - currentPlan
+        - planStartedAt
+        - lastModified
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        tenantName:
+          type: string
+        subdomain:
+          type: string
+        currentPlan:
+          type: string
+          description: Current subscription plan identifier
+          example: professional
+        planStartedAt:
+          type: string
+          format: date-time
+          description: When the current plan became active
+        lastModified:
+          type: string
+          format: date-time
+          description: When plan metadata was last updated
+
+    PlanChangeRequest:
+      type: object
+      required:
+        - newPlan
+        - reason
+      properties:
+        newPlan:
+          type: string
+          description: Target plan identifier
+          example: enterprise
+        reason:
+          type: string
+          minLength: 10
+          description: Justification for the plan change
+          example: "Customer upgrade request - increased GMV"
+        ticketNumber:
+          type: string
+          description: Optional support ticket reference
+          example: "TICKET-999"
+
+    ImpersonationRequest:
+      type: object
+      required:
+        - targetTenantId
+        - reason
+        - ticketNumber
+      properties:
+        targetTenantId:
+          type: string
+          format: uuid
+        targetUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional target user ID (null = tenant admin mode)
+        reason:
+          type: string
+          minLength: 10
+          description: Justification for impersonation
+        ticketNumber:
+          type: string
+          description: Support ticket reference
+          example: "SUPPORT-12345"
+
+    ImpersonationContext:
+      type: object
+      required:
+        - sessionId
+        - platformAdminId
+        - platformAdminEmail
+        - targetTenantId
+        - targetTenantName
+        - reason
+        - ticketNumber
+        - startedAt
+        - expiresAt
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        platformAdminId:
+          type: string
+          format: uuid
+        platformAdminEmail:
+          type: string
+          format: email
+        targetTenantId:
+          type: string
+          format: uuid
+        targetTenantName:
+          type: string
+        targetUserId:
+          type: string
+          format: uuid
+          nullable: true
+        targetUserEmail:
+          type: string
+          format: email
+          nullable: true
+        reason:
+          type: string
+        ticketNumber:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    PlatformMetricsResponse:
+      type: object
+      required:
+        - totalStores
+        - activeStores
+        - suspendedStores
+        - totalUsers
+        - activeUsers
+        - totalOrders
+        - totalRevenue
+        - totalProducts
+        - dataFreshnessTimestamp
+      properties:
+        totalStores:
+          type: integer
+          description: Total number of provisioned stores
+        activeStores:
+          type: integer
+          description: Stores currently active
+        suspendedStores:
+          type: integer
+          description: Stores currently suspended
+        totalUsers:
+          type: integer
+          description: Total user accounts across all stores
+        activeUsers:
+          type: integer
+          description: Active user accounts
+        totalOrders:
+          type: integer
+          format: int64
+          description: Aggregate order count (optionally date-bounded)
+        totalRevenue:
+          type: number
+          format: double
+          description: Aggregate revenue (BigDecimal)
+        totalProducts:
+          type: integer
+          format: int64
+          description: Total products across all tenants
+        dataFreshnessTimestamp:
+          type: string
+          format: date-time
+          description: Timestamp for underlying reporting data freshness
 
     HealthResponse:
       type: object

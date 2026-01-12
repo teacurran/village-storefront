@@ -17,7 +17,7 @@ public class ImpersonationRequest {
     public UUID targetTenantId;
     public UUID targetUserId; // Nullable: NULL = tenant admin mode
     public String reason; // Required, min 10 chars
-    public String ticketNumber; // Optional support ticket reference
+    public String ticketNumber; // Required support ticket reference
 
     public ImpersonationRequest() {
     }

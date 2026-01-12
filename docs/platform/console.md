@@ -110,7 +110,10 @@ Requires `suspend_tenant` permission. All suspensions log to `platform_commands`
 curl -X POST \
   -H "Authorization: Bearer $PLATFORM_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"reason":"Violation of terms of service - fraudulent transactions"}' \
+  -d '{
+        "reason":"Violation of terms of service - fraudulent transactions",
+        "ticketNumber":"OPS-12345"
+      }' \
   "https://platform.villagecompute.com/api/v1/platform/stores/{storeId}/suspend"
 ```
 
@@ -118,6 +121,10 @@ curl -X POST \
 - Minimum 10 characters
 - Should reference policy violation or support ticket
 - Stored immutably in audit log
+- Automatically enables kill-switch feature flags:
+  - `checkout.kill-switch`
+  - `admin.access.disabled`
+  - `storefront.maintenance-mode`
 
 #### Reactivate Store
 
@@ -125,19 +132,33 @@ curl -X POST \
 
 Restores store to `active` status. Creates audit log entry.
 
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $PLATFORM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "reason":"Investigation resolved - ticket #54321",
+        "ticketNumber":"OPS-54321"
+      }' \
+  "https://platform.villagecompute.com/api/v1/platform/stores/{storeId}/reactivate"
+```
+
+Reactivation removes kill-switch feature flags and invalidates tenant cache to ensure storefront availability.
+
 ---
 
 ## Impersonation Control
 
 **API Endpoints:**
 - `POST /api/v1/platform/impersonate` - Start session
+- `POST /api/v1/platform/impersonate/renew` - Extend session expiry
 - `DELETE /api/v1/platform/impersonate` - End session
 - `GET /api/v1/platform/impersonate/current` - Get active session
 
 ### Impersonation Workflow
 
 1. **MFA Challenge** - Platform admin authenticates with MFA
-2. **Reason Required** - Provide justification (min 10 chars) and optional ticket number
+2. **Reason Required** - Provide justification (min 10 chars) and ticket number
 3. **Session Start** - Creates entry in `impersonation_sessions` table
 4. **Visual Indicator** - Red banner displays across all pages (see screenshot below)
 5. **Session End** - Platform admin or timeout ends session

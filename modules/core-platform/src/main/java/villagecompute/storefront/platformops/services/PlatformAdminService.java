@@ -11,11 +11,14 @@ import jakarta.transaction.Transactional;
 
 import org.jboss.logging.Logger;
 
+import villagecompute.storefront.data.models.FeatureFlag;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.User;
 import villagecompute.storefront.platformops.api.types.StoreDirectoryEntry;
+import villagecompute.storefront.platformops.api.types.TenantPlanInfo;
 import villagecompute.storefront.platformops.data.models.PlatformCommand;
 import villagecompute.storefront.platformops.data.repositories.PlatformCommandRepository;
+import villagecompute.storefront.services.FeatureToggle;
 
 import io.quarkus.panache.common.Parameters;
 import io.vertx.core.json.JsonObject;
@@ -38,9 +41,15 @@ import io.vertx.core.json.JsonObject;
 public class PlatformAdminService {
 
     private static final Logger LOG = Logger.getLogger(PlatformAdminService.class);
+    private static final List<String> SUSPENSION_KILL_SWITCH_FLAGS = List.of("checkout.kill-switch",
+            "admin.access.disabled", "storefront.maintenance-mode");
+    private static final String SUSPENSION_FLAG_OWNER = "platform-ops@villagecompute.com";
 
     @Inject
     PlatformCommandRepository platformCommandRepo;
+
+    @Inject
+    FeatureToggle featureToggle;
 
     /**
      * Get store directory with pagination and filters.
@@ -149,7 +158,7 @@ public class PlatformAdminService {
      *            platform admin email
      */
     @Transactional
-    public void suspendStore(UUID tenantId, String reason, UUID actorId, String actorEmail) {
+    public void suspendStore(UUID tenantId, String reason, String ticketNumber, UUID actorId, String actorEmail) {
         Tenant tenant = Tenant.findById(tenantId);
         if (tenant == null) {
             throw new IllegalArgumentException("Store not found: " + tenantId);
@@ -159,8 +168,10 @@ public class PlatformAdminService {
         tenant.updatedAt = OffsetDateTime.now();
         tenant.persist();
 
+        applySuspensionKillSwitches(tenant, true, reason);
+
         JsonObject metadata = new JsonObject().put("newStatus", tenant.status);
-        logPlatformAction(actorId, actorEmail, "suspend_store", "tenant", tenantId, reason, null, metadata);
+        logPlatformAction(actorId, actorEmail, "suspend_store", "tenant", tenantId, reason, ticketNumber, metadata);
 
         LOG.infof("Suspended store %s (tenant %s) by %s - reason: %s", tenant.subdomain, tenantId, actorEmail, reason);
     }
@@ -176,7 +187,7 @@ public class PlatformAdminService {
      *            platform admin email
      */
     @Transactional
-    public void reactivateStore(UUID tenantId, UUID actorId, String actorEmail) {
+    public void reactivateStore(UUID tenantId, String reason, String ticketNumber, UUID actorId, String actorEmail) {
         Tenant tenant = Tenant.findById(tenantId);
         if (tenant == null) {
             throw new IllegalArgumentException("Store not found: " + tenantId);
@@ -186,14 +197,114 @@ public class PlatformAdminService {
         tenant.updatedAt = OffsetDateTime.now();
         tenant.persist();
 
+        applySuspensionKillSwitches(tenant, false, reason);
+
         JsonObject metadata = new JsonObject().put("newStatus", tenant.status);
-        logPlatformAction(actorId, actorEmail, "reactivate_store", "tenant", tenantId, "Store reactivated", null,
-                metadata);
+        logPlatformAction(actorId, actorEmail, "reactivate_store", "tenant", tenantId, reason, ticketNumber, metadata);
 
         LOG.infof("Reactivated store %s (tenant %s) by %s", tenant.subdomain, tenantId, actorEmail);
     }
 
+    /**
+     * Get current plan information for a tenant.
+     *
+     * @param tenantId
+     *            tenant UUID
+     * @return tenant plan info
+     */
+    @Transactional
+    public TenantPlanInfo getTenantPlan(UUID tenantId) {
+        Tenant tenant = Tenant.findById(tenantId);
+        if (tenant == null) {
+            throw new IllegalArgumentException("Store not found: " + tenantId);
+        }
+
+        // Parse plan from settings JSON (simplified - production would use proper JSON parsing)
+        String currentPlan = extractPlanFromSettings(tenant.settings);
+
+        return new TenantPlanInfo(tenant.id, tenant.name, tenant.subdomain, currentPlan, tenant.createdAt,
+                tenant.updatedAt);
+    }
+
+    /**
+     * Change a tenant's subscription plan.
+     *
+     * @param tenantId
+     *            tenant UUID
+     * @param newPlan
+     *            new plan identifier ('basic', 'professional', 'enterprise')
+     * @param reason
+     *            justification for plan change
+     * @param ticketNumber
+     *            optional support ticket reference
+     * @param actorId
+     *            platform admin performing the action
+     * @param actorEmail
+     *            platform admin email
+     */
+    @Transactional
+    public void changeTenantPlan(UUID tenantId, String newPlan, String reason, String ticketNumber, UUID actorId,
+            String actorEmail) {
+
+        // Validation
+        if (newPlan == null || newPlan.isBlank()) {
+            throw new IllegalArgumentException("New plan must be specified");
+        }
+        if (reason == null || reason.trim().length() < 10) {
+            throw new IllegalArgumentException("Plan change reason must be at least 10 characters");
+        }
+
+        Tenant tenant = Tenant.findById(tenantId);
+        if (tenant == null) {
+            throw new IllegalArgumentException("Store not found: " + tenantId);
+        }
+
+        String oldPlan = extractPlanFromSettings(tenant.settings);
+
+        // Update tenant settings with new plan
+        JsonObject settings = new JsonObject(tenant.settings);
+        settings.put("plan", newPlan);
+        settings.put("plan_changed_at", OffsetDateTime.now().toString());
+        tenant.settings = settings.encode();
+        tenant.updatedAt = OffsetDateTime.now();
+        tenant.persist();
+
+        // Log plan change with metadata
+        JsonObject metadata = new JsonObject().put("old_plan", oldPlan).put("new_plan", newPlan).put("tenant_subdomain",
+                tenant.subdomain);
+
+        logPlatformAction(actorId, actorEmail, "change_plan", "tenant", tenantId, reason, ticketNumber, metadata);
+
+        LOG.infof("Changed plan for store %s (tenant %s) from %s to %s by %s - reason: %s", tenant.subdomain, tenantId,
+                oldPlan, newPlan, actorEmail, reason);
+
+        // TODO: In production, would trigger feature flag updates based on plan capabilities
+        // e.g., if downgrading from enterprise to basic, disable advanced features
+    }
+
     // --- Helper Methods ---
+
+    private void applySuspensionKillSwitches(Tenant tenant, boolean suspended, String reason) {
+        for (String flagKey : SUSPENSION_KILL_SWITCH_FLAGS) {
+            FeatureFlag flag = FeatureFlag.find("tenant.id = ?1 AND flagKey = ?2", tenant.id, flagKey).firstResult();
+
+            if (flag == null) {
+                flag = new FeatureFlag();
+                flag.tenant = tenant;
+                flag.flagKey = flagKey;
+                flag.owner = SUSPENSION_FLAG_OWNER;
+                flag.riskLevel = "CRITICAL";
+                flag.description = "Automated kill switch managed via tenant suspension workflow.";
+                flag.rollbackInstructions = "Use Platform Admin resume endpoint to clear kill switches.";
+                flag.persist();
+            }
+
+            flag.enabled = suspended;
+            featureToggle.invalidate(tenant.id, flagKey);
+        }
+
+        LOG.infof("Kill switch flags set to %s for tenant %s - reason=%s", suspended, tenant.id, reason);
+    }
 
     private StoreDirectoryEntry buildDirectoryEntry(Tenant tenant) {
         // Count users for this tenant
@@ -227,5 +338,18 @@ public class PlatformAdminService {
         command.ticketNumber = ticketNumber;
         command.metadata = metadata != null ? metadata.encode() : null;
         platformCommandRepo.persist(command);
+    }
+
+    private String extractPlanFromSettings(String settingsJson) {
+        if (settingsJson == null || settingsJson.isBlank()) {
+            return "basic"; // Default plan
+        }
+        try {
+            JsonObject settings = new JsonObject(settingsJson);
+            return settings.getString("plan", "basic");
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to parse plan from tenant settings JSON");
+            return "basic";
+        }
     }
 }

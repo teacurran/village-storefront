@@ -1098,6 +1098,20 @@
           }
         }
       },
+      "PlanChangeRequest" : {
+        "type" : "object",
+        "properties" : {
+          "newPlan" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "ticketNumber" : {
+            "type" : "string"
+          }
+        }
+      },
       "PlatformEvent" : {
         "type" : "object"
       },
@@ -1417,6 +1431,17 @@
           "subjectEmail" : {
             "type" : "string"
           },
+          "reason" : {
+            "type" : "string"
+          },
+          "ticketNumber" : {
+            "type" : "string"
+          }
+        }
+      },
+      "TenantLifecycleRequest" : {
+        "type" : "object",
+        "properties" : {
           "reason" : {
             "type" : "string"
           },
@@ -6492,6 +6517,132 @@
         } ]
       }
     },
+    "/api/v1/platform/impersonation/current" : {
+      "get" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Current Impersonation",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/impersonation/renew" : {
+      "post" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Renew Impersonation",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/impersonation/start" : {
+      "post" : {
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ImpersonationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Start Impersonation",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/impersonation/stop" : {
+      "delete" : {
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Stop Impersonation",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/metrics" : {
+      "get" : {
+        "parameters" : [ {
+          "name" : "endDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "startDate",
+          "in" : "query",
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Platform Metrics",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
     "/api/v1/platform/stores" : {
       "get" : {
         "parameters" : [ {
@@ -6567,8 +6718,8 @@
         } ]
       }
     },
-    "/api/v1/platform/stores/{storeId}/reactivate" : {
-      "post" : {
+    "/api/v1/platform/stores/{storeId}/plan" : {
+      "get" : {
         "parameters" : [ {
           "name" : "storeId",
           "in" : "path",
@@ -6586,6 +6737,86 @@
           },
           "403" : {
             "description" : "Not Allowed"
+          }
+        },
+        "summary" : "Get Store Plan",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      },
+      "post" : {
+        "parameters" : [ {
+          "name" : "storeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PlanChangeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
+          }
+        },
+        "summary" : "Change Store Plan",
+        "tags" : [ "Platform Admin Resource" ],
+        "security" : [ {
+          "SecurityScheme" : [ ]
+        } ]
+      }
+    },
+    "/api/v1/platform/stores/{storeId}/reactivate" : {
+      "post" : {
+        "parameters" : [ {
+          "name" : "storeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/UUID"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TenantLifecycleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          },
+          "401" : {
+            "description" : "Not Authorized"
+          },
+          "403" : {
+            "description" : "Not Allowed"
+          },
+          "400" : {
+            "description" : "Bad Request"
           }
         },
         "summary" : "Reactivate Store",
@@ -6609,10 +6840,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "type" : "object",
-                "additionalProperties" : {
-                  "type" : "string"
-                }
+                "$ref" : "#/components/schemas/TenantLifecycleRequest"
               }
             }
           },

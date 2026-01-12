@@ -27,13 +27,14 @@ public class ImpersonationContext {
     public String reason;
     public String ticketNumber;
     public OffsetDateTime startedAt;
+    public OffsetDateTime expiresAt;
 
     public ImpersonationContext() {
     }
 
     public ImpersonationContext(UUID sessionId, UUID platformAdminId, String platformAdminEmail, UUID targetTenantId,
             String targetTenantName, UUID targetUserId, String targetUserEmail, String reason, String ticketNumber,
-            OffsetDateTime startedAt) {
+            OffsetDateTime startedAt, OffsetDateTime expiresAt) {
         this.sessionId = sessionId;
         this.platformAdminId = platformAdminId;
         this.platformAdminEmail = platformAdminEmail;
@@ -44,5 +45,6 @@ public class ImpersonationContext {
         this.reason = reason;
         this.ticketNumber = ticketNumber;
         this.startedAt = startedAt;
+        this.expiresAt = expiresAt;
     }
 }
