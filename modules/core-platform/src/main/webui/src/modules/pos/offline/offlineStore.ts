@@ -14,6 +14,7 @@ import { ref, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { useTenantStore } from '@/stores/tenant'
 import { useAuthStore } from '@/stores/auth'
+import type { PaymentEntry } from '@/stores/pos'
 import {
   addToQueue,
   getQueuedEntries,
@@ -24,8 +25,17 @@ import {
   deleteSyncedEntries,
   getDeviceKeys,
   storeDeviceKeys,
+  cleanupExpiredEntries,
+  cleanupExpiredCatalogCache,
+  getEntriesEligibleForRetry,
+  calculateNextRetryTime,
+  bulkCacheProducts,
+  searchCachedProducts,
   type QueueEntry,
   type DeviceKeys,
+  type CachedProduct,
+  DEFAULT_TTL_MS,
+  updateQueueEntry,
 } from './offlineDB'
 import { encryptData, importKeyFromBase64 } from './encryption'
 
@@ -34,7 +44,18 @@ interface OfflineTransaction {
   totalAmount: number
   currency: string
   customerId?: string
-  paymentMethodId: string
+  customer?: {
+    id: string
+    name: string
+    email?: string
+  }
+  paymentMethodId?: string
+  payments: PaymentEntry[]
+  amountTendered: number
+  amountDue: number
+  changeDue: number
+  taxAmount?: number
+  discountAmount?: number
   items: Array<{
     productId: string
     variantId: string
@@ -42,6 +63,40 @@ interface OfflineTransaction {
     price: number
   }>
 }
+
+const FALLBACK_CATALOG: Omit<CachedProduct, 'cachedAt' | 'expiresAt'>[] = [
+  {
+    variantId: 'demo-widget-pro',
+    productId: 'demo-1',
+    productName: 'Widget Pro',
+    sku: 'WIDG-PRO',
+    barcode: '123456789012',
+    price: 29.99,
+    inventoryQuantity: 25,
+    categoryId: 'widgets',
+  },
+  {
+    variantId: 'demo-gadget-plus',
+    productId: 'demo-2',
+    productName: 'Gadget Plus',
+    sku: 'GADT-PLUS',
+    barcode: '987654321098',
+    price: 49.99,
+    inventoryQuantity: 18,
+    categoryId: 'gadgets',
+  },
+  {
+    variantId: 'demo-device-elite',
+    productId: 'demo-3',
+    productName: 'Device Elite',
+    sku: 'DEVC-ELTE',
+    barcode: '135791357913',
+    price: 99.99,
+    inventoryQuantity: 6,
+    categoryId: 'devices',
+  },
+]
+let fallbackCatalogSeeded = false
 
 export const useOfflineStore = defineStore('pos-offline', () => {
   const tenantStore = useTenantStore()
@@ -65,6 +120,8 @@ export const useOfflineStore = defineStore('pos-offline', () => {
   let serviceWorkerRegistered = false
   let serviceWorkerRegistration: ServiceWorkerRegistration | null = null
   let processingEntries: QueueEntry[] = []
+  let cleanupIntervalId: number | null = null
+  let retryIntervalId: number | null = null
 
   // Computed
   const hasQueuedTransactions = computed(() => queueStats.value.queued > 0)
@@ -90,6 +147,10 @@ export const useOfflineStore = defineStore('pos-offline', () => {
     }
 
     await ensureServiceWorker()
+
+    // Start periodic cleanup jobs
+    startPeriodicCleanup()
+    startRetryMonitor()
 
     // Attempt sync if online
     if (isOnline.value && hasQueuedTransactions.value && !isSyncOnHold.value) {
@@ -120,19 +181,23 @@ export const useOfflineStore = defineStore('pos-offline', () => {
     const tenantId = tenantStore.tenantId?.value ?? 'unknown-tenant'
     const idempotencyKey = `${tenantId}:${currentDeviceId.value}:${transaction.localTransactionId}`
 
-    // Create queue entry
+    // Create queue entry with TTL and retry metadata
+    const now = new Date()
     const queueEntry: QueueEntry = {
       id: uuidv4(),
       localTransactionId: transaction.localTransactionId,
       encryptedPayload: encrypted.encryptedData,
       encryptionIv: encrypted.iv,
       encryptionKeyVersion: encrypted.keyVersion,
-      transactionTimestamp: new Date().toISOString(),
+      transactionTimestamp: now.toISOString(),
       transactionAmount: transaction.totalAmount,
       idempotencyKey,
       staffUserId: staffUserId ?? authStore.user?.id ?? undefined,
       syncStatus: 'queued',
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
+      ttlMs: DEFAULT_TTL_MS,
+      expiresAt: new Date(now.getTime() + DEFAULT_TTL_MS).toISOString(),
+      retryCount: 0,
     }
 
     await addToQueue(queueEntry)
@@ -218,9 +283,18 @@ export const useOfflineStore = defineStore('pos-offline', () => {
       console.error('[OfflineQueue] Sync error:', error)
       syncError.value = error instanceof Error ? error.message : 'Unknown error'
 
-      // Mark all as failed
+      // Mark all as failed with retry backoff
       for (const entry of processingEntries) {
-        await markAsFailed(entry.id, syncError.value)
+        const newRetryCount = entry.retryCount + 1
+        const nextRetryAt = calculateNextRetryTime(newRetryCount)
+
+        await updateQueueEntry(entry.id, {
+          syncStatus: 'failed',
+          syncError: syncError.value,
+          retryCount: newRetryCount,
+          nextRetryAt: nextRetryAt.toISOString(),
+          lastAttemptAt: new Date().toISOString(),
+        })
       }
       await refreshQueueStats()
     } finally {
@@ -330,6 +404,155 @@ export const useOfflineStore = defineStore('pos-offline', () => {
   }
 
   /**
+   * Start periodic cleanup of expired entries and cache.
+   */
+  function startPeriodicCleanup() {
+    if (cleanupIntervalId) return
+
+    // Run cleanup every 10 minutes
+    cleanupIntervalId = window.setInterval(
+      async () => {
+        const expiredEntries = await cleanupExpiredEntries()
+        const expiredCache = await cleanupExpiredCatalogCache()
+        if (expiredEntries > 0 || expiredCache > 0) {
+          console.log(
+            `[OfflineQueue] Cleanup: ${expiredEntries} expired entries, ${expiredCache} expired cache items`
+          )
+          await refreshQueueStats()
+        }
+      },
+      10 * 60 * 1000
+    ) // 10 minutes
+  }
+
+  /**
+   * Start periodic monitoring for retry-eligible failed entries.
+   */
+  function startRetryMonitor() {
+    if (retryIntervalId) return
+
+    // Check for retry-eligible entries every 30 seconds
+    retryIntervalId = window.setInterval(async () => {
+      if (isSyncing.value || !isOnline.value || isSyncOnHold.value) {
+        return
+      }
+
+      const eligibleEntries = await getEntriesEligibleForRetry()
+      if (eligibleEntries.length > 0) {
+        console.log(`[OfflineQueue] ${eligibleEntries.length} entries eligible for retry`)
+
+        // Reset status to queued so syncQueue will pick them up
+        for (const entry of eligibleEntries) {
+          await updateQueueEntry(entry.id, { syncStatus: 'queued' })
+        }
+        await refreshQueueStats()
+        await syncQueue()
+      }
+    }, 30 * 1000) // 30 seconds
+  }
+
+  /**
+   * Prime catalog cache by fetching frequently used products.
+   */
+  async function primeCatalogCache() {
+    if (!isOnline.value) {
+      console.warn('[OfflineQueue] Cannot reach catalog API while offline - using fallback data')
+      await ensureFallbackCatalogCached()
+      return
+    }
+
+    try {
+      // Fetch active products from API
+      const response = await fetch('/api/catalog/products?status=active&limit=200', {
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch catalog: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      const products: Omit<CachedProduct, 'cachedAt' | 'expiresAt'>[] = data.items.map(
+        (item: any) => ({
+          variantId: item.variantId,
+          productId: item.productId,
+          productName: item.name,
+          sku: item.sku,
+          barcode: item.barcode,
+          price: item.price,
+          inventoryQuantity: item.inventoryQuantity || 0,
+          categoryId: item.categoryId,
+        })
+      )
+
+      if (products.length > 0) {
+        await bulkCacheProducts(products)
+        console.log(`[OfflineQueue] Cached ${products.length} products from API`)
+      }
+    } catch (error) {
+      console.error('[OfflineQueue] Failed to prime catalog cache:', error)
+      await ensureFallbackCatalogCached()
+    }
+  }
+
+  /**
+   * Search products (online or cached).
+   */
+  async function searchProducts(query: string): Promise<CachedProduct[]> {
+    const trimmedQuery = query.trim()
+    if (trimmedQuery.length < 2) {
+      return []
+    }
+
+    // Try cached search first (works offline)
+    const cached = await searchCachedProducts(trimmedQuery)
+    if (cached.length > 0) {
+      return cached
+    }
+
+    // If online and no cached results, fetch from API
+    if (isOnline.value) {
+      try {
+        const response = await fetch(
+          `/api/catalog/products/search?q=${encodeURIComponent(trimmedQuery)}&limit=20`,
+          {
+            credentials: 'include',
+          }
+        )
+
+        if (!response.ok) {
+          return []
+        }
+
+        const data = await response.json()
+        const products: Omit<CachedProduct, 'cachedAt' | 'expiresAt'>[] = data.items.map(
+          (item: any) => ({
+            variantId: item.variantId,
+            productId: item.productId,
+            productName: item.name,
+            sku: item.sku,
+            barcode: item.barcode,
+            price: item.price,
+            inventoryQuantity: item.inventoryQuantity || 0,
+            categoryId: item.categoryId,
+          })
+        )
+
+        if (products.length > 0) {
+          await bulkCacheProducts(products)
+          return searchCachedProducts(trimmedQuery)
+        }
+      } catch (error) {
+        console.error('[OfflineQueue] Product search failed:', error)
+      }
+    }
+
+    // Fall back to demo catalog to keep POS usable when offline
+    await ensureFallbackCatalogCached()
+    return searchCachedProducts(trimmedQuery)
+  }
+
+  /**
    * Cleanup listeners on unmount.
    */
   function dispose() {
@@ -341,6 +564,16 @@ export const useOfflineStore = defineStore('pos-offline', () => {
     if (serviceWorkerRegistered && navigator.serviceWorker) {
       navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage)
     }
+
+    if (cleanupIntervalId) {
+      clearInterval(cleanupIntervalId)
+      cleanupIntervalId = null
+    }
+
+    if (retryIntervalId) {
+      clearInterval(retryIntervalId)
+      retryIntervalId = null
+    }
   }
 
   /**
@@ -349,6 +582,15 @@ export const useOfflineStore = defineStore('pos-offline', () => {
   function clearDeviceContext() {
     currentDeviceId.value = null
     encryptionKeyVersion.value = 1
+  }
+
+  async function ensureFallbackCatalogCached() {
+    if (fallbackCatalogSeeded) {
+      return
+    }
+
+    await bulkCacheProducts(FALLBACK_CATALOG)
+    fallbackCatalogSeeded = true
   }
 
   return {
@@ -378,5 +620,7 @@ export const useOfflineStore = defineStore('pos-offline', () => {
     resumeSync,
     clearDeviceContext,
     dispose,
+    primeCatalogCache,
+    searchProducts,
   }
 })

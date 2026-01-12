@@ -1,28 +1,58 @@
 /**
- * POS Service Worker for offline queue background sync.
+ * POS Service Worker for offline queue background sync and asset caching.
  *
- * Handles background sync when network connectivity is restored.
- * Registered from POS module initialization.
+ * Handles background sync when network connectivity is restored and caches
+ * critical assets for offline operation.
  *
  * References:
  * - Architecture: §3.4 POS Offline Flow UX (automatic retry behavior)
- * - Task I4.T7: Service Worker for offline sync
+ * - Task I4.T5: Service Worker with cache management
  */
 
-// Cache name for future use when implementing offline caching
-// const CACHE_NAME = 'pos-offline-v1'
+const CACHE_NAME = 'pos-offline-v2'
 const SYNC_TAG = 'pos-offline-sync'
 
-// Install event
-self.addEventListener('install', () => {
+// Assets to cache for offline use
+const CRITICAL_ASSETS = [
+  '/',
+  '/pos',
+  '/assets/primeicons.woff2',
+  '/assets/vendor.js',
+  '/assets/main.js',
+]
+
+const API_CACHE_NAME = 'pos-api-v1'
+const API_CACHE_PATTERNS = ['/api/catalog/products']
+
+// Install event - cache critical assets
+self.addEventListener('install', (event) => {
   console.log('[POS SW] Installing service worker...')
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[POS SW] Caching critical assets')
+      return cache.addAll(CRITICAL_ASSETS).catch((error) => {
+        console.warn('[POS SW] Failed to cache some assets:', error)
+      })
+    })
+  )
   self.skipWaiting() // Activate immediately
 })
 
-// Activate event
+// Activate event - cleanup old caches
 self.addEventListener('activate', (event) => {
   console.log('[POS SW] Activating service worker...')
-  event.waitUntil(self.clients.claim()) // Take control immediately
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME && cacheName !== API_CACHE_NAME) {
+            console.log('[POS SW] Deleting old cache:', cacheName)
+            return caches.delete(cacheName)
+          }
+        })
+      )
+    }).then(() => self.clients.claim())
+  )
 })
 
 // Background Sync event
@@ -89,6 +119,101 @@ self.addEventListener('message', (event) => {
         event.ports[0].postMessage({ success: false, error: 'Background sync not supported' })
       }
     }
+  }
+})
+
+// Fetch event - implement caching strategies
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+  const url = new URL(request.url)
+
+  // Skip cross-origin requests
+  if (url.origin !== location.origin) {
+    return
+  }
+
+  // API requests: Network-first with cache fallback
+  if (API_CACHE_PATTERNS.some((pattern) => url.pathname.startsWith(pattern))) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          // Cache successful responses
+          if (response.ok) {
+            const responseClone = response.clone()
+            caches.open(API_CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone)
+            })
+          }
+          return response
+        })
+        .catch(() => {
+          // Network failed, try cache
+          return caches.match(request).then((cached) => {
+            if (cached) {
+              console.log('[POS SW] Serving cached API response:', url.pathname)
+              return cached
+            }
+            // Return offline response
+            return new Response(JSON.stringify({ error: 'Offline', items: [] }), {
+              headers: { 'Content-Type': 'application/json' },
+              status: 503,
+            })
+          })
+        })
+    )
+    return
+  }
+
+  // Static assets: Cache-first
+  if (
+    request.method === 'GET' &&
+    (url.pathname.startsWith('/assets/') ||
+      url.pathname.endsWith('.js') ||
+      url.pathname.endsWith('.css') ||
+      url.pathname.endsWith('.woff2'))
+  ) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) {
+          return cached
+        }
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const responseClone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone)
+            })
+          }
+          return response
+        })
+      })
+    )
+    return
+  }
+
+  // HTML pages: Network-first with cache fallback
+  if (request.method === 'GET' && request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const responseClone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone)
+            })
+          }
+          return response
+        })
+        .catch(() => {
+          return caches.match(request).then((cached) => {
+            if (cached) {
+              console.log('[POS SW] Serving cached HTML:', url.pathname)
+              return cached
+            }
+            return caches.match('/').then((fallback) => fallback || new Response('Offline'))
+          })
+        })
+    )
   }
 })
 
