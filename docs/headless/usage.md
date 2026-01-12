@@ -27,17 +27,126 @@ The Village Storefront Headless API provides OAuth-secured REST endpoints for bu
 
 ### Creating an OAuth Client
 
+**Admin Dashboard Method:**
+
 1. Log in to your store's admin dashboard at `https://yourstore.villagecompute.com/admin`
 2. Navigate to **Settings → OAuth Clients**
 3. Click **Create OAuth Client**
 4. Configure:
    - **Name**: Descriptive name (e.g., "Mobile App", "Custom Storefront")
    - **Description**: Optional description
-   - **Scopes**: Select required scopes (`catalog:read`, `cart:read`, `cart:write`)
+   - **Scopes**: Select required scopes (`catalog:read`, `cart:read`, `cart:write`, `orders:read`, `orders:write`, `customer:read`, `customer:write`)
    - **Rate Limit**: Default 5000 requests/minute (adjustable)
 5. Save and securely store the generated `client_id` and `client_secret`
 
 ⚠️ **Security Warning**: Client secrets are only shown once. Store them securely (e.g., environment variables, secrets manager). Never commit to version control.
+
+**API Method (Admin JWT Required):**
+
+```bash
+# Authenticate as admin first, then create OAuth client
+curl -X POST "https://yourstore.villagecompute.com/api/v1/admin/oauth-clients" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mobile App Client",
+    "description": "OAuth client for iOS/Android apps",
+    "scopes": ["catalog:read", "cart:read", "cart:write", "orders:read", "customer:read"],
+    "rateLimitPerMinute": 5000
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "clientId": "oauth_abc123xyz",
+  "clientSecret": "dGVzdC1zZWNyZXQtZGF0YQ",
+  "name": "Mobile App Client",
+  "scopes": ["catalog:read", "cart:read", "cart:write", "orders:read"],
+  "rateLimitPerMinute": 5000
+}
+```
+
+⚠️ **CRITICAL**: The `clientSecret` is only returned during creation. Store it securely immediately.
+
+### Managing OAuth Clients
+
+**List All OAuth Clients:**
+
+```bash
+curl "https://yourstore.villagecompute.com/api/v1/admin/oauth-clients" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN"
+```
+
+**Get OAuth Client Details:**
+
+```bash
+curl "https://yourstore.villagecompute.com/api/v1/admin/oauth-clients/oauth_abc123xyz" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN"
+```
+
+**Update OAuth Client (Scopes & Rate Limit):**
+
+```bash
+curl -X PUT "https://yourstore.villagecompute.com/api/v1/admin/oauth-clients/oauth_abc123xyz" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mobile App Client (Updated)",
+    "description": "Updated description",
+    "scopes": ["catalog:read", "cart:read", "cart:write", "orders:read", "orders:write", "customer:write"],
+    "rateLimitPerMinute": 10000
+  }'
+```
+
+**Regenerate Client Secret:**
+
+Use this if the secret was compromised or lost. The old secret is invalidated immediately.
+
+```bash
+curl -X POST "https://yourstore.villagecompute.com/api/v1/admin/oauth-clients/oauth_abc123xyz/regenerate-secret" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "clientId": "oauth_abc123xyz",
+  "clientSecret": "bmV3LXNlY3JldC1kYXRh"
+}
+```
+
+⚠️ **WARNING**: The old secret is invalidated immediately. Update all integrations with the new secret.
+
+**Revoke OAuth Client:**
+
+Revokes the client permanently. All existing authentication will fail immediately.
+
+```bash
+curl -X POST "https://yourstore.villagecompute.com/api/v1/admin/oauth-clients/oauth_abc123xyz/revoke" \
+  -H "Authorization: Bearer $ADMIN_JWT_TOKEN"
+```
+
+After revocation, the client's `active` status is set to `false` and cannot authenticate.
+
+### OAuth Client Lifecycle
+
+**Recommended Workflow:**
+
+1. **Development:** Create OAuth client with limited scopes (`catalog:read` only)
+2. **Testing:** Test integration in staging environment
+3. **Production:** Update client with production scopes and rate limits
+4. **Rotation:** Regenerate secrets quarterly or when team members leave
+5. **Revocation:** Revoke immediately if credentials are compromised
+
+**Security Best Practices:**
+
+- **Scope Minimization:** Only grant scopes your integration actually needs
+- **Rate Limit Tuning:** Start conservative (1000 req/min) and increase based on monitoring
+- **Secret Rotation:** Regenerate secrets every 90 days or on security incidents
+- **Monitoring:** Track usage via admin dashboard (last used timestamp, request counts)
+- **Separation:** Use separate OAuth clients for dev/staging/prod environments
 
 ---
 
@@ -72,8 +181,10 @@ curl https://yourstore.villagecompute.com/api/v1/headless/catalog/products \
 | `catalog:read` | Read product catalog (list products, get product details) |
 | `cart:read` | Read cart contents |
 | `cart:write` | Modify cart (add/update/remove items) |
-| `orders:read` | Read order history (future) |
-| `orders:write` | Create and update orders (future) |
+| `orders:read` | Read order history and fulfillment status |
+| `orders:write` | Create, update, or cancel orders |
+| `customer:read` | Retrieve customer profiles, addresses, and preferences |
+| `customer:write` | Update customer contact info, addresses, or opt-ins |
 
 ---
 

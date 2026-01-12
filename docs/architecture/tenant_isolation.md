@@ -87,8 +87,8 @@ The **Tenant Access Gateway** is the named entry point from Section 2 of the Cor
 |---------------|---------------------|---------|
 | **Subdomain** | Extract subdomain from `Host: storename.villagecompute.com` → query `tenants.subdomain` | `GET / Host: mystore.villagecompute.com` |
 | **Custom Domain** | Query `custom_domains.domain` (exact match, verified=true) → join to `tenants` | `GET / Host: shop.example.com` |
+| **OAuth Headless API** | OAuth client linked to tenant → verified by `HeadlessAuthFilter` → tenant context populated | `GET /api/v1/headless/catalog/products Host: mystore.villagecompute.com Authorization: Basic <credentials>` |
 | **Background Jobs** | Manual context seeding via `TenantContext.setCurrentTenantId(uuid)` | Scheduled jobs, async processing |
-| **API Keys** | (Future) API key linked to tenant → same resolution mechanism | Server-to-server integrations |
 
 ---
 

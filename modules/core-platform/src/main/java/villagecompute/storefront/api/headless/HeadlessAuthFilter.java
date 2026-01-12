@@ -214,6 +214,9 @@ public class HeadlessAuthFilter implements ContainerRequestFilter, ContainerResp
         if (path.startsWith("/api/v1/headless/orders")) {
             return "GET".equals(httpMethod) ? "orders:read" : "orders:write";
         }
+        if (path.startsWith("/api/v1/headless/customer")) {
+            return "GET".equals(httpMethod) ? "customer:read" : "customer:write";
+        }
         return "catalog:read";
     }
 }

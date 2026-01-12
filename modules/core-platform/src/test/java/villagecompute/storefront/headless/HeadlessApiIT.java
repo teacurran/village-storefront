@@ -31,6 +31,7 @@ import villagecompute.storefront.services.RateLimitService;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.tenant.TenantInfo;
 
+import io.quarkus.cache.CacheManager;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
@@ -59,6 +60,9 @@ class HeadlessApiIT {
     @Inject
     RateLimitService rateLimitService;
 
+    @Inject
+    CacheManager cacheManager;
+
     private Tenant tenant;
     private Tenant rogueTenant;
     private Product product;
@@ -68,6 +72,7 @@ class HeadlessApiIT {
     @BeforeEach
     @Transactional
     void setUp() {
+        clearTenantCache();
         rateLimitService.clearAllBuckets();
 
         entityManager.createQuery("DELETE FROM CartItem").executeUpdate();
@@ -132,6 +137,7 @@ class HeadlessApiIT {
     void tearDown() {
         rateLimitService.clearAllBuckets();
         TenantContext.clear();
+        clearTenantCache();
     }
 
     @Test
@@ -230,5 +236,9 @@ class HeadlessApiIT {
         client.scopes.addAll(scopes);
         client.rateLimitPerMinute = rateLimitPerMinute;
         return client;
+    }
+
+    private void clearTenantCache() {
+        cacheManager.getCache("tenant-cache").ifPresent(cache -> cache.invalidateAll().await().indefinitely());
     }
 }

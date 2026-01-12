@@ -156,8 +156,20 @@ tags:
   - name: Headless
     description: |
       Headless commerce API for custom frontend implementations. Supports cart
-      operations, checkout flows, and order management via API keys. Optimized
-      for high-throughput integrations.
+      operations, checkout flows, customer management, and order orchestration
+      via OAuth client credentials. Optimized for high-throughput integrations.
+
+      **Available Scopes**
+      - `catalog:read` – list products and fetch product details
+      - `cart:read` – retrieve cart contents for a guest session
+      - `cart:write` – mutate cart contents (add/update/remove)
+      - `orders:read` – fetch order history and order detail records
+      - `orders:write` – create or update orders via API
+      - `customer:read` – retrieve customer profiles and addresses
+      - `customer:write` – update customer contact info and preferences
+
+      Sample cURL requests for these endpoints are included inline with each
+      operation definition.
 
   - name: Platform
     description: |
@@ -4296,6 +4308,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      x-codeSamples:
+        - lang: cURL
+          label: List products with search
+          source: |
+            curl -s "https://mystore.villagecompute.com/api/v1/headless/catalog/products?search=running" \
+              -H "Authorization: Basic BASE64_CLIENT_CREDENTIALS"
 
   /api/v1/headless/catalog/products/{productId}:
     get:
@@ -4504,6 +4522,15 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '429':
           $ref: '#/components/responses/RateLimitExceeded'
+      x-codeSamples:
+        - lang: cURL
+          label: Add item to cart
+          source: |
+            curl -X POST https://mystore.villagecompute.com/api/v1/headless/cart/items \
+              -H "Authorization: Basic BASE64_CLIENT_CREDENTIALS" \
+              -H "X-Session-Id: 44444444-2222-3333-4444-555555555555" \
+              -H "Content-Type: application/json" \
+              -d '{"variantId":"7c9e6679-7425-40de-944b-e07fc1f90ae7","quantity":2}'
 
   /api/v1/headless/cart/items/{itemId}:
     patch:
@@ -5445,6 +5472,8 @@ components:
             cart:write: Modify cart (add/update/remove items)
             orders:read: Read order history
             orders:write: Create and update orders
+            customer:read: Read customer profiles
+            customer:write: Update customer profiles
       description: |
         OAuth 2.0 Client Credentials flow for headless API access.
 
