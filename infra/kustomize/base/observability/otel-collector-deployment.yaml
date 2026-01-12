@@ -1,0 +1,222 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  labels:
+    app: village-storefront
+    component: otel-collector
+    tier: observability
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: otel-collector
+  template:
+    metadata:
+      labels:
+        app: village-storefront
+        component: otel-collector
+        tier: observability
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8889"
+    spec:
+      serviceAccountName: village-storefront
+
+      # Pod anti-affinity to spread collectors across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - otel-collector
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib:0.94.0
+        imagePullPolicy: IfNotPresent
+
+        # Resource allocation for telemetry processing
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "512Mi"
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Ports
+        ports:
+        - name: otlp-grpc
+          containerPort: 4317
+          protocol: TCP
+        - name: otlp-http
+          containerPort: 4318
+          protocol: TCP
+        - name: prometheus
+          containerPort: 8889
+          protocol: TCP
+        - name: health
+          containerPort: 13133
+          protocol: TCP
+        - name: pprof
+          containerPort: 1777
+          protocol: TCP
+        - name: zpages
+          containerPort: 55679
+          protocol: TCP
+        - name: metrics
+          containerPort: 8888
+          protocol: TCP
+
+        # Volume mounts
+        volumeMounts:
+        - name: otel-collector-config
+          mountPath: /etc/otelcol-contrib
+          readOnly: true
+
+        # Environment variables
+        env:
+        - name: CLUSTER_NAME
+          value: "village-storefront-prod"
+
+        - name: ENVIRONMENT
+          value: "production"
+
+        - name: JAEGER_ENDPOINT
+          value: "jaeger-collector.observability.svc.cluster.local:4317"
+
+        - name: LOGGING_LEVEL
+          value: "info"
+
+        - name: ELASTIC_OTLP_ENDPOINT
+          value: "https://logs.villagecompute.com:4318"
+
+        - name: ELASTIC_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: observability-shared
+              key: elastic_api_token
+
+        - name: GCP_PROJECT_ID
+          value: "village-observability"
+
+        - name: PAGERDUTY_EVENT_ENDPOINT
+          value: "https://events.pagerduty.com/v2/enqueue"
+
+        - name: PAGERDUTY_ROUTING_KEY
+          valueFrom:
+            secretKeyRef:
+              name: observability-shared
+              key: pagerduty_routing_key
+
+        # Memory ballast for GC optimization
+        - name: GOMEMLIMIT
+          value: "400MiB"
+
+      volumes:
+      - name: otel-collector-config
+        configMap:
+          name: otel-collector-config
+          items:
+          - key: otel-collector-config.yaml
+            path: config.yaml
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  labels:
+    app: village-storefront
+    component: otel-collector
+spec:
+  type: ClusterIP
+  selector:
+    app: village-storefront
+    component: otel-collector
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+  - name: otlp-http
+    port: 4318
+    targetPort: 4318
+    protocol: TCP
+  - name: prometheus
+    port: 8889
+    targetPort: 8889
+    protocol: TCP
+  - name: health
+    port: 13133
+    targetPort: 13133
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector-headless
+  labels:
+    app: village-storefront
+    component: otel-collector
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: village-storefront
+    component: otel-collector
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    targetPort: 4317
+    protocol: TCP
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otel-collector-pdb
+  labels:
+    app: village-storefront
+    component: otel-collector
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: village-storefront
+      component: otel-collector

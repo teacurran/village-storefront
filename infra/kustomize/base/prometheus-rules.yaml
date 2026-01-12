@@ -1,0 +1,348 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: village-storefront-alerts
+  labels:
+    app: village-storefront
+    prometheus: platform
+    role: alert-rules
+spec:
+  groups:
+  # Queue Health Alerts (Task I5.T5)
+  # Maps to runbook.md §5 SLA targets and alert thresholds
+  - name: background_job_queue_health
+    interval: 30s
+    rules:
+    # Critical: Media queue depth exceeds capacity
+    - alert: MediaQueueDepthCritical
+      expr: |
+        media_processing_queue_depth{priority="critical"} > 50
+      for: 5m
+      labels:
+        severity: sev1
+        component: media-processing
+        alert_group: queue_health
+      annotations:
+        summary: "Media processing queue depth critical ({{ $value }} jobs)"
+        description: "Critical priority media queue has {{ $value }} jobs pending for >5 minutes. SLA breach imminent. Check worker pod availability and FFmpeg resource usage."
+        runbook_url: "https://docs.villagecompute.com/runbooks/media-queue-backlog"
+        dashboard_url: "/d/background-jobs"
+
+    # Warning: Media queue depth elevated
+    - alert: MediaQueueDepthHigh
+      expr: |
+        media_processing_queue_depth{priority=~"high|default"} > 200
+      for: 10m
+      labels:
+        severity: sev2
+        component: media-processing
+        alert_group: queue_health
+      annotations:
+        summary: "Media processing queue depth high ({{ $value }} jobs)"
+        description: "Media queue has {{ $value }} jobs pending for >10 minutes. Consider scaling workers or investigating slow jobs."
+        runbook_url: "https://docs.villagecompute.com/runbooks/media-queue-backlog"
+        dashboard_url: "/d/background-jobs"
+
+    # Critical: Email queue stalled
+    - alert: EmailQueueDepthCritical
+      expr: |
+        media_processing_queue_depth{queue_type="emails.transactional"} > 100
+      for: 2m
+      labels:
+        severity: sev1
+        component: email-processing
+        alert_group: queue_health
+      annotations:
+        summary: "Email queue critically backlogged ({{ $value }} emails)"
+        description: "Transactional email queue has {{ $value }} pending for >2 minutes. Check SMTP service health and worker availability."
+        runbook_url: "https://docs.villagecompute.com/runbooks/email-queue-stalled"
+        dashboard_url: "/d/background-jobs"
+
+    # Critical: Webhook queue depth
+    - alert: WebhookQueueDepthCritical
+      expr: |
+        media_processing_queue_depth{queue_type="webhooks.stripe"} > 50
+      for: 2m
+      labels:
+        severity: sev1
+        component: webhooks
+        alert_group: queue_health
+      annotations:
+        summary: "Stripe webhook queue backlogged ({{ $value }} webhooks)"
+        description: "Stripe webhook queue has {{ $value }} pending for >2 minutes. Payment confirmations delayed. Check Stripe connectivity and worker health."
+        runbook_url: "https://docs.villagecompute.com/runbooks/webhook-queue-backlog"
+        dashboard_url: "/d/checkout-payments"
+
+    # Critical: Dead Letter Queue accumulation
+    - alert: DeadLetterQueueAccumulation
+      expr: |
+        dead_letter_queue_depth > 10
+      for: 5m
+      labels:
+        severity: sev1
+        component: job-system
+        alert_group: queue_health
+      annotations:
+        summary: "Dead letter queue accumulating ({{ $value }} failed jobs)"
+        description: "Dead letter queue has {{ $value }} permanently failed jobs. Investigate job handler bugs or data corruption issues."
+        runbook_url: "https://docs.villagecompute.com/runbooks/dlq-accumulation"
+        dashboard_url: "/d/background-jobs"
+
+  # Latency & Performance Alerts
+  - name: job_latency_sla
+    interval: 30s
+    rules:
+    # P1 Alert: Stripe webhook latency breach (3x P99 target)
+    - alert: StripeWebhookLatencyP1
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(stripe_webhook_processing_duration_seconds_bucket[5m])) by (le)
+        ) > 3.6
+      for: 5m
+      labels:
+        severity: sev1
+        component: webhooks
+        alert_group: latency_sla
+        sla_metric: p99
+      annotations:
+        summary: "Stripe webhook P99 latency breach ({{ $value | humanizeDuration }})"
+        description: "Stripe webhook processing P99 latency is {{ $value | humanizeDuration }}, exceeding 3x target (3.6s). Payment confirmations severely delayed."
+        runbook_url: "https://docs.villagecompute.com/runbooks/webhook-latency-breach"
+        dashboard_url: "/d/checkout-payments"
+
+    # P2 Alert: Stripe webhook latency elevated (2x P95 target)
+    - alert: StripeWebhookLatencyP2
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(stripe_webhook_processing_duration_seconds_bucket[5m])) by (le)
+        ) > 1.2
+      for: 10m
+      labels:
+        severity: sev2
+        component: webhooks
+        alert_group: latency_sla
+        sla_metric: p95
+      annotations:
+        summary: "Stripe webhook P95 latency elevated ({{ $value | humanizeDuration }})"
+        description: "Stripe webhook processing P95 latency is {{ $value | humanizeDuration }}, exceeding 2x target (1.2s). Investigate worker resource contention."
+        runbook_url: "https://docs.villagecompute.com/runbooks/webhook-latency-breach"
+        dashboard_url: "/d/checkout-payments"
+
+    # P1 Alert: Email processing latency breach
+    - alert: EmailProcessingLatencyP1
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(media_processing_job_duration_seconds_bucket{queue_type="emails.transactional"}[5m])) by (le)
+        ) > 4.5
+      for: 5m
+      labels:
+        severity: sev1
+        component: email-processing
+        alert_group: latency_sla
+        sla_metric: p99
+      annotations:
+        summary: "Email processing P99 latency breach ({{ $value | humanizeDuration }})"
+        description: "Transactional email P99 latency is {{ $value | humanizeDuration }}, exceeding 3x target (4.5s). Check SMTP service and network connectivity."
+        runbook_url: "https://docs.villagecompute.com/runbooks/email-latency-breach"
+        dashboard_url: "/d/background-jobs"
+
+    # P1 Alert: Media processing (images) latency breach
+    - alert: MediaImageProcessingLatencyP1
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(media_processing_job_duration_seconds_bucket{queue_type="media.processing",media_type="image"}[5m])) by (le)
+        ) > 135
+      for: 10m
+      labels:
+        severity: sev1
+        component: media-processing
+        alert_group: latency_sla
+        sla_metric: p99
+      annotations:
+        summary: "Image processing P99 latency breach ({{ $value | humanizeDuration }})"
+        description: "Image processing P99 latency is {{ $value | humanizeDuration }}, exceeding 3x target (135s). Check worker CPU usage and R2 connectivity."
+        runbook_url: "https://docs.villagecompute.com/runbooks/media-latency-breach"
+        dashboard_url: "/d/media-pipeline"
+
+    # P1 Alert: Video transcoding latency breach
+    - alert: MediaVideoProcessingLatencyP1
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(media_processing_job_duration_seconds_bucket{queue_type="media.processing",media_type="video"}[5m])) by (le)
+        ) > 1440
+      for: 15m
+      labels:
+        severity: sev1
+        component: media-processing
+        alert_group: latency_sla
+        sla_metric: p99
+      annotations:
+        summary: "Video transcoding P99 latency breach ({{ $value | humanizeDuration }})"
+        description: "Video transcoding P99 latency is {{ $value | humanizeDuration }}, exceeding 3x target (24m). Check FFmpeg resource allocation and worker availability."
+        runbook_url: "https://docs.villagecompute.com/runbooks/media-latency-breach"
+        dashboard_url: "/d/media-pipeline"
+
+  # POS Offline Queue Health (Task I5.T5 acceptance criteria)
+  - name: pos_offline_queue_health
+    interval: 30s
+    rules:
+    # Critical: POS offline batch queue depth
+    - alert: POSOfflineQueueDepthCritical
+      expr: |
+        pos_offline_batch_queue_depth > 100
+      for: 10m
+      labels:
+        severity: sev1
+        component: pos-offline
+        alert_group: queue_health
+      annotations:
+        summary: "POS offline batch queue critically backlogged ({{ $value }} batches)"
+        description: "POS offline sync queue has {{ $value }} batches pending for >10 minutes. Stores may experience data sync delays. Check worker availability and database connectivity."
+        runbook_url: "https://docs.villagecompute.com/runbooks/pos-offline-queue-backlog"
+        dashboard_url: "/d/pos-offline-sync"
+
+    # Critical: POS validation failure rate elevated
+    - alert: POSValidationFailureRateHigh
+      expr: |
+        rate(pos_offline_batch_validation_failures[1h]) > 0.05
+      for: 15m
+      labels:
+        severity: sev2
+        component: pos-offline
+        alert_group: data_quality
+      annotations:
+        summary: "POS offline validation failures elevated ({{ $value | humanizePercentage }} per hour)"
+        description: "POS offline batch validation failure rate is {{ $value | humanizePercentage }} per hour. Investigate data integrity issues or schema mismatches."
+        runbook_url: "https://docs.villagecompute.com/runbooks/pos-validation-failures"
+        dashboard_url: "/d/pos-offline-sync"
+
+    # Warning: POS cash discrepancy detected
+    - alert: POSCashDiscrepancyDetected
+      expr: |
+        sum(pos_offline_cash_discrepancy_total) > 0
+      for: 5m
+      labels:
+        severity: sev2
+        component: pos-offline
+        alert_group: data_quality
+      annotations:
+        summary: "POS cash discrepancies detected ({{ $value }} occurrences)"
+        description: "POS offline sync detected {{ $value }} cash discrepancies. Review reconciliation process and notify store managers."
+        runbook_url: "https://docs.villagecompute.com/runbooks/pos-cash-discrepancy"
+        dashboard_url: "/d/pos-offline-sync"
+
+  # Checkout & Payment Health
+  - name: checkout_payment_health
+    interval: 30s
+    rules:
+    # Critical: Payment success rate degraded
+    - alert: PaymentSuccessRateLow
+      expr: |
+        (
+          rate(payment_succeeded_total[5m]) /
+          rate(payment_attempted_total[5m])
+        ) < 0.95
+      for: 10m
+      labels:
+        severity: sev1
+        component: checkout
+        alert_group: payment_health
+      annotations:
+        summary: "Payment success rate below 95% ({{ $value | humanizePercentage }})"
+        description: "Payment success rate is {{ $value | humanizePercentage }}, below threshold. Check Stripe service status and payment processor connectivity."
+        runbook_url: "https://docs.villagecompute.com/runbooks/payment-degradation"
+        dashboard_url: "/d/checkout-payments"
+
+    # Warning: Compensation events elevated
+    - alert: CheckoutCompensationEventsElevated
+      expr: |
+        rate(checkout_compensation_triggered_total[5m]) > 0.01
+      for: 10m
+      labels:
+        severity: sev2
+        component: checkout
+        alert_group: saga_reliability
+      annotations:
+        summary: "Checkout compensation events elevated ({{ $value }} per second)"
+        description: "Checkout saga compensation rate is {{ $value }} events/sec. Investigate payment gateway timeouts or inventory reservation failures."
+        runbook_url: "https://docs.villagecompute.com/runbooks/checkout-compensation-events"
+        dashboard_url: "/d/checkout-payments"
+
+  # Worker Resource Alerts
+  - name: worker_resource_health
+    interval: 30s
+    rules:
+    # Warning: Worker CPU saturation
+    - alert: WorkerCPUSaturation
+      expr: |
+        sum by (pod) (
+          rate(container_cpu_usage_seconds_total{pod=~"village-storefront-.*workers.*"}[5m])
+        ) > 1.5
+      for: 15m
+      labels:
+        severity: sev2
+        component: workers
+        alert_group: resource_saturation
+      annotations:
+        summary: "Worker pod {{ $labels.pod }} CPU saturated ({{ $value | humanize }} cores)"
+        description: "Worker pod {{ $labels.pod }} using {{ $value | humanize }} CPU cores (75% of limit). Consider scaling or investigating CPU-intensive jobs."
+        runbook_url: "https://docs.villagecompute.com/runbooks/worker-resource-saturation"
+        dashboard_url: "/d/background-jobs"
+
+    # Warning: Worker memory pressure
+    - alert: WorkerMemoryPressure
+      expr: |
+        sum by (pod) (
+          container_memory_working_set_bytes{pod=~"village-storefront-.*workers.*"}
+        ) / (1024^3) > 3
+      for: 15m
+      labels:
+        severity: sev2
+        component: workers
+        alert_group: resource_saturation
+      annotations:
+        summary: "Worker pod {{ $labels.pod }} memory pressure ({{ $value | humanize }}Gi)"
+        description: "Worker pod {{ $labels.pod }} using {{ $value | humanize }}Gi memory (75% of 4Gi limit). Monitor for memory leaks or large job payloads."
+        runbook_url: "https://docs.villagecompute.com/runbooks/worker-resource-saturation"
+        dashboard_url: "/d/background-jobs"
+
+  # Failure Rate Alerts
+  - name: job_failure_rates
+    interval: 30s
+    rules:
+    # Critical: Job failure rate breach (2x threshold)
+    - alert: JobFailureRateCritical
+      expr: |
+        (
+          rate(media_processing_job_failed_total[5m]) /
+          rate(media_processing_job_enqueued_total[5m])
+        ) > 0.02
+      for: 10m
+      labels:
+        severity: sev1
+        component: job-system
+        alert_group: failure_rate
+      annotations:
+        summary: "Job failure rate critical ({{ $value | humanizePercentage }})"
+        description: "Job failure rate is {{ $value | humanizePercentage }}, exceeding 2x threshold (2%). Investigate job handler bugs or infrastructure issues."
+        runbook_url: "https://docs.villagecompute.com/runbooks/job-failure-rate-spike"
+        dashboard_url: "/d/background-jobs"
+
+    # Warning: Job failure rate elevated
+    - alert: JobFailureRateElevated
+      expr: |
+        (
+          rate(media_processing_job_failed_total[5m]) /
+          rate(media_processing_job_enqueued_total[5m])
+        ) > 0.01
+      for: 15m
+      labels:
+        severity: sev2
+        component: job-system
+        alert_group: failure_rate
+      annotations:
+        summary: "Job failure rate elevated ({{ $value | humanizePercentage }})"
+        description: "Job failure rate is {{ $value | humanizePercentage }}, above threshold (1%). Monitor for degradation trends."
+        runbook_url: "https://docs.villagecompute.com/runbooks/job-failure-rate-spike"
+        dashboard_url: "/d/background-jobs"

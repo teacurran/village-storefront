@@ -577,6 +577,277 @@ sum(rate(media_storage_upload_bytes_total[5m])) + sum(rate(media_storage_downloa
 **Unit:** Mbps
 **Alert:** > 500 Mbps sustained (R2 egress cost consideration)
 
+### Grafana Dashboard: Checkout & Payments
+
+_Runbook reference: `docs/operations/runbook.md` §5 "Dashboard Navigation Guide" (item 3)._
+
+**Dashboard ID:** `/d/checkout-payments`
+**Refresh Interval:** 30s
+**Data Source:** Prometheus
+
+#### Panel 1: Checkout Conversion Funnel
+
+**Queries:**
+```promql
+# Checkout initiated
+sum(rate(checkout_initiated_total[5m]))
+
+# Payment attempted
+sum(rate(checkout_payment_attempted_total[5m]))
+
+# Checkout completed
+sum(rate(checkout_completed_total[5m]))
+```
+
+**Visualization:** Funnel chart
+**Conversion Thresholds:**
+- Initiation → Payment: > 80%
+- Payment → Completion: > 95%
+
+#### Panel 2: Payment Success Rate
+
+**Query:**
+```promql
+(
+  rate(payment_succeeded_total[5m]) /
+  rate(payment_attempted_total[5m])
+) * 100
+```
+
+**Visualization:** Stat panel with sparkline
+**Target:** > 95% success rate
+**Thresholds:**
+- Green: > 95%
+- Yellow: 90-95%
+- Red: < 90%
+
+#### Panel 3: Stripe Webhook Processing Latency
+
+**Query:**
+```promql
+# P50, P95, P99 latency
+histogram_quantile(0.50, sum(rate(stripe_webhook_processing_duration_seconds_bucket[5m])) by (le))
+histogram_quantile(0.95, sum(rate(stripe_webhook_processing_duration_seconds_bucket[5m])) by (le))
+histogram_quantile(0.99, sum(rate(stripe_webhook_processing_duration_seconds_bucket[5m])) by (le))
+```
+
+**Visualization:** Time series graph
+**Legend:** p50, p95, p99
+**Reference Lines:** SLA targets (p50: 150ms, p95: 600ms, p99: 1.2s)
+**Alert Lines:** P1 threshold (p99: 3.6s), P2 threshold (p95: 1.2s)
+
+#### Panel 4: Compensation Event Rate (Saga Rollbacks)
+
+**Query:**
+```promql
+rate(checkout_compensation_triggered_total[5m])
+```
+
+**Visualization:** Time series with alert annotations
+**Target:** < 0.01 events/sec
+**Context:** Track saga compensation triggers indicating payment failures, inventory conflicts, or timeout scenarios
+
+#### Panel 5: Payment Gateway Response Times
+
+**Query:**
+```promql
+histogram_quantile(0.95, sum(rate(http_client_request_duration_seconds_bucket{host=~".*stripe.com"}[5m])) by (le))
+```
+
+**Visualization:** Time series
+**Unit:** seconds
+**Alert:** > 2s sustained (indicates Stripe API degradation)
+
+### Grafana Dashboard: POS Offline Sync
+
+_Runbook reference: `docs/operations/runbook.md` §5 "Dashboard Navigation Guide" (item 5)._
+
+**Dashboard ID:** `/d/pos-offline-sync`
+**Refresh Interval:** 60s
+**Data Source:** Prometheus
+
+#### Panel 1: POS Offline Batch Queue Depth
+
+**Query:**
+```promql
+pos_offline_batch_queue_depth
+```
+
+**Visualization:** Time series with threshold bands
+**Y-Axis:** Batch count
+**Thresholds:**
+- Green: 0-50
+- Yellow: 50-100
+- Red: > 100 (triggers SEV-1 alert)
+
+#### Panel 2: Batch Processing Rate
+
+**Query:**
+```promql
+# Enqueued rate
+rate(pos_offline_batch_enqueued_total[5m])
+
+# Processed rate
+rate(pos_offline_batch_processed_total[5m])
+
+# Failed rate
+rate(pos_offline_batch_failed_total[5m])
+```
+
+**Visualization:** Stacked area chart
+**Legend:** Enqueued, Processed (green), Failed (red)
+
+#### Panel 3: Validation Failure Rate
+
+**Query:**
+```promql
+rate(pos_offline_batch_validation_failures[1h]) * 100
+```
+
+**Visualization:** Stat panel with trend indicator
+**Unit:** Percent per hour
+**Target:** < 5% per hour
+**Alert Threshold:** > 5% for 15 minutes
+
+#### Panel 4: Cash Discrepancy Tracker
+
+**Query:**
+```promql
+sum(pos_offline_cash_discrepancy_total)
+```
+
+**Visualization:** Counter stat panel with history
+**Alert:** Any non-zero value triggers notification to store managers
+**Context:** Tracks cash register reconciliation discrepancies requiring investigation
+
+#### Panel 5: Replay Error Analysis
+
+**Query:**
+```promql
+sum(rate(pos_offline_batch_replay_errors[5m])) by (error_type)
+```
+
+**Visualization:** Bar chart
+**Group By:** error_type (schema_mismatch, duplicate_key, referential_integrity, etc.)
+**Context:** Identifies root causes of offline batch replay failures
+
+#### Panel 6: Batch Size Distribution
+
+**Query:**
+```promql
+histogram_quantile(0.95, sum(rate(pos_offline_batch_size_bucket[5m])) by (le))
+```
+
+**Visualization:** Heatmap
+**X-Axis:** Time
+**Y-Axis:** Transaction count per batch
+**Color Scale:** Frequency
+**Context:** Identifies stores with unusually large offline batches indicating potential network issues
+
+### Grafana Dashboard: Platform Overview (SLO)
+
+_Runbook reference: `docs/operations/runbook.md` §5 "Dashboard Navigation Guide" (item 1)._
+
+**Dashboard ID:** `/d/platform-overview`
+**Refresh Interval:** 15s
+**Data Source:** Prometheus
+
+#### Panel 1: Platform Health Score
+
+**Query:**
+```promql
+# Composite health score (0-100)
+100 * (
+  (1 - clamp_max(rate(http_server_requests_total{status=~"5.."}[5m]) / rate(http_server_requests_total[5m]), 1)) * 0.4 +
+  (1 - clamp_max(media_processing_queue_depth / 1000, 1)) * 0.3 +
+  (rate(payment_succeeded_total[5m]) / rate(payment_attempted_total[5m])) * 0.3
+)
+```
+
+**Visualization:** Large stat panel with gradient background
+**Thresholds:**
+- Green: > 95 (healthy)
+- Yellow: 85-95 (degraded)
+- Red: < 85 (unhealthy)
+
+#### Panel 2: Request Rate & Error Rate
+
+**Queries:**
+```promql
+# Request rate
+sum(rate(http_server_requests_total[5m]))
+
+# Error rate (4xx + 5xx)
+sum(rate(http_server_requests_total{status=~"[45].."}[5m]))
+```
+
+**Visualization:** Dual-axis time series
+**Left Y-Axis:** Requests/sec
+**Right Y-Axis:** Errors/sec
+**Alert:** Error rate > 1% of request rate
+
+#### Panel 3: API Latency Percentiles (All Endpoints)
+
+**Query:**
+```promql
+histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{uri!~"/q/.*"}[5m])) by (le, uri))
+```
+
+**Visualization:** Time series, top 10 slowest endpoints
+**Y-Axis:** Latency (seconds)
+**Target:** p95 < 300ms for API endpoints
+
+#### Panel 4: Pod Resource Utilization
+
+**Queries:**
+```promql
+# CPU usage by component
+sum(rate(container_cpu_usage_seconds_total{pod=~"village-storefront-.*"}[5m])) by (component)
+
+# Memory usage by component
+sum(container_memory_working_set_bytes{pod=~"village-storefront-.*"}) by (component)
+```
+
+**Visualization:** Stacked bar chart
+**Group By:** component (api, workers, media-workers)
+**Units:** CPU cores, Memory GiB
+
+#### Panel 5: Database Connection Pool Health
+
+**Query:**
+```promql
+# Active connections
+hikaricp_connections_active
+
+# Idle connections
+hikaricp_connections_idle
+
+# Connection wait time
+hikaricp_connections_pending
+```
+
+**Visualization:** Time series
+**Target:** Pending connections < 5
+**Alert:** Connection pool exhaustion (active + idle > 90% max)
+
+#### Panel 6: Background Job SLA Compliance
+
+**Query:**
+```promql
+# Percentage of jobs meeting SLA by priority
+100 * (
+  sum(rate(media_processing_job_completed_total{duration_bucket=~"le_sla"}[5m])) by (priority) /
+  sum(rate(media_processing_job_completed_total[5m])) by (priority)
+)
+```
+
+**Visualization:** Gauge per priority level
+**Targets:**
+- CRITICAL: > 99.9%
+- HIGH: > 99%
+- DEFAULT: > 95%
+- LOW: > 90%
+
 ---
 
 <!-- anchor: alert-response-playbooks -->

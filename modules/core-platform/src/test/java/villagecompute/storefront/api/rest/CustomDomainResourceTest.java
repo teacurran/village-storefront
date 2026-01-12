@@ -20,11 +20,10 @@ import villagecompute.storefront.data.models.CustomDomain;
 import villagecompute.storefront.data.models.CustomDomain.DomainStatus;
 import villagecompute.storefront.data.models.Tenant;
 
-import io.restassured.specification.RequestSpecification;
 import io.quarkus.cache.CacheManager;
-
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
+import io.restassured.specification.RequestSpecification;
 
 /**
  * Integration tests for CustomDomainResource REST API. Verifies CRUD operations, validation, and tenant isolation.
@@ -60,8 +59,7 @@ public class CustomDomainResourceTest {
         entityManager.flush();
         cacheManager.getCache("tenant-cache").ifPresent(cache -> cache.invalidateAll());
 
-        Tenant tenant = entityManager
-                .createQuery("SELECT t FROM Tenant t WHERE t.subdomain = :subdomain", Tenant.class)
+        Tenant tenant = entityManager.createQuery("SELECT t FROM Tenant t WHERE t.subdomain = :subdomain", Tenant.class)
                 .setParameter("subdomain", "testshop").getResultStream().findFirst().orElse(null);
 
         if (tenant == null) {
@@ -157,8 +155,10 @@ public class CustomDomainResourceTest {
             roles = {"ADMIN"})
     public void testAddDomain_EmptyDomain_ReturnsBadRequest() {
         givenWithTenantHost().contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON)
-                .body("{\"domain\": \"\"}")
-                .when().post("/api/v1/admin/custom-domains").then().statusCode(400); // Bad Request (validation failure)
+                .body("{\"domain\": \"\"}").when().post("/api/v1/admin/custom-domains").then().statusCode(400); // Bad
+                                                                                                                // Request
+                                                                                                                // (validation
+                                                                                                                // failure)
     }
 
     @Test
@@ -204,8 +204,7 @@ public class CustomDomainResourceTest {
         UUID nonExistentId = UUID.randomUUID();
 
         givenWithTenantHost().contentType(MediaType.APPLICATION_JSON).when()
-                .delete("/api/v1/admin/custom-domains/" + nonExistentId)
-                .then().statusCode(404); // Not Found
+                .delete("/api/v1/admin/custom-domains/" + nonExistentId).then().statusCode(404); // Not Found
     }
 
     @Test

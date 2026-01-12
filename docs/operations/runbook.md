@@ -1102,56 +1102,283 @@ payout_batches_on_hold
 
 ### Alert Configuration
 
-**Prometheus Alert Rules:** `k8s/base/prometheus-rules.yaml`
+**Prometheus Alert Rules:** `infra/kustomize/base/prometheus-rules.yaml`
+
+**Alert Groups Deployed (Task I5.T5):**
+
+1. **background_job_queue_health** - Queue depth alerts for media, email, webhooks, and DLQ
+2. **job_latency_sla** - SLA breach detection for P95/P99 latency thresholds
+3. **pos_offline_queue_health** - POS offline sync queue and validation monitoring
+4. **checkout_payment_health** - Payment success rate and compensation event tracking
+5. **worker_resource_health** - Worker pod CPU/memory saturation detection
+6. **job_failure_rates** - Job failure rate threshold monitoring
+
+**Key Alert Examples:**
 
 ```yaml
-groups:
-- name: background_jobs_critical
-  interval: 30s
-  rules:
-  - alert: CriticalQueueBacklog
-    expr: media_processing_queue_depth{priority="critical"} > 100
-    for: 2m
-    labels:
-      severity: critical
-      team: platform
-    annotations:
-      summary: "CRITICAL priority queue backlog"
-      description: "Media processing CRITICAL queue depth {{ $value }} exceeds threshold"
-      runbook: "https://docs.villagecompute.com/operations/runbook.md#media-processing-backlog"
+# MediaQueueDepthCritical (SEV-1)
+- alert: MediaQueueDepthCritical
+  expr: media_processing_queue_depth{priority="critical"} > 50
+  for: 5m
 
-  - alert: DLQAccumulating
-    expr: rate(dead_letter_queue_added_total[5m]) > 0.1
-    for: 5m
-    labels:
-      severity: critical
-      team: platform
-    annotations:
-      summary: "Dead letter queue accumulating failures"
-      runbook: "https://docs.villagecompute.com/operations/runbook.md#dead-letter-queue-management"
+# StripeWebhookLatencyP1 (SEV-1)
+- alert: StripeWebhookLatencyP1
+  expr: histogram_quantile(0.99, sum(rate(stripe_webhook_processing_duration_seconds_bucket[5m])) by (le)) > 3.6
+  for: 5m
 
-- name: background_jobs_warning
-  interval: 60s
-  rules:
-  - alert: HighJobFailureRate
-    expr: |
-      rate(media_processing_job_failed_total[5m])
-      /
-      rate(media_processing_job_started_total[5m]) > 0.05
-    for: 10m
-    labels:
-      severity: warning
-      team: platform
-    annotations:
-      summary: "Job failure rate exceeds 5%"
-      runbook: "https://docs.villagecompute.com/operations/runbook.md#background-job-management"
+# POSOfflineQueueDepthCritical (SEV-1)
+- alert: POSOfflineQueueDepthCritical
+  expr: pos_offline_batch_queue_depth > 100
+  for: 10m
+
+# PaymentSuccessRateLow (SEV-1)
+- alert: PaymentSuccessRateLow
+  expr: (rate(payment_succeeded_total[5m]) / rate(payment_attempted_total[5m])) < 0.95
+  for: 10m
 ```
 
-**PagerDuty Integration:**
+**Alert Routing & Notification Policies**
 
-- **Critical Alerts (P1):** Page on-call engineer immediately
-- **Warning Alerts (P2):** Slack notification to #platform-alerts
-- **Info Alerts (P3):** Email digest (daily summary)
+#### PagerDuty Integration
+
+**Service Configuration:**
+
+- **Service Name:** `Village Storefront - Production`
+- **Integration Key:** Configured in Prometheus Alertmanager
+- **Escalation Policy:** L1 (5 min) → L2 (15 min) → L3 (30 min)
+
+**Alert Severity Routing:**
+
+- **SEV-1 (sev1):** Immediate PagerDuty page + Slack #incidents channel + StatusPage auto-update
+- **SEV-2 (sev2):** Slack #platform-alerts notification + Email to on-call
+- **SEV-3 (sev3):** Email digest (hourly rollup)
+
+**Alertmanager Configuration Example:**
+
+```yaml
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'component']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+  # SEV-1: Immediate escalation
+  - match:
+      severity: sev1
+    receiver: 'pagerduty-critical'
+    group_wait: 10s
+    repeat_interval: 15m
+    continue: true
+
+  - match:
+      severity: sev1
+    receiver: 'slack-incidents'
+    continue: true
+
+  - match:
+      severity: sev1
+    receiver: 'statuspage-automation'
+
+  # SEV-2: Slack + Email
+  - match:
+      severity: sev2
+    receiver: 'slack-platform-alerts'
+    continue: true
+
+  - match:
+      severity: sev2
+    receiver: 'email-oncall'
+
+receivers:
+- name: 'pagerduty-critical'
+  pagerduty_configs:
+  - service_key: '${PAGERDUTY_INTEGRATION_KEY}'
+    severity: 'critical'
+    description: '{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}'
+    details:
+      firing: '{{ template "pagerduty.default.instances" . }}'
+      resolved: '{{ template "pagerduty.default.instances" . }}'
+      runbook: '{{ .Annotations.runbook_url }}'
+      dashboard: '{{ .Annotations.dashboard_url }}'
+
+- name: 'slack-incidents'
+  slack_configs:
+  - api_url: '${SLACK_WEBHOOK_URL_INCIDENTS}'
+    channel: '#incidents'
+    title: 'SEV-1 Alert: {{ .GroupLabels.alertname }}'
+    text: '{{ .Annotations.description }}'
+    actions:
+    - type: button
+      text: 'View Runbook'
+      url: '{{ .Annotations.runbook_url }}'
+    - type: button
+      text: 'View Dashboard'
+      url: '{{ .Annotations.dashboard_url }}'
+
+- name: 'slack-platform-alerts'
+  slack_configs:
+  - api_url: '${SLACK_WEBHOOK_URL_ALERTS}'
+    channel: '#platform-alerts'
+    title: '{{ .GroupLabels.alertname }}'
+    text: '{{ .Annotations.summary }}'
+
+- name: 'statuspage-automation'
+  webhook_configs:
+  - url: '${STATUSPAGE_WEBHOOK_URL}'
+    send_resolved: true
+```
+
+#### StatusPage Automation
+
+**Automated Component Status Updates:**
+
+Webhook payload format for StatusPage API integration:
+
+```json
+{
+  "component_id": "{{ if eq .GroupLabels.component \"checkout\" }}chkout123{{ else if eq .GroupLabels.component \"media-processing\" }}media456{{ end }}",
+  "status": "{{ if eq .Status \"firing\" }}major_outage{{ else }}operational{{ end }}",
+  "message": "{{ .Annotations.summary }}",
+  "incident_updates": [
+    {
+      "body": "{{ .Annotations.description }}",
+      "status": "{{ if eq .Status \"firing\" }}investigating{{ else }}resolved{{ end }}"
+    }
+  ]
+}
+```
+
+**Component Mappings:**
+
+| Alert Component | StatusPage Component ID | Component Name |
+|-----------------|------------------------|----------------|
+| `checkout` | `chkout123` | Checkout & Payments |
+| `media-processing` | `media456` | Media Upload & Processing |
+| `pos-offline` | `pos789` | POS Offline Sync |
+| `webhooks` | `webhook012` | Webhook Processing |
+| `job-system` | `jobs345` | Background Jobs |
+
+**Incident Status Mapping:**
+
+- **SEV-1 Alert Firing** → StatusPage: `major_outage` or `partial_outage`
+- **SEV-2 Alert Firing** → StatusPage: `degraded_performance`
+- **Alert Resolved** → StatusPage: `operational`
+
+### Log Shipping & Retention (per §3.7 Observability Fabric)
+
+- **Pipeline Overview:** Pods emit structured JSON logs (fields: `tenant_id`, `store_id`, `user_id`, `session_id`, `correlation_id`, `impersonation_context`) to stdout. A `fluent-bit` DaemonSet tails `/var/log/containers/*` and forwards batches to the OpenTelemetry Collector (`component=otel-collector`) via OTLP/HTTP logs receiver.
+- **Section 3 Alignment:** Collector processors enforce §3.7 and §3.13.2 policies by enriching entries with `cluster.name`/`environment` attributes and deleting sensitive fields (`payment_token`, `raw_card_number`, `pii_masked`) via the `attributes/log_redaction` processor before export.
+- **Destinations:** Logs are streamed simultaneously to (1) **Elastic Cloud** (`vs-prod-hot` index) for 30-day search, (2) **GCS cold storage** bucket `gs://vc-storefront-logs` for 13-month retention, and (3) **PagerDuty Events API** for SEV-1 payload enrichment. Exporters live in `infra/kustomize/base/observability/otel-collector-configmap.yaml`.
+- **Access Controls:** Elastic IAM role `logs.viewer` grants read-only access to on-call engineers. Requests for elevated access (bulk export, longer retention review) must follow the governance process outlined in §3.7 Observability Fabric and be approved by security.
+- **Correlation & Searchability:** `X-Request-ID` headers propagate via Quarkus filters; Fluent Bit ensures the ID is present on every log entry. Use this field to pivot between logs and Jaeger traces, mirroring §3 correlation guidance.
+- **Validation Steps:**
+
+```bash
+# Ensure DaemonSet running on every node
+kubectl get daemonset fluent-bit -n observability
+
+# Spot-check raw structured logs
+kubectl logs -n village-storefront deploy/village-storefront-api --tail=5 | jq
+
+# Confirm collector receives log payloads (HTTP 200 == success)
+kubectl port-forward -n village-storefront svc/otel-collector 4318:4318 &
+curl -X POST http://localhost:4318/v1/logs -d '{}' -H 'Content-Type: application/json'
+
+# Verify Elastic hot index is rolling
+curl -u "${ELASTIC_USER}:${ELASTIC_PASS}" \
+  https://logs.villagecompute.com/_cat/indices/vs-prod-hot?v
+```
+
+### Observability Stack Verification Commands
+
+**OpenTelemetry Collector Health Check:**
+
+```bash
+# Check collector pod status
+kubectl get pods -n village-storefront -l component=otel-collector
+
+# Verify collector endpoints
+kubectl port-forward -n village-storefront svc/otel-collector 4317:4317 &
+curl -v http://localhost:4317  # Should connect (gRPC endpoint)
+
+# Check collector metrics
+kubectl port-forward -n village-storefront svc/otel-collector 8888:8888 &
+curl http://localhost:8888/metrics | grep otelcol
+
+# View collector logs
+kubectl logs -n village-storefront -l component=otel-collector --tail=100 -f
+
+# Check trace export to Jaeger
+kubectl port-forward -n observability svc/jaeger-query 16686:16686 &
+open http://localhost:16686  # Verify traces appear for "village-storefront" service
+```
+
+**Prometheus Alert Rules Validation:**
+
+```bash
+# Verify PrometheusRule resource applied
+kubectl get prometheusrules -n village-storefront
+
+# Check rule evaluation status
+kubectl port-forward -n observability svc/prometheus 9090:9090 &
+curl http://localhost:9090/api/v1/rules | jq '.data.groups[] | select(.name | contains("village"))'
+
+# Test specific alert query
+curl -s http://localhost:9090/api/v1/query \
+  --data-urlencode 'query=media_processing_queue_depth{priority="critical"}' | jq
+
+# View active alerts
+curl http://localhost:9090/api/v1/alerts | jq '.data.alerts[] | select(.labels.app == "village-storefront")'
+```
+
+**Grafana Dashboard Verification:**
+
+```bash
+# Port-forward to Grafana
+kubectl port-forward -n observability svc/grafana 3000:3000 &
+
+# Access dashboards
+open http://localhost:3000/d/background-jobs      # Background Job Health
+open http://localhost:3000/d/checkout-payments    # Checkout & Payments
+open http://localhost:3000/d/media-pipeline       # Media Pipeline
+open http://localhost:3000/d/pos-offline-sync     # POS Offline Sync
+open http://localhost:3000/d/platform-overview    # Platform Overview
+
+# Test dashboard via API
+curl -H "Authorization: Bearer ${GRAFANA_API_KEY}" \
+  http://localhost:3000/api/dashboards/uid/background-jobs | jq
+```
+
+**Metrics Export Verification:**
+
+```bash
+# Check Quarkus app emitting metrics
+kubectl port-forward -n village-storefront svc/village-storefront-api 8080:8080 &
+curl http://localhost:8080/q/metrics | grep media_processing_queue_depth
+
+# Verify Prometheus scraping app metrics
+curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.app == "village-storefront")'
+
+# Check metric availability in Prometheus
+curl -s http://localhost:9090/api/v1/query \
+  --data-urlencode 'query={app="village-storefront"}' | jq '.data.result | length'
+```
+
+**Alert Firing Simulation (Testing Only):**
+
+```bash
+# Simulate queue depth alert by scaling down workers
+kubectl scale deployment village-storefront-media-workers -n village-storefront --replicas=0
+
+# Wait 5-10 minutes, then check alert status
+curl http://localhost:9090/api/v1/alerts | jq '.data.alerts[] | select(.labels.alertname == "MediaQueueDepthCritical")'
+
+# Verify PagerDuty incident created (check PagerDuty dashboard)
+
+# Restore workers
+kubectl scale deployment village-storefront-media-workers -n village-storefront --replicas=2
+```
 
 ---
 

@@ -1,0 +1,158 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  labels:
+    app: village-storefront
+    component: otel-collector
+data:
+  otel-collector-config.yaml: |
+    # OpenTelemetry Collector Configuration
+    # Receives traces/metrics from Quarkus apps and forwards to Jaeger + Prometheus
+    # Task I5.T5: Observability hardening per §3.7 Observability Fabric
+
+    receivers:
+      # OTLP gRPC receiver (default Quarkus exporter)
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Prometheus receiver for collector self-monitoring
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'otel-collector'
+              scrape_interval: 30s
+              static_configs:
+                - targets: ['localhost:8888']
+
+    processors:
+      # Batch processor for efficiency
+      batch:
+        timeout: 10s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+
+      # Memory limiter to prevent OOM
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+
+      # Resource processor to add cluster metadata
+      resource:
+        attributes:
+          - key: cluster.name
+            value: ${CLUSTER_NAME}
+            action: insert
+          - key: environment
+            value: ${ENVIRONMENT}
+            action: insert
+
+      # Log redaction per §3.13.2
+      attributes/log_redaction:
+        actions:
+          - key: payment_token
+            action: delete
+          - key: raw_card_number
+            action: delete
+          - key: pii_masked
+            action: delete
+
+      # Span processor to add correlation context
+      span:
+        name:
+          from_attributes: [http.method, http.route]
+          separator: " "
+
+    exporters:
+      # Jaeger OTLP exporter for distributed tracing
+      otlp/jaeger:
+        endpoint: ${JAEGER_ENDPOINT:jaeger-collector.observability.svc.cluster.local:4317}
+        tls:
+          insecure: true
+
+      # Prometheus exporter for metrics scraping
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        namespace: otel
+        const_labels:
+          cluster: ${CLUSTER_NAME}
+
+      # Elastic OTLP/HTTP exporter for structured logs
+      otlphttp/elastic:
+        endpoint: ${ELASTIC_OTLP_ENDPOINT:https://logs.villagecompute.com:4318}
+        headers:
+          Authorization: "Bearer ${ELASTIC_API_TOKEN}"
+        tls:
+          insecure_skip_verify: false
+
+      # Google Cloud Logging exporter for cold storage (GCS bucket)
+      googlecloud:
+        project: ${GCP_PROJECT_ID:village-observability}
+        user_agent: "village-storefront-otelcol"
+        log:
+          default_log_name: "village-storefront"
+          resource_type: "k8s_container"
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 512
+
+      # HTTP exporter for PagerDuty status updates
+      http/pagerduty:
+        endpoint: ${PAGERDUTY_EVENT_ENDPOINT:https://events.pagerduty.com/v2/enqueue}
+        headers:
+          X-Routing-Key: ${PAGERDUTY_ROUTING_KEY}
+        log:
+          format: json
+
+      # Logging exporter for debugging (development only)
+      logging:
+        loglevel: ${LOGGING_LEVEL:info}
+
+    extensions:
+      # Health check extension
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+      # Performance profiler
+      pprof:
+        endpoint: 0.0.0.0:1777
+
+      # Zpages for debugging
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, pprof, zpages]
+
+      pipelines:
+        # Trace pipeline: OTLP → Jaeger + Logging
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, span, batch]
+          exporters: [otlp/jaeger, logging]
+
+        # Metrics pipeline: Prometheus self-monitoring
+        metrics:
+          receivers: [prometheus]
+          processors: [memory_limiter, resource, batch]
+          exporters: [prometheus, logging]
+
+        # Logs pipeline: OTLP → Elastic, Google Cloud, PagerDuty + Logging
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, attributes/log_redaction, batch]
+          exporters: [otlphttp/elastic, googlecloud, http/pagerduty, logging]
+
+      telemetry:
+        logs:
+          level: ${LOGGING_LEVEL:info}
+        metrics:
+          level: detailed
+          address: 0.0.0.0:8888
