@@ -3,7 +3,9 @@
     <header class="pos-header">
       <div>
         <h1>Point of Sale</h1>
-        <p class="subtitle">Sell confidently even if the network drops — queued transactions sync automatically.</p>
+        <p class="subtitle">
+          Sell confidently even if the network drops — queued transactions sync automatically.
+        </p>
       </div>
       <OfflineIndicator />
     </header>
@@ -11,7 +13,8 @@
     <section v-if="!pairedDevice" class="card pairing-card">
       <h2>Complete Device Pairing</h2>
       <p class="helper-text">
-        Enter the pairing code generated from the admin dashboard to receive the encryption key for this POS device.
+        Enter the pairing code generated from the admin dashboard to receive the encryption key for
+        this POS device.
       </p>
 
       <form class="pairing-form" @submit.prevent="completePairing">
@@ -81,7 +84,11 @@
             <p class="helper-text">Provide to the Stripe Terminal SDK when pairing a reader.</p>
           </div>
           <div class="token-actions">
-            <button class="btn-secondary" :disabled="isTerminalLoading" @click="requestTerminalToken">
+            <button
+              class="btn-secondary"
+              :disabled="isTerminalLoading"
+              @click="requestTerminalToken"
+            >
               <i class="pi pi-refresh" :class="{ 'pi-spin': isTerminalLoading }"></i>
               Refresh
             </button>
@@ -98,7 +105,12 @@
     <section v-if="pairedDevice" class="card cart-card">
       <div class="cart-header">
         <h2>Cart</h2>
-        <button class="btn-link danger" :disabled="cartItems.length === 0" aria-label="Clear cart" @click="clearCart">
+        <button
+          class="btn-link danger"
+          :disabled="cartItems.length === 0"
+          aria-label="Clear cart"
+          @click="clearCart"
+        >
           Clear
         </button>
       </div>
@@ -136,19 +148,11 @@
         <div v-for="item in cartItems" :key="item.variantId" class="cart-item">
           <span class="item-name">{{ item.productName }}</span>
           <div class="quantity-controls">
-            <button
-              aria-label="Decrease quantity"
-              class="qty-btn"
-              @click="decrementQty(item)"
-            >
+            <button aria-label="Decrease quantity" class="qty-btn" @click="decrementQty(item)">
               -
             </button>
             <span class="quantity">{{ item.quantity }}</span>
-            <button
-              aria-label="Increase quantity"
-              class="qty-btn"
-              @click="incrementQty(item)"
-            >
+            <button aria-label="Increase quantity" class="qty-btn" @click="incrementQty(item)">
               +
             </button>
           </div>
@@ -254,7 +258,7 @@ const paymentMethodId = ref('')
 const isProcessing = ref(false)
 
 const cartTotal = computed(() =>
-  cartItems.value.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0)
+  cartItems.value.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0)
 )
 
 const lastSyncLabel = computed(() => {
@@ -309,7 +313,11 @@ async function completePairing() {
     }
 
     const result = await response.json()
-    await offlineStore.storePairingKeys(result.deviceId, result.encryptionKey, result.encryptionKeyVersion)
+    await offlineStore.storePairingKeys(
+      result.deviceId,
+      result.encryptionKey,
+      result.encryptionKeyVersion
+    )
     await offlineStore.initialize(result.deviceId)
     await offlineStore.refreshQueueStats()
 
@@ -365,14 +373,24 @@ async function requestTerminalToken() {
 function copyTerminalToken() {
   if (!terminalToken.value) return
   navigator.clipboard.writeText(terminalToken.value).then(() => {
-    toast.add({ severity: 'info', summary: 'Copied', detail: 'Connection token copied', life: 2500 })
+    toast.add({
+      severity: 'info',
+      summary: 'Copied',
+      detail: 'Connection token copied',
+      life: 2500,
+    })
   })
 }
 
 function toggleHold() {
   if (isSyncOnHold.value) {
     offlineStore.resumeSync()
-    toast.add({ severity: 'info', summary: 'Sync Resumed', detail: 'Offline queue sync resumed', life: 3000 })
+    toast.add({
+      severity: 'info',
+      summary: 'Sync Resumed',
+      detail: 'Offline queue sync resumed',
+      life: 3000,
+    })
   } else {
     offlineStore.holdSync()
     toast.add({ severity: 'warn', summary: 'Sync Paused', detail: 'Sync is on hold', life: 3000 })
@@ -389,7 +407,12 @@ function forgetDevice() {
   pairedDevice.value = null
   terminalToken.value = null
   localStorage.removeItem('pos.offline.device')
-  toast.add({ severity: 'warn', summary: 'Device Removed', detail: 'Device pairing cleared locally', life: 3000 })
+  toast.add({
+    severity: 'warn',
+    summary: 'Device Removed',
+    detail: 'Device pairing cleared locally',
+    life: 3000,
+  })
 }
 
 function formatRelative(dateString: string) {
@@ -444,9 +467,8 @@ function searchProducts() {
       },
     ]
 
-    searchResults.value = mockProducts.filter(
-      (p) =>
-        p.productName.toLowerCase().includes(searchQuery.value.toLowerCase())
+    searchResults.value = mockProducts.filter((p) =>
+      p.productName.toLowerCase().includes(searchQuery.value.toLowerCase())
     )
   }, 300)
 }

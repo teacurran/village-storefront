@@ -71,17 +71,9 @@ const inputClasses = computed(() => {
 
   // State styles
   if (props.error) {
-    classes.push(
-      'border-error-500',
-      'focus:ring-error-500',
-      'focus:border-error-500'
-    )
+    classes.push('border-error-500', 'focus:ring-error-500', 'focus:border-error-500')
   } else {
-    classes.push(
-      'border-neutral-300',
-      'focus:ring-primary-500',
-      'focus:border-primary-500'
-    )
+    classes.push('border-neutral-300', 'focus:ring-primary-500', 'focus:border-primary-500')
   }
 
   if (props.disabled) {

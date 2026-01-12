@@ -5,4 +5,4 @@
 /**
  * Number of items per page (max 100)
  */
-export type PageSize = number;
+export type PageSize = number

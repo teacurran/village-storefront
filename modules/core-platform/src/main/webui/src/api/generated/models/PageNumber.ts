@@ -5,4 +5,4 @@
 /**
  * Page number for pagination (1-indexed)
  */
-export type PageNumber = number;
+export type PageNumber = number

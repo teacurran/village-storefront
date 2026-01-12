@@ -5,19 +5,14 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <MetricsCard
         title="Total Revenue"
-        :value="29584.50"
+        :value="29584.5"
         format="currency"
         :change="12.5"
         timeframe="Last 30 days"
         :show-sparkline="true"
         :sparkline-data="[100, 120, 115, 134, 168, 132, 200]"
       />
-      <MetricsCard
-        title="Orders"
-        :value="1247"
-        :change="8.2"
-        timeframe="Last 30 days"
-      />
+      <MetricsCard title="Orders" :value="1247" :change="8.2" timeframe="Last 30 days" />
       <MetricsCard
         title="Conversion Rate"
         :value="3.24"

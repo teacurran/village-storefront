@@ -9,7 +9,12 @@
             @click="handleBack"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
           <h1 class="text-2xl font-bold text-neutral-900">
@@ -202,8 +207,18 @@
         <div class="bg-white rounded-lg border border-neutral-200 p-6">
           <h2 class="text-lg font-semibold text-neutral-900 mb-4">Media</h2>
           <div class="border-2 border-dashed border-neutral-300 rounded-lg p-8 text-center">
-            <svg class="w-12 h-12 mx-auto text-neutral-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            <svg
+              class="w-12 h-12 mx-auto text-neutral-400 mb-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
             </svg>
             <p class="text-sm text-neutral-600">Image upload coming soon</p>
           </div>
@@ -294,9 +309,7 @@ async function loadProduct() {
         categoryId: loadedProduct.categoryId || '',
       }
 
-      priceInput.value = loadedProduct.price
-        ? (loadedProduct.price.value / 100).toFixed(2)
-        : '0.00'
+      priceInput.value = loadedProduct.price ? (loadedProduct.price.value / 100).toFixed(2) : '0.00'
       compareAtPriceInput.value = loadedProduct.compareAtPrice
         ? (loadedProduct.compareAtPrice.value / 100).toFixed(2)
         : ''

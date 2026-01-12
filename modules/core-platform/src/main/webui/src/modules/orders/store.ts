@@ -69,7 +69,7 @@ export const useOrdersStore = defineStore('orders', () => {
     error.value = null
 
     try {
-      const result = await ordersApi.getOrders(pagination.value.size, page, filters.value)
+      const result = await ordersApi.getOrders(page, pagination.value.size, filters.value)
 
       if (page === 0) {
         orders.value = result.items
@@ -210,6 +210,99 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
+  async function refundOrder(
+    orderId: string,
+    amount: number,
+    reason: string,
+    notes?: string
+  ): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const updated = await ordersApi.refundOrder(orderId, amount, reason, notes)
+
+      // Update in list
+      const index = orders.value.findIndex((o) => o.id === orderId)
+      if (index !== -1) {
+        orders.value[index] = { ...orders.value[index], status: updated.status }
+      }
+
+      // Update selected order if it's the same
+      if (selectedOrder.value?.id === orderId) {
+        selectedOrder.value = updated
+      }
+
+      await loadStats()
+
+      emitTelemetryEvent('action_refund_order', {
+        orderId,
+        amount,
+        reason,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to refund order'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function capturePayment(orderId: string, paymentIntentId: string): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const updated = await ordersApi.capturePayment(orderId, paymentIntentId)
+
+      // Update in list
+      const index = orders.value.findIndex((o) => o.id === orderId)
+      if (index !== -1) {
+        orders.value[index] = { ...orders.value[index], status: updated.status }
+      }
+
+      // Update selected order if it's the same
+      if (selectedOrder.value?.id === orderId) {
+        selectedOrder.value = updated
+      }
+
+      await loadStats()
+
+      emitTelemetryEvent('action_capture_payment', {
+        orderId,
+        paymentIntentId,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to capture payment'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function addOrderNote(orderId: string, note: string): Promise<void> {
+    loading.value = true
+    error.value = null
+
+    try {
+      const updated = await ordersApi.addOrderNote(orderId, note)
+
+      // Update selected order if it's the same
+      if (selectedOrder.value?.id === orderId) {
+        selectedOrder.value = updated
+      }
+
+      emitTelemetryEvent('action_add_order_note', {
+        orderId,
+      })
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to add note'
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function bulkUpdateStatus(status: OrderStatus): Promise<void> {
     if (selectedOrderIds.value.size === 0) {
       throw new Error('No orders selected')
@@ -282,10 +375,7 @@ export const useOrdersStore = defineStore('orders', () => {
     }
 
     try {
-      sseEventSource.value = ordersApi.connectOrdersSSE(
-        handleSSEEvent,
-        handleSSEError
-      )
+      sseEventSource.value = ordersApi.connectOrdersSSE(handleSSEEvent, handleSSEError)
       sseConnected.value = true
 
       emitTelemetryEvent('sse_orders_connected', {
@@ -383,6 +473,9 @@ export const useOrdersStore = defineStore('orders', () => {
     clearFilters,
     updateOrderStatus,
     cancelOrder,
+    refundOrder,
+    capturePayment,
+    addOrderNote,
     bulkUpdateStatus,
     exportOrdersCSV,
     toggleOrderSelection,

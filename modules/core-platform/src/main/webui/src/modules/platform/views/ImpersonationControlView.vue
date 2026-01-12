@@ -22,11 +22,7 @@
 
         <label>
           Target User ID (optional)
-          <input
-            v-model="userId"
-            type="text"
-            placeholder="UUID of specific user"
-          />
+          <input v-model="userId" type="text" placeholder="UUID of specific user" />
         </label>
 
         <label>
@@ -41,12 +37,7 @@
 
         <label>
           Support Ticket Number
-          <input
-            v-model="ticketNumber"
-            type="text"
-            required
-            placeholder="e.g. TICKET-12345"
-          />
+          <input v-model="ticketNumber" type="text" required placeholder="e.g. TICKET-12345" />
         </label>
 
         <div class="form-actions">

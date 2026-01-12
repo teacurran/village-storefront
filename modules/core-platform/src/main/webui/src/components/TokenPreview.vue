@@ -31,11 +31,7 @@
         <div class="color-scale">
           <h4 class="scale-title">Primary</h4>
           <div class="color-row">
-            <div
-              v-for="shade in colorShades"
-              :key="`primary-${shade}`"
-              class="color-swatch"
-            >
+            <div v-for="shade in colorShades" :key="`primary-${shade}`" class="color-swatch">
               <div
                 class="swatch-box"
                 :style="{
@@ -61,11 +57,7 @@
         <div class="color-scale">
           <h4 class="scale-title">Secondary</h4>
           <div class="color-row">
-            <div
-              v-for="shade in colorShades"
-              :key="`secondary-${shade}`"
-              class="color-swatch"
-            >
+            <div v-for="shade in colorShades" :key="`secondary-${shade}`" class="color-swatch">
               <div
                 class="swatch-box"
                 :style="{
@@ -92,11 +84,7 @@
       <div class="semantic-colors">
         <h4 class="scale-title">Semantic Colors</h4>
         <div class="color-row">
-          <div
-            v-for="color in semanticColors"
-            :key="color"
-            class="color-swatch"
-          >
+          <div v-for="color in semanticColors" :key="color" class="color-swatch">
             <div
               class="swatch-box swatch-box-large"
               :style="{
@@ -122,9 +110,7 @@
     <!-- Typography Tokens Section -->
     <section class="token-section">
       <h3 class="section-title">Typography</h3>
-      <p class="section-description">
-        Font families and type scale with contrast verification
-      </p>
+      <p class="section-description">Font families and type scale with contrast verification</p>
 
       <div class="typography-samples">
         <div class="sample-item">

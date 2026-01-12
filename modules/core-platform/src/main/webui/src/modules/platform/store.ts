@@ -67,7 +67,11 @@ export const usePlatformStore = defineStore('platform', () => {
     error.value = null
 
     try {
-      const result = await platformApi.getStoreDirectory(storeFilters.value, page, storePagination.value.size)
+      const result = await platformApi.getStoreDirectory(
+        storeFilters.value,
+        page,
+        storePagination.value.size
+      )
 
       stores.value = result.stores
       storePagination.value.page = page
@@ -215,7 +219,11 @@ export const usePlatformStore = defineStore('platform', () => {
     error.value = null
 
     try {
-      const result = await platformApi.getAuditLogs(auditFilters.value, page, auditPagination.value.size)
+      const result = await platformApi.getAuditLogs(
+        auditFilters.value,
+        page,
+        auditPagination.value.size
+      )
 
       auditLogs.value = result.entries
       auditPagination.value.page = page
@@ -315,7 +323,7 @@ export const usePlatformStore = defineStore('platform', () => {
 
   async function updateFeatureFlag(
     flagId: string,
-    request: UpdateFeatureFlagRequest,
+    request: UpdateFeatureFlagRequest
   ): Promise<void> {
     loading.value = true
     error.value = null
@@ -347,7 +355,11 @@ export const usePlatformStore = defineStore('platform', () => {
     }
   }
 
-  async function toggleFeatureFlag(flagId: string, enabled: boolean, reason: string): Promise<void> {
+  async function toggleFeatureFlag(
+    flagId: string,
+    enabled: boolean,
+    reason: string
+  ): Promise<void> {
     await updateFeatureFlag(flagId, { enabled, reason })
   }
 

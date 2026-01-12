@@ -8,7 +8,9 @@
       <div class="header-actions">
         <div class="sse-status" :class="{ connected: reportingStore.sseConnected }">
           <div class="sse-indicator" />
-          <span class="text-sm">{{ reportingStore.sseConnected ? t('common.live') : t('common.offline') }}</span>
+          <span class="text-sm">{{
+            reportingStore.sseConnected ? t('common.live') : t('common.offline')
+          }}</span>
         </div>
         <Button
           v-if="authStore.hasRole('REPORTS_EXPORT')"
@@ -108,7 +110,11 @@
             <h2>{{ t('reporting.exports.title') }}</h2>
             <p>{{ t('reporting.exports.subtitle') }}</p>
           </div>
-          <Button class="p-button-text" icon="pi pi-refresh" @click="reportingStore.refreshExportJobs" />
+          <Button
+            class="p-button-text"
+            icon="pi pi-refresh"
+            @click="reportingStore.refreshExportJobs"
+          />
         </header>
         <ul class="job-list">
           <li v-for="job in reportingStore.exportJobs" :key="job.jobId" class="job-item">
@@ -116,7 +122,9 @@
               <p class="job-title">{{ job.reportType }}</p>
               <div class="job-meta-row">
                 <JobStatusBadge :status="job.status" />
-                <span class="job-time">{{ job.createdAt ? new Date(job.createdAt).toLocaleString() : '' }}</span>
+                <span class="job-time">{{
+                  job.createdAt ? new Date(job.createdAt).toLocaleString() : ''
+                }}</span>
               </div>
             </div>
             <Button
@@ -180,7 +188,10 @@ onBeforeUnmount(() => {
 })
 
 async function handleRefresh() {
-  reportingStore.setDateRange({ start: startDate.value || undefined, end: endDate.value || undefined })
+  reportingStore.setDateRange({
+    start: startDate.value || undefined,
+    end: endDate.value || undefined,
+  })
   try {
     await reportingStore.loadDashboard()
   } catch (error) {

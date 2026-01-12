@@ -24,7 +24,9 @@ export const useNotificationsStore = defineStore('notifications', () => {
   const severityFilter = ref<NotificationSeverity | 'ALL'>('ALL')
   const searchTerm = ref('')
 
-  const unreadCount = computed(() => notifications.value.filter((notification) => !notification.read).length)
+  const unreadCount = computed(
+    () => notifications.value.filter((notification) => !notification.read).length
+  )
 
   const filteredNotifications = computed(() => {
     return notifications.value.filter((notification) => {

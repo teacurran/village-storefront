@@ -26,7 +26,16 @@ import {
 } from 'chart.js'
 import type { SalesAggregate } from '../api'
 
-ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend, Filler)
+ChartJS.register(
+  LineElement,
+  PointElement,
+  LinearScale,
+  CategoryScale,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
 
 const props = defineProps<{
   salesData: SalesAggregate[]

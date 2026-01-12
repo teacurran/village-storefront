@@ -80,9 +80,31 @@ export async function cancelOrder(orderId: string, reason: string): Promise<Orde
 export async function refundOrder(
   orderId: string,
   amount: number,
-  reason: string
+  reason: string,
+  notes?: string
 ): Promise<OrderDetail> {
-  return apiClient.post<OrderDetail>(`/admin/orders/${orderId}/refund`, { amount, reason })
+  return apiClient.post<OrderDetail>(`/admin/orders/${orderId}/refund`, {
+    amountToRefund: amount,
+    reason,
+    notes,
+  })
+}
+
+/**
+ * Capture payment for order
+ */
+export async function capturePayment(
+  orderId: string,
+  paymentIntentId: string
+): Promise<OrderDetail> {
+  return apiClient.post<OrderDetail>(`/api/v1/payments/intents/${paymentIntentId}/capture`, {})
+}
+
+/**
+ * Add note to order
+ */
+export async function addOrderNote(orderId: string, note: string): Promise<OrderDetail> {
+  return apiClient.post<OrderDetail>(`/admin/orders/${orderId}/notes`, { note })
 }
 
 /**

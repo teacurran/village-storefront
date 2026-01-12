@@ -13,7 +13,7 @@
               tab.id === activeTab
                 ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300',
-              'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm'
+              'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
             ]"
             @click="activeTab = tab.id"
           >
@@ -49,7 +49,7 @@ interface Tab {
 
 const tabs: Tab[] = [
   { id: 'general', label: 'General' },
-  { id: 'oauth-clients', label: 'OAuth Clients' }
+  { id: 'oauth-clients', label: 'OAuth Clients' },
 ]
 
 const activeTab = ref('general')

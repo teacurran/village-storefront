@@ -32,7 +32,10 @@ const offlineStore = useOfflineStore()
 const isOffline = computed(() => offlineStore.isOfflineMode)
 const isSyncing = computed(() => offlineStore.isSyncing)
 const queueCount = computed(
-  () => offlineStore.queueStats.queued + offlineStore.queueStats.syncing + offlineStore.queueStats.failed
+  () =>
+    offlineStore.queueStats.queued +
+    offlineStore.queueStats.syncing +
+    offlineStore.queueStats.failed
 )
 const hasError = computed(() => offlineStore.hasSyncErrors)
 const errorMessage = computed(() => offlineStore.syncError || 'Sync failed')
@@ -47,15 +50,15 @@ const statusText = computed(() => {
 })
 
 const indicatorClass = computed(() => ({
-  'offline': isOffline.value,
-  'syncing': isSyncing.value,
-  'error': hasError.value,
-  'hold': isSyncOnHold.value,
-  'online': !isOffline.value && queueCount.value === 0 && !isSyncOnHold.value,
+  offline: isOffline.value,
+  syncing: isSyncing.value,
+  error: hasError.value,
+  hold: isSyncOnHold.value,
+  online: !isOffline.value && queueCount.value === 0 && !isSyncOnHold.value,
 }))
 
 const iconClass = computed(() => ({
-  'pi': true,
+  pi: true,
   'pi-cloud-upload': isSyncing.value,
   'pi-wifi': !isOffline.value,
   'pi-exclamation-circle': isOffline.value || hasError.value,
@@ -141,7 +144,8 @@ function retrySync() {
 
 /* Pulse animation for offline state */
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {

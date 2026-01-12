@@ -8,29 +8,28 @@
  *
  */
 export type PaginationMetadata = {
-    /**
-     * Current page number (1-indexed)
-     */
-    page: number;
-    /**
-     * Items per page
-     */
-    pageSize: number;
-    /**
-     * Total number of items across all pages
-     */
-    totalItems: number;
-    /**
-     * Total number of pages
-     */
-    totalPages: number;
-    /**
-     * Whether there is a next page
-     */
-    hasNext?: boolean;
-    /**
-     * Whether there is a previous page
-     */
-    hasPrev?: boolean;
-};
-
+  /**
+   * Current page number (1-indexed)
+   */
+  page: number
+  /**
+   * Items per page
+   */
+  pageSize: number
+  /**
+   * Total number of items across all pages
+   */
+  totalItems: number
+  /**
+   * Total number of pages
+   */
+  totalPages: number
+  /**
+   * Whether there is a next page
+   */
+  hasNext?: boolean
+  /**
+   * Whether there is a previous page
+   */
+  hasPrev?: boolean
+}

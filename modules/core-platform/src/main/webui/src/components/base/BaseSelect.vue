@@ -59,9 +59,7 @@ const selectId = computed(() => `select-${Math.random().toString(36).substr(2, 9
 
 const normalizedOptions = computed<SelectOption[]>(() =>
   props.options.map((option) =>
-    typeof option === 'string'
-      ? { label: option, value: option }
-      : option
+    typeof option === 'string' ? { label: option, value: option } : option
   )
 )
 

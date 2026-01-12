@@ -52,9 +52,7 @@ export class ApiClient {
         }
 
         if (authStore.impersonationContext) {
-          config.headers['X-Impersonation-Context'] = JSON.stringify(
-            authStore.impersonationContext
-          )
+          config.headers['X-Impersonation-Context'] = JSON.stringify(authStore.impersonationContext)
         }
 
         return config

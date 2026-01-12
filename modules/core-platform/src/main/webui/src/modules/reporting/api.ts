@@ -31,7 +31,10 @@ export async function getInventoryAgingAggregates() {
   return apiClient.get<any[]>('/admin/reports/aggregates/inventory-aging')
 }
 
-export async function requestExport(reportType: string, payload: { format: 'csv' | 'pdf'; requestedBy?: string }) {
+export async function requestExport(
+  reportType: string,
+  payload: { format: 'csv' | 'pdf'; requestedBy?: string }
+) {
   return apiClient.post(`/admin/reports/${reportType}/export`, payload)
 }
 

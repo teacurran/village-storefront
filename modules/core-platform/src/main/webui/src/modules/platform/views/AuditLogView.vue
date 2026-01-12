@@ -94,11 +94,16 @@
     </div>
 
     <footer v-if="auditLogs.length > 0" class="pagination">
-      <button class="pagination-btn" :disabled="auditPagination.page === 0" @click="loadPreviousPage">
+      <button
+        class="pagination-btn"
+        :disabled="auditPagination.page === 0"
+        @click="loadPreviousPage"
+      >
         <i class="pi pi-chevron-left" /> Previous
       </button>
       <span>
-        Page {{ auditPagination.page + 1 }} of {{ totalPages }} ({{ auditPagination.total }} total entries)
+        Page {{ auditPagination.page + 1 }} of {{ totalPages }} ({{ auditPagination.total }} total
+        entries)
       </span>
       <button class="pagination-btn" :disabled="!hasNextPage" @click="loadNextPage">
         Next <i class="pi pi-chevron-right" />
@@ -122,11 +127,11 @@ const targetType = ref('')
 const startDate = ref('')
 const endDate = ref('')
 
-const totalPages = computed(() =>
-  Math.ceil(auditPagination.value.total / auditPagination.value.size) || 1,
+const totalPages = computed(
+  () => Math.ceil(auditPagination.value.total / auditPagination.value.size) || 1
 )
 const hasNextPage = computed(
-  () => (auditPagination.value.page + 1) * auditPagination.value.size < auditPagination.value.total,
+  () => (auditPagination.value.page + 1) * auditPagination.value.size < auditPagination.value.total
 )
 
 onMounted(async () => {

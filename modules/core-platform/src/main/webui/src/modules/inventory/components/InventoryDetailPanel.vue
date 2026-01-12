@@ -67,7 +67,8 @@
             <div>
               <p class="transfer-title">#{{ transfer.transferId.slice(0, 8) }}</p>
               <p class="transfer-meta">
-                {{ transfer.status }} · {{ transfer.createdAt ? formatDate(transfer.createdAt) : '' }}
+                {{ transfer.status }} ·
+                {{ transfer.createdAt ? formatDate(transfer.createdAt) : '' }}
               </p>
             </div>
             <span>{{ transfer.lines.reduce((sum, line) => sum + (line.quantity || 0), 0) }}</span>

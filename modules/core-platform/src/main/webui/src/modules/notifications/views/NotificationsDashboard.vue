@@ -8,7 +8,9 @@
       <div class="header-actions">
         <div class="sse-badge" :class="{ connected: notificationsStore.sseConnected }">
           <span class="dot" />
-          <span>{{ notificationsStore.sseConnected ? t('common.live') : t('common.offline') }}</span>
+          <span>{{
+            notificationsStore.sseConnected ? t('common.live') : t('common.offline')
+          }}</span>
         </div>
         <Button
           v-if="notificationsStore.unreadCount > 0"
@@ -27,18 +29,18 @@
         option-value="value"
         class="w-48"
       />
-      <InputText
-        v-model="search"
-        :placeholder="t('notifications.filters.search')"
-        class="flex-1"
-      />
+      <InputText v-model="search" :placeholder="t('notifications.filters.search')" class="flex-1" />
     </div>
 
     <div class="notifications-list">
       <article
         v-for="notification in notificationsStore.filteredNotifications"
         :key="notification.id"
-        :class="['notification-card', notification.severity.toLowerCase(), { unread: !notification.read }]"
+        :class="[
+          'notification-card',
+          notification.severity.toLowerCase(),
+          { unread: !notification.read },
+        ]"
       >
         <div>
           <p class="eyebrow">{{ formatSeverity(notification.severity) }}</p>

@@ -58,9 +58,7 @@ describe('Catalog Store', () => {
       const store = useCatalogStore()
       await store.fetchProducts()
 
-      expect(apiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('/admin/catalog/products')
-      )
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('/admin/catalog/products'))
       expect(store.products).toHaveLength(1)
       expect(store.products[0].name).toBe('Test Product')
       expect(store.pagination.totalItems).toBe(1)
@@ -88,15 +86,9 @@ describe('Catalog Store', () => {
       store.setFilters({ search: 'test', status: 'active', category: 'cat-1' })
       await store.fetchProducts()
 
-      expect(apiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('q=test')
-      )
-      expect(apiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('status=active')
-      )
-      expect(apiClient.get).toHaveBeenCalledWith(
-        expect.stringContaining('categoryId=cat-1')
-      )
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('q=test'))
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('status=active'))
+      expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('categoryId=cat-1'))
     })
   })
 
@@ -191,8 +183,24 @@ describe('Catalog Store', () => {
     it('should select all products', () => {
       const store = useCatalogStore()
       store.products = [
-        { id: '1', name: 'P1', slug: 's1', status: 'active', trackInventory: true, createdAt: '', updatedAt: '' },
-        { id: '2', name: 'P2', slug: 's2', status: 'active', trackInventory: true, createdAt: '', updatedAt: '' },
+        {
+          id: '1',
+          name: 'P1',
+          slug: 's1',
+          status: 'active',
+          trackInventory: true,
+          createdAt: '',
+          updatedAt: '',
+        },
+        {
+          id: '2',
+          name: 'P2',
+          slug: 's2',
+          status: 'active',
+          trackInventory: true,
+          createdAt: '',
+          updatedAt: '',
+        },
       ]
 
       store.selectAllProducts()

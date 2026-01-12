@@ -3,17 +3,16 @@
  * Do not make direct changes to the file.
  */
 
-
 export interface paths {
-  "/health": {
+  '/health': {
     /**
      * Health check endpoint
      * @description Returns the service health status. Used by Kubernetes liveness/readiness probes.
      * No authentication required.
      */
-    get: operations["healthCheck"];
-  };
-  "/auth/login": {
+    get: operations['healthCheck']
+  }
+  '/auth/login': {
     /**
      * Authenticate user and obtain JWT tokens
      * @description Authenticates a user (customer, admin, or vendor) and returns access + refresh tokens.
@@ -28,25 +27,25 @@ export interface paths {
      * **Session Logging:**
      * All login attempts are logged to the database for audit/compliance purposes.
      */
-    post: operations["login"];
-  };
-  "/auth/refresh": {
+    post: operations['login']
+  }
+  '/auth/refresh': {
     /**
      * Refresh access token using refresh token
      * @description Exchanges a valid refresh token for a new access token + refresh token pair.
      * Refresh tokens are single-use; the old refresh token is invalidated upon successful refresh.
      */
-    post: operations["refreshToken"];
-  };
-  "/auth/logout": {
+    post: operations['refreshToken']
+  }
+  '/auth/logout': {
     /**
      * Invalidate current session
      * @description Logs out the current user by invalidating the refresh token.
      * Access tokens cannot be invalidated (stateless JWT), but expire in 15 minutes.
      */
-    post: operations["logout"];
-  };
-  "/tenants/resolve": {
+    post: operations['logout']
+  }
+  '/tenants/resolve': {
     /**
      * Resolve current tenant metadata
      * @description Returns metadata about the currently resolved tenant based on the Host header.
@@ -54,9 +53,9 @@ export interface paths {
      *
      * **No authentication required** - tenant resolution happens before authentication.
      */
-    get: operations["resolveTenant"];
-  };
-  "/catalog/products": {
+    get: operations['resolveTenant']
+  }
+  '/catalog/products': {
     /**
      * List products (catalog listing)
      * @description **TODO:** Implement product catalog listing with filtering, sorting, and pagination.
@@ -68,9 +67,9 @@ export interface paths {
      *
      * **Authentication:** Optional (public catalog browsing, auth required for customer-specific pricing)
      */
-    get: operations["listProducts"];
-  };
-  "/catalog/products/{productId}": {
+    get: operations['listProducts']
+  }
+  '/catalog/products/{productId}': {
     /**
      * Get product details
      * @description **TODO:** Implement product detail retrieval.
@@ -78,9 +77,9 @@ export interface paths {
      * Returns full product details including variants, pricing, inventory, images.
      * Public endpoint (no auth required for browsing).
      */
-    get: operations["getProduct"];
-  };
-  "/checkout/preview": {
+    get: operations['getProduct']
+  }
+  '/checkout/preview': {
     /**
      * Preview checkout totals (cart calculation)
      * @description **TODO:** Implement checkout preview/calculation.
@@ -94,9 +93,9 @@ export interface paths {
      * **Idempotent:** Safe to call multiple times with same cart state.
      * Does not create order or charge payment method.
      */
-    post: operations["previewCheckout"];
-  };
-  "/checkout/commit": {
+    post: operations['previewCheckout']
+  }
+  '/checkout/commit': {
     /**
      * Complete checkout and create order
      * @description **TODO:** Implement order creation and payment processing.
@@ -112,9 +111,9 @@ export interface paths {
      *
      * **Requires authentication:** Must be logged-in customer or use valid API key.
      */
-    post: operations["commitCheckout"];
-  };
-  "/platform/tenants": {
+    post: operations['commitCheckout']
+  }
+  '/platform/tenants': {
     /**
      * List all tenants (platform admin only)
      * @description **TODO:** Implement tenant listing for platform administrators.
@@ -122,7 +121,7 @@ export interface paths {
      * Returns paginated list of all tenants with status, creation date, and billing info.
      * **Restricted to platform administrators only** (not accessible to store owners).
      */
-    get: operations["listTenants"];
+    get: operations['listTenants']
     /**
      * Create new tenant (platform admin only)
      * @description **TODO:** Implement tenant provisioning.
@@ -135,11 +134,11 @@ export interface paths {
      *
      * **Restricted to platform administrators only.**
      */
-    post: operations["createTenant"];
-  };
+    post: operations['createTenant']
+  }
 }
 
-export type webhooks = Record<string, never>;
+export type webhooks = Record<string, never>
 
 export interface components {
   schemas: {
@@ -148,94 +147,94 @@ export interface components {
        * @description Health status (ok, degraded, error)
        * @example ok
        */
-      status: string;
+      status: string
       /**
        * @description API version
        * @example 1.0.0
        */
-      version?: string;
+      version?: string
       /**
        * Format: date-time
        * @description Server timestamp (ISO 8601)
        * @example 2026-01-02T12:00:00Z
        */
-      timestamp?: string;
-    };
+      timestamp?: string
+    }
     AuthTokenResponse: {
       /**
        * @description JWT access token (short-lived, 15 min)
        * @example eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
        */
-      accessToken: string;
+      accessToken: string
       /**
        * @description JWT refresh token (long-lived, 30 days)
        * @example eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
        */
-      refreshToken: string;
+      refreshToken: string
       /**
        * @description Access token expiry in seconds
        * @example 900
        */
-      expiresIn: number;
+      expiresIn: number
       /**
        * @description Token type (always "Bearer")
        * @example Bearer
        */
-      tokenType: string;
-      user?: components["schemas"]["UserSummary"];
-    };
+      tokenType: string
+      user?: components['schemas']['UserSummary']
+    }
     UserSummary: {
       /**
        * Format: uuid
        * @description User ID
        */
-      id: string;
+      id: string
       /**
        * Format: email
        * @description User email address
        */
-      email: string;
+      email: string
       /**
        * @description User full name
        * @example John Doe
        */
-      name?: string;
+      name?: string
       /**
        * @description User roles within tenant
        * @example [
        *   "admin"
        * ]
        */
-      roles: ("customer" | "admin" | "vendor" | "platform_admin")[];
-    };
+      roles: ('customer' | 'admin' | 'vendor' | 'platform_admin')[]
+    }
     TenantMetadata: {
       /**
        * Format: uuid
        * @description Tenant ID
        */
-      id: string;
+      id: string
       /**
        * @description Tenant subdomain
        * @example storename
        */
-      subdomain: string;
+      subdomain: string
       /**
        * @description Store name (display)
        * @example Acme Store
        */
-      name: string;
+      name: string
       /**
        * @description Tenant status
        * @enum {string}
        */
-      status: "active" | "suspended" | "deleted";
+      status: 'active' | 'suspended' | 'deleted'
       /**
        * @description Verified custom domains for this tenant
        * @example [
        *   "shop.acme.com"
        * ]
        */
-      customDomains?: string[];
+      customDomains?: string[]
       /**
        * @description Tenant-specific settings (theme, locale, features)
        * @example {
@@ -245,95 +244,95 @@ export interface components {
        * }
        */
       settings?: {
-        [key: string]: unknown;
-      };
-    };
+        [key: string]: unknown
+      }
+    }
     TenantSummary: {
       /** Format: uuid */
-      id: string;
+      id: string
       /** @example storename */
-      subdomain: string;
+      subdomain: string
       /** @example Acme Store */
-      name: string;
+      name: string
       /** @enum {string} */
-      status: "active" | "suspended" | "deleted";
+      status: 'active' | 'suspended' | 'deleted'
       /** Format: date-time */
-      createdAt: string;
+      createdAt: string
       /**
        * @description Billing plan tier
        * @example professional
        */
-      planTier?: string;
-    };
-    TenantDetail: components["schemas"]["TenantSummary"] & {
+      planTier?: string
+    }
+    TenantDetail: components['schemas']['TenantSummary'] & {
       customDomains?: {
-          domain?: string;
-          verified?: boolean;
-        }[];
+        domain?: string
+        verified?: boolean
+      }[]
       settings?: {
-        [key: string]: unknown;
-      };
+        [key: string]: unknown
+      }
       /** Format: date-time */
-      updatedAt?: string;
-    };
+      updatedAt?: string
+    }
     CreateTenantRequest: {
       /**
        * @description Tenant subdomain (lowercase alphanumeric + hyphens, 3-63 chars)
        * @example acme-store
        */
-      subdomain: string;
+      subdomain: string
       /**
        * @description Store display name
        * @example Acme Store
        */
-      name: string;
+      name: string
       /**
        * Format: email
        * @description Email for initial admin user account
        * @example admin@acme.com
        */
-      adminEmail: string;
+      adminEmail: string
       /**
        * Format: password
        * @description Password for initial admin user (if not provided, generated and emailed)
        */
-      adminPassword?: string;
+      adminPassword?: string
       /** @description Initial tenant settings (optional) */
       settings?: {
-        [key: string]: unknown;
-      };
-    };
+        [key: string]: unknown
+      }
+    }
     ProductSummary: {
       /** Format: uuid */
-      id: string;
+      id: string
       /** @example WIDGET-001 */
-      sku: string;
+      sku: string
       /** @example Premium Widget */
-      name: string;
+      name: string
       /**
        * @description Short description (max 200 chars for listing)
        * @example High-quality widget for all your needs
        */
-      description?: string;
-      price: components["schemas"]["Money"];
+      description?: string
+      price: components['schemas']['Money']
       /** @enum {string} */
-      status: "active" | "draft" | "archived";
+      status: 'active' | 'draft' | 'archived'
       /**
        * Format: uri
        * @description Primary product image URL
        * @example https://cdn.villagecompute.com/products/widget-001.jpg
        */
-      imageUrl?: string;
+      imageUrl?: string
       /** @description Aggregate stock availability (true if any variant in stock) */
-      inStock?: boolean;
-    };
-    ProductDetail: components["schemas"]["ProductSummary"] & {
+      inStock?: boolean
+    }
+    ProductDetail: components['schemas']['ProductSummary'] & {
       /** @description Full product description (Markdown supported) */
-      longDescription?: string;
+      longDescription?: string
       /** @description All product image URLs */
-      images?: string[];
+      images?: string[]
       /** @description Product variants (size, color, etc.) */
-      variants?: components["schemas"]["ProductVariant"][];
+      variants?: components['schemas']['ProductVariant'][]
       /**
        * @description Category slugs
        * @example [
@@ -341,7 +340,7 @@ export interface components {
        *   "widgets"
        * ]
        */
-      categories?: string[];
+      categories?: string[]
       /**
        * @description Product tags
        * @example [
@@ -349,20 +348,20 @@ export interface components {
        *   "on-sale"
        * ]
        */
-      tags?: string[];
+      tags?: string[]
       /** Format: date-time */
-      createdAt?: string;
+      createdAt?: string
       /** Format: date-time */
-      updatedAt?: string;
-    };
+      updatedAt?: string
+    }
     ProductVariant: {
       /** Format: uuid */
-      id: string;
+      id: string
       /** @example WIDGET-001-RED-L */
-      sku: string;
-      price: components["schemas"]["Money"];
+      sku: string
+      price: components['schemas']['Money']
       /** @description Available inventory quantity */
-      stock: number;
+      stock: number
       /**
        * @description Variant option values (e.g., {"color": "Red", "size": "Large"})
        * @example {
@@ -371,69 +370,69 @@ export interface components {
        * }
        */
       options?: {
-        [key: string]: string;
-      };
-    };
+        [key: string]: string
+      }
+    }
     CheckoutPreviewRequest: {
       lineItems: {
-          /** Format: uuid */
-          variantId: string;
-          quantity: number;
-        }[];
-      shippingAddress?: components["schemas"]["Address"];
+        /** Format: uuid */
+        variantId: string
+        quantity: number
+      }[]
+      shippingAddress?: components['schemas']['Address']
       /**
        * @description Promotional/discount code
        * @example SAVE20
        */
-      promoCode?: string;
-    };
+      promoCode?: string
+    }
     CheckoutPreview: {
-      subtotal: components["schemas"]["Money"];
+      subtotal: components['schemas']['Money']
       discounts?: {
-          code?: string;
-          amount?: components["schemas"]["Money"];
-        }[];
-      tax: components["schemas"]["Money"];
-      shipping: components["schemas"]["Money"];
-      total: components["schemas"]["Money"];
+        code?: string
+        amount?: components['schemas']['Money']
+      }[]
+      tax: components['schemas']['Money']
+      shipping: components['schemas']['Money']
+      total: components['schemas']['Money']
       /** @example USD */
-      currency: string;
+      currency: string
       /** @description Calculated line items with final pricing */
       lineItems?: {
-          /** Format: uuid */
-          variantId?: string;
-          quantity?: number;
-          unitPrice?: components["schemas"]["Money"];
-          lineTotal?: components["schemas"]["Money"];
-        }[];
-    };
-    CheckoutCommitRequest: components["schemas"]["CheckoutPreviewRequest"] & {
-      billingAddress: components["schemas"]["Address"];
+        /** Format: uuid */
+        variantId?: string
+        quantity?: number
+        unitPrice?: components['schemas']['Money']
+        lineTotal?: components['schemas']['Money']
+      }[]
+    }
+    CheckoutCommitRequest: components['schemas']['CheckoutPreviewRequest'] & {
+      billingAddress: components['schemas']['Address']
       /**
        * @description Stripe payment method ID (from Stripe Elements)
        * @example pm_1234567890abcdef
        */
-      paymentMethodId: string;
-    };
+      paymentMethodId: string
+    }
     OrderCreatedResponse: {
       /** Format: uuid */
-      orderId: string;
+      orderId: string
       /**
        * @description Human-readable order number
        * @example ORD-2026-00042
        */
-      orderNumber: string;
+      orderNumber: string
       /** @enum {string} */
-      status: "pending" | "processing" | "shipped" | "delivered" | "cancelled";
-      total: components["schemas"]["Money"];
+      status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
+      total: components['schemas']['Money']
       /** Format: date-time */
-      createdAt: string;
+      createdAt: string
       /**
        * Format: date
        * @description Estimated delivery date
        */
-      estimatedDelivery?: string;
-    };
+      estimatedDelivery?: string
+    }
     /**
      * @description Monetary value with currency. Amount stored as string to preserve precision.
      * Always includes exactly 2 decimal places (e.g., "10.00", not "10").
@@ -443,45 +442,45 @@ export interface components {
        * @description Decimal amount as string (avoids floating-point precision issues)
        * @example 99.99
        */
-      amount: string;
+      amount: string
       /**
        * @description ISO 4217 currency code
        * @example USD
        */
-      currency: string;
-    };
+      currency: string
+    }
     /** @description Physical address for shipping/billing */
     Address: {
       /**
        * @description Street address line 1
        * @example 123 Main St
        */
-      line1: string;
+      line1: string
       /**
        * @description Street address line 2 (apt, suite, etc.)
        * @example Apt 4B
        */
-      line2?: string;
+      line2?: string
       /** @example San Francisco */
-      city: string;
+      city: string
       /**
        * @description State/province/region code
        * @example CA
        */
-      state?: string;
+      state?: string
       /** @example 94102 */
-      postalCode: string;
+      postalCode: string
       /**
        * @description ISO 3166-1 alpha-2 country code
        * @example US
        */
-      country: string;
+      country: string
       /**
        * @description Contact phone number
        * @example +1-415-555-1234
        */
-      phone?: string;
-    };
+      phone?: string
+    }
     /**
      * @description Pagination metadata for paginated list responses.
      * Includes navigation helpers (hasNext, hasPrev) to simplify client logic.
@@ -491,33 +490,33 @@ export interface components {
        * @description Current page number (1-indexed)
        * @example 1
        */
-      page: number;
+      page: number
       /**
        * @description Items per page
        * @example 20
        */
-      pageSize: number;
+      pageSize: number
       /**
        * @description Total number of items across all pages
        * @example 142
        */
-      totalItems: number;
+      totalItems: number
       /**
        * @description Total number of pages
        * @example 8
        */
-      totalPages: number;
+      totalPages: number
       /**
        * @description Whether there is a next page
        * @example true
        */
-      hasNext?: boolean;
+      hasNext?: boolean
       /**
        * @description Whether there is a previous page
        * @example false
        */
-      hasPrev?: boolean;
-    };
+      hasPrev?: boolean
+    }
     /**
      * @description RFC 7807 Problem Details for HTTP APIs.
      * Standard error response format used across all endpoints.
@@ -537,28 +536,28 @@ export interface components {
        * @description URI reference identifying the problem type
        * @example https://docs.villagecompute.com/errors/validation-error
        */
-      type: string;
+      type: string
       /**
        * @description Short, human-readable summary of the problem
        * @example Validation Failed
        */
-      title: string;
+      title: string
       /**
        * @description HTTP status code
        * @example 400
        */
-      status: number;
+      status: number
       /**
        * @description Human-readable explanation specific to this occurrence
        * @example Product SKU must be unique within tenant
        */
-      detail?: string;
+      detail?: string
       /**
        * Format: uri
        * @description URI reference identifying the specific occurrence
        * @example https://storename.villagecompute.com/api/v1/products
        */
-      instance?: string;
+      instance?: string
       /**
        * @description Field-level validation errors (key = field name, value = error messages)
        * @example {
@@ -571,11 +570,11 @@ export interface components {
        * }
        */
       errors?: {
-        [key: string]: string[];
-      };
-    };
-  };
-  responses: never;
+        [key: string]: string[]
+      }
+    }
+  }
+  responses: never
   parameters: {
     /**
      * @description Idempotency key for safe retries of non-idempotent operations (POST, DELETE).
@@ -585,11 +584,11 @@ export interface components {
      * **Recommended:** Always generate a unique UUID v4 per logical operation.
      * Store the key client-side and reuse on retry.
      */
-    IdempotencyKey?: string;
+    IdempotencyKey?: string
     /** @description Page number for pagination (1-indexed) */
-    PageNumber?: number;
+    PageNumber?: number
     /** @description Number of items per page (max 100) */
-    PageSize?: number;
+    PageSize?: number
     /**
      * @description **Optional override** for tenant resolution in testing/development.
      * Production requests should rely on the HTTP `Host` header for automatic resolution.
@@ -599,19 +598,18 @@ export interface components {
      * - Platform admin impersonation
      * - Local development with ngrok/tunnels
      */
-    TenantDomain?: string;
-  };
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    TenantDomain?: string
+  }
+  requestBodies: never
+  headers: never
+  pathItems: never
 }
 
-export type $defs = Record<string, never>;
+export type $defs = Record<string, never>
 
-export type external = Record<string, never>;
+export type external = Record<string, never>
 
 export interface operations {
-
   /**
    * Health check endpoint
    * @description Returns the service health status. Used by Kubernetes liveness/readiness probes.
@@ -622,11 +620,11 @@ export interface operations {
       /** @description Service is healthy and ready to accept requests */
       200: {
         content: {
-          "application/json": components["schemas"]["HealthResponse"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['HealthResponse']
+        }
+      }
+    }
+  }
   /**
    * Authenticate user and obtain JWT tokens
    * @description Authenticates a user (customer, admin, or vendor) and returns access + refresh tokens.
@@ -644,41 +642,41 @@ export interface operations {
   login: {
     requestBody: {
       content: {
-        "application/json": {
+        'application/json': {
           /**
            * Format: email
            * @example admin@merchant.com
            */
-          email: string;
+          email: string
           /**
            * Format: password
            * @example ********
            */
-          password: string;
-        };
-      };
-    };
+          password: string
+        }
+      }
+    }
     responses: {
       /** @description Authentication successful, tokens issued */
       200: {
         content: {
-          "application/json": components["schemas"]["AuthTokenResponse"];
-        };
-      };
+          'application/json': components['schemas']['AuthTokenResponse']
+        }
+      }
       /** @description Invalid credentials or account locked */
       401: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
       /** @description Tenant not found (invalid subdomain/domain) */
       404: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Refresh access token using refresh token
    * @description Exchanges a valid refresh token for a new access token + refresh token pair.
@@ -687,30 +685,30 @@ export interface operations {
   refreshToken: {
     requestBody: {
       content: {
-        "application/json": {
+        'application/json': {
           /**
            * @description The refresh token obtained from login
            * @example eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
            */
-          refreshToken: string;
-        };
-      };
-    };
+          refreshToken: string
+        }
+      }
+    }
     responses: {
       /** @description Token refresh successful */
       200: {
         content: {
-          "application/json": components["schemas"]["AuthTokenResponse"];
-        };
-      };
+          'application/json': components['schemas']['AuthTokenResponse']
+        }
+      }
       /** @description Invalid or expired refresh token */
       401: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Invalidate current session
    * @description Logs out the current user by invalidating the refresh token.
@@ -720,16 +718,16 @@ export interface operations {
     responses: {
       /** @description Logout successful, refresh token invalidated */
       204: {
-        content: never;
-      };
+        content: never
+      }
       /** @description Invalid or missing authentication token */
       401: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Resolve current tenant metadata
    * @description Returns metadata about the currently resolved tenant based on the Host header.
@@ -742,17 +740,17 @@ export interface operations {
       /** @description Tenant successfully resolved */
       200: {
         content: {
-          "application/json": components["schemas"]["TenantMetadata"];
-        };
-      };
+          'application/json': components['schemas']['TenantMetadata']
+        }
+      }
       /** @description No tenant found for this domain/subdomain */
       404: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * List products (catalog listing)
    * @description **TODO:** Implement product catalog listing with filtering, sorting, and pagination.
@@ -767,38 +765,38 @@ export interface operations {
   listProducts: {
     parameters: {
       query?: {
-        page?: components["parameters"]["PageNumber"];
-        pageSize?: components["parameters"]["PageSize"];
+        page?: components['parameters']['PageNumber']
+        pageSize?: components['parameters']['PageSize']
         /** @description Filter by category slug */
-        category?: string;
+        category?: string
         /** @description Minimum price filter (in tenant's default currency) */
-        minPrice?: number;
+        minPrice?: number
         /** @description Maximum price filter */
-        maxPrice?: number;
+        maxPrice?: number
         /** @description Search query (matches name, SKU, description) */
-        search?: string;
+        search?: string
         /** @description Sort order */
-        sort?: "name" | "price_asc" | "price_desc" | "created_desc" | "popularity";
-      };
-    };
+        sort?: 'name' | 'price_asc' | 'price_desc' | 'created_desc' | 'popularity'
+      }
+    }
     responses: {
       /** @description Product list successfully retrieved */
       200: {
         content: {
-          "application/json": {
-            data: components["schemas"]["ProductSummary"][];
-            pagination: components["schemas"]["PaginationMetadata"];
-          };
-        };
-      };
+          'application/json': {
+            data: components['schemas']['ProductSummary'][]
+            pagination: components['schemas']['PaginationMetadata']
+          }
+        }
+      }
       /** @description Tenant not found */
       404: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Get product details
    * @description **TODO:** Implement product detail retrieval.
@@ -810,24 +808,24 @@ export interface operations {
     parameters: {
       path: {
         /** @description Product UUID */
-        productId: string;
-      };
-    };
+        productId: string
+      }
+    }
     responses: {
       /** @description Product details retrieved */
       200: {
         content: {
-          "application/json": components["schemas"]["ProductDetail"];
-        };
-      };
+          'application/json': components['schemas']['ProductDetail']
+        }
+      }
       /** @description Product not found */
       404: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Preview checkout totals (cart calculation)
    * @description **TODO:** Implement checkout preview/calculation.
@@ -844,29 +842,29 @@ export interface operations {
   previewCheckout: {
     parameters: {
       header?: {
-        "X-Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
-      };
-    };
+        'X-Idempotency-Key'?: components['parameters']['IdempotencyKey']
+      }
+    }
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CheckoutPreviewRequest"];
-      };
-    };
+        'application/json': components['schemas']['CheckoutPreviewRequest']
+      }
+    }
     responses: {
       /** @description Checkout preview calculated */
       200: {
         content: {
-          "application/json": components["schemas"]["CheckoutPreview"];
-        };
-      };
+          'application/json': components['schemas']['CheckoutPreview']
+        }
+      }
       /** @description Invalid cart state (out of stock, invalid promo code, etc.) */
       400: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Complete checkout and create order
    * @description **TODO:** Implement order creation and payment processing.
@@ -885,45 +883,45 @@ export interface operations {
   commitCheckout: {
     parameters: {
       header?: {
-        "X-Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
-      };
-    };
+        'X-Idempotency-Key'?: components['parameters']['IdempotencyKey']
+      }
+    }
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CheckoutCommitRequest"];
-      };
-    };
+        'application/json': components['schemas']['CheckoutCommitRequest']
+      }
+    }
     responses: {
       /** @description Order successfully created and payment charged */
       201: {
         headers: {
           /** @description URL of the created order resource */
-          Location?: string;
-        };
+          Location?: string
+        }
         content: {
-          "application/json": components["schemas"]["OrderCreatedResponse"];
-        };
-      };
+          'application/json': components['schemas']['OrderCreatedResponse']
+        }
+      }
       /** @description Invalid request (validation errors, out of stock, etc.) */
       400: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
       /** @description Payment required (payment method declined) */
       402: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
       /** @description Duplicate idempotency key (order already created) */
       409: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * List all tenants (platform admin only)
    * @description **TODO:** Implement tenant listing for platform administrators.
@@ -934,30 +932,30 @@ export interface operations {
   listTenants: {
     parameters: {
       query?: {
-        page?: components["parameters"]["PageNumber"];
-        pageSize?: components["parameters"]["PageSize"];
+        page?: components['parameters']['PageNumber']
+        pageSize?: components['parameters']['PageSize']
         /** @description Filter by tenant status */
-        status?: "active" | "suspended" | "deleted";
-      };
-    };
+        status?: 'active' | 'suspended' | 'deleted'
+      }
+    }
     responses: {
       /** @description Tenant list retrieved */
       200: {
         content: {
-          "application/json": {
-            data: components["schemas"]["TenantSummary"][];
-            pagination: components["schemas"]["PaginationMetadata"];
-          };
-        };
-      };
+          'application/json': {
+            data: components['schemas']['TenantSummary'][]
+            pagination: components['schemas']['PaginationMetadata']
+          }
+        }
+      }
       /** @description Forbidden (requires platform admin role) */
       403: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
   /**
    * Create new tenant (platform admin only)
    * @description **TODO:** Implement tenant provisioning.
@@ -973,32 +971,32 @@ export interface operations {
   createTenant: {
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateTenantRequest"];
-      };
-    };
+        'application/json': components['schemas']['CreateTenantRequest']
+      }
+    }
     responses: {
       /** @description Tenant created successfully */
       201: {
         headers: {
           /** @description URL of the created tenant resource */
-          Location?: string;
-        };
+          Location?: string
+        }
         content: {
-          "application/json": components["schemas"]["TenantDetail"];
-        };
-      };
+          'application/json': components['schemas']['TenantDetail']
+        }
+      }
       /** @description Validation error (subdomain taken, invalid format, etc.) */
       400: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
       /** @description Forbidden (requires platform admin role) */
       403: {
         content: {
-          "application/json": components["schemas"]["ProblemDetails"];
-        };
-      };
-    };
-  };
+          'application/json': components['schemas']['ProblemDetails']
+        }
+      }
+    }
+  }
 }

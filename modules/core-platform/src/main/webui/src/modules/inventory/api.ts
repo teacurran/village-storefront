@@ -87,7 +87,8 @@ export async function getInventoryMatrix(filters: InventoryFilters): Promise<Inv
       if (!filters.search) return true
       const query = filters.search.toLowerCase()
       return (
-        agg.variant.name.toLowerCase().includes(query) || agg.variant.sku.toLowerCase().includes(query)
+        agg.variant.name.toLowerCase().includes(query) ||
+        agg.variant.sku.toLowerCase().includes(query)
       )
     })
     .map((agg) => ({

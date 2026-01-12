@@ -199,7 +199,9 @@ export const useOfflineStore = defineStore('pos-offline', () => {
       }
 
       const result = await response.json()
-      console.log(`[OfflineQueue] Sync complete: ${result.enqueued} enqueued, ${result.duplicates} duplicates`)
+      console.log(
+        `[OfflineQueue] Sync complete: ${result.enqueued} enqueued, ${result.duplicates} duplicates`
+      )
 
       // Mark all as synced
       for (const entry of processingEntries) {
@@ -212,7 +214,6 @@ export const useOfflineStore = defineStore('pos-offline', () => {
       setTimeout(() => deleteSyncedEntries(), 5 * 60 * 1000)
       await refreshQueueStats()
       await requestBackgroundSync()
-
     } catch (error) {
       console.error('[OfflineQueue] Sync error:', error)
       syncError.value = error instanceof Error ? error.message : 'Unknown error'
@@ -288,8 +289,8 @@ export const useOfflineStore = defineStore('pos-offline', () => {
   }
 
   /**
-    * Ensure service worker is registered so background sync can run.
-    */
+   * Ensure service worker is registered so background sync can run.
+   */
   async function ensureServiceWorker() {
     if (serviceWorkerRegistered) return
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {

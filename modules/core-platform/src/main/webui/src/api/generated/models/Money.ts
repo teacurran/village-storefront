@@ -8,13 +8,12 @@
  *
  */
 export type Money = {
-    /**
-     * Decimal amount as string (avoids floating-point precision issues)
-     */
-    amount: string;
-    /**
-     * ISO 4217 currency code
-     */
-    currency: string;
-};
-
+  /**
+   * Decimal amount as string (avoids floating-point precision issues)
+   */
+  amount: string
+  /**
+   * ISO 4217 currency code
+   */
+  currency: string
+}

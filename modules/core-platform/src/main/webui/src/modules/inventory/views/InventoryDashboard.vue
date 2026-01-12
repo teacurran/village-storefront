@@ -155,7 +155,11 @@ async function handleRefresh() {
   }
 }
 
-async function handleAdjustmentSave(payload: { quantityChange: number; reason: string; notes?: string }) {
+async function handleAdjustmentSave(payload: {
+  quantityChange: number
+  reason: string
+  notes?: string
+}) {
   try {
     await inventoryStore.recordAdjustment(payload)
     showAdjustmentDialog.value = false

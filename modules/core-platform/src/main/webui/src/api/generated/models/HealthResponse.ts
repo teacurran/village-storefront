@@ -3,17 +3,16 @@
 /* tslint:disable */
 /* eslint-disable */
 export type HealthResponse = {
-    /**
-     * Health status (ok, degraded, error)
-     */
-    status: string;
-    /**
-     * API version
-     */
-    version?: string;
-    /**
-     * Server timestamp (ISO 8601)
-     */
-    timestamp?: string;
-};
-
+  /**
+   * Health status (ok, degraded, error)
+   */
+  status: string
+  /**
+   * API version
+   */
+  version?: string
+  /**
+   * Server timestamp (ISO 8601)
+   */
+  timestamp?: string
+}

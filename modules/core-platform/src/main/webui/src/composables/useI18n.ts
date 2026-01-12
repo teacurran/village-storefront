@@ -142,7 +142,8 @@ const translations: Record<string, Record<string, string>> = {
     'loyalty.tiers.subtitle': 'Define progression for customers',
     'loyalty.members.title': 'Member Lookup',
     'loyalty.members.subtitle': 'Search by user ID to view balances',
-    'loyalty.members.lookupPlaceholder': 'Enter user UUID (e.g. 123e4567-e89b-12d3-a456-426614174000)',
+    'loyalty.members.lookupPlaceholder':
+      'Enter user UUID (e.g. 123e4567-e89b-12d3-a456-426614174000)',
     'loyalty.members.lookup': 'Lookup Member',
     'loyalty.members.pointsBalance': 'Points Balance',
     'loyalty.members.tier': 'Current Tier',

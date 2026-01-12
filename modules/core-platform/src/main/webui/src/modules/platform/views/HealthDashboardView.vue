@@ -30,7 +30,9 @@
 
       <article class="metric-card">
         <h3>Tenants</h3>
-        <p class="metric-value">{{ healthMetrics?.activeTenantCount }} / {{ healthMetrics?.tenantCount }}</p>
+        <p class="metric-value">
+          {{ healthMetrics?.activeTenantCount }} / {{ healthMetrics?.tenantCount }}
+        </p>
         <small>Active / Total</small>
       </article>
 
@@ -83,7 +85,7 @@ const platformStore = usePlatformStore()
 const { healthMetrics, loading, error, sseConnected } = storeToRefs(platformStore)
 
 const formattedTimestamp = computed(() =>
-  healthMetrics.value ? new Date(healthMetrics.value.timestamp).toLocaleString() : '',
+  healthMetrics.value ? new Date(healthMetrics.value.timestamp).toLocaleString() : ''
 )
 
 onMounted(async () => {

@@ -57,9 +57,7 @@
                 {{ store.status }}
               </span>
             </td>
-            <td>
-              {{ store.activeUserCount }} / {{ store.userCount }}
-            </td>
+            <td>{{ store.activeUserCount }} / {{ store.userCount }}</td>
             <td>
               <span class="plan-badge">{{ store.plan }}</span>
             </td>
@@ -110,8 +108,8 @@
         <i class="pi pi-chevron-left"></i> Previous
       </button>
       <span class="pagination-info">
-        Page {{ storePagination.page + 1 }} of {{ totalPages }}
-        ({{ storePagination.total }} total stores)
+        Page {{ storePagination.page + 1 }} of {{ totalPages }} ({{ storePagination.total }} total
+        stores)
       </span>
       <button :disabled="!hasNextPage" class="pagination-btn" @click="loadNextPage">
         Next <i class="pi pi-chevron-right"></i>
@@ -122,7 +120,10 @@
     <dialog ref="suspendDialog" class="modal">
       <div class="modal-content">
         <h2>Suspend Store</h2>
-        <p>Are you sure you want to suspend <strong>{{ selectedStore?.name }}</strong>?</p>
+        <p>
+          Are you sure you want to suspend <strong>{{ selectedStore?.name }}</strong
+          >?
+        </p>
         <textarea
           v-model="suspendReason"
           placeholder="Enter suspension reason (required)..."
@@ -160,9 +161,11 @@ const suspendDialog = ref<HTMLDialogElement | null>(null)
 const selectedStore = ref<StoreDirectoryEntry | null>(null)
 const suspendReason = ref('')
 
-const totalPages = computed(() => Math.ceil(storePagination.value.total / storePagination.value.size))
+const totalPages = computed(() =>
+  Math.ceil(storePagination.value.total / storePagination.value.size)
+)
 const hasNextPage = computed(
-  () => (storePagination.value.page + 1) * storePagination.value.size < storePagination.value.total,
+  () => (storePagination.value.page + 1) * storePagination.value.size < storePagination.value.total
 )
 
 onMounted(() => {

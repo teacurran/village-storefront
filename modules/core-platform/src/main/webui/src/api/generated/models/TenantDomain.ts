@@ -12,4 +12,4 @@
  * - Local development with ngrok/tunnels
  *
  */
-export type TenantDomain = string;
+export type TenantDomain = string

@@ -106,7 +106,12 @@
       >
         <template #empty>
           <div class="text-center py-8 text-neutral-500">
-            <svg class="w-16 h-16 mx-auto mb-4 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="w-16 h-16 mx-auto mb-4 text-neutral-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -159,11 +164,7 @@
 
         <Column field="status" header="Status" sortable style="width: 120px">
           <template #body="{ data }">
-            <Tag
-              :value="data.status"
-              :severity="getStatusSeverity(data.status)"
-              class="text-xs"
-            />
+            <Tag :value="data.status" :severity="getStatusSeverity(data.status)" class="text-xs" />
           </template>
         </Column>
 

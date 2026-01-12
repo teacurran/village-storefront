@@ -273,7 +273,9 @@ function ensureScale(input: string | TokenScale | undefined): TokenScale | undef
   return output
 }
 
-function normalizeTypography(typography?: ThemeTokenPayload['typography']): DesignTokens['typography'] {
+function normalizeTypography(
+  typography?: ThemeTokenPayload['typography']
+): DesignTokens['typography'] {
   if (!typography) {
     return undefined
   }

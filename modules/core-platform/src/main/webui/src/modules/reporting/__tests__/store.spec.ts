@@ -41,7 +41,13 @@ describe('Reporting Store', () => {
     ])
 
     vi.mocked(reportingApi.getInventoryAgingAggregates).mockResolvedValue([
-      { id: '1', variant: { sku: 'SKU-001' }, location: { name: 'Warehouse' }, quantity: 50, daysInStock: 120 },
+      {
+        id: '1',
+        variant: { sku: 'SKU-001' },
+        location: { name: 'Warehouse' },
+        quantity: 50,
+        daysInStock: 120,
+      },
     ])
 
     vi.mocked(reportingApi.getExportJobs).mockResolvedValue([

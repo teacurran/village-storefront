@@ -35,10 +35,7 @@ const localeTagMap: Record<'en' | 'es', string> = {
  */
 export async function loadTranslations() {
   try {
-    const [en, es] = await Promise.all([
-      import('@/locales/en.json'),
-      import('@/locales/es.json'),
-    ])
+    const [en, es] = await Promise.all([import('@/locales/en.json'), import('@/locales/es.json')])
 
     translations.value = {
       en: en.default || en,
@@ -81,9 +78,7 @@ export function useI18n() {
   function t(key: LocaleKey, params?: TranslationParams): string {
     const dict = translations.value[locale.value] || translations.value.en || {}
     let translation =
-      resolveTranslation(dict, key) ??
-      resolveTranslation(translations.value.en, key) ??
-      key
+      resolveTranslation(dict, key) ?? resolveTranslation(translations.value.en, key) ?? key
 
     // Replace parameters in translation
     if (params) {
@@ -103,10 +98,7 @@ export function useI18n() {
     currentTimeZone.value = newTimeZone || 'UTC'
   }
 
-  function formatCurrency(
-    money: Money,
-    options?: Intl.NumberFormatOptions
-  ): string {
+  function formatCurrency(money: Money, options?: Intl.NumberFormatOptions): string {
     return new Intl.NumberFormat(getLocaleTag(), {
       style: 'currency',
       currency: money.currency,
@@ -114,12 +106,8 @@ export function useI18n() {
     }).format(money.amount / 100)
   }
 
-  function formatDate(
-    dateInput: string | Date,
-    options?: Intl.DateTimeFormatOptions
-  ): string {
-    const date =
-      typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  function formatDate(dateInput: string | Date, options?: Intl.DateTimeFormatOptions): string {
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
     return new Intl.DateTimeFormat(getLocaleTag(), {
       month: 'short',
       day: 'numeric',
@@ -130,8 +118,7 @@ export function useI18n() {
   }
 
   function formatRelativeTime(dateInput: string | Date): string {
-    const date =
-      typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffMins = Math.floor(diffMs / 60000)
@@ -139,10 +126,8 @@ export function useI18n() {
     const diffDays = Math.floor(diffMs / 86400000)
 
     if (diffMins < 1) return t('common.time.justNow')
-    if (diffMins < 60)
-      return t('common.time.minutesAgo', { count: diffMins })
-    if (diffHours < 24)
-      return t('common.time.hoursAgo', { count: diffHours })
+    if (diffMins < 60) return t('common.time.minutesAgo', { count: diffMins })
+    if (diffHours < 24) return t('common.time.hoursAgo', { count: diffHours })
     if (diffDays < 7) return t('common.time.daysAgo', { count: diffDays })
 
     return formatDate(date, { month: 'short', day: 'numeric' })

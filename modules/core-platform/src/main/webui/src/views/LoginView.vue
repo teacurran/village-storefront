@@ -13,20 +13,9 @@
           class="mb-4"
         />
 
-        <BaseInput
-          v-model="password"
-          type="password"
-          label="Password"
-          required
-          class="mb-6"
-        />
+        <BaseInput v-model="password" type="password" label="Password" required class="mb-6" />
 
-        <BaseButton
-          type="submit"
-          variant="primary"
-          :loading="loading"
-          full-width
-        >
+        <BaseButton type="submit" variant="primary" :loading="loading" full-width>
           Sign In
         </BaseButton>
       </form>

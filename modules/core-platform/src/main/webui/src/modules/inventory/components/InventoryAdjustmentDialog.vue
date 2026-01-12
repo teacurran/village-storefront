@@ -1,5 +1,10 @@
 <template>
-  <Dialog :visible="visible" modal :header="t('inventory.adjustDialog.title')" @hide="emit('close')">
+  <Dialog
+    :visible="visible"
+    modal
+    :header="t('inventory.adjustDialog.title')"
+    @hide="emit('close')"
+  >
     <div class="dialog-body">
       <label class="field-label" for="quantity">{{ t('inventory.adjustDialog.quantity') }}</label>
       <InputNumber

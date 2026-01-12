@@ -71,8 +71,20 @@ describe('ReportingDashboard', () => {
     ])
 
     vi.mocked(reportingApi.getInventoryAgingAggregates).mockResolvedValue([
-      { id: '1', variant: { sku: 'SKU-001' }, location: { name: 'Warehouse A' }, quantity: 50, daysInStock: 120 },
-      { id: '2', variant: { sku: 'SKU-002' }, location: { name: 'Warehouse B' }, quantity: 30, daysInStock: 90 },
+      {
+        id: '1',
+        variant: { sku: 'SKU-001' },
+        location: { name: 'Warehouse A' },
+        quantity: 50,
+        daysInStock: 120,
+      },
+      {
+        id: '2',
+        variant: { sku: 'SKU-002' },
+        location: { name: 'Warehouse B' },
+        quantity: 30,
+        daysInStock: 90,
+      },
     ])
 
     vi.mocked(reportingApi.getExportJobs).mockResolvedValue([
@@ -122,7 +134,8 @@ describe('ReportingDashboard', () => {
           Button: { template: '<button><slot /></button>' },
           MetricsCard: { template: '<div class="metrics-card"></div>' },
           SalesLineChart: {
-            template: '<canvas aria-label="Sales trend chart showing revenue over time" role="img"></canvas>',
+            template:
+              '<canvas aria-label="Sales trend chart showing revenue over time" role="img"></canvas>',
           },
           InventoryBarChart: { template: '<div></div>' },
           JobStatusBadge: { template: '<span></span>' },

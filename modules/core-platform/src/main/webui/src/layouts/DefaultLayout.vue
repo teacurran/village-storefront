@@ -50,10 +50,7 @@
               </svg>
             </button>
             <div class="flex-1">
-              <button
-                class="command-palette-trigger"
-                @click="emit('toggle-command-palette')"
-              >
+              <button class="command-palette-trigger" @click="emit('toggle-command-palette')">
                 <span class="text-neutral-500">Search...</span>
                 <kbd class="kbd">⌘K</kbd>
               </button>
@@ -74,7 +71,9 @@
 
             <div class="relative">
               <button class="flex items-center gap-2 text-sm">
-                <div class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center font-medium">
+                <div
+                  class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center font-medium"
+                >
                   {{ userInitials }}
                 </div>
                 <span class="font-medium">{{ authStore.user?.firstName }}</span>

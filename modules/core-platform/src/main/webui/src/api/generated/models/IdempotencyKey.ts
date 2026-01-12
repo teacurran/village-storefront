@@ -11,4 +11,4 @@
  * Store the key client-side and reuse on retry.
  *
  */
-export type IdempotencyKey = string;
+export type IdempotencyKey = string

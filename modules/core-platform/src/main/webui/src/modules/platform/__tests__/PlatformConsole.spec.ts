@@ -72,7 +72,7 @@ describe('Platform Console Store', () => {
       expect(platformApi.getStoreDirectory).toHaveBeenCalledWith(
         { status: 'active', search: 'test' },
         0,
-        20,
+        20
       )
     })
 

@@ -32,7 +32,12 @@
       >
         <template #empty>
           <div class="text-center py-8 text-neutral-500">
-            <svg class="w-16 h-16 mx-auto mb-4 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="w-16 h-16 mx-auto mb-4 text-neutral-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -49,7 +54,9 @@
           <template #body="{ data }">
             <div>
               <div class="font-medium text-neutral-900">{{ data.name }}</div>
-              <div v-if="data.description" class="text-sm text-neutral-500">{{ data.description }}</div>
+              <div v-if="data.description" class="text-sm text-neutral-500">
+                {{ data.description }}
+              </div>
             </div>
           </template>
         </Column>
@@ -92,9 +99,7 @@
         </Column>
 
         <Column field="rateLimitPerMinute" header="Rate Limit">
-          <template #body="{ data }">
-            {{ data.rateLimitPerMinute }}/min
-          </template>
+          <template #body="{ data }"> {{ data.rateLimitPerMinute }}/min </template>
         </Column>
 
         <Column field="active" header="Status">
@@ -131,11 +136,7 @@
               >
                 Revoke
               </BaseButton>
-              <BaseButton
-                variant="warning"
-                size="sm"
-                @click="confirmRegenerateSecret(data)"
-              >
+              <BaseButton variant="warning" size="sm" @click="confirmRegenerateSecret(data)">
                 Regenerate Secret
               </BaseButton>
             </div>
@@ -164,7 +165,9 @@
         </div>
 
         <div>
-          <label for="description" class="block text-sm font-medium text-neutral-700 mb-1">Description</label>
+          <label for="description" class="block text-sm font-medium text-neutral-700 mb-1"
+            >Description</label
+          >
           <textarea
             id="description"
             v-model="createForm.description"
@@ -324,20 +327,24 @@ const createForm = ref<CreateOAuthClientRequest>({
   name: '',
   description: '',
   scopes: [],
-  rateLimitPerMinute: 5000
+  rateLimitPerMinute: 5000,
 })
 
 const newClientCredentials = ref({
   clientId: '',
-  clientSecret: ''
+  clientSecret: '',
 })
 
 const availableScopes = [
   { value: 'catalog:read', label: 'Catalog Read', description: 'Read product catalog' },
   { value: 'cart:read', label: 'Cart Read', description: 'Read cart contents' },
-  { value: 'cart:write', label: 'Cart Write', description: 'Modify cart (add/update/remove items)' },
+  {
+    value: 'cart:write',
+    label: 'Cart Write',
+    description: 'Modify cart (add/update/remove items)',
+  },
   { value: 'orders:read', label: 'Orders Read', description: 'Read order history' },
-  { value: 'orders:write', label: 'Orders Write', description: 'Create and update orders' }
+  { value: 'orders:write', label: 'Orders Write', description: 'Create and update orders' },
 ]
 
 async function loadClients() {
@@ -353,7 +360,7 @@ async function loadClients() {
       severity: 'error',
       summary: 'Error',
       detail: 'Failed to load OAuth clients',
-      life: 5000
+      life: 5000,
     })
   } finally {
     loading.value = false
@@ -365,7 +372,7 @@ function showCreateDialog() {
     name: '',
     description: '',
     scopes: [],
-    rateLimitPerMinute: 5000
+    rateLimitPerMinute: 5000,
   }
   createDialogVisible.value = true
 }
@@ -376,7 +383,7 @@ async function createClient() {
       severity: 'warn',
       summary: 'Validation Error',
       detail: 'Name and at least one scope are required',
-      life: 5000
+      life: 5000,
     })
     return
   }
@@ -386,7 +393,7 @@ async function createClient() {
     const response = await fetch('/api/v1/admin/oauth-clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(createForm.value)
+      body: JSON.stringify(createForm.value),
     })
 
     if (!response.ok) {
@@ -397,7 +404,7 @@ async function createClient() {
 
     newClientCredentials.value = {
       clientId: result.clientId,
-      clientSecret: result.clientSecret
+      clientSecret: result.clientSecret,
     }
 
     createDialogVisible.value = false
@@ -408,14 +415,14 @@ async function createClient() {
       severity: 'success',
       summary: 'Client Created',
       detail: 'OAuth client created successfully',
-      life: 3000
+      life: 3000,
     })
   } catch (error) {
     toast.add({
       severity: 'error',
       summary: 'Error',
       detail: 'Failed to create OAuth client',
-      life: 5000
+      life: 5000,
     })
   } finally {
     creating.value = false
@@ -429,7 +436,7 @@ async function confirmRevoke(client: OAuthClient) {
 
   try {
     const response = await fetch(`/api/v1/admin/oauth-clients/${client.clientId}/revoke`, {
-      method: 'POST'
+      method: 'POST',
     })
 
     if (!response.ok) {
@@ -442,27 +449,34 @@ async function confirmRevoke(client: OAuthClient) {
       severity: 'success',
       summary: 'Client Revoked',
       detail: 'OAuth client revoked successfully',
-      life: 3000
+      life: 3000,
     })
   } catch (error) {
     toast.add({
       severity: 'error',
       summary: 'Error',
       detail: 'Failed to revoke OAuth client',
-      life: 5000
+      life: 5000,
     })
   }
 }
 
 async function confirmRegenerateSecret(client: OAuthClient) {
-  if (!confirm(`Are you sure you want to regenerate the secret for "${client.name}"? The old secret will stop working immediately.`)) {
+  if (
+    !confirm(
+      `Are you sure you want to regenerate the secret for "${client.name}"? The old secret will stop working immediately.`
+    )
+  ) {
     return
   }
 
   try {
-    const response = await fetch(`/api/v1/admin/oauth-clients/${client.clientId}/regenerate-secret`, {
-      method: 'POST'
-    })
+    const response = await fetch(
+      `/api/v1/admin/oauth-clients/${client.clientId}/regenerate-secret`,
+      {
+        method: 'POST',
+      }
+    )
 
     if (!response.ok) {
       throw new Error('Failed to regenerate secret')
@@ -472,7 +486,7 @@ async function confirmRegenerateSecret(client: OAuthClient) {
 
     newClientCredentials.value = {
       clientId: result.clientId,
-      clientSecret: result.clientSecret
+      clientSecret: result.clientSecret,
     }
 
     secretDialogVisible.value = true
@@ -481,14 +495,14 @@ async function confirmRegenerateSecret(client: OAuthClient) {
       severity: 'success',
       summary: 'Secret Regenerated',
       detail: 'New secret generated. Copy it now!',
-      life: 5000
+      life: 5000,
     })
   } catch (error) {
     toast.add({
       severity: 'error',
       summary: 'Error',
       detail: 'Failed to regenerate secret',
-      life: 5000
+      life: 5000,
     })
   }
 }
@@ -499,7 +513,7 @@ function copyToClipboard(text: string) {
     severity: 'info',
     summary: 'Copied',
     detail: 'Copied to clipboard',
-    life: 2000
+    life: 2000,
   })
 }
 

@@ -47,7 +47,12 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="isLoading && !ordersStore.orders.length" class="dashboard-loading" role="status" aria-live="polite">
+    <div
+      v-if="isLoading && !ordersStore.orders.length"
+      class="dashboard-loading"
+      role="status"
+      aria-live="polite"
+    >
       <div class="spinner" />
       <p>{{ t('common.loading') }}</p>
     </div>
@@ -176,6 +181,9 @@
       @close="closeDetailPanel"
       @update-status="handleDetailStatusUpdate"
       @cancel="handleDetailCancel"
+      @refund="handleDetailRefund"
+      @capture-payment="handleDetailCapturePayment"
+      @add-note="handleDetailAddNote"
     />
   </div>
 </template>
@@ -351,7 +359,10 @@ async function handleDetailStatusUpdate(status: OrderStatus) {
 async function handleDetailCancel() {
   if (!ordersStore.selectedOrder) return
   try {
-    await ordersStore.cancelOrder(ordersStore.selectedOrder.id, t('orders.actions.defaultCancelReason'))
+    await ordersStore.cancelOrder(
+      ordersStore.selectedOrder.id,
+      t('orders.actions.defaultCancelReason')
+    )
     toast.add({
       severity: 'info',
       summary: t('orders.messages.orderCancelled'),
@@ -362,6 +373,67 @@ async function handleDetailCancel() {
       severity: 'error',
       summary: t('orders.errors.cancelFailed'),
     })
+  }
+}
+
+async function handleDetailRefund(amount: number, reason: string, notes: string) {
+  if (!ordersStore.selectedOrder) return
+  try {
+    await ordersStore.refundOrder(ordersStore.selectedOrder.id, amount, reason, notes)
+    toast.add({
+      severity: 'success',
+      summary: t('orders.messages.refundProcessed'),
+      life: 5000,
+    })
+    liveRegionMessage.value = t('orders.messages.refundProcessed')
+  } catch (error) {
+    console.error('Failed to refund order', error)
+    toast.add({
+      severity: 'error',
+      summary: t('orders.errors.refundFailed'),
+      detail: error instanceof Error ? error.message : undefined,
+      life: 5000,
+    })
+    liveRegionMessage.value = t('orders.errors.refundFailed')
+  }
+}
+
+async function handleDetailCapturePayment(paymentIntentId: string) {
+  if (!ordersStore.selectedOrder) return
+  try {
+    await ordersStore.capturePayment(ordersStore.selectedOrder.id, paymentIntentId)
+    toast.add({
+      severity: 'success',
+      summary: t('orders.messages.paymentCaptured'),
+    })
+    liveRegionMessage.value = t('orders.messages.paymentCaptured')
+  } catch (error) {
+    console.error('Failed to capture payment', error)
+    toast.add({
+      severity: 'error',
+      summary: t('orders.errors.captureFailed'),
+      detail: error instanceof Error ? error.message : undefined,
+    })
+    liveRegionMessage.value = t('orders.errors.captureFailed')
+  }
+}
+
+async function handleDetailAddNote(note: string) {
+  if (!ordersStore.selectedOrder) return
+  try {
+    await ordersStore.addOrderNote(ordersStore.selectedOrder.id, note)
+    toast.add({
+      severity: 'success',
+      summary: t('orders.messages.noteAdded'),
+    })
+    liveRegionMessage.value = t('orders.messages.noteAdded')
+  } catch (error) {
+    console.error('Failed to add note', error)
+    toast.add({
+      severity: 'error',
+      summary: t('orders.errors.noteFailed'),
+    })
+    liveRegionMessage.value = t('orders.errors.noteFailed')
   }
 }
 

@@ -11,11 +11,7 @@
         <h2 id="modal-title" class="modal-title">
           {{ t('consignor.payout.requestTitle') }}
         </h2>
-        <button
-          class="modal-close-btn"
-          :aria-label="t('common.close')"
-          @click="emit('close')"
-        >
+        <button class="modal-close-btn" :aria-label="t('common.close')" @click="emit('close')">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -98,11 +94,7 @@
           <button type="button" class="btn-secondary" @click="emit('close')">
             {{ t('common.cancel') }}
           </button>
-          <button
-            type="submit"
-            class="btn-primary"
-            :disabled="!isFormValid || submitting"
-          >
+          <button type="submit" class="btn-primary" :disabled="!isFormValid || submitting">
             <span v-if="submitting" class="inline-flex items-center gap-2">
               <div class="spinner-sm" />
               {{ t('consignor.payout.submitting') }}

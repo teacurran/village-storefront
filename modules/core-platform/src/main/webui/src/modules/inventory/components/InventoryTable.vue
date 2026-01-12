@@ -46,7 +46,12 @@
       <Column field="reserved" :header="t('inventory.table.reserved')" sortable align="center" />
       <Column field="quantity" :header="t('inventory.table.onHand')" sortable align="center" />
 
-      <Column field="daysInStock" :header="t('inventory.table.daysInStock')" sortable align="center">
+      <Column
+        field="daysInStock"
+        :header="t('inventory.table.daysInStock')"
+        sortable
+        align="center"
+      >
         <template #body="{ data }">
           <span :class="{ 'text-warning-600': data.daysInStock > 30 }">{{ data.daysInStock }}</span>
         </template>

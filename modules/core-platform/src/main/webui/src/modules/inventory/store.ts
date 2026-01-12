@@ -58,7 +58,9 @@ export const useInventoryStore = defineStore('inventory', () => {
     return records
   })
 
-  const lowStockCount = computed(() => inventory.value.filter((record) => record.available <= 5).length)
+  const lowStockCount = computed(
+    () => inventory.value.filter((record) => record.available <= 5).length
+  )
 
   async function loadDashboard(): Promise<void> {
     loading.value = true
@@ -106,7 +108,11 @@ export const useInventoryStore = defineStore('inventory', () => {
     }
   }
 
-  async function recordAdjustment(payload: { quantityChange: number; reason: string; notes?: string }) {
+  async function recordAdjustment(payload: {
+    quantityChange: number
+    reason: string
+    notes?: string
+  }) {
     if (!selectedRecord.value) return
     await inventoryApi.createAdjustment({
       variantId: selectedRecord.value.variantId,

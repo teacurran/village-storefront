@@ -2,18 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { Money } from './Money';
+import type { Money } from './Money'
 export type ProductVariant = {
-    id: string;
-    sku: string;
-    price: Money;
-    /**
-     * Available inventory quantity
-     */
-    stock: number;
-    /**
-     * Variant option values (e.g., {"color": "Red", "size": "Large"})
-     */
-    options?: Record<string, string>;
-};
-
+  id: string
+  sku: string
+  price: Money
+  /**
+   * Available inventory quantity
+   */
+  stock: number
+  /**
+   * Variant option values (e.g., {"color": "Red", "size": "Large"})
+   */
+  options?: Record<string, string>
+}

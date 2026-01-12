@@ -10,7 +10,12 @@
           <span class="dot" />
           <span>{{ loyaltyStore.sseConnected ? t('common.live') : t('common.offline') }}</span>
         </div>
-        <Button icon="pi pi-refresh" class="p-button-text" :label="t('common.refresh')" @click="loadProgram" />
+        <Button
+          icon="pi pi-refresh"
+          class="p-button-text"
+          :label="t('common.refresh')"
+          @click="loadProgram"
+        />
       </div>
     </div>
 
@@ -64,7 +69,11 @@
             :placeholder="t('loyalty.members.lookupPlaceholder')"
             class="w-80"
           />
-          <Button :label="t('loyalty.members.lookup')" :disabled="!lookupId" @click="handleLookup" />
+          <Button
+            :label="t('loyalty.members.lookup')"
+            :disabled="!lookupId"
+            @click="handleLookup"
+          />
         </div>
 
         <div v-if="loyaltyStore.member" class="member-card-container">
@@ -108,11 +117,12 @@
               :show-value="true"
               :pt="{
                 root: { class: 'tier-progress-bar' },
-                value: { style: 'background: var(--primary-color)' }
+                value: { style: 'background: var(--primary-color)' },
               }"
             />
             <p class="tier-progress-text">
-              {{ loyaltyStore.member.lifetimePointsEarned.toLocaleString() }} / {{ nextTier.minPoints.toLocaleString() }} {{ t('loyalty.tier.pointsToNextTier') }}
+              {{ loyaltyStore.member.lifetimePointsEarned.toLocaleString() }} /
+              {{ nextTier.minPoints.toLocaleString() }} {{ t('loyalty.tier.pointsToNextTier') }}
             </p>
           </div>
 
@@ -150,16 +160,30 @@
       </section>
     </div>
 
-    <Dialog :visible="showAdjustDialog" modal :header="t('loyalty.actions.adjustPoints')" @hide="closeAdjustDialog">
+    <Dialog
+      :visible="showAdjustDialog"
+      modal
+      :header="t('loyalty.actions.adjustPoints')"
+      @hide="closeAdjustDialog"
+    >
       <div class="dialog-body">
         <label>{{ t('loyalty.adjust.points') }}</label>
         <InputNumber v-model.number="adjustPointsValue" :min="-1000" :max="1000" show-buttons />
         <label>{{ t('loyalty.adjust.reason') }}</label>
-        <Dropdown v-model="adjustReason" :options="reasonOptions" option-label="label" option-value="value" />
+        <Dropdown
+          v-model="adjustReason"
+          :options="reasonOptions"
+          option-label="label"
+          option-value="value"
+        />
       </div>
       <template #footer>
         <Button class="p-button-text" :label="t('common.cancel')" @click="closeAdjustDialog" />
-        <Button :label="t('common.confirm')" :disabled="!adjustPointsValue || !adjustReason" @click="handleAdjust" />
+        <Button
+          :label="t('common.confirm')"
+          :disabled="!adjustPointsValue || !adjustReason"
+          @click="handleAdjust"
+        />
       </template>
     </Dialog>
   </div>
@@ -223,7 +247,8 @@ const tierProgressPercent = computed(() => {
   const currentTierObj = sorted.find((t) => t.name === loyaltyStore.member!.currentTier)
   const currentTierMin = currentTierObj?.minPoints || 0
 
-  const progress = ((currentPoints - currentTierMin) / (nextTier.value.minPoints - currentTierMin)) * 100
+  const progress =
+    ((currentPoints - currentTierMin) / (nextTier.value.minPoints - currentTierMin)) * 100
   return Math.min(Math.round(progress), 100)
 })
 

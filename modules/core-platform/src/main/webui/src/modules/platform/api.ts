@@ -43,7 +43,7 @@ interface AuditLogResponse {
 export async function getStoreDirectory(
   filters: StoreFilters = {},
   page = 0,
-  size = 20,
+  size = 20
 ): Promise<StoreDirectoryResponse> {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   if (filters.status) params.set('status', filters.status)
@@ -93,7 +93,7 @@ export async function reactivateStore(storeId: string): Promise<void> {
  * Start impersonation session.
  */
 export async function startImpersonation(
-  request: ImpersonationRequest,
+  request: ImpersonationRequest
 ): Promise<ImpersonationContext> {
   const response = await fetch(`${BASE_PATH}/impersonate`, {
     method: 'POST',
@@ -141,7 +141,7 @@ export async function getCurrentImpersonation(): Promise<ImpersonationContext | 
 export async function getAuditLogs(
   filters: AuditLogFilters = {},
   page = 0,
-  size = 50,
+  size = 50
 ): Promise<AuditLogResponse> {
   const params = new URLSearchParams({ page: String(page), size: String(size) })
   if (filters.actorId) params.set('actorId', filters.actorId)
@@ -212,7 +212,7 @@ export async function getStaleFlagReport(): Promise<StaleFlagReport> {
  */
 export async function updateFeatureFlag(
   flagId: string,
-  request: UpdateFeatureFlagRequest,
+  request: UpdateFeatureFlagRequest
 ): Promise<FeatureFlagDto> {
   const response = await fetch(`${BASE_PATH}/feature-flags/${flagId}`, {
     method: 'PUT',

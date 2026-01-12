@@ -31,7 +31,10 @@
         </div>
         <div class="detail-row">
           <span class="label">{{ t('orders.detailDrawer.status') }}</span>
-          <Tag :value="t(`orders.status.${order.status.toLowerCase()}`)" :severity="statusTone(order.status)" />
+          <Tag
+            :value="t(`orders.status.${order.status.toLowerCase()}`)"
+            :severity="statusTone(order.status)"
+          />
         </div>
         <div class="detail-row">
           <span class="label">{{ t('orders.detailDrawer.total') }}</span>
@@ -52,7 +55,9 @@
           <li v-for="line in order.lineItems" :key="line.id" class="line-item">
             <div>
               <p class="line-name">{{ line.name }}</p>
-              <p class="line-meta">SKU {{ line.sku }} · {{ line.quantity }} × {{ formatMoney(line.unitPrice) }}</p>
+              <p class="line-meta">
+                SKU {{ line.sku }} · {{ line.quantity }} × {{ formatMoney(line.unitPrice) }}
+              </p>
             </div>
             <span>{{ formatMoney(line.total) }}</span>
           </li>
@@ -60,20 +65,7 @@
       </section>
 
       <section v-if="order.timeline?.length" class="detail-section">
-        <header class="section-header">
-          <h3>{{ t('orders.detailDrawer.timeline') }}</h3>
-        </header>
-        <ul class="timeline">
-          <li v-for="entry in order.timeline" :key="entry.id" class="timeline-entry">
-            <div class="timeline-marker" />
-            <div>
-              <p class="timeline-title">{{ entry.description }}</p>
-              <p class="timeline-meta">
-                {{ formatDate(entry.timestamp) }} · {{ entry.actor || t('orders.detailDrawer.systemActor') }}
-              </p>
-            </div>
-          </li>
-        </ul>
+        <OrderTimeline :events="order.timeline" :show-actor="true" :show-filter="true" />
       </section>
 
       <section class="detail-section actions">
@@ -81,6 +73,13 @@
           <h3>{{ t('orders.detailDrawer.actions') }}</h3>
         </header>
         <div class="action-grid">
+          <Button
+            v-if="canEdit && canCapturePayment"
+            icon="pi pi-wallet"
+            class="p-button-success"
+            :label="t('orders.actions.capturePayment')"
+            @click="handleCapturePayment"
+          />
           <Button
             v-if="canEdit"
             icon="pi pi-check"
@@ -103,26 +102,82 @@
             @click="() => emit('updateStatus', 'DELIVERED')"
           />
           <Button
+            v-if="canEdit && canRefund"
+            icon="pi pi-replay"
+            class="p-button-outlined p-button-warning"
+            :label="t('orders.actions.refundOrder')"
+            @click="showRefundDialog = true"
+          />
+          <Button
             v-if="canEdit"
             icon="pi pi-ban"
             class="p-button-outlined p-button-danger"
             :label="t('orders.actions.cancelOrder')"
             @click="() => emit('cancel')"
           />
+          <Button
+            v-if="canEdit"
+            icon="pi pi-comment"
+            class="p-button-outlined"
+            :label="t('orders.actions.addNote')"
+            @click="showNoteDialog = true"
+          />
         </div>
       </section>
     </div>
+
+    <!-- Refund Dialog -->
+    <RefundDialog
+      :is-open="showRefundDialog"
+      :order="order"
+      :is-processing="isRefundProcessing"
+      @close="showRefundDialog = false"
+      @confirm="handleRefund"
+    />
+
+    <!-- Note Dialog -->
+    <Dialog
+      :visible="showNoteDialog"
+      modal
+      :header="t('orders.noteDialog.title')"
+      :style="{ width: '24rem' }"
+      @update:visible="(val) => (showNoteDialog = val)"
+    >
+      <div class="note-dialog-content">
+        <textarea
+          v-model="noteText"
+          rows="4"
+          class="note-textarea"
+          :placeholder="t('orders.noteDialog.placeholder')"
+          :maxlength="500"
+        />
+        <p class="note-hint">{{ noteText.length }}/500</p>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <Button :label="t('common.cancel')" text @click="showNoteDialog = false" />
+          <Button
+            :label="t('orders.noteDialog.addNote')"
+            :disabled="!noteText.trim()"
+            @click="handleAddNote"
+          />
+        </div>
+      </template>
+    </Dialog>
   </Sidebar>
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import Sidebar from 'primevue/sidebar'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
-import { computed } from 'vue'
+import Dialog from 'primevue/dialog'
+import { useI18n } from '@/composables/useI18n'
+import OrderTimeline from './OrderTimeline.vue'
+import RefundDialog from './RefundDialog.vue'
 import type { OrderDetail, OrderStatus } from '../types'
 import type { Money } from '@/api/types'
-import { useI18n } from '@/composables/useI18n'
 
 const props = defineProps<{
   order: OrderDetail | null
@@ -134,9 +189,37 @@ const emit = defineEmits<{
   close: []
   updateStatus: [status: OrderStatus]
   cancel: []
+  refund: [amount: number, reason: string, notes: string]
+  capturePayment: [paymentIntentId: string]
+  addNote: [note: string]
 }>()
 
 const { t } = useI18n()
+
+const showRefundDialog = ref(false)
+const showNoteDialog = ref(false)
+const noteText = ref('')
+const isRefundProcessing = ref(false)
+
+const canRefund = computed(() => {
+  if (!props.order) return false
+  // Can refund if order is confirmed/processing/shipped/delivered and not fully refunded
+  return (
+    ['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'].includes(props.order.status) &&
+    props.order.total.amount > 0
+  )
+})
+
+const canCapturePayment = computed(() => {
+  if (!props.order) return false
+  // Check if order has an uncaptured payment intent
+  const hasUncapturedPayment = props.order.timeline?.some(
+    (event) =>
+      event.type === 'payment.authorized' &&
+      !props.order?.timeline?.some((e) => e.type === 'payment.captured')
+  )
+  return hasUncapturedPayment && props.order.status === 'PENDING'
+})
 
 function formatMoney(money: Money | undefined) {
   if (!money) return '-'
@@ -167,6 +250,34 @@ function statusTone(status: OrderStatus) {
 
 function formatDate(date: string) {
   return new Date(date).toLocaleString()
+}
+
+async function handleRefund(amount: number, reason: string, notes: string) {
+  isRefundProcessing.value = true
+  try {
+    emit('refund', amount, reason, notes)
+    showRefundDialog.value = false
+  } finally {
+    isRefundProcessing.value = false
+  }
+}
+
+function handleCapturePayment() {
+  if (!props.order) return
+  // Find payment intent ID from order metadata or timeline
+  const paymentIntentId = props.order.timeline?.find((e) => e.type === 'payment.authorized')
+    ?.metadata?.paymentIntentId
+
+  if (paymentIntentId) {
+    emit('capturePayment', paymentIntentId)
+  }
+}
+
+function handleAddNote() {
+  if (!noteText.value.trim()) return
+  emit('addNote', noteText.value.trim())
+  noteText.value = ''
+  showNoteDialog.value = false
 }
 
 const isOpen = computed(() => props.isOpen)
@@ -259,5 +370,21 @@ const isOpen = computed(() => props.isOpen)
 
 .action-grid {
   @apply grid gap-3;
+}
+
+.note-dialog-content {
+  @apply space-y-3;
+}
+
+.note-textarea {
+  @apply w-full px-3 py-2 border border-neutral-300 rounded-md focus:ring-2 focus:ring-primary-500 resize-none;
+}
+
+.note-hint {
+  @apply text-xs text-neutral-500;
+}
+
+.dialog-footer {
+  @apply flex justify-end gap-3;
 }
 </style>
