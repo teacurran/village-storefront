@@ -1,13 +1,19 @@
 package villagecompute.storefront.giftcard;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import jakarta.inject.Inject;
@@ -170,6 +176,16 @@ class GiftCardServiceTest {
         StoreCreditTransaction creditTxn = conversion.storeCreditTransaction();
         assertEquals(new BigDecimal("60.00"), creditTxn.amount);
         assertEquals("converted", creditTxn.transactionType);
+    }
+
+    @Test
+    @Transactional
+    void codeHashIsSaltedPerTenant() throws NoSuchAlgorithmException {
+        GiftCard card = createGiftCard(new BigDecimal("25.00"));
+        String normalized = card.code.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.US);
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        String naiveHash = HexFormat.of().formatHex(digest.digest(normalized.getBytes(StandardCharsets.UTF_8)));
+        assertNotEquals(naiveHash, card.codeHash);
     }
 
     private GiftCard createGiftCard(BigDecimal amount) {

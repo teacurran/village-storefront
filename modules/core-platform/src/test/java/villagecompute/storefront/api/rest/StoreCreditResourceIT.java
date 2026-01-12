@@ -116,7 +116,8 @@ class StoreCreditResourceIT {
     void getBalanceReturnsAccountDetails() {
         given().header("X-Tenant-ID", tenantId.toString()).when().get("/api/v1/store-credit/balance/" + userId).then()
                 .statusCode(Response.Status.OK.getStatusCode()).body("balance", equalTo("50.00"))
-                .body("userId", equalTo(userId.toString())).body("status", equalTo("active"));
+                .body("userId", equalTo(userId.toString())).body("userEmail", equalTo("storecredit-it@example.com"))
+                .body("status", equalTo("active"));
     }
 
     @Test
@@ -236,6 +237,17 @@ class StoreCreditResourceIT {
         given().header("X-Tenant-ID", tenantId.toString()).queryParam("status", "active").queryParam("page", 0)
                 .queryParam("size", 20).when().get("/api/v1/admin/store-credit/accounts").then()
                 .statusCode(Response.Status.OK.getStatusCode()).body("data.size()", greaterThan(0));
+    }
+
+    @Test
+    @TestSecurity(
+            user = "admin@example.com",
+            roles = {"admin"})
+    void adminCanSearchStoreCreditAccountsByEmail() {
+        given().header("X-Tenant-ID", tenantId.toString()).queryParam("search", "storecredit-it@example.com")
+                .queryParam("page", 0).queryParam("size", 20).when().get("/api/v1/admin/store-credit/accounts").then()
+                .statusCode(Response.Status.OK.getStatusCode()).body("data.size()", equalTo(1))
+                .body("data[0].userEmail", equalTo("storecredit-it@example.com"));
     }
 
     @Test

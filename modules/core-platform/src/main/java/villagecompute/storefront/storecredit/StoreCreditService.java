@@ -28,6 +28,7 @@ import villagecompute.storefront.services.ReportingProjectionService;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import io.quarkus.panache.common.Parameters;
 
 /**
  * Store credit domain service responsible for debits/credits, ledger entries, and POS friendly operations.
@@ -72,29 +73,20 @@ public class StoreCreditService {
      * List accounts for tenant with pagination.
      */
     @Transactional(TxType.SUPPORTS)
-    public List<StoreCreditAccount> listAccounts(String status, int page, int size) {
-        UUID tenantId = TenantContext.getCurrentTenantId();
+    public List<StoreCreditAccount> listAccounts(String status, String search, int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 200);
 
-        if (status != null && !status.isBlank()) {
-            return StoreCreditAccount
-                    .find("tenant.id = :tenant and lower(status) = :status", io.quarkus.panache.common.Parameters
-                            .with("tenant", tenantId).and("status", status.toLowerCase(Locale.US)))
-                    .page(safePage, safeSize).list();
-        }
-
-        return StoreCreditAccount.find("tenant.id = ?1", tenantId).page(safePage, safeSize).list();
+        AccountQuery query = buildAccountQuery(status, search);
+        String jpql = "select sca from StoreCreditAccount sca left join fetch sca.user where " + query.fetchWhereClause
+                + " order by sca.createdAt desc";
+        return StoreCreditAccount.find(jpql, query.parameters).page(safePage, safeSize).list();
     }
 
     @Transactional(TxType.SUPPORTS)
-    public long countAccounts(String status) {
-        UUID tenantId = TenantContext.getCurrentTenantId();
-        if (status != null && !status.isBlank()) {
-            return StoreCreditAccount.count("tenant.id = ?1 and lower(status) = ?2", tenantId,
-                    status.toLowerCase(Locale.US));
-        }
-        return StoreCreditAccount.count("tenant.id = ?1", tenantId);
+    public long countAccounts(String status, String search) {
+        AccountQuery query = buildAccountQuery(status, search);
+        return StoreCreditAccount.count(query.whereClause, query.parameters);
     }
 
     /**
@@ -254,5 +246,45 @@ public class StoreCreditService {
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException("Idempotency key is required");
         }
+    }
+
+    private AccountQuery buildAccountQuery(String status, String search) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        StringBuilder whereClause = new StringBuilder("tenant.id = :tenant");
+        StringBuilder fetchWhereClause = new StringBuilder("sca.tenant.id = :tenant");
+        Parameters parameters = Parameters.with("tenant", tenantId);
+
+        if (status != null && !status.isBlank()) {
+            whereClause.append(" and lower(status) = :status");
+            fetchWhereClause.append(" and lower(sca.status) = :status");
+            parameters.and("status", status.toLowerCase(Locale.US));
+        }
+
+        if (search != null && !search.isBlank()) {
+            String trimmed = search.trim();
+            UUID searchUuid = tryParseUuid(trimmed);
+            if (searchUuid != null) {
+                whereClause.append(" and user.id = :searchUserId");
+                fetchWhereClause.append(" and sca.user.id = :searchUserId");
+                parameters.and("searchUserId", searchUuid);
+            } else {
+                whereClause.append(" and lower(user.email) like :searchLike");
+                fetchWhereClause.append(" and lower(sca.user.email) like :searchLike");
+                parameters.and("searchLike", "%" + trimmed.toLowerCase(Locale.US) + "%");
+            }
+        }
+
+        return new AccountQuery(whereClause.toString(), fetchWhereClause.toString(), parameters);
+    }
+
+    private UUID tryParseUuid(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private record AccountQuery(String whereClause, String fetchWhereClause, Parameters parameters) {
     }
 }

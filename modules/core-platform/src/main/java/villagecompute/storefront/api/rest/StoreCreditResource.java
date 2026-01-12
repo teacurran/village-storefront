@@ -114,15 +114,15 @@ public class StoreCreditResource {
     @Path("/admin/store-credit/accounts")
     @RolesAllowed({"admin"})
     public Response listAccounts(@QueryParam("page") Integer page, @QueryParam("size") Integer size,
-            @QueryParam("status") String status) {
+            @QueryParam("status") String status, @QueryParam("search") String search) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         int pageNum = page != null ? page : 0;
         int pageSize = size != null ? size : 20;
-        LOG.infof("GET /admin/store-credit/accounts - tenantId=%s, status=%s", tenantId, status);
+        LOG.infof("GET /admin/store-credit/accounts - tenantId=%s, status=%s, search=%s", tenantId, status, search);
 
-        List<StoreCreditAccount> accounts = storeCreditService.listAccounts(status, pageNum, pageSize);
+        List<StoreCreditAccount> accounts = storeCreditService.listAccounts(status, search, pageNum, pageSize);
         List<StoreCreditAccountDto> data = accounts.stream().map(storeCreditMapper::toDto).collect(Collectors.toList());
-        long total = storeCreditService.countAccounts(status);
+        long total = storeCreditService.countAccounts(status, search);
         PaginationMetadata pagination = new PaginationMetadata(pageNum, pageSize, total);
         return Response.ok(new StoreCreditListResponse(data, pagination)).build();
     }

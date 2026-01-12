@@ -37,6 +37,7 @@ public class PostgresTenantTestResource implements QuarkusTestResourceLifecycleM
         config.put("quarkus.datasource.db-kind", "postgresql");
         String jdbcUrl = buildJdbcUrl();
         config.put("quarkus.datasource.jdbc.url", jdbcUrl);
+        config.put("quarkus.datasource.jdbc.driver", "org.postgresql.Driver");
         config.put("quarkus.datasource.username", APP_DB_USER);
         config.put("quarkus.datasource.password", APP_DB_PASSWORD);
         config.put("quarkus.hibernate-orm.database.generation", "drop-and-create");

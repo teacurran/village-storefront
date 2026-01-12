@@ -6,6 +6,7 @@ import villagecompute.storefront.api.types.StoreCreditAccountDto;
 import villagecompute.storefront.api.types.StoreCreditTransactionDto;
 import villagecompute.storefront.data.models.StoreCreditAccount;
 import villagecompute.storefront.data.models.StoreCreditTransaction;
+import villagecompute.storefront.data.models.User;
 
 /**
  * Mapper for store credit ledger entities.
@@ -17,6 +18,8 @@ public class StoreCreditMapper {
         StoreCreditAccountDto dto = new StoreCreditAccountDto();
         dto.id = account.id;
         dto.userId = account.user != null ? account.user.id : null;
+        dto.userEmail = account.user != null ? account.user.email : null;
+        dto.userName = resolveUserName(account.user);
         dto.balance = account.balance;
         dto.currency = account.currency;
         dto.status = account.status;
@@ -40,5 +43,15 @@ public class StoreCreditMapper {
         dto.posDeviceId = transaction.posDeviceId;
         dto.createdAt = transaction.createdAt;
         return dto;
+    }
+
+    private String resolveUserName(User user) {
+        if (user == null) {
+            return null;
+        }
+        String first = user.firstName != null ? user.firstName.trim() : "";
+        String last = user.lastName != null ? user.lastName.trim() : "";
+        String combined = (first + " " + last).trim();
+        return combined.isEmpty() ? null : combined;
     }
 }

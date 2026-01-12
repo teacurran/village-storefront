@@ -10,6 +10,8 @@ import java.util.UUID;
 public class StoreCreditAccountDto {
     public Long id;
     public UUID userId;
+    public String userEmail;
+    public String userName;
     public BigDecimal balance;
     public String currency;
     public String status;

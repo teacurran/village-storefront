@@ -127,10 +127,31 @@ class StoreCreditServiceTest {
         account.status = "suspended";
         entityManager.merge(account);
 
-        List<StoreCreditAccount> suspended = storeCreditService.listAccounts("suspended", 0, 10);
+        List<StoreCreditAccount> suspended = storeCreditService.listAccounts("suspended", null, 0, 10);
         assertEquals(1, suspended.size());
 
-        List<StoreCreditAccount> active = storeCreditService.listAccounts("active", 0, 10);
+        List<StoreCreditAccount> active = storeCreditService.listAccounts("active", null, 0, 10);
         assertEquals(0, active.size());
+
+        long totalSuspended = storeCreditService.countAccounts("suspended", null);
+        assertEquals(1, totalSuspended);
+    }
+
+    @Test
+    @Transactional
+    void listAccountsSupportsSearchByEmailOrId() {
+        storeCreditService.adjust(userId, new BigDecimal("5.00"), "seed");
+
+        List<StoreCreditAccount> emailResults = storeCreditService.listAccounts(null, "storecredit-it", 0, 10);
+        assertEquals(1, emailResults.size());
+
+        List<StoreCreditAccount> idResults = storeCreditService.listAccounts(null, userId.toString(), 0, 10);
+        assertEquals(1, idResults.size());
+
+        List<StoreCreditAccount> none = storeCreditService.listAccounts(null, "missing@example.com", 0, 10);
+        assertEquals(0, none.size());
+
+        long counted = storeCreditService.countAccounts(null, "storecredit-it@example.com");
+        assertEquals(1, counted);
     }
 }

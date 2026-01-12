@@ -2,6 +2,7 @@ package villagecompute.storefront.giftcard;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -21,6 +22,7 @@ import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.transaction.Transactional.TxType;
 
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import villagecompute.storefront.api.types.IssueGiftCardRequest;
@@ -74,6 +76,11 @@ public class GiftCardService {
 
     @Inject
     StoreCreditService storeCreditService;
+
+    @ConfigProperty(
+            name = "giftcard.hash.pepper",
+            defaultValue = "")
+    String hashPepper;
 
     /**
      * Issue a new gift card with a secure code.
@@ -411,7 +418,8 @@ public class GiftCardService {
     private String generateUniqueCode() {
         for (int attempt = 0; attempt < 10; attempt++) {
             String code = randomCode();
-            if (GiftCard.find("codeHash = ?1", hashCode(code)).firstResult() == null) {
+            UUID tenantId = TenantContext.getCurrentTenantId();
+            if (GiftCard.find("codeHash = ?1 and tenant.id = ?2", hashCode(code), tenantId).firstResult() == null) {
                 return code;
             }
         }
@@ -442,9 +450,13 @@ public class GiftCardService {
         if (normalized == null) {
             throw new IllegalArgumentException("Code cannot be null");
         }
+        UUID tenantId = TenantContext.hasContext() ? TenantContext.getCurrentTenantId() : null;
+        String tenantSalt = tenantId != null ? tenantId.toString() : "global";
+        String pepper = hashPepper != null ? hashPepper : "";
+        String saltedValue = tenantSalt + ":" + normalized + ":" + pepper;
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            byte[] hash = digest.digest(saltedValue.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("Unable to hash gift card code", e);
