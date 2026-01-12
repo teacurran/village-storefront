@@ -94,9 +94,15 @@ export class CheckoutPage extends BasePage {
     await zipInput.fill(info.zip);
   }
 
-  async placeOrder(): Promise<void> {
+  async placeOrder(options: { expectSuccess?: boolean } = {}): Promise<void> {
+    const { expectSuccess = true } = options;
     await this.clickButton(this.placeOrderButton);
-    await this.page.waitForURL('**/order-confirmation/**', { timeout: 15000 });
+    if (expectSuccess) {
+      await this.page.waitForURL('**/order-confirmation/**', { timeout: 15000 });
+      return;
+    }
+    // Allow validation/payment error assertions without navigation timeout
+    await this.page.waitForLoadState('networkidle');
   }
 
   async getOrderTotal(): Promise<number> {

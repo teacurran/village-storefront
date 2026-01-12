@@ -133,7 +133,8 @@ run_rest_assured_contracts() {
 
     # Run integration tests that validate OpenAPI contract
     # Note: These tests use QuarkusTest and will start embedded server
-    ./mvnw -pl modules/core-platform test -Dtest=CatalogContractIT || {
+    # I3.T8: Added PaymentContractIT for Stripe webhook validation
+    ./mvnw -pl modules/core-platform test -Dtest=CatalogContractIT,PaymentContractIT || {
         log_error "REST-assured contract tests failed"
         return 1
     }
@@ -283,7 +284,24 @@ fi
 #   - Exit early if smoke tests fail (no point running full E2E suite)
 #   Deliverable: Expand this script with smoke_test() function called before Playwright
 
-# TODO(I3.T8): Performance + chaos testing implementation
+# COMPLETED(I3.T8): E2E automation expansion
+#   Delivered:
+#   - Playwright checkout spec (tests/e2e/storefront/checkout.spec.ts) covering:
+#     * Guest checkout flow with Stripe test card
+#     * Logged-in checkout with loyalty points redemption
+#     * Gift card application
+#     * Shipping method selection
+#     * Order confirmation verification
+#     * Visual regression snapshots
+#   - REST-assured payment contract tests (PaymentContractIT.java) covering:
+#     * Stripe webhook event handling (payment succeeded, failed, refunded)
+#     * Webhook idempotency verification
+#     * Refund API endpoint validation
+#     * Order status transitions
+#   - Script updated to run PaymentContractIT alongside CatalogContractIT
+#   - Test strategy documentation updated with I3.T8 deliverables
+#
+# TODO(Future): Performance + chaos testing implementation
 #   Performance testing integration:
 #   - Add performance_test() function that runs Gatling/Locust load tests
 #   - Execute after E2E tests pass to validate checkout/cart API performance

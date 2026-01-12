@@ -451,6 +451,48 @@ Reliable test data management is critical for deterministic test execution acros
 - Run seeding prior to E2E execution: `npm --prefix tests/e2e/playwright run seed:e2e`. The command is idempotent and can be re-run mid-suite to repair data drifts.
 - `scripts/qa/run_e2e.sh` automatically seeds catalog data via `scripts/dev/tenant_seed.sh --catalog` before executing Playwright and REST-assured contract tests. Seeding can be disabled with `SEED_DATA=false` environment variable.
 
+##### Stripe Webhook Testing (Local Development)
+
+<!-- anchor: stripe-webhook-testing -->
+
+For testing Stripe webhook flows locally (required by `PaymentContractIT` and checkout E2E tests):
+
+1. **Prerequisites:**
+   - Stripe CLI installed: `brew install stripe/stripe-cli/stripe` (macOS) or see https://stripe.com/docs/stripe-cli
+   - Authenticated with Stripe: `stripe login`
+   - Stripe test API keys configured in `.env` (see `STRIPE.md` for setup)
+
+2. **Start Stripe Tunnel:**
+   ```bash
+   ./scripts/dev/stripe_tunnel.sh
+   ```
+   This script:
+   - Forwards webhook events from Stripe to `http://localhost:8080/api/webhooks/payments/stripe`
+   - Automatically exports `STRIPE_WEBHOOK_SIGNING_SECRET` to `.env.stripe-tunnel`
+   - Logs all incoming webhook events for debugging
+
+3. **Webhook Replay (For Testing):**
+   ```bash
+   # List recent webhook events
+   stripe events list --limit 10
+
+   # Replay a specific event (useful for testing idempotency)
+   stripe events resend evt_1234567890
+   ```
+
+4. **Test Data:**
+   - Stripe test cards documented in `tests/e2e/storefront/checkout.spec.ts`:
+     * Success: `4242424242424242`
+     * Decline: `4000000000000002`
+     * Requires authentication: `4000002500003155`
+   - Full list: https://stripe.com/docs/testing
+
+5. **CI Environment:**
+   - CI uses mocked webhook payloads in `PaymentContractIT` (no Stripe tunnel required)
+   - Webhook signature validation skipped in test profile via `@TestProfile` annotation
+6. **API Automation:**
+   - Playwright API tests (`tests/e2e/api/payment.spec.ts`) replay Stripe fixtures directly against `/api/webhooks/payments/stripe`, asserting signature enforcement and duplicate-event idempotency alongside the REST-assured coverage.
+
 ##### Isolation & Refresh Policy
 
 <!-- anchor: data-isolation -->
@@ -796,11 +838,46 @@ The test strategy is delivered incrementally across iterations I1-I5. Each itera
     - REST-assured contract tests: 100% coverage of checkout/payment/shipping endpoints defined in OpenAPI spec
     - Playwright E2E tests: Guest checkout, registered checkout, admin refund, shipping rate selection scenarios
     - Schema validation: All request/response bodies must validate against OpenAPI schemas
-- **I3.T8:** Performance + chaos testing implementation
-  - Gatling/Locust load tests for checkout/cart APIs
-  - Chaos scripts for DB failover, Stripe outages
-  - Performance budgets enforcement (checkout <300ms p95)
-  - **Stretch Goal:** Mutation testing evaluation (PIT + StrykerJS)
+- **I3.T8:** E2E automation expansion (completed)
+  - **Playwright Checkout Suite:** `tests/e2e/storefront/checkout.spec.ts`
+    - Guest checkout flow with Stripe test card (4242424242424242)
+    - Logged-in checkout with loyalty points redemption
+    - Gift card application and discount verification
+    - Shipping method selection (standard/express) with cost calculation
+    - Payment validation (required fields, declined card handling)
+    - Order confirmation page verification with screenshot artifacts
+    - Mobile-responsive checkout flow (iPhone 12/Pixel 5 viewports)
+    - Cart persistence across navigation
+  - **REST-assured Payment Contract Tests:** `PaymentContractIT.java`
+    - Stripe webhook event handling:
+      * `payment_intent.succeeded` → updates order status to paid
+      * `payment_intent.payment_failed` → marks payment intent failed and reverts orders to `PENDING_PAYMENT`
+      * `charge.refunded` → records refund amount and transitions order to `REFUNDED`
+      * `charge.dispute.created` → flags the related payment intent as `DISPUTED`
+      * `/api/webhooks/payments/health` returns provider metadata for monitoring probes
+    - Webhook idempotency verification (duplicate event IDs return cached result without inserting a new `WebhookEvent`)
+    - Admin refund endpoint validation (`POST /admin/orders/{id}/refund`) covering happy-path response and missing idempotency header (400)
+    - Missing `Stripe-Signature` header yields RFC7807 problem response (400)
+    - OpenAPI schema compliance validation via REST Assured filter
+  - **Playwright API Tests:** `tests/e2e/api/payment.spec.ts`
+    - Replays Stripe webhook fixtures through Playwright's `APIRequestContext` to assert duplicate-event handling and signature enforcement against the live Quarkus endpoint.
+  - **Runner Script Updates:** `scripts/qa/run_e2e.sh`
+    - Added `PaymentContractIT` to REST-assured test suite execution
+    - Documented I3.T8 completion in script comments
+    - Maintained existing seeding and artifact collection flows
+  - **Data Requirements:**
+    - Stripe test cards documented in checkout spec
+    - Gift card codes from tenant fixtures (`tenants.ts`)
+    - Loyalty member credentials for authenticated checkout tests
+    - Webhook signing secret from `stripe_tunnel.sh` (`.env.stripe-tunnel`)
+  - **CI Integration:**
+    - Checkout suite runs nightly + on release candidates
+    - Screenshot artifacts captured for order confirmation pages
+    - Payment contract tests gate PR merges (must pass OpenAPI validation)
+  - **Future Work (deferred):**
+    - Performance testing (Gatling/Locust) for checkout API load
+    - Chaos testing for DB failover and Stripe outages
+    - Mutation testing evaluation (PIT + StrykerJS)
 - **Cumulative Coverage Target:** ≥75% overall (checkout + payment + media modules added)
 
 #### Iteration 4 (I4): Loyalty + POS + Headless
