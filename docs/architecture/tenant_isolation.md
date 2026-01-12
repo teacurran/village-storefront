@@ -953,6 +953,271 @@ The loyalty module introduces several new entities beyond the baseline ERD:
 
 ---
 
+<!-- anchor: privacy-data-export-deletion -->
+
+## 8. Privacy Data Export & Deletion
+
+### Overview
+
+Village Storefront provides GDPR/CCPA-compliant data export and deletion workflows that respect tenant isolation boundaries. All privacy operations are tenant-scoped to prevent cross-tenant data leakage and maintain audit trails for compliance verification.
+
+### Data Export Architecture
+
+**Customer-Facing API:** `/api/v1/privacy/export` (POST) - Self-service data export request
+**Platform Admin API:** `/api/v1/platform/compliance/privacy-requests` - Approval workflow for sensitive exports
+
+**Export Job Flow:**
+```
+1. Customer submits export request via UI
+   → DataExportResource.requestDataExport()
+   → ComplianceService.submitExportRequest()
+
+2. Privacy request created with status PENDING_REVIEW
+   → Auto-approved for self-service requests
+   → Manual approval required for platform admin requests
+
+3. Background job processes export
+   → Queries all tenant-scoped entities (orders, users, sessions, etc.)
+   → Streams data to JSONL files (one per entity type)
+   → Generates CSV summaries for human readability
+   → Creates manifest.json with schema metadata + checksums
+
+4. ZIP file uploaded to R2 storage
+   → Storage key: tenant-{tenant_id}/exports/{request_id}.zip
+   → Pre-signed download URL generated (72-hour expiry)
+
+5. Customer notified via email
+   → Download link delivered securely
+   → Status polling available via GET /api/v1/privacy/export/{requestId}
+```
+
+**Tenant Isolation Enforcement:**
+- All export queries include `WHERE tenant_id = TenantContext.getCurrentTenantId()`
+- R2 storage keys prefixed with `tenant-{tenant_id}` to prevent cross-tenant access
+- Pre-signed URLs scoped to tenant via IAM policy (validated by R2 access control)
+- Export job payload stores only hashed identifiers (no PII in job queue logs)
+
+**Data Included in Export:**
+- User profile (email, name, addresses, payment methods)
+- Order history (orders, line items, payments, shipments, refunds)
+- Session logs (last 90 days, hot partition + archived)
+- Consent records (marketing consent timeline)
+- Loyalty transactions (points earned/redeemed, gift card activity)
+- Consignment data (if user is a consignor: items, payouts)
+- Audit logs referencing user (redacted sensitive fields)
+
+**Data Formats:**
+- **JSONL:** Machine-readable, one JSON object per line, supports streaming parsing
+- **CSV:** Human-readable summaries with header rows (Excel-compatible)
+- **Manifest:** JSON metadata file describing export contents:
+  ```json
+  {
+    "requestId": "uuid",
+    "tenantId": "uuid",
+    "subjectEmail": "user@example.com",
+    "exportedAt": "2026-01-12T10:00:00Z",
+    "schemaVersion": "1.0",
+    "files": [
+      {"path": "users.jsonl", "recordCount": 1, "sha256": "hash"},
+      {"path": "orders.jsonl", "recordCount": 42, "sha256": "hash"},
+      {"path": "orders.csv", "recordCount": 42, "sha256": "hash"}
+    ],
+    "retentionPolicy": "72-hour download window"
+  }
+  ```
+
+### Data Deletion Architecture
+
+**Customer-Facing API:** `/api/v1/privacy/delete` (POST) - Self-service account deletion request
+**Platform Admin API:** `/api/v1/platform/compliance/privacy-requests/{id}/approve` - Approval workflow
+
+**Two-Phase Deletion Strategy:**
+
+**Phase 1: Soft Delete (Immediate)**
+- User record marked with `deleted_at = NOW()`
+- Cascades to related entities via application logic:
+  - `UPDATE users SET deleted_at = NOW() WHERE id = :userId AND tenant_id = :tenantId`
+  - Addresses, payment methods, cart, session tokens marked deleted
+- UI treats soft-deleted records as non-existent (filtered in queries)
+- Account deactivated immediately (user cannot log in)
+- Order history preserved for merchant compliance (GDPR allows retention for legal obligations)
+
+**Phase 2: Purge (After 90-Day Retention)**
+- Scheduled job scans `WHERE deleted_at < NOW() - INTERVAL '90 days'`
+- Permanent deletion via `DELETE FROM users WHERE id = :userId AND tenant_id = :tenantId`
+- Cascades via foreign key `ON DELETE CASCADE` constraints
+- Archive cleanup: R2 objects under `tenant-{tenant_id}/user-{user_id}/*` deleted
+- Audit logs preserved (anonymized PII fields via `UPDATE audit_log_entries SET email = 'REDACTED'`)
+
+**Tenant Isolation Enforcement:**
+- All deletion queries include `AND tenant_id = TenantContext.getCurrentTenantId()`
+- Deletion job payload stores hashed identifier (no plaintext email in job logs)
+- Platform command audit record captures actor + rationale + tenant context
+- RLS policies ensure deletion queries cannot affect other tenants' data
+
+**Deletion Safeguards:**
+- Prevent deletion of users with active subscriptions (return 409 Conflict)
+- Prevent deletion of consignors with pending payouts (return 409 Conflict)
+- Require re-authentication before account deletion (mitigate session hijacking)
+- Rate limit deletion requests (1 per user per 24 hours)
+
+**Audit Trail:**
+- Every deletion recorded in `platform_commands` table (survives user data purge)
+- Audit entry includes: actor, timestamp, IP address, tenant ID, user identifier hash, rationale
+- Audit logs queryable by platform admins for compliance verification
+- Deletion request status tracked in `privacy_requests` table (PENDING_REVIEW → APPROVED → IN_PROGRESS → AWAITING_PURGE → COMPLETED)
+
+### Session Management & Revocation
+
+**Session Visibility API:** `/api/v1/sessions` (GET) - List active sessions for authenticated user
+**Revocation API:** `/api/v1/sessions/{sessionId}` (DELETE) - Revoke specific session
+
+**JWT Revocation Strategy:**
+- Since JWTs are stateless, revocation uses in-memory cache (Caffeine)
+- Revoked JWT IDs (jti claim) stored in cache with TTL matching token expiry
+- Authentication filter checks revocation cache on every request
+- Cache entries automatically expire when JWT expires (no manual cleanup needed)
+
+**Session Information Displayed:**
+- Device name (parsed from User-Agent: iPhone, Android, Windows PC, Mac)
+- Browser (Chrome, Safari, Firefox, Edge)
+- Approximate location (GeoIP lookup: City, Country)
+- Last activity timestamp
+- Impersonation indicator (if session is platform admin impersonating user)
+
+**Tenant Isolation Enforcement:**
+- Session queries filtered by `WHERE user_email = :email AND tenant_id = :tenantId`
+- Revocation only allowed for user's own sessions (verified via SecurityIdentity)
+- Impersonation sessions queryable by target user (transparency requirement)
+- Session logs partitioned by tenant + month for performance
+
+**Revoke All Sessions:**
+- POST `/api/v1/sessions/revoke-all` - Revokes all sessions except current
+- Useful after password change or suspected account compromise
+- Adds all JWT IDs to revocation cache in bulk operation
+- Ends all active impersonation sessions targeting user
+
+### R2 Storage Tenant Isolation
+
+**Cloudflare R2 Bucket Structure:**
+```
+storefront-exports/
+├── tenant-{uuid}/
+│   ├── exports/
+│   │   ├── {request_id}.zip          # Data export archives
+│   │   └── {request_id}-manifest.json
+│   ├── user-{uuid}/                  # Per-user media uploads
+│   │   ├── avatar.jpg
+│   │   └── documents/*.pdf
+│   └── archive/                      # Hot storage archival
+│       └── sessions-2025-12.jsonl.gz
+```
+
+**Pre-Signed URL Generation:**
+- URLs signed with R2 access key scoped to tenant prefix
+- Expiry: 72 hours (configurable via `compliance.export.url_expiry_hours`)
+- IAM policy prevents cross-tenant access even with leaked URL:
+  ```json
+  {
+    "Effect": "Allow",
+    "Action": ["s3:GetObject"],
+    "Resource": ["arn:aws:s3:::storefront-exports/tenant-{tenant_id}/*"],
+    "Condition": {
+      "StringEquals": {"s3:ExistingObjectTag/tenant_id": "{tenant_id}"}
+    }
+  }
+  ```
+
+**Deletion Workflow:**
+- Purge job deletes R2 objects matching `tenant-{tenant_id}/user-{user_id}/*`
+- Archive manifests updated to note records purged (tombstone markers)
+- S3 lifecycle rules automatically delete expired export archives after 72 hours
+
+### Testing Privacy Workflows
+
+**Integration Tests:**
+- `PrivacyExportIT` - Verify export includes all tenant-scoped data, respects RLS
+- `PrivacyDeletionIT` - Verify soft-delete + purge cascade, audit logs preserved
+- `SessionManagementIT` - Verify revocation blacklist prevents subsequent requests
+
+**Test Scenarios:**
+```java
+@Test
+void dataExport_onlyIncludesCurrentTenantData() {
+    // Setup: Two tenants with users
+    Tenant tenantA = createTenant("tenant-a");
+    Tenant tenantB = createTenant("tenant-b");
+    User userA = createUser(tenantA, "usera@example.com");
+    User userB = createUser(tenantB, "userb@example.com");
+    createOrders(userA, 5);
+    createOrders(userB, 3);
+
+    // Act: Export userA's data
+    TenantContext.setCurrentTenantId(tenantA.id);
+    UUID requestId = complianceService.submitExportRequest(
+        "usera@example.com", "usera@example.com", "Test export", null
+    );
+    complianceService.approveExportRequest(requestId, "admin", "Approved");
+
+    // Wait for job completion
+    await().atMost(30, SECONDS).until(() -> {
+        PrivacyRequest req = PrivacyRequest.findById(requestId);
+        return req.status == RequestStatus.COMPLETED;
+    });
+
+    // Assert: Export contains only tenantA data
+    String zipContent = downloadExport(requestId);
+    assertThat(zipContent).contains("usera@example.com");
+    assertThat(zipContent).doesNotContain("userb@example.com");
+    assertThat(countRecords(zipContent, "orders.jsonl")).isEqualTo(5);
+}
+```
+
+### Performance Considerations
+
+**Export Job Performance:**
+- Use cursor pagination for large datasets (avoid loading millions of records into memory)
+- Stream JSONL generation (write directly to R2, don't buffer entire ZIP in memory)
+- Chunk processing: Export 10,000 records per batch, commit transaction, continue
+- Estimated export time: ~30 seconds per 100K records (depends on data complexity)
+
+**Deletion Job Performance:**
+- Batch deletions in transactions of 1,000 records (prevents long-running locks)
+- Use `DELETE FROM ... RETURNING id` to track progress and emit metrics
+- Partition deletion by entity type (users → addresses → payment_methods → orders)
+- Estimated deletion time: ~10 seconds per 10K records
+
+**Session Query Performance:**
+- Session logs partitioned by month (query scans only current partition)
+- Composite index `(tenant_id, user_email, last_activity_at)` for filtering
+- Cache session list for 30 seconds (reduce DB load on security page refreshes)
+
+### Compliance Checklist
+
+**GDPR Article 15 (Right of Access):**
+- ✅ Data export includes all personal data processed by platform
+- ✅ Export delivered within 30 days (typically < 5 minutes for self-service)
+- ✅ Manifest describes data categories and retention policies
+- ✅ Downloadable format (ZIP with JSONL + CSV)
+
+**GDPR Article 17 (Right to Erasure):**
+- ✅ Two-phase deletion (soft-delete + 90-day purge)
+- ✅ Audit logs preserved (anonymized) for compliance verification
+- ✅ Exception handling for legal retention obligations (order history)
+- ✅ Confirmation messaging explains retention period
+
+**GDPR Article 30 (Records of Processing Activities):**
+- ✅ All privacy operations logged in `platform_commands` table
+- ✅ Audit logs include actor, timestamp, rationale, tenant context
+- ✅ Queryable via platform admin UI for compliance reporting
+
+**CCPA Section 1798.110 (Right to Know):**
+- ✅ Data export includes categories of personal information collected
+- ✅ Sources of data documented in manifest (user-provided, inferred, third-party)
+- ✅ Business purposes documented (order fulfillment, marketing, analytics)
+
+---
+
 **Document Maintainers:** Architecture Team
 **Review Cadence:** After each ADR affecting tenancy model
 **Next Review:** Q2 2026 (post-tenant sharding evaluation)

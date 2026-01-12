@@ -5174,6 +5174,166 @@ paths:
       - Platform Admin Resource
       security:
       - SecurityScheme: []
+  /api/v1/privacy/delete:
+    post:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Request Account Deletion
+      tags:
+      - Data Export Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/privacy/delete/{requestId}:
+    get:
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Deletion Status
+      tags:
+      - Data Export Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/privacy/export:
+    post:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Request Data Export
+      tags:
+      - Data Export Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/privacy/export/{requestId}:
+    get:
+      parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/UUID"
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Get Export Status
+      tags:
+      - Data Export Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/privacy/exports:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Export Requests
+      tags:
+      - Data Export Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/sessions:
+    get:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: List Active Sessions
+      tags:
+      - Session Management Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/sessions/revoke-all:
+    post:
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Revoke All Other Sessions
+      tags:
+      - Session Management Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/sessions/{sessionId}:
+    delete:
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+      summary: Revoke Session
+      tags:
+      - Session Management Resource
+      security:
+      - SecurityScheme: []
+  /api/v1/sessions/{sessionId}/report:
+    post:
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+        required: true
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: Not Authorized
+        "403":
+          description: Not Allowed
+        "400":
+          description: Bad Request
+      summary: Report Suspicious Session
+      tags:
+      - Session Management Resource
+      security:
+      - SecurityScheme: []
   /api/v1/shipping/labels:
     post:
       parameters:

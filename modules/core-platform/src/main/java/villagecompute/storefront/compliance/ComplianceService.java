@@ -1,15 +1,22 @@
 package villagecompute.storefront.compliance;
 
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -33,11 +40,19 @@ import villagecompute.storefront.compliance.data.repositories.PrivacyDeletionRec
 import villagecompute.storefront.compliance.data.repositories.PrivacyRequestRepository;
 import villagecompute.storefront.compliance.jobs.PrivacyDeleteJobPayload;
 import villagecompute.storefront.compliance.jobs.PrivacyExportJobPayload;
+import villagecompute.storefront.data.models.LoyaltyMember;
+import villagecompute.storefront.data.models.LoyaltyTransaction;
+import villagecompute.storefront.data.models.Order;
+import villagecompute.storefront.data.models.OrderLineItem;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.User;
+import villagecompute.storefront.data.repositories.LoyaltyMemberRepository;
+import villagecompute.storefront.data.repositories.LoyaltyTransactionRepository;
 import villagecompute.storefront.data.repositories.UserRepository;
 import villagecompute.storefront.platformops.data.models.PlatformCommand;
 import villagecompute.storefront.reporting.ReportStorageClient;
+import villagecompute.storefront.security.sessions.SessionLogEntry;
+import villagecompute.storefront.security.sessions.SessionLogRepository;
 import villagecompute.storefront.services.jobs.config.DeadLetterQueue;
 import villagecompute.storefront.services.jobs.config.JobConfig;
 import villagecompute.storefront.services.jobs.config.JobPriority;
@@ -84,6 +99,15 @@ public class ComplianceService {
 
     @Inject
     UserRepository userRepository;
+
+    @Inject
+    SessionLogRepository sessionLogRepository;
+
+    @Inject
+    LoyaltyMemberRepository loyaltyMemberRepository;
+
+    @Inject
+    LoyaltyTransactionRepository loyaltyTransactionRepository;
 
     @Inject
     PrivacyDeletionRecordRepository deletionRecordRepo;
@@ -442,8 +466,7 @@ public class ComplianceService {
             String hashHex = HexFormat.of().formatHex(hash);
 
             // Upload to storage
-            String objectKey = String.format("%s/privacy-exports/%s-%s.zip", payload.getTenantId(),
-                    request.subjectEmail.replaceAll("[^a-zA-Z0-9]", "_"), hashHex.substring(0, 8));
+            String objectKey = buildExportObjectKey(request, hashHex);
 
             storageClient.uploadReport(objectKey, new ByteArrayInputStream(exportZip), "application/zip",
                     exportZip.length);
@@ -528,60 +551,270 @@ public class ComplianceService {
 
     private byte[] generatePrivacyExport(PrivacyRequest request) throws Exception {
         ByteArrayOutputStream zipOutput = new ByteArrayOutputStream();
+        List<ManifestEntry> manifestEntries = new ArrayList<>();
+
+        User user = userRepository.findByTenantAndEmail(request.tenant.id, request.subjectEmail);
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime archivedCutoff = now.minusDays(90);
 
         try (ZipOutputStream zip = new ZipOutputStream(zipOutput)) {
-            // Add customer data JSONL
-            zip.putNextEntry(new ZipEntry("customer_data.jsonl"));
-            User user = userRepository.findByTenantAndEmail(request.tenant.id, request.subjectEmail);
-            if (user != null) {
-                String customerJson = objectMapper.writeValueAsString(user);
-                zip.write(customerJson.getBytes(StandardCharsets.UTF_8));
-                zip.write('\n');
-            }
-            zip.closeEntry();
-
-            // Add consent timeline CSV
-            zip.putNextEntry(new ZipEntry("marketing_consents.csv"));
-            ByteArrayOutputStream csvOutput = new ByteArrayOutputStream();
-            try (OutputStreamWriter writer = new OutputStreamWriter(csvOutput, StandardCharsets.UTF_8);
-                    CSVWriter csvWriter = new CSVWriter(writer)) {
-
-                csvWriter.writeNext(new String[]{"Channel", "Consented", "Source", "Method", "Timestamp"});
-
-                if (user != null) {
-                    List<MarketingConsent> consents = consentRepo.findByCustomer(user.id);
-                    for (MarketingConsent consent : consents) {
-                        csvWriter.writeNext(new String[]{consent.channel, String.valueOf(consent.consented),
-                                consent.consentSource, consent.consentMethod,
-                                consent.consentedAt != null ? consent.consentedAt.toString() : ""});
-                    }
-                }
-                csvWriter.flush();
-            }
-            zip.write(csvOutput.toByteArray());
-            zip.closeEntry();
-
-            // Add summary CSV
-            zip.putNextEntry(new ZipEntry("export_summary.csv"));
-            ByteArrayOutputStream summaryOutput = new ByteArrayOutputStream();
-            try (OutputStreamWriter writer = new OutputStreamWriter(summaryOutput, StandardCharsets.UTF_8);
-                    CSVWriter csvWriter = new CSVWriter(writer)) {
-
-                csvWriter.writeNext(new String[]{"Field", "Value"});
-                csvWriter.writeNext(new String[]{"Tenant", request.tenant.name});
-                csvWriter.writeNext(new String[]{"Subject Email", request.subjectEmail});
-                csvWriter.writeNext(new String[]{"Request Date", request.createdAt.toString()});
-                csvWriter.writeNext(new String[]{"Export Date", OffsetDateTime.now().toString()});
-                csvWriter.writeNext(new String[]{"Requester", request.requesterEmail});
-                csvWriter.flush();
-            }
-            zip.write(summaryOutput.toByteArray());
-            zip.closeEntry();
-
-            zip.finish();
+            manifestEntries.add(writeCustomerProfile(zip, user));
+            manifestEntries.add(writeOrdersExport(zip, request));
+            manifestEntries.add(writeLoyaltyExport(zip, user));
+            manifestEntries.add(writeSessionsExport(zip, "sessions_hot.jsonl", "hot",
+                    user != null
+                            ? sessionLogRepository.findRecentSessionsForUser(request.tenant.id, user.id, archivedCutoff,
+                                    500)
+                            : List.of()));
+            manifestEntries.add(writeSessionsExport(zip, "sessions_archived.jsonl", "archived",
+                    user != null
+                            ? sessionLogRepository.findArchivedSessionsForUser(request.tenant.id, user.id,
+                                    archivedCutoff, 500)
+                            : List.of()));
+            manifestEntries.add(writeConsentsCsv(zip, user));
+            manifestEntries.add(writeSummaryCsv(zip, request, now));
+            writeManifest(zip, request, now, manifestEntries);
         }
 
         return zipOutput.toByteArray();
+    }
+
+    private ManifestEntry writeCustomerProfile(ZipOutputStream zip, User user) throws Exception {
+        return writeJsonLines(zip, "customer_profile.jsonl", "hot", writer -> {
+            if (user == null) {
+                return 0;
+            }
+            writer.write(objectMapper.writeValueAsString(user));
+            writer.write('\n');
+            return 1;
+        });
+    }
+
+    private ManifestEntry writeOrdersExport(ZipOutputStream zip, PrivacyRequest request) throws Exception {
+        @SuppressWarnings("unchecked")
+        List<Order> orders = Order.list("tenant.id = ?1 AND customerEmail = ?2 ORDER BY createdAt DESC",
+                request.tenant.id, request.subjectEmail);
+        return writeJsonLines(zip, "orders.jsonl", "hot", writer -> {
+            int count = 0;
+            for (Order order : orders) {
+                Map<String, Object> payload = mapOrder(order);
+                writer.write(objectMapper.writeValueAsString(payload));
+                writer.write('\n');
+                count++;
+            }
+            return count;
+        });
+    }
+
+    private ManifestEntry writeLoyaltyExport(ZipOutputStream zip, User user) throws Exception {
+        return writeJsonLines(zip, "loyalty_transactions.jsonl", "hot", writer -> {
+            if (user == null) {
+                return 0;
+            }
+            Optional<LoyaltyMember> memberOpt = loyaltyMemberRepository.findByUser(user.id);
+            if (memberOpt.isEmpty()) {
+                return 0;
+            }
+            LoyaltyMember member = memberOpt.get();
+            List<LoyaltyTransaction> transactions = loyaltyTransactionRepository.findByMember(member.id, 0, 1000);
+            if (transactions.isEmpty()) {
+                Map<String, Object> record = new LinkedHashMap<>();
+                record.put("memberId", member.id);
+                record.put("pointsBalance", member.pointsBalance);
+                record.put("status", member.status);
+                writer.write(objectMapper.writeValueAsString(record));
+                writer.write('\n');
+                return 1;
+            }
+            int count = 0;
+            for (LoyaltyTransaction tx : transactions) {
+                Map<String, Object> record = new LinkedHashMap<>();
+                record.put("memberId", member.id);
+                record.put("transactionId", tx.id);
+                record.put("transactionType", tx.transactionType);
+                record.put("pointsDelta", tx.pointsDelta);
+                record.put("balanceAfter", tx.balanceAfter);
+                record.put("reason", tx.reason);
+                record.put("createdAt", tx.createdAt);
+                writer.write(objectMapper.writeValueAsString(record));
+                writer.write('\n');
+                count++;
+            }
+            return count;
+        });
+    }
+
+    private ManifestEntry writeSessionsExport(ZipOutputStream zip, String filename, String source,
+            List<SessionLogEntry> sessions) throws Exception {
+        return writeJsonLines(zip, filename, source, writer -> {
+            int count = 0;
+            for (SessionLogEntry entry : sessions) {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("sessionId", entry.id);
+                payload.put("ip", entry.ipAddress);
+                payload.put("userAgent", entry.userAgent);
+                payload.put("loginAt", entry.loginAt);
+                payload.put("lastActivityAt", entry.lastActivityAt);
+                payload.put("logoutReason", entry.logoutReason);
+                payload.put("impersonationContext", entry.impersonationContext);
+                writer.write(objectMapper.writeValueAsString(payload));
+                writer.write('\n');
+                count++;
+            }
+            return count;
+        });
+    }
+
+    private ManifestEntry writeConsentsCsv(ZipOutputStream zip, User user) throws Exception {
+        List<MarketingConsent> consents = user != null ? consentRepo.findByCustomer(user.id) : List.of();
+        return writeCsvEntry(zip, "marketing_consents.csv", "hot", csvWriter -> {
+            csvWriter.writeNext(new String[]{"Channel", "Consented", "Source", "Method", "Timestamp"});
+            int count = 0;
+            for (MarketingConsent consent : consents) {
+                csvWriter.writeNext(new String[]{consent.channel, String.valueOf(consent.consented),
+                        consent.consentSource, consent.consentMethod,
+                        consent.consentedAt != null ? consent.consentedAt.toString() : ""});
+                count++;
+            }
+            return count;
+        });
+    }
+
+    private ManifestEntry writeSummaryCsv(ZipOutputStream zip, PrivacyRequest request, OffsetDateTime generatedAt)
+            throws Exception {
+        return writeCsvEntry(zip, "export_summary.csv", "meta", csvWriter -> {
+            csvWriter.writeNext(new String[]{"Field", "Value"});
+            csvWriter.writeNext(new String[]{"Tenant", request.tenant.name});
+            csvWriter.writeNext(new String[]{"Subject Email", request.subjectEmail});
+            csvWriter.writeNext(new String[]{"Requester", request.requesterEmail});
+            csvWriter.writeNext(new String[]{"Request Date", request.createdAt.toString()});
+            csvWriter.writeNext(new String[]{"Generated At", generatedAt.toString()});
+            return 5;
+        });
+    }
+
+    private void writeManifest(ZipOutputStream zip, PrivacyRequest request, OffsetDateTime generatedAt,
+            List<ManifestEntry> entries) throws Exception {
+        zip.putNextEntry(new ZipEntry("manifest.json"));
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("requestId", request.id);
+        manifest.put("tenantId", request.tenant.id);
+        manifest.put("schemaVersion", "1.0");
+        manifest.put("subjectEmail", request.subjectEmail);
+        manifest.put("generatedAt", generatedAt.toString());
+        manifest.put("retentionPolicy", "72-hour download window");
+        manifest.put("files", entries.stream().map(ManifestEntry::toMap).collect(Collectors.toList()));
+        zip.write(objectMapper.writeValueAsBytes(manifest));
+        zip.closeEntry();
+    }
+
+    private ManifestEntry writeJsonLines(ZipOutputStream zip, String entryName, String source, JsonLineWriter writer)
+            throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        zip.putNextEntry(new ZipEntry(entryName));
+        DigestOutputStream digestStream = new DigestOutputStream(zip, digest);
+        BufferedWriter bufferedWriter = new BufferedWriter(
+                new OutputStreamWriter(digestStream, StandardCharsets.UTF_8));
+        int recordCount = writer.write(bufferedWriter);
+        bufferedWriter.flush();
+        zip.closeEntry();
+        return new ManifestEntry(entryName, "jsonl", source, recordCount, HexFormat.of().formatHex(digest.digest()));
+    }
+
+    private ManifestEntry writeCsvEntry(ZipOutputStream zip, String entryName, String source, CsvContentWriter writer)
+            throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        zip.putNextEntry(new ZipEntry(entryName));
+        DigestOutputStream digestStream = new DigestOutputStream(zip, digest);
+        OutputStreamWriter streamWriter = new OutputStreamWriter(digestStream, StandardCharsets.UTF_8);
+        CSVWriter csvWriter = new CSVWriter(streamWriter);
+        int recordCount = writer.write(csvWriter);
+        csvWriter.flush();
+        zip.closeEntry();
+        return new ManifestEntry(entryName, "csv", source, recordCount, HexFormat.of().formatHex(digest.digest()));
+    }
+
+    private Map<String, Object> mapOrder(Order order) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("orderId", order.id);
+        payload.put("orderNumber", order.orderNumber);
+        payload.put("status", order.status);
+        payload.put("totalAmount", order.totalAmount);
+        payload.put("currency", order.currency);
+        payload.put("createdAt", order.createdAt);
+        payload.put("metadata", order.metadata);
+        payload.put("lineItems", mapLineItems(order));
+        return payload;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mapLineItems(Order order) {
+        List<OrderLineItem> lineItems = OrderLineItem.list("order.id = ?1", order.id);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (OrderLineItem item : lineItems) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("productName", item.productName);
+            row.put("variantName", item.variantName);
+            row.put("sku", item.sku);
+            row.put("quantity", item.quantity);
+            row.put("unitPrice", item.unitPrice);
+            row.put("subtotal", item.subtotal);
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    @FunctionalInterface
+    private interface JsonLineWriter {
+        int write(BufferedWriter writer) throws Exception;
+    }
+
+    @FunctionalInterface
+    private interface CsvContentWriter {
+        int write(CSVWriter writer) throws Exception;
+    }
+
+    private static final class ManifestEntry {
+
+        private final String path;
+        private final String format;
+        private final String source;
+        private final int recordCount;
+        private final String sha256;
+
+        ManifestEntry(String path, String format, String source, int recordCount, String sha256) {
+            this.path = path;
+            this.format = format;
+            this.source = source;
+            this.recordCount = recordCount;
+            this.sha256 = sha256;
+        }
+
+        Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("path", path);
+            map.put("format", format);
+            map.put("source", source);
+            map.put("recordCount", recordCount);
+            map.put("sha256", sha256);
+            return map;
+        }
+    }
+
+    private String buildExportObjectKey(PrivacyRequest request, String hashHex) {
+        String tenantSlug = sanitizeSlug(
+                request.tenant.subdomain != null && !request.tenant.subdomain.isBlank() ? request.tenant.subdomain
+                        : request.tenant.name);
+        String subjectSlug = sanitizeSlug(request.subjectEmail);
+        return String.format("tenant-%s/exports/%s-%s-%s.zip", request.tenant.id, tenantSlug, subjectSlug,
+                hashHex.substring(0, Math.min(8, hashHex.length())));
+    }
+
+    private String sanitizeSlug(String value) {
+        if (value == null || value.isBlank()) {
+            return "unknown";
+        }
+        return value.replaceAll("[^a-zA-Z0-9]", "-").toLowerCase();
     }
 
     private void executeSoftDelete(PrivacyRequest request) {

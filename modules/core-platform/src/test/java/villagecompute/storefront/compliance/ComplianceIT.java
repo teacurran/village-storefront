@@ -4,13 +4,22 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.ByteArrayInputStream;
+import java.net.URI;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.compliance.api.types.RecordConsentRequest;
 import villagecompute.storefront.compliance.api.types.SubmitPrivacyRequestRequest;
@@ -20,6 +29,7 @@ import villagecompute.storefront.compliance.data.repositories.MarketingConsentRe
 import villagecompute.storefront.compliance.data.repositories.PrivacyRequestRepository;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.User;
+import villagecompute.storefront.reporting.StubReportStorageClient;
 import villagecompute.storefront.tenant.TenantContext;
 
 import io.quarkus.test.junit.QuarkusTest;
@@ -50,6 +60,12 @@ public class ComplianceIT {
 
     @Inject
     MarketingConsentRepository consentRepo;
+
+    @Inject
+    StubReportStorageClient storageClient;
+
+    @Inject
+    ObjectMapper objectMapper;
 
     private UUID testTenantId;
     private UUID testUserId;
@@ -147,6 +163,28 @@ public class ComplianceIT {
         assertEquals(PrivacyRequest.RequestStatus.COMPLETED, request.status);
         assertNotNull(request.resultUrl, "Signed download URL should be generated");
         assertNotNull(request.completedAt);
+
+        StubReportStorageClient.StoredReport storedReport = getStoredReport(request.resultUrl);
+        assertNotNull(storedReport, "Export archive should be stored");
+
+        Set<String> entries = new HashSet<>();
+        JsonNode manifest = null;
+        try (ZipInputStream zipInputStream = new ZipInputStream(new ByteArrayInputStream(storedReport.getData()))) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                entries.add(entry.getName());
+                if ("manifest.json".equals(entry.getName())) {
+                    manifest = objectMapper.readTree(zipInputStream);
+                }
+            }
+        } catch (Exception e) {
+            fail("Failed to read export archive: " + e.getMessage());
+        }
+
+        assertTrue(entries.contains("manifest.json"), "Manifest should be included");
+        assertTrue(entries.contains("customer_profile.jsonl"), "Profile JSON should be exported");
+        assertNotNull(manifest, "Manifest JSON should parse");
+        assertTrue(manifest.get("files").size() >= 3, "Manifest should describe exported files");
     }
 
     @Test
@@ -318,5 +356,14 @@ public class ComplianceIT {
 
         assertTrue(newExportDepth > initialExportDepth, "Export queue should have jobs");
         assertTrue(newDeleteDepth > initialDeleteDepth, "Delete queue should have jobs");
+    }
+
+    private StubReportStorageClient.StoredReport getStoredReport(String resultUrl) {
+        URI uri = URI.create(resultUrl);
+        String path = uri.getPath();
+        String prefix = "/reports/";
+        int idx = path.indexOf(prefix);
+        String key = idx >= 0 ? path.substring(idx + prefix.length()) : path.replaceFirst("^/", "");
+        return storageClient.getStoredReport(key);
     }
 }

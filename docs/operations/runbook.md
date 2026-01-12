@@ -2081,10 +2081,461 @@ Chaos engineering drills validate platform resilience by simulating failure scen
 
 ---
 
+## Security Operations
+
+### Encryption Key Rotation
+
+**Purpose:** Periodically rotate application-level encryption keys used for sensitive PII (consignor tax IDs, payment tokens, POS device secrets) to limit exposure window in case of compromise.
+
+**Schedule:**
+- **Standard rotation:** Annual (every 365 days)
+- **Emergency rotation:** Immediately upon suspected compromise
+- **Monitoring alert:** Warning if key age > 400 days, critical if > 450 days
+
+**Key Types:**
+
+| Key Purpose | Storage Location | Rotation Frequency |
+|------------|------------------|-------------------|
+| Application master key (AES-256) | K8s Secret `encryption-keys` | Annual |
+| Consignor PII encryption | Derived from master key | Annual |
+| POS device secrets | K8s Secret per tenant | Quarterly |
+| JWT signing key (HMAC-SHA256) | K8s Secret `jwt-secret` | Biannual |
+
+#### Automated Rotation Procedure
+
+**Pre-Rotation Checklist:**
+- [ ] Verify backup window completed successfully (last 24h)
+- [ ] Confirm no active deployments or schema migrations
+- [ ] Alert on-call team of scheduled rotation (1 hour notice)
+- [ ] Run staging rotation first (validate procedure)
+
+**Automated Rotation Script:**
+
+```bash
+#!/bin/bash
+# File: scripts/rotate-encryption-keys.sh
+# Description: Automated encryption key rotation with re-encryption of existing data
+
+set -euo pipefail
+
+NAMESPACE="storefront"
+KEY_NAME="encryption-keys"
+NEW_KEY=$(openssl rand -base64 32)
+TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
+echo "🔑 Starting encryption key rotation - $TIMESTAMP"
+
+# Step 1: Generate new encryption key
+echo "Generating new encryption key..."
+kubectl create secret generic $KEY_NAME-new \
+  --from-literal=master-key=$NEW_KEY \
+  --from-literal=rotation-timestamp=$TIMESTAMP \
+  --from-literal=previous-key=$(kubectl get secret $KEY_NAME -o jsonpath='{.data.master-key}' | base64 -d) \
+  --namespace=$NAMESPACE \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Step 2: Deploy application with dual-key support (reads old, writes new)
+echo "Deploying application with dual-key support..."
+kubectl set env deployment/village-storefront \
+  ENCRYPTION_KEY_NEW="$NEW_KEY" \
+  ENCRYPTION_KEY_PREVIOUS="$(kubectl get secret $KEY_NAME -o jsonpath='{.data.master-key}' | base64 -d)" \
+  --namespace=$NAMESPACE
+
+kubectl rollout status deployment/village-storefront --namespace=$NAMESPACE --timeout=5m
+
+# Step 3: Trigger re-encryption background job
+echo "Triggering re-encryption background job..."
+kubectl exec -it deployment/village-storefront --namespace=$NAMESPACE -- \
+  curl -X POST http://localhost:8080/api/internal/re-encrypt \
+    -H "Authorization: Bearer $(kubectl get secret ops-api-token -o jsonpath='{.data.token}' | base64 -d)" \
+    -H "Content-Type: application/json" \
+    -d '{"keyRotationTimestamp": "'$TIMESTAMP'"}'
+
+# Step 4: Monitor re-encryption progress
+echo "Monitoring re-encryption progress (this may take 10-30 minutes)..."
+while true; do
+  PROGRESS=$(kubectl exec deployment/village-storefront --namespace=$NAMESPACE -- \
+    curl -s http://localhost:8080/api/internal/re-encrypt/status | jq -r '.percentComplete')
+
+  echo "Re-encryption progress: $PROGRESS%"
+
+  if [ "$PROGRESS" = "100" ]; then
+    echo "✅ Re-encryption complete"
+    break
+  fi
+
+  sleep 30
+done
+
+# Step 5: Switch to new key only (remove dual-key support)
+echo "Switching to new key only..."
+kubectl create secret generic $KEY_NAME \
+  --from-literal=master-key=$NEW_KEY \
+  --from-literal=rotation-timestamp=$TIMESTAMP \
+  --namespace=$NAMESPACE \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl set env deployment/village-storefront \
+  ENCRYPTION_KEY_NEW- \
+  ENCRYPTION_KEY_PREVIOUS- \
+  --namespace=$NAMESPACE
+
+kubectl rollout status deployment/village-storefront --namespace=$NAMESPACE --timeout=5m
+
+# Step 6: Archive old key for 90-day retention (compliance requirement)
+echo "Archiving old key to S3..."
+kubectl get secret $KEY_NAME-new -o json | \
+  jq '.data."previous-key"' | \
+  aws s3 cp - s3://villagecompute-key-archive/rotation-$TIMESTAMP-previous-key.txt
+
+# Step 7: Verify encryption with new key
+echo "Verifying encryption with new key..."
+kubectl exec deployment/village-storefront --namespace=$NAMESPACE -- \
+  curl -s http://localhost:8080/api/internal/encryption/verify | jq
+
+echo "🎉 Key rotation complete - $TIMESTAMP"
+```
+
+#### Manual Rotation Override
+
+**Emergency Rotation (Suspected Compromise):**
+
+```bash
+# Immediate rotation without re-encryption (accept temporary dual-key period)
+NEW_KEY=$(openssl rand -base64 32)
+
+kubectl create secret generic encryption-keys \
+  --from-literal=master-key=$NEW_KEY \
+  --from-literal=rotation-timestamp=$(date +%Y%m%d-%H%M%S) \
+  --from-literal=previous-key=$(kubectl get secret encryption-keys -o jsonpath='{.data.master-key}' | base64 -d) \
+  --namespace=storefront \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl rollout restart deployment/village-storefront --namespace=storefront
+
+# Schedule re-encryption for next maintenance window
+# Add note to incident ticket for follow-up
+```
+
+#### Re-Encryption Job Implementation
+
+**Background Job Handler:**
+
+The re-encryption job queries all tables with encrypted columns and updates records in batches:
+
+```sql
+-- Example: Re-encrypt consignor SSNs
+UPDATE consignors
+SET ssn_encrypted = pgp_sym_encrypt(
+    pgp_sym_decrypt(ssn_encrypted, <old_key>),
+    <new_key>
+)
+WHERE tenant_id = :tenantId
+  AND updated_at < :rotationTimestamp
+LIMIT 1000;
+```
+
+**Job Priority:** HIGH (complete within 2 hours to minimize dual-key window)
+
+**Metrics:**
+- `encryption.rotation.progress` (gauge: 0-100)
+- `encryption.rotation.records_reencrypted` (counter)
+- `encryption.rotation.duration_seconds` (histogram)
+
+#### Monitoring & Alerts
+
+**Prometheus Alerts:**
+
+```yaml
+- alert: EncryptionKeyAgeTooHigh
+  expr: time() - encryption_key_rotation_timestamp_seconds > (400 * 86400)
+  for: 24h
+  labels:
+    severity: warning
+  annotations:
+    summary: "Encryption key age exceeds 400 days"
+    description: "Key last rotated {{ $value | humanizeDuration }} ago. Schedule rotation."
+
+- alert: EncryptionKeyRotationFailed
+  expr: encryption_key_rotation_errors_total > 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Encryption key rotation failed"
+    description: "Re-encryption job failed {{ $value }} times. Investigate immediately."
+```
+
+**Grafana Dashboard:**
+- Key age gauge (days since last rotation)
+- Re-encryption progress bar (during active rotation)
+- Historical rotation timeline (annotations for each rotation)
+
+---
+
+### Privacy Request Workflow (GDPR/CCPA)
+
+**Purpose:** Handle data subject access requests (DSAR) and right-to-erasure requests in compliance with GDPR Article 15/17 and CCPA Section 1798.110.
+
+**SLA:**
+- Data export: 30 days (typically complete within 5 minutes)
+- Account deletion: Immediate soft-delete, 90-day purge retention
+
+#### Data Export Request Workflow
+
+**Customer Self-Service Path:**
+
+```
+1. Customer clicks "Download My Data" in Account Settings
+   → POST /api/v1/privacy/export
+
+2. System creates PrivacyRequest (status: PENDING_REVIEW)
+   → Auto-approved for self-service requests
+   → Enqueued in HIGH priority job queue
+
+3. Background job processes export (ComplianceService.handleExportJob)
+   → Queries all tenant-scoped entities for customer data
+   → Streams JSONL files (users, orders, sessions, consents, etc.)
+   → Generates CSV summaries for human readability
+   → Creates manifest.json with checksums
+
+4. ZIP file uploaded to R2 storage
+   → Storage key: tenant-{tenant_id}/exports/{request_id}.zip
+   → Pre-signed download URL generated (72-hour expiry)
+
+5. Customer receives email notification
+   → "Your data export is ready"
+   → Download link expires in 72 hours
+
+6. Customer downloads ZIP file
+   → Status: COMPLETED
+```
+
+**Platform Admin Path (Manual Review):**
+
+```
+1. Support receives GDPR request via email/ticket
+   → Log into platform admin console
+
+2. Admin submits export request on behalf of customer
+   → POST /api/v1/platform/compliance/privacy-requests/export
+   → Status: PENDING_REVIEW
+
+3. Compliance officer reviews and approves
+   → POST /api/v1/platform/compliance/privacy-requests/{id}/approve
+   → Rationale documented in approval notes
+
+4-6. Same as self-service path
+```
+
+#### Data Deletion Request Workflow
+
+**Customer Self-Service Path:**
+
+```
+1. Customer clicks "Delete My Account" in Account Settings
+   → Confirmation modal warns of irreversible action
+   → Requires re-authentication (password confirmation)
+
+2. System creates PrivacyRequest (type: DELETE, status: PENDING_REVIEW)
+   → POST /api/v1/privacy/delete
+   → Auto-approved for self-service requests
+
+3. Background job executes Phase 1: Soft Delete
+   → UPDATE users SET deleted_at = NOW() WHERE id = :userId
+   → Cascades to addresses, payment_methods, carts, sessions
+   → Order history preserved (merchant compliance requirement)
+   → Status: AWAITING_PURGE
+
+4. Customer account deactivated immediately
+   → Cannot log in (authentication filter checks deleted_at)
+   → Profile hidden from UI
+
+5. After 90-day retention period, scheduled job executes Phase 2: Purge
+   → DELETE FROM users WHERE deleted_at < NOW() - INTERVAL '90 days'
+   → Cascades via foreign key ON DELETE CASCADE
+   → R2 objects deleted: tenant-{id}/user-{id}/*
+   → Audit logs anonymized (email → 'REDACTED')
+   → Status: COMPLETED
+```
+
+**Emergency Deletion (Manual Escalation):**
+
+```bash
+# For legal hold, court order, or user safety concerns
+# Requires dual approval (compliance officer + engineering lead)
+
+kubectl exec deployment/village-storefront --namespace=storefront -- \
+  psql -U storefront -d storefront -c \
+    "SELECT compliance_emergency_delete(
+       p_tenant_id := '<tenant-uuid>',
+       p_user_email := 'user@example.com',
+       p_reason := 'Court order - case #12345',
+       p_approved_by := 'compliance.officer@villagecompute.com'
+     );"
+
+# Function logs to platform_commands table (audit trail)
+# Bypasses 90-day retention (immediate purge)
+```
+
+#### Safeguards & Validations
+
+**Deletion Blockers (Return 409 Conflict):**
+
+```sql
+-- Check for active subscriptions
+SELECT COUNT(*) FROM subscription_memberships
+WHERE user_id = :userId
+  AND status = 'active'
+  AND cancel_at_period_end = false;
+
+-- Check for pending consignor payouts
+SELECT COUNT(*) FROM payout_batches pb
+JOIN consignors c ON c.id = pb.consignor_id
+WHERE c.user_id = :userId
+  AND pb.status IN ('pending', 'processing');
+
+-- If any blockers exist, return error:
+{
+  "error": "cannot_delete_account",
+  "reason": "Active subscription or pending payouts",
+  "blockers": [
+    {"type": "subscription", "id": "sub_123"},
+    {"type": "payout", "id": "pay_456"}
+  ]
+}
+```
+
+**Rate Limiting:**
+
+```java
+// Privacy request rate limit: 1 per user per 24 hours
+@RateLimit(limit = 1, window = Duration.ofHours(24), key = "user_email")
+public UUID requestDataExport() { ... }
+```
+
+#### Monitoring Privacy Workflows
+
+**Key Metrics:**
+
+```promql
+# Export job completion rate
+rate(compliance_export_completed_total[5m])
+
+# Export job failure rate (alert if > 1%)
+rate(compliance_export_failed_total[5m]) / rate(compliance_export_requested_total[5m]) * 100
+
+# Deletion job lag (alert if > 95 days, approaching legal deadline)
+max(time() - privacy_request_created_at{type="delete",status="awaiting_purge"})
+
+# Privacy request queue depth (alert if > 100)
+sum(compliance_privacy_request_queue_depth) by (type)
+```
+
+**Grafana Dashboard:**
+
+- Privacy request funnel (requested → approved → completed)
+- Export job duration histogram (P50/P95/P99)
+- Deletion pipeline stages (soft-delete → awaiting_purge → purged)
+- SLA compliance gauge (% completed within 30 days)
+
+#### Incident Response: Failed Privacy Request
+
+**Scenario:** Export job fails after 3 retries, customer ticket escalated
+
+**Investigation:**
+
+```bash
+# Check job status and error logs
+kubectl exec deployment/village-storefront --namespace=storefront -- \
+  psql -U storefront -c \
+    "SELECT pr.id, pr.status, pr.error_message, pr.created_at, pr.updated_at
+     FROM privacy_requests pr
+     WHERE pr.id = '<request-id>';"
+
+# Check background job attempts
+kubectl logs -l component=worker --namespace=storefront | \
+  grep "PrivacyExportJobHandler" | \
+  grep "<request-id>"
+
+# Common failure causes:
+# - R2 upload timeout (large data export)
+# - Database query timeout (customer with 1M+ orders)
+# - Out of memory (export ZIP buffer too large)
+```
+
+**Resolution:**
+
+```bash
+# Manual retry with increased resources
+kubectl scale deployment/village-storefront-workers --replicas=5 --namespace=storefront
+
+# Re-enqueue job
+curl -X POST http://localhost:8080/api/internal/privacy/retry/<request-id> \
+  -H "Authorization: Bearer $(kubectl get secret ops-api-token -o jsonpath='{.data.token}' | base64 -d)"
+
+# Monitor completion
+watch -n 5 "kubectl exec deployment/village-storefront -- \
+  psql -U storefront -c \"SELECT status FROM privacy_requests WHERE id = '<request-id>'\""
+```
+
+**Post-Incident:**
+- Update runbook with failure pattern
+- Add retry logic improvements to backlog
+- Document escalation path for future incidents
+
+#### Compliance Audit Trail
+
+**Query All Privacy Operations:**
+
+```sql
+-- Platform admin query: All privacy requests for compliance audit
+SELECT
+  pr.id AS request_id,
+  pr.request_type,
+  pr.status,
+  pr.requester_email,
+  pr.subject_email,
+  pr.reason,
+  pr.ticket_number,
+  pr.created_at,
+  pr.approved_by_email,
+  pr.approved_at,
+  pr.completed_at,
+  pc.action AS platform_command_action,
+  pc.actor_email AS audit_actor,
+  pc.reason AS audit_rationale
+FROM privacy_requests pr
+LEFT JOIN platform_commands pc ON pc.id = pr.platform_command_id
+WHERE pr.tenant_id = '<tenant-uuid>'
+  AND pr.created_at >= '2025-01-01'
+ORDER BY pr.created_at DESC;
+```
+
+**Export Audit Log for External Review:**
+
+```bash
+# Generate compliance report for GDPR audit
+kubectl exec deployment/village-storefront --namespace=storefront -- \
+  psql -U storefront -d storefront -c \
+    "COPY (
+       SELECT * FROM privacy_requests
+       WHERE created_at BETWEEN '2025-01-01' AND '2025-12-31'
+       ORDER BY created_at
+     ) TO STDOUT WITH CSV HEADER" > privacy_audit_2025.csv
+
+# Upload to compliance archive
+aws s3 cp privacy_audit_2025.csv \
+  s3://villagecompute-compliance/audits/2025/privacy-requests.csv
+```
+
+---
+
 ## Revision History
 
 | Date | Version | Changes | Author |
 |------|---------|---------|--------|
+| 2026-01-12 | 1.1 | Added encryption key rotation and privacy workflow procedures | Platform Ops Team |
 | 2026-01-12 | 1.0 | Initial runbook creation covering deployment, incidents, job management, monitoring | Platform Ops Team |
 
 ---

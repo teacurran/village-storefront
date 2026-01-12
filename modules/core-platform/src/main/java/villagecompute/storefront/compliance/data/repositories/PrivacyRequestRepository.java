@@ -99,4 +99,34 @@ public class PrivacyRequestRepository implements PanacheRepositoryBase<PrivacyRe
         return count("tenant.id = :tenantId AND status = :status",
                 Parameters.with("tenantId", tenantId).and("status", status));
     }
+
+    /**
+     * Find privacy requests by subject email for current tenant.
+     *
+     * @param subjectEmail
+     *            email of data subject
+     * @param requestType
+     *            type of request (EXPORT or DELETE)
+     * @return list of matching requests
+     */
+    public List<PrivacyRequest> findBySubjectEmail(String subjectEmail, RequestType requestType) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return list("tenant.id = :tenantId AND subjectEmail = :email AND requestType = :type ORDER BY createdAt DESC",
+                Parameters.with("tenantId", tenantId).and("email", subjectEmail).and("type", requestType));
+    }
+
+    /**
+     * Find privacy requests by subject email and status for current tenant.
+     *
+     * @param subjectEmail
+     *            email of data subject
+     * @param statuses
+     *            list of statuses to match
+     * @return list of matching requests
+     */
+    public List<PrivacyRequest> findBySubjectAndStatus(String subjectEmail, List<RequestStatus> statuses) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return list("tenant.id = :tenantId AND subjectEmail = :email AND status IN :statuses ORDER BY createdAt DESC",
+                Parameters.with("tenantId", tenantId).and("email", subjectEmail).and("statuses", statuses));
+    }
 }

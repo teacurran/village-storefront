@@ -92,6 +92,35 @@ public class AuditLogService {
         return entry;
     }
 
+    /**
+     * Record a generic security action (sessions, privacy, impersonation, etc.).
+     *
+     * @param action
+     *            action identifier
+     * @param entityType
+     *            domain entity type
+     * @param entityId
+     *            entity identifier (nullable)
+     * @param context
+     *            contextual metadata
+     * @return persisted entry
+     */
+    @Transactional
+    public AuditLogEntry recordSecurityAction(String action, String entityType, UUID entityId,
+            Map<String, Object> context) {
+        AuditLogEntry entry = new AuditLogEntry();
+        entry.action = action;
+        entry.entityType = entityType;
+        entry.entityId = entityId;
+        entry.tenantId = TenantContext.hasContext() ? TenantContext.getCurrentTenantId() : null;
+        entry.changes = serializeChanges(context);
+
+        auditLogRepository.persist(entry);
+        LOG.infof("Security audit log recorded - tenantId=%s, action=%s, entityType=%s", entry.tenantId, action,
+                entityType);
+        return entry;
+    }
+
     private String serializeChanges(Map<String, Object> changes) {
         try {
             Map<String, Object> safeChanges = changes != null ? changes : Collections.emptyMap();

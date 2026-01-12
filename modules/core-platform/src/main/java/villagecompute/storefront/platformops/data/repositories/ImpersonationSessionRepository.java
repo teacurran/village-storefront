@@ -116,6 +116,18 @@ public class ImpersonationSessionRepository implements PanacheRepositoryBase<Imp
     }
 
     /**
+     * Find active impersonation sessions targeting a specific user email.
+     *
+     * @param targetEmail
+     *            email of the impersonated user
+     * @return list of active sessions
+     */
+    public List<ImpersonationSession> findActiveByTargetEmail(String targetEmail) {
+        return find("targetUserEmail = :email AND endedAt IS NULL ORDER BY startedAt DESC",
+                Parameters.with("email", targetEmail)).list();
+    }
+
+    /**
      * Find sessions that have exceeded the active TTL threshold.
      *
      * @param threshold
