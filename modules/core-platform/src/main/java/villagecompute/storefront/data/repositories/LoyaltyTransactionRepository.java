@@ -35,7 +35,10 @@ public class LoyaltyTransactionRepository implements PanacheRepositoryBase<Loyal
     private static final String QUERY_FIND_BY_MEMBER = "tenant.id = :tenantId and member.id = :memberId order by createdAt desc";
     private static final String QUERY_FIND_BY_ORDER = "tenant.id = :tenantId and orderId = :orderId";
     private static final String QUERY_FIND_BY_IDEMPOTENCY_KEY = "tenant.id = :tenantId and idempotencyKey = :idempotencyKey";
-    private static final String QUERY_FIND_EXPIRING = "tenant.id = :tenantId and transactionType in ('earned','adjusted') and expiresAt <= :expiresAt and expiresAt is not null order by expiresAt asc";
+    private static final String QUERY_BASE_EXPIRING = "tenant.id = :tenantId and transactionType in ('earned','adjusted') and expiresAt <= :expiresAt and expiresAt is not null";
+    private static final String QUERY_FIND_EXPIRING = QUERY_BASE_EXPIRING + " order by expiresAt asc";
+    private static final String QUERY_FIND_EXPIRING_FOR_MEMBER = QUERY_BASE_EXPIRING
+            + " and member.id = :memberId order by expiresAt asc";
     private static final String QUERY_FIND_EXPIRED_REASON = "tenant.id = :tenantId and transactionType = 'expired' and reason = :reason";
     private static final String QUERY_FIND_BY_TYPE = "tenant.id = :tenantId and transactionType = :transactionType order by createdAt desc";
 
@@ -95,6 +98,26 @@ public class LoyaltyTransactionRepository implements PanacheRepositoryBase<Loyal
     public List<LoyaltyTransaction> findExpiring(OffsetDateTime expiresAt, int page, int size) {
         UUID tenantId = TenantContext.getCurrentTenantId();
         return find(QUERY_FIND_EXPIRING, Parameters.with("tenantId", tenantId).and("expiresAt", expiresAt))
+                .page(Page.of(page, size)).list();
+    }
+
+    /**
+     * Find expiring transactions for a specific member within current tenant.
+     *
+     * @param memberId
+     *            member identifier
+     * @param expiresAt
+     *            cutoff timestamp
+     * @param page
+     *            page number (0-indexed)
+     * @param size
+     *            page size
+     * @return list of expiring transactions for member
+     */
+    public List<LoyaltyTransaction> findExpiringForMember(UUID memberId, OffsetDateTime expiresAt, int page, int size) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        return find(QUERY_FIND_EXPIRING_FOR_MEMBER,
+                Parameters.with("tenantId", tenantId).and("memberId", memberId).and("expiresAt", expiresAt))
                 .page(Page.of(page, size)).list();
     }
 

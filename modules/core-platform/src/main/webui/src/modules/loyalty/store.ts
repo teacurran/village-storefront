@@ -25,6 +25,7 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
   const error = ref<string | null>(null)
   const sseConnected = ref(false)
   const sseSource = ref<EventSource | null>(null)
+  const savingProgram = ref(false)
 
   async function loadProgram() {
     loading.value = true
@@ -103,6 +104,23 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     sseConnected.value = false
   }
 
+  async function saveProgram(payload: loyaltyApi.UpsertProgramPayload) {
+    savingProgram.value = true
+    error.value = null
+    try {
+      const updated = await loyaltyApi.saveProgram(payload)
+      program.value = updated
+      tiers.value = parseTiers(updated?.tierConfig)
+      emitTelemetryEvent('update_loyalty_program', { programId: updated.id })
+      return updated
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to save program'
+      throw err
+    } finally {
+      savingProgram.value = false
+    }
+  }
+
   return {
     program,
     tiers,
@@ -111,10 +129,12 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     loading,
     error,
     sseConnected,
+    savingProgram,
     loadProgram,
     lookupMember,
     adjustPoints,
     connectSSE,
     disconnectSSE,
+    saveProgram,
   }
 })

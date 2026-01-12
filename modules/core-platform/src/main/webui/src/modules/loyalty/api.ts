@@ -14,6 +14,19 @@ export interface LoyaltyProgramResponse {
   metadata?: Record<string, any>
 }
 
+export interface UpsertProgramPayload {
+  name: string
+  description?: string
+  enabled: boolean
+  pointsPerDollar: number
+  redemptionValuePerPoint: number
+  minRedemptionPoints: number
+  maxRedemptionPoints?: number | null
+  pointsExpirationDays?: number | null
+  tiers: { name: string; minPoints: number; multiplier: number }[]
+  metadata?: Record<string, any>
+}
+
 export interface LoyaltyMemberResponse {
   id: string
   userId: string
@@ -48,6 +61,10 @@ export async function getTransactions(userId: string): Promise<LoyaltyTransactio
 
 export async function adjustPoints(userId: string, points: number, reason: string) {
   return apiClient.post(`/admin/loyalty/adjust/${userId}`, { points, reason })
+}
+
+export async function saveProgram(payload: UpsertProgramPayload): Promise<LoyaltyProgramResponse> {
+  return apiClient.put('/admin/loyalty/program', payload)
 }
 
 export function connectLoyaltySSE(onEvent: () => void, onError?: (err: Error) => void) {

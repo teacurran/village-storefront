@@ -1,5 +1,7 @@
 package villagecompute.storefront.api.rest;
 
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -35,6 +37,7 @@ import villagecompute.storefront.api.types.UpsertLoyaltyProgramRequest;
 import villagecompute.storefront.data.models.LoyaltyMember;
 import villagecompute.storefront.data.models.LoyaltyProgram;
 import villagecompute.storefront.data.models.LoyaltyTransaction;
+import villagecompute.storefront.loyalty.CartLoyaltyProjection;
 import villagecompute.storefront.loyalty.LoyaltyMapper;
 import villagecompute.storefront.loyalty.LoyaltyService;
 import villagecompute.storefront.tenant.TenantContext;
@@ -210,6 +213,87 @@ public class LoyaltyResource {
     }
 
     /**
+     * Create a redemption reservation for cart checkout.
+     *
+     * @param userId
+     *            user UUID
+     * @param cartId
+     *            cart UUID
+     * @param request
+     *            reservation request
+     * @return reservation details
+     */
+    @POST
+    @Path("/loyalty/reservations/{userId}/{cartId}")
+    public Response createReservation(@PathParam("userId") UUID userId, @PathParam("cartId") UUID cartId,
+            @Valid RedeemPointsRequest request, @HeaderParam("X-Idempotency-Key") String idempotencyKeyHeader) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /loyalty/reservations/%s/%s - tenantId=%s, points=%d", userId, cartId, tenantId,
+                request.pointsToRedeem);
+
+        String idempotencyKey = resolveIdempotencyKey(request, idempotencyKeyHeader);
+        if (idempotencyKey == null) {
+            return Response.status(Status.BAD_REQUEST).entity(createError("Idempotency key is required")).build();
+        }
+
+        try {
+            villagecompute.storefront.data.models.LoyaltyRedemptionReservation reservation = loyaltyService
+                    .createReservation(userId, cartId, request.pointsToRedeem, idempotencyKey);
+            ReservationDto dto = new ReservationDto(reservation.id, reservation.pointsReserved, reservation.status,
+                    reservation.expiresAt);
+            return Response.status(Status.CREATED).entity(dto).build();
+        } catch (IllegalStateException e) {
+            return Response.status(Status.BAD_REQUEST).entity(createError(e.getMessage())).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Status.BAD_REQUEST).entity(createError(e.getMessage())).build();
+        }
+    }
+
+    /**
+     * Release a redemption reservation.
+     *
+     * @param reservationId
+     *            reservation UUID
+     * @return success response
+     */
+    @POST
+    @Path("/loyalty/reservations/{reservationId}/release")
+    public Response releaseReservation(@PathParam("reservationId") UUID reservationId) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /loyalty/reservations/%s/release - tenantId=%s", reservationId, tenantId);
+
+        try {
+            loyaltyService.releaseReservation(reservationId, "Manually released");
+            return Response.ok(new SuccessResponse("Reservation released")).build();
+        } catch (Exception e) {
+            return Response.status(Status.BAD_REQUEST).entity(createError(e.getMessage())).build();
+        }
+    }
+
+    /**
+     * Get cart loyalty summary including available balance and redemption preview.
+     *
+     * @param userId
+     *            user UUID (optional)
+     * @param subtotal
+     *            cart subtotal
+     * @return cart loyalty summary
+     */
+    @GET
+    @Path("/loyalty/cart/summary")
+    public Response getCartSummary(@QueryParam("userId") UUID userId, @QueryParam("subtotal") BigDecimal subtotal) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("GET /loyalty/cart/summary - tenantId=%s, userId=%s, subtotal=%s", tenantId, userId, subtotal);
+
+        try {
+            CartLoyaltyProjection projection = loyaltyService.calculateCartSummary(subtotal, userId);
+            return Response.ok(projection).build();
+        } catch (Exception e) {
+            return Response.status(Status.BAD_REQUEST).entity(createError(e.getMessage())).build();
+        }
+    }
+
+    /**
      * Admin: Adjust points for user.
      *
      * @param userId
@@ -322,6 +406,28 @@ public class LoyaltyResource {
 
         public ErrorResponse(String error) {
             this.error = error;
+        }
+    }
+
+    public static class SuccessResponse {
+        public String message;
+
+        public SuccessResponse(String message) {
+            this.message = message;
+        }
+    }
+
+    public static class ReservationDto {
+        public UUID id;
+        public Integer pointsReserved;
+        public String status;
+        public OffsetDateTime expiresAt;
+
+        public ReservationDto(UUID id, Integer pointsReserved, String status, OffsetDateTime expiresAt) {
+            this.id = id;
+            this.pointsReserved = pointsReserved;
+            this.status = status;
+            this.expiresAt = expiresAt;
         }
     }
 }

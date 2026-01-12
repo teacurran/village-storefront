@@ -3043,6 +3043,113 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
 
+  /loyalty/reservations/{userId}/{cartId}:
+    post:
+      operationId: createLoyaltyReservation
+      summary: Create a loyalty reservation for a cart
+      description: |
+        Reserves points for an in-flight checkout so balances remain accurate while payment authorization completes.
+        Requires the same `X-Idempotency-Key` header used for redemption to avoid duplicate holds.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cartId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemPointsRequest'
+      responses:
+        '201':
+          description: Reservation created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyReservationResponse'
+        '400':
+          description: Reservation failed (insufficient balance, missing header, or invalid request)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/reservations/{reservationId}/release:
+    post:
+      operationId: releaseLoyaltyReservation
+      summary: Release a loyalty reservation
+      description: |
+        Allows the storefront to return reserved points when the shopper abandons checkout after a hold was placed.
+      tags: [Storefront]
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reservation released successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Reservation could not be released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /loyalty/cart/summary:
+    get:
+      operationId: getCartLoyaltySummary
+      summary: Retrieve loyalty summary for a cart
+      description: |
+        Returns available balance, reservation-adjusted redemption limits, and expiration warnings so the storefront can
+        render cart redemption controls.
+      tags: [Storefront]
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Optional user identifier for authenticated carts
+        - name: subtotal
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+          description: Subtotal used to calculate estimated earnings
+      responses:
+        '200':
+          description: Summary calculated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartLoyaltySummary'
+        '400':
+          description: Unable to calculate loyalty summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
   /loyalty/transactions/{userId}:
     get:
       operationId: listLoyaltyTransactions
@@ -5901,6 +6008,16 @@ components:
           minimum: 0
           nullable: true
           description: Current balance for the authenticated user (null for guests)
+        availablePointsBalance:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Current balance after subtracting active reservations
+        reservedPoints:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Points currently held by pending reservations
         estimatedPointsEarned:
           type: integer
           minimum: 0
@@ -5909,14 +6026,30 @@ components:
           $ref: '#/components/schemas/Money'
         availableRedemptionValue:
           $ref: '#/components/schemas/Money'
+        redemptionValuePerPoint:
+          type: string
+          nullable: true
+          description: Monetary value of a single point (e.g., "0.01" for $0.01)
         currentTier:
           type: string
           nullable: true
           description: Tier name resolved from the tenant's tier configuration
+        pointsExpirationWarning:
+          type: string
+          format: date-time
+          nullable: true
+          description: Indicates when the next block of points will expire
+        dataFreshnessTimestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp indicating when the loyalty data was last refreshed
       example:
         programEnabled: true
         programId: "b52ad1ef-8c65-4e5f-a0da-820f1be4e6a3"
         memberPointsBalance: 125
+        availablePointsBalance: 100
+        reservedPoints: 25
         estimatedPointsEarned: 55
         estimatedRewardValue:
           amount: "5.50"
@@ -5924,12 +6057,44 @@ components:
         availableRedemptionValue:
           amount: "10.00"
           currency: "USD"
+        redemptionValuePerPoint: "0.01"
         currentTier: "Gold"
-        dataFreshnessTimestamp:
+        pointsExpirationWarning: "2026-02-01T00:00:00Z"
+        dataFreshnessTimestamp: "2026-01-12T04:10:00Z"
+
+    LoyaltyReservationResponse:
+      type: object
+      required:
+        - id
+        - pointsReserved
+        - status
+        - expiresAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        pointsReserved:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active, released, expired, consumed]
+        expiresAt:
           type: string
           format: date-time
-          nullable: true
-          description: Timestamp indicating when the loyalty data was last refreshed
+      example:
+        id: "e8f4ad13-d5c7-4d42-8d35-6e7a5dbacaa4"
+        pointsReserved: 150
+        status: "active"
+        expiresAt: "2026-01-12T04:40:00Z"
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      example:
+        message: "Reservation released"
 
     LoyaltyProgram:
       type: object

@@ -120,10 +120,14 @@ public class CartMapper {
         summary.setProgramEnabled(projection.isProgramEnabled());
         summary.setProgramId(projection.getProgramId());
         summary.setMemberPointsBalance(projection.getMemberPointsBalance());
+        summary.setAvailablePointsBalance(projection.getAvailablePointsBalance());
+        summary.setReservedPoints(projection.getReservedPoints());
         summary.setEstimatedPointsEarned(projection.getEstimatedPointsEarned());
         summary.setEstimatedRewardValue(toMoney(projection.getEstimatedRewardValue()));
         summary.setAvailableRedemptionValue(toMoney(projection.getAvailableRedemptionValue()));
+        summary.setRedemptionValuePerPoint(toPlainString(projection.getRedemptionValuePerPoint()));
         summary.setCurrentTier(projection.getCurrentTier());
+        summary.setPointsExpirationWarning(projection.getPointsExpirationWarning());
         summary.setDataFreshnessTimestamp(projection.getDataFreshnessTimestamp());
         cartService.storeLoyaltySnapshot(cart.id, loyaltySnapshotFromSummary(summary));
         return summary;
@@ -158,10 +162,21 @@ public class CartMapper {
         summary.setProgramId(snapshot.get("programId") instanceof UUID uuid ? uuid
                 : snapshot.get("programId") instanceof String str && !str.isBlank() ? UUID.fromString(str) : null);
         summary.setMemberPointsBalance(toInteger(snapshot.get("memberPointsBalance")));
+        summary.setAvailablePointsBalance(toInteger(snapshot.get("availablePointsBalance")));
+        summary.setReservedPoints(toInteger(snapshot.get("reservedPoints")));
         summary.setEstimatedPointsEarned(toInteger(snapshot.get("estimatedPointsEarned")));
         summary.setEstimatedRewardValue(toMoney(convertToBigDecimal(snapshot.get("estimatedRewardValue"))));
         summary.setAvailableRedemptionValue(toMoney(convertToBigDecimal(snapshot.get("availableRedemptionValue"))));
+        summary.setRedemptionValuePerPoint(
+                snapshot.get("redemptionValuePerPoint") != null ? snapshot.get("redemptionValuePerPoint").toString()
+                        : null);
         summary.setCurrentTier(snapshot.get("currentTier") != null ? snapshot.get("currentTier").toString() : null);
+        Object expiration = snapshot.get("pointsExpirationWarning");
+        if (expiration instanceof OffsetDateTime warning) {
+            summary.setPointsExpirationWarning(warning);
+        } else if (expiration instanceof String warningStr && !warningStr.isBlank()) {
+            summary.setPointsExpirationWarning(OffsetDateTime.parse(warningStr));
+        }
         Object freshness = snapshot.get("dataFreshnessTimestamp");
         if (freshness instanceof OffsetDateTime time) {
             summary.setDataFreshnessTimestamp(time);
@@ -176,13 +191,17 @@ public class CartMapper {
         snapshot.put("programEnabled", summary.isProgramEnabled());
         snapshot.put("programId", summary.getProgramId());
         snapshot.put("memberPointsBalance", summary.getMemberPointsBalance());
+        snapshot.put("availablePointsBalance", summary.getAvailablePointsBalance());
+        snapshot.put("reservedPoints", summary.getReservedPoints());
         snapshot.put("estimatedPointsEarned", summary.getEstimatedPointsEarned());
         snapshot.put("estimatedRewardValue",
                 summary.getEstimatedRewardValue() != null ? summary.getEstimatedRewardValue().getAmount() : null);
         snapshot.put("availableRedemptionValue",
                 summary.getAvailableRedemptionValue() != null ? summary.getAvailableRedemptionValue().getAmount()
                         : null);
+        snapshot.put("redemptionValuePerPoint", summary.getRedemptionValuePerPoint());
         snapshot.put("currentTier", summary.getCurrentTier());
+        snapshot.put("pointsExpirationWarning", summary.getPointsExpirationWarning());
         snapshot.put("dataFreshnessTimestamp", summary.getDataFreshnessTimestamp());
         return snapshot;
     }
@@ -211,5 +230,9 @@ public class CartMapper {
             return new BigDecimal(str);
         }
         return BigDecimal.ZERO;
+    }
+
+    private String toPlainString(BigDecimal value) {
+        return value != null ? value.stripTrailingZeros().toPlainString() : null;
     }
 }

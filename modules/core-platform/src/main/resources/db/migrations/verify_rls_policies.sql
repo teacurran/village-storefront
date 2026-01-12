@@ -57,7 +57,7 @@ WHERE schemaname = 'public'
     -- Consignment module
     'consignors', 'consignment_items', 'payout_batches', 'payout_line_items',
     -- Loyalty module
-    'loyalty_programs', 'loyalty_members', 'loyalty_transactions'
+    'loyalty_programs', 'loyalty_members', 'loyalty_transactions', 'loyalty_redemption_reservations'
   )
 ORDER BY tablename;
 

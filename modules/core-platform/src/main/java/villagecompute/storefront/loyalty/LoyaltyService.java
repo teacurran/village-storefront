@@ -23,10 +23,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import villagecompute.storefront.data.models.LoyaltyMember;
 import villagecompute.storefront.data.models.LoyaltyProgram;
+import villagecompute.storefront.data.models.LoyaltyRedemptionReservation;
 import villagecompute.storefront.data.models.LoyaltyTransaction;
 import villagecompute.storefront.data.models.User;
 import villagecompute.storefront.data.repositories.LoyaltyMemberRepository;
 import villagecompute.storefront.data.repositories.LoyaltyProgramRepository;
+import villagecompute.storefront.data.repositories.LoyaltyRedemptionReservationRepository;
 import villagecompute.storefront.data.repositories.LoyaltyTransactionRepository;
 import villagecompute.storefront.services.ReportingProjectionService;
 import villagecompute.storefront.tenant.TenantContext;
@@ -74,6 +76,9 @@ public class LoyaltyService {
 
     @Inject
     LoyaltyTransactionRepository transactionRepository;
+
+    @Inject
+    LoyaltyRedemptionReservationRepository reservationRepository;
 
     @Inject
     MeterRegistry meterRegistry;
@@ -661,6 +666,201 @@ public class LoyaltyService {
     }
 
     // ========================================
+    // Redemption Reservations
+    // ========================================
+
+    /**
+     * Create a redemption reservation for cart checkout.
+     *
+     * @param userId
+     *            user UUID
+     * @param cartId
+     *            cart UUID
+     * @param pointsToReserve
+     *            points to reserve
+     * @param idempotencyKey
+     *            idempotency key
+     * @return reservation record
+     */
+    @Transactional
+    public LoyaltyRedemptionReservation createReservation(UUID userId, UUID cartId, int pointsToReserve,
+            String idempotencyKey) {
+        Objects.requireNonNull(userId, "User ID is required");
+        Objects.requireNonNull(cartId, "Cart ID is required");
+        Objects.requireNonNull(idempotencyKey, "Idempotency key is required");
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Creating loyalty reservation - tenantId=%s, userId=%s, cartId=%s, points=%d", tenantId, userId,
+                cartId, pointsToReserve);
+
+        if (pointsToReserve <= 0) {
+            throw new IllegalArgumentException("Points to reserve must be positive");
+        }
+
+        // Check for duplicate reservation
+        Optional<LoyaltyRedemptionReservation> existing = reservationRepository.findByIdempotencyKey(idempotencyKey);
+        if (existing.isPresent()) {
+            LOG.infof("Duplicate reservation detected - tenantId=%s, idempotencyKey=%s, reservationId=%s", tenantId,
+                    idempotencyKey, existing.get().id);
+            return existing.get();
+        }
+
+        // Get member
+        LoyaltyMember member = getMemberByUser(userId)
+                .orElseThrow(() -> new IllegalStateException("User not enrolled in loyalty program"));
+
+        LoyaltyProgram program = member.program;
+        ensureProgramEnabled(program);
+
+        // Check available balance (current balance minus active reservations)
+        int availableBalance = getAvailableBalance(member);
+        if (pointsToReserve > availableBalance) {
+            throw new IllegalArgumentException("Insufficient available points balance (after active reservations)");
+        }
+
+        // Release any existing active reservation for this cart
+        Optional<LoyaltyRedemptionReservation> existingCartReservation = reservationRepository.findActiveByCart(cartId);
+        if (existingCartReservation.isPresent()) {
+            releaseReservation(existingCartReservation.get().id, "Replaced by new reservation");
+        }
+
+        // Create reservation
+        LoyaltyRedemptionReservation reservation = new LoyaltyRedemptionReservation();
+        reservation.member = member;
+        reservation.cartId = cartId;
+        reservation.pointsReserved = pointsToReserve;
+        reservation.status = "active";
+        reservation.idempotencyKey = idempotencyKey;
+        // Default 15-minute expiration set in prePersist
+
+        reservationRepository.persist(reservation);
+
+        LOG.infof("Reservation created - tenantId=%s, userId=%s, cartId=%s, reservationId=%s, points=%d", tenantId,
+                userId, cartId, reservation.id, pointsToReserve);
+        meterRegistry.counter("loyalty.reservation.created", "tenant_id", tenantId.toString()).increment();
+
+        return reservation;
+    }
+
+    /**
+     * Release a redemption reservation.
+     *
+     * @param reservationId
+     *            reservation UUID
+     * @param reason
+     *            release reason
+     */
+    @Transactional
+    public void releaseReservation(UUID reservationId, String reason) {
+        Objects.requireNonNull(reservationId, "Reservation ID is required");
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Releasing loyalty reservation - tenantId=%s, reservationId=%s, reason=%s", tenantId, reservationId,
+                reason);
+
+        LoyaltyRedemptionReservation reservation = reservationRepository.findById(reservationId);
+        if (reservation == null) {
+            LOG.warnf("Reservation not found - tenantId=%s, reservationId=%s", tenantId, reservationId);
+            return;
+        }
+
+        if ("released".equals(reservation.status) || "expired".equals(reservation.status)
+                || "consumed".equals(reservation.status)) {
+            LOG.debugf("Reservation already finalized - tenantId=%s, reservationId=%s, status=%s", tenantId,
+                    reservationId, reservation.status);
+            return;
+        }
+
+        reservation.status = "released";
+        reservationRepository.persist(reservation);
+
+        LOG.infof("Reservation released - tenantId=%s, reservationId=%s", tenantId, reservationId);
+        meterRegistry.counter("loyalty.reservation.released", "tenant_id", tenantId.toString()).increment();
+    }
+
+    /**
+     * Consume a reservation during checkout.
+     *
+     * @param reservationId
+     *            reservation UUID
+     * @param orderId
+     *            order UUID
+     */
+    @Transactional
+    public void consumeReservation(UUID reservationId, UUID orderId) {
+        Objects.requireNonNull(reservationId, "Reservation ID is required");
+        Objects.requireNonNull(orderId, "Order ID is required");
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Consuming loyalty reservation - tenantId=%s, reservationId=%s, orderId=%s", tenantId, reservationId,
+                orderId);
+
+        LoyaltyRedemptionReservation reservation = reservationRepository.findById(reservationId);
+        if (reservation == null) {
+            throw new IllegalArgumentException("Reservation not found");
+        }
+
+        if (!"active".equals(reservation.status)) {
+            throw new IllegalStateException("Reservation is not active");
+        }
+
+        if (reservation.expiresAt.isBefore(OffsetDateTime.now())) {
+            throw new IllegalStateException("Reservation has expired");
+        }
+
+        reservation.status = "consumed";
+        reservation.orderId = orderId;
+        reservationRepository.persist(reservation);
+
+        LOG.infof("Reservation consumed - tenantId=%s, reservationId=%s, orderId=%s", tenantId, reservationId, orderId);
+        meterRegistry.counter("loyalty.reservation.consumed", "tenant_id", tenantId.toString()).increment();
+    }
+
+    /**
+     * Get available points balance for member (current balance minus active reservations).
+     *
+     * @param member
+     *            loyalty member
+     * @return available points
+     */
+    @Transactional(TxType.SUPPORTS)
+    public int getAvailableBalance(LoyaltyMember member) {
+        Objects.requireNonNull(member, "Member is required");
+        int reservedPoints = reservationRepository.calculateReservedPoints(member.id);
+        return Math.max(0, (member.pointsBalance != null ? member.pointsBalance : 0) - reservedPoints);
+    }
+
+    /**
+     * Expire reservations past their expiration date.
+     *
+     * @param cutoffDate
+     *            cutoff timestamp
+     * @return number of reservations expired
+     */
+    @Transactional
+    public int expireReservations(OffsetDateTime cutoffDate) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("Expiring reservations - tenantId=%s, cutoffDate=%s", tenantId, cutoffDate);
+
+        final int batchSize = 500;
+        int expiredCount = 0;
+        while (true) {
+            List<LoyaltyRedemptionReservation> expiringReservations = reservationRepository.findExpired(cutoffDate, 0,
+                    batchSize);
+            if (expiringReservations.isEmpty()) {
+                break;
+            }
+            for (LoyaltyRedemptionReservation reservation : expiringReservations) {
+                reservation.status = "expired";
+                reservationRepository.persist(reservation);
+                expiredCount++;
+            }
+        }
+
+        LOG.infof("Reservations expired - tenantId=%s, reservationsExpired=%d", tenantId, expiredCount);
+        meterRegistry.counter("loyalty.reservation.expired", "tenant_id", tenantId.toString()).increment(expiredCount);
+
+        return expiredCount;
+    }
+
+    // ========================================
     // Helper Methods
     // ========================================
 
@@ -756,6 +956,7 @@ public class LoyaltyService {
         LoyaltyProgram program = programOpt.get();
         projection.setProgramId(program.id);
         projection.setDataFreshnessTimestamp(program.updatedAt);
+        projection.setRedemptionValuePerPoint(program.redemptionValuePerPoint);
 
         if (!Boolean.TRUE.equals(program.enabled)) {
             return projection;
@@ -768,11 +969,28 @@ public class LoyaltyService {
         if (member != null) {
             projection.setMemberPointsBalance(member.pointsBalance);
             projection.setCurrentTier(member.currentTier);
-            if (program.redemptionValuePerPoint != null && member.pointsBalance != null) {
-                BigDecimal redeemable = program.redemptionValuePerPoint
-                        .multiply(BigDecimal.valueOf(member.pointsBalance));
+            projection.setRedemptionValuePerPoint(program.redemptionValuePerPoint);
+
+            // Calculate available balance after active reservations
+            int availableBalance = getAvailableBalance(member);
+            int reservedPoints = (member.pointsBalance != null ? member.pointsBalance : 0) - availableBalance;
+            projection.setAvailablePointsBalance(availableBalance);
+            projection.setReservedPoints(reservedPoints);
+
+            // Set available redemption value based on available balance (not total balance)
+            if (program.redemptionValuePerPoint != null && availableBalance > 0) {
+                BigDecimal redeemable = program.redemptionValuePerPoint.multiply(BigDecimal.valueOf(availableBalance));
                 projection.setAvailableRedemptionValue(redeemable);
             }
+
+            // Check for upcoming expirations (within next 30 days)
+            OffsetDateTime thirtyDaysOut = OffsetDateTime.now().plusDays(30);
+            List<LoyaltyTransaction> expiringTransactions = transactionRepository.findExpiringForMember(member.id,
+                    thirtyDaysOut, 0, 1);
+            if (!expiringTransactions.isEmpty()) {
+                projection.setPointsExpirationWarning(expiringTransactions.get(0).expiresAt);
+            }
+
             if (member.updatedAt != null) {
                 projection.setDataFreshnessTimestamp(member.updatedAt);
             }

@@ -17,10 +17,14 @@ public class CartLoyaltyProjection {
     private boolean programEnabled;
     private UUID programId;
     private Integer memberPointsBalance = 0;
+    private Integer availablePointsBalance = 0; // Balance after active reservations
+    private Integer reservedPoints = 0;
     private Integer estimatedPointsEarned = 0;
     private BigDecimal estimatedRewardValue = BigDecimal.ZERO;
     private BigDecimal availableRedemptionValue = BigDecimal.ZERO;
     private String currentTier;
+    private BigDecimal redemptionValuePerPoint = BigDecimal.ZERO;
+    private OffsetDateTime pointsExpirationWarning; // Next expiration date if points will expire soon
     private OffsetDateTime dataFreshnessTimestamp = OffsetDateTime.now();
 
     public boolean isProgramEnabled() {
@@ -45,6 +49,22 @@ public class CartLoyaltyProjection {
 
     public void setMemberPointsBalance(Integer memberPointsBalance) {
         this.memberPointsBalance = memberPointsBalance;
+    }
+
+    public Integer getAvailablePointsBalance() {
+        return availablePointsBalance;
+    }
+
+    public void setAvailablePointsBalance(Integer availablePointsBalance) {
+        this.availablePointsBalance = availablePointsBalance;
+    }
+
+    public Integer getReservedPoints() {
+        return reservedPoints;
+    }
+
+    public void setReservedPoints(Integer reservedPoints) {
+        this.reservedPoints = reservedPoints;
     }
 
     public Integer getEstimatedPointsEarned() {
@@ -77,6 +97,22 @@ public class CartLoyaltyProjection {
 
     public void setCurrentTier(String currentTier) {
         this.currentTier = currentTier;
+    }
+
+    public BigDecimal getRedemptionValuePerPoint() {
+        return redemptionValuePerPoint;
+    }
+
+    public void setRedemptionValuePerPoint(BigDecimal redemptionValuePerPoint) {
+        this.redemptionValuePerPoint = redemptionValuePerPoint;
+    }
+
+    public OffsetDateTime getPointsExpirationWarning() {
+        return pointsExpirationWarning;
+    }
+
+    public void setPointsExpirationWarning(OffsetDateTime pointsExpirationWarning) {
+        this.pointsExpirationWarning = pointsExpirationWarning;
     }
 
     public OffsetDateTime getDataFreshnessTimestamp() {

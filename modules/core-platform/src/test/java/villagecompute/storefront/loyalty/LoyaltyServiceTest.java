@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import villagecompute.storefront.data.models.LoyaltyMember;
 import villagecompute.storefront.data.models.LoyaltyProgram;
+import villagecompute.storefront.data.models.LoyaltyRedemptionReservation;
 import villagecompute.storefront.data.models.LoyaltyTransaction;
 import villagecompute.storefront.data.models.Tenant;
 import villagecompute.storefront.data.models.User;
@@ -371,5 +372,240 @@ class LoyaltyServiceTest {
     void testCalculateRedemptionValue() {
         BigDecimal value = loyaltyService.calculateRedemptionValue(1000);
         assertEquals(new BigDecimal("10.00"), value);
+    }
+
+    // ========================================
+    // Reservation Tests
+    // ========================================
+
+    @Test
+    @Transactional
+    void testCreateReservation() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+        String idempotencyKey = UUID.randomUUID().toString();
+        LoyaltyRedemptionReservation reservation = loyaltyService.createReservation(userId, cartId, 100,
+                idempotencyKey);
+
+        assertNotNull(reservation);
+        assertEquals(100, reservation.pointsReserved);
+        assertEquals("active", reservation.status);
+        assertEquals(cartId, reservation.cartId);
+        assertEquals(idempotencyKey, reservation.idempotencyKey);
+        assertNotNull(reservation.expiresAt);
+    }
+
+    @Test
+    @Transactional
+    void testCreateReservationIdempotent() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        LoyaltyRedemptionReservation reservation1 = loyaltyService.createReservation(userId, cartId, 100,
+                idempotencyKey);
+        LoyaltyRedemptionReservation reservation2 = loyaltyService.createReservation(userId, cartId, 100,
+                idempotencyKey);
+
+        // Should return same reservation
+        assertEquals(reservation1.id, reservation2.id);
+    }
+
+    @Test
+    @Transactional
+    void testCreateReservationInsufficientBalance() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("50.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class, () -> {
+            loyaltyService.createReservation(userId, cartId, 100, UUID.randomUUID().toString());
+        });
+    }
+
+    @Test
+    @Transactional
+    void testCreateReservationReplacesExisting() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+
+        // Create first reservation
+        LoyaltyRedemptionReservation reservation1 = loyaltyService.createReservation(userId, cartId, 50,
+                UUID.randomUUID().toString());
+        assertEquals("active", reservation1.status);
+
+        // Create second reservation for same cart - should release first
+        LoyaltyRedemptionReservation reservation2 = loyaltyService.createReservation(userId, cartId, 100,
+                UUID.randomUUID().toString());
+        assertEquals("active", reservation2.status);
+
+        // Verify first reservation was released
+        entityManager.flush();
+        entityManager.clear();
+        LoyaltyRedemptionReservation updated1 = entityManager.find(LoyaltyRedemptionReservation.class, reservation1.id);
+        assertEquals("released", updated1.status);
+    }
+
+    @Test
+    @Transactional
+    void testGetAvailableBalance() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        Optional<LoyaltyMember> memberOpt = loyaltyService.getMemberByUser(userId);
+        assertTrue(memberOpt.isPresent());
+        LoyaltyMember member = memberOpt.get();
+
+        // No reservations - should equal balance
+        int availableBalance = loyaltyService.getAvailableBalance(member);
+        assertEquals(200, availableBalance);
+
+        // Create reservation
+        UUID cartId = UUID.randomUUID();
+        loyaltyService.createReservation(userId, cartId, 100, UUID.randomUUID().toString());
+
+        // Available balance should be reduced
+        availableBalance = loyaltyService.getAvailableBalance(member);
+        assertEquals(100, availableBalance);
+    }
+
+    @Test
+    @Transactional
+    void testReleaseReservation() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+        LoyaltyRedemptionReservation reservation = loyaltyService.createReservation(userId, cartId, 100,
+                UUID.randomUUID().toString());
+        assertEquals("active", reservation.status);
+
+        loyaltyService.releaseReservation(reservation.id, "Test release");
+
+        entityManager.flush();
+        entityManager.clear();
+        LoyaltyRedemptionReservation updated = entityManager.find(LoyaltyRedemptionReservation.class, reservation.id);
+        assertEquals("released", updated.status);
+    }
+
+    @Test
+    @Transactional
+    void testConsumeReservation() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        LoyaltyRedemptionReservation reservation = loyaltyService.createReservation(userId, cartId, 100,
+                UUID.randomUUID().toString());
+
+        loyaltyService.consumeReservation(reservation.id, orderId);
+
+        entityManager.flush();
+        entityManager.clear();
+        LoyaltyRedemptionReservation updated = entityManager.find(LoyaltyRedemptionReservation.class, reservation.id);
+        assertEquals("consumed", updated.status);
+        assertEquals(orderId, updated.orderId);
+    }
+
+    @Test
+    @Transactional
+    void testConsumeReservationFailsIfExpired() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        UUID cartId = UUID.randomUUID();
+        LoyaltyRedemptionReservation reservation = loyaltyService.createReservation(userId, cartId, 100,
+                UUID.randomUUID().toString());
+
+        // Manually expire reservation
+        reservation.expiresAt = OffsetDateTime.now().minusMinutes(1);
+        entityManager.persist(reservation);
+        entityManager.flush();
+
+        UUID orderId = UUID.randomUUID();
+        assertThrows(IllegalStateException.class, () -> {
+            loyaltyService.consumeReservation(reservation.id, orderId);
+        });
+    }
+
+    @Test
+    @Transactional
+    void testExpireReservations() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        // Create reservation with past expiration
+        UUID cartId = UUID.randomUUID();
+        LoyaltyRedemptionReservation reservation = loyaltyService.createReservation(userId, cartId, 100,
+                UUID.randomUUID().toString());
+        reservation.expiresAt = OffsetDateTime.now().minusMinutes(1);
+        entityManager.persist(reservation);
+        entityManager.flush();
+
+        // Run expiration job
+        int expiredCount = loyaltyService.expireReservations(OffsetDateTime.now());
+
+        assertEquals(1, expiredCount);
+
+        entityManager.clear();
+        LoyaltyRedemptionReservation updated = entityManager.find(LoyaltyRedemptionReservation.class, reservation.id);
+        assertEquals("expired", updated.status);
+    }
+
+    @Test
+    @Transactional
+    void testCalculateCartSummaryIncludesReservations() {
+        loyaltyService.enrollMember(userId);
+        loyaltyService.awardPointsForPurchase(userId, new BigDecimal("200.00"), UUID.randomUUID()).orElseThrow();
+
+        // Create reservation
+        UUID cartId = UUID.randomUUID();
+        loyaltyService.createReservation(userId, cartId, 100, UUID.randomUUID().toString());
+
+        CartLoyaltyProjection projection = loyaltyService.calculateCartSummary(new BigDecimal("50.00"), userId);
+
+        assertTrue(projection.isProgramEnabled());
+        assertEquals(200, projection.getMemberPointsBalance());
+        assertEquals(100, projection.getAvailablePointsBalance());
+        assertEquals(100, projection.getReservedPoints());
+        LoyaltyProgram program = loyaltyService.getProgramForTenant().orElseThrow();
+        assertEquals(program.redemptionValuePerPoint, projection.getRedemptionValuePerPoint());
+    }
+
+    @Test
+    @Transactional
+    void testCalculateCartSummaryIncludesExpirationWarning() {
+        loyaltyService.enrollMember(userId);
+
+        // Award points with expiration
+        Optional<LoyaltyMember> memberOpt = loyaltyService.getMemberByUser(userId);
+        assertTrue(memberOpt.isPresent());
+        LoyaltyMember member = memberOpt.get();
+
+        LoyaltyTransaction transaction = new LoyaltyTransaction();
+        transaction.member = member;
+        transaction.pointsDelta = 100;
+        transaction.balanceAfter = 100;
+        transaction.transactionType = "earned";
+        transaction.reason = "Test";
+        transaction.source = "test";
+        transaction.expiresAt = OffsetDateTime.now().plusDays(15); // Within 30-day window
+        entityManager.persist(transaction);
+
+        member.pointsBalance = 100;
+        member.lifetimePointsEarned = 100;
+        entityManager.persist(member);
+        entityManager.flush();
+
+        CartLoyaltyProjection projection = loyaltyService.calculateCartSummary(new BigDecimal("50.00"), userId);
+
+        assertNotNull(projection.getPointsExpirationWarning());
     }
 }

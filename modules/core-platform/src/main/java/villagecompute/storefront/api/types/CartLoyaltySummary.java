@@ -19,6 +19,12 @@ public class CartLoyaltySummary {
     @JsonProperty("memberPointsBalance")
     private Integer memberPointsBalance;
 
+    @JsonProperty("availablePointsBalance")
+    private Integer availablePointsBalance;
+
+    @JsonProperty("reservedPoints")
+    private Integer reservedPoints;
+
     @JsonProperty("estimatedPointsEarned")
     private Integer estimatedPointsEarned;
 
@@ -28,11 +34,17 @@ public class CartLoyaltySummary {
     @JsonProperty("availableRedemptionValue")
     private Money availableRedemptionValue;
 
+    @JsonProperty("redemptionValuePerPoint")
+    private String redemptionValuePerPoint;
+
     @JsonProperty("currentTier")
     private String currentTier;
 
     @JsonProperty("dataFreshnessTimestamp")
     private OffsetDateTime dataFreshnessTimestamp;
+
+    @JsonProperty("pointsExpirationWarning")
+    private OffsetDateTime pointsExpirationWarning;
 
     public boolean isProgramEnabled() {
         return programEnabled;
@@ -56,6 +68,22 @@ public class CartLoyaltySummary {
 
     public void setMemberPointsBalance(Integer memberPointsBalance) {
         this.memberPointsBalance = memberPointsBalance;
+    }
+
+    public Integer getAvailablePointsBalance() {
+        return availablePointsBalance;
+    }
+
+    public void setAvailablePointsBalance(Integer availablePointsBalance) {
+        this.availablePointsBalance = availablePointsBalance;
+    }
+
+    public Integer getReservedPoints() {
+        return reservedPoints;
+    }
+
+    public void setReservedPoints(Integer reservedPoints) {
+        this.reservedPoints = reservedPoints;
     }
 
     public Integer getEstimatedPointsEarned() {
@@ -82,6 +110,14 @@ public class CartLoyaltySummary {
         this.availableRedemptionValue = availableRedemptionValue;
     }
 
+    public String getRedemptionValuePerPoint() {
+        return redemptionValuePerPoint;
+    }
+
+    public void setRedemptionValuePerPoint(String redemptionValuePerPoint) {
+        this.redemptionValuePerPoint = redemptionValuePerPoint;
+    }
+
     public String getCurrentTier() {
         return currentTier;
     }
@@ -96,5 +132,13 @@ public class CartLoyaltySummary {
 
     public void setDataFreshnessTimestamp(OffsetDateTime dataFreshnessTimestamp) {
         this.dataFreshnessTimestamp = dataFreshnessTimestamp;
+    }
+
+    public OffsetDateTime getPointsExpirationWarning() {
+        return pointsExpirationWarning;
+    }
+
+    public void setPointsExpirationWarning(OffsetDateTime pointsExpirationWarning) {
+        this.pointsExpirationWarning = pointsExpirationWarning;
     }
 }

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<body>
+{#if loyaltySummary.programEnabled}
+<div class="loyalty-panel" data-component="loyalty-panel">
+    <div class="loyalty-header">
+        <h3 class="loyalty-title">Loyalty Rewards</h3>
+        {#if loyaltySummary.currentTier}
+        <span class="loyalty-tier-badge" data-tier="{loyaltySummary.currentTier}">
+            {loyaltySummary.currentTier}
+        </span>
+        {/if}
+    </div>
+
+    {#if userId}
+    <div class="loyalty-balance">
+        <div class="balance-row">
+            <span class="balance-label">Available Points:</span>
+            <span class="balance-value">{loyaltySummary.availablePointsBalance ?: 0}</span>
+        </div>
+        {#if loyaltySummary.reservedPoints > 0}
+        <div class="balance-row reserved">
+            <span class="balance-label">Reserved:</span>
+            <span class="balance-value">-{loyaltySummary.reservedPoints}</span>
+        </div>
+        {/if}
+        {#if loyaltySummary.availableRedemptionValue}
+        <div class="balance-row redemption-value">
+            <span class="balance-label">Redemption Value:</span>
+            <span class="balance-value">
+                {#if loyaltySummary.availableRedemptionValue.currency == 'USD'}${/if}{loyaltySummary.availableRedemptionValue.amount}
+                {#if loyaltySummary.availableRedemptionValue.currency && loyaltySummary.availableRedemptionValue.currency != 'USD'}
+                {loyaltySummary.availableRedemptionValue.currency}
+                {/if}
+            </span>
+        </div>
+        {/if}
+    </div>
+
+    {#if loyaltySummary.pointsExpirationWarning}
+    <div class="loyalty-warning">
+        <i class="icon-warning"></i>
+        <span>Points expiring on {loyaltySummary.pointsExpirationWarning}</span>
+    </div>
+    {/if}
+
+    {#if cartSubtotal && loyaltySummary.availablePointsBalance > 0}
+    <div class="loyalty-redemption">
+        <h4 class="redemption-title">Redeem Points at Checkout</h4>
+        <p class="redemption-hint">
+            Use up to {loyaltySummary.availablePointsBalance} points
+            ({#if loyaltySummary.availableRedemptionValue.currency == 'USD'}${/if}{loyaltySummary.availableRedemptionValue.amount}
+            {#if loyaltySummary.availableRedemptionValue.currency && loyaltySummary.availableRedemptionValue.currency != 'USD'}
+            {loyaltySummary.availableRedemptionValue.currency}
+            {/if} discount)
+        </p>
+        <div class="redemption-slider-container">
+            <input
+                type="range"
+                id="loyalty-redemption-slider"
+                class="redemption-slider"
+                min="0"
+                max="{loyaltySummary.availablePointsBalance}"
+                value="0"
+                step="1"
+                data-redemption-value-per-point="{loyaltySummary.redemptionValuePerPoint != null ? loyaltySummary.redemptionValuePerPoint : 0.01}"
+                data-currency="{loyaltySummary.availableRedemptionValue != null ? loyaltySummary.availableRedemptionValue.currency : 'USD'}"
+            />
+            <div class="redemption-display">
+                <span id="redemption-points-display">0</span> points =
+                <span id="redemption-value-display">$0.00</span>
+            </div>
+        </div>
+        <input type="hidden" id="loyalty-redemption-points" name="loyaltyPoints" value="0" />
+    </div>
+    {/if}
+    {#else}
+    <div class="loyalty-guest-message">
+        <p>Sign in to access your loyalty rewards</p>
+        <a href="/login?returnTo=/cart" class="btn-link">Sign In</a>
+    </div>
+    {/if}
+
+    {#if loyaltySummary.estimatedPointsEarned > 0}
+    <div class="loyalty-earn-preview">
+        <i class="icon-star"></i>
+        <span>You'll earn <strong>{loyaltySummary.estimatedPointsEarned} points</strong> on this order</span>
+        {#if loyaltySummary.estimatedRewardValue}
+        <span class="earn-value">(~${loyaltySummary.estimatedRewardValue} value)</span>
+        {/if}
+    </div>
+    {/if}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const slider = document.getElementById('loyalty-redemption-slider');
+    const pointsDisplay = document.getElementById('redemption-points-display');
+    const valueDisplay = document.getElementById('redemption-value-display');
+    const hiddenInput = document.getElementById('loyalty-redemption-points');
+
+    if (slider && pointsDisplay && valueDisplay && hiddenInput) {
+        const redemptionValuePerPoint = parseFloat(slider.dataset.redemptionValuePerPoint || '0.01');
+        const currency = slider.dataset.currency || 'USD';
+
+        const resolveCurrencySymbol = (code) => {
+            if (code === 'USD') return '$';
+            if (code === 'EUR') return '€';
+            if (code === 'GBP') return '£';
+            return code + ' ';
+        };
+        const currencySymbol = resolveCurrencySymbol(currency);
+
+        slider.addEventListener('input', function() {
+            const points = parseInt(this.value);
+            const value = (points * redemptionValuePerPoint).toFixed(2);
+
+            pointsDisplay.textContent = points;
+            valueDisplay.textContent = currencySymbol + value;
+            hiddenInput.value = points;
+        });
+    }
+});
+</script>
+
+<style>
+.loyalty-panel {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+}
+
+.loyalty-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.loyalty-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+    color: #333;
+}
+
+.loyalty-tier-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.loyalty-tier-badge[data-tier="Bronze"] {
+    background-color: #cd7f32;
+    color: white;
+}
+
+.loyalty-tier-badge[data-tier="Silver"] {
+    background-color: #c0c0c0;
+    color: #333;
+}
+
+.loyalty-tier-badge[data-tier="Gold"] {
+    background-color: #ffd700;
+    color: #333;
+}
+
+.loyalty-tier-badge[data-tier="Platinum"] {
+    background-color: #e5e4e2;
+    color: #333;
+}
+
+.loyalty-balance {
+    background: white;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.balance-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.balance-row:last-child {
+    margin-bottom: 0;
+}
+
+.balance-row.reserved {
+    color: #999;
+    font-size: 0.875rem;
+}
+
+.balance-row.redemption-value {
+    font-weight: 600;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f0f0f0;
+}
+
+.balance-label {
+    color: #666;
+}
+
+.balance-value {
+    font-weight: 600;
+    color: #333;
+}
+
+.loyalty-warning {
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #856404;
+}
+
+.loyalty-redemption {
+    background: white;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.redemption-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.redemption-hint {
+    font-size: 0.875rem;
+    color: #666;
+    margin: 0 0 1rem 0;
+}
+
+.redemption-slider-container {
+    margin-bottom: 0.75rem;
+}
+
+.redemption-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #e0e0e0;
+    outline: none;
+    margin-bottom: 0.5rem;
+}
+
+.redemption-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+}
+
+.redemption-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #007bff;
+    cursor: pointer;
+    border: none;
+}
+
+.redemption-display {
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #007bff;
+}
+
+.loyalty-guest-message {
+    text-align: center;
+    padding: 1rem;
+    background: white;
+    border-radius: 6px;
+}
+
+.loyalty-guest-message p {
+    margin: 0 0 0.5rem 0;
+    color: #666;
+}
+
+.loyalty-earn-preview {
+    background: #e8f4fd;
+    border: 1px solid #b3d9f2;
+    border-radius: 6px;
+    padding: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    color: #004085;
+}
+
+.loyalty-earn-preview strong {
+    color: #007bff;
+}
+
+.earn-value {
+    color: #666;
+    margin-left: 0.25rem;
+}
+
+.btn-link {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: #007bff;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.btn-link:hover {
+    background-color: #0056b3;
+}
+
+.icon-warning::before {
+    content: "⚠️";
+}
+
+.icon-star::before {
+    content: "⭐";
+}
+</style>
+{/if}
+</body>
+</html>
