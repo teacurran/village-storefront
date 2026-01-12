@@ -1,7 +1,9 @@
 package villagecompute.storefront.api.rest;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,6 +31,7 @@ import villagecompute.storefront.integration.shipping.CarrierRateAdapter;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationRequest;
 import villagecompute.storefront.integration.shipping.CarrierRateAdapter.AddressValidationResult;
 import villagecompute.storefront.services.CheckoutSaga;
+import villagecompute.storefront.services.CheckoutService;
 import villagecompute.storefront.services.ShippingService;
 import villagecompute.storefront.tenant.TenantContext;
 import villagecompute.storefront.util.ProblemDetailsUtil;
@@ -66,6 +69,9 @@ public class CheckoutResource {
 
     @Inject
     CheckoutSaga checkoutSaga;
+
+    @Inject
+    CheckoutService checkoutService;
 
     @Inject
     ShippingService shippingService;
@@ -223,6 +229,138 @@ public class CheckoutResource {
     }
 
     /**
+     * Prepare checkout summary with address validation, shipping options, and totals.
+     *
+     * <p>
+     * Returns comprehensive checkout information for client review before payment commitment. Validates shipping
+     * address, calculates shipping rate options, computes totals with tax and discounts, and optionally reserves
+     * loyalty points.
+     *
+     * <p>
+     * **Feature Flag:** Respects {@code checkout.enabled} and {@code loyalty.enabled} flags.
+     *
+     * <p>
+     * **Authentication:** Optional - supports guest checkout with cart ID only, or authenticated flow with loyalty.
+     *
+     * @param request
+     *            checkout preparation request
+     * @return checkout summary with totals and shipping options
+     */
+    @POST
+    @Path("/prepare")
+    @Operation(
+            summary = "Prepare checkout summary",
+            description = """
+                    Validates shipping address, fetches shipping rate quotes, calculates totals including tax,
+                    and optionally reserves loyalty points. Returns comprehensive summary for client review.
+
+                    **Use Case:** Call this during checkout step 2 (after address entry, before payment).
+                    **Provider:** Uses configured shipping and address validation providers.
+                    **Loyalty:** If user is authenticated and loyalty points requested, provisionally reserves them.
+
+                    **Note:** This endpoint does NOT create orders or charge payments. Use POST /checkout/commit for that.
+                    """)
+    @APIResponses(
+            value = {@APIResponse(
+                    responseCode = "200",
+                    description = "Checkout summary calculated successfully",
+                    content = @Content(
+                            mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "400",
+                            description = "Invalid request (missing cart, invalid address, insufficient loyalty points)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "404",
+                            description = "Cart not found",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON)),
+                    @APIResponse(
+                            responseCode = "500",
+                            description = "Internal server error",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON))})
+    public Response prepareCheckout(@Valid Map<String, Object> request) {
+        UUID tenantId = TenantContext.getCurrentTenantId();
+        LOG.infof("POST /checkout/prepare - tenantId=%s", tenantId);
+
+        try {
+            // Parse request parameters
+            String cartIdStr = (String) request.get("cartId");
+            if (cartIdStr == null || cartIdStr.isBlank()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(ProblemDetailsUtil.badRequest("Cart ID is required")).build();
+            }
+            UUID cartId = UUID.fromString(cartIdStr);
+
+            // Parse shipping address
+            @SuppressWarnings("unchecked")
+            Map<String, Object> shippingAddrMap = (Map<String, Object>) request.get("shippingAddress");
+            if (shippingAddrMap == null) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(ProblemDetailsUtil.badRequest("Shipping address is required")).build();
+            }
+            CheckoutService.CheckoutAddress shippingAddress = parseAddressFromMap(shippingAddrMap);
+
+            // Parse optional origin address (for accurate shipping calculation)
+            CheckoutService.CheckoutAddress originAddress = null;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> originAddrMap = (Map<String, Object>) request.get("originAddress");
+            if (originAddrMap != null) {
+                originAddress = parseAddressFromMap(originAddrMap);
+            }
+
+            // Parse optional user ID for loyalty
+            UUID userId = null;
+            String userIdStr = (String) request.get("userId");
+            if (userIdStr != null && !userIdStr.isBlank()) {
+                userId = UUID.fromString(userIdStr);
+            }
+
+            // Parse optional loyalty points to apply
+            Integer applyLoyaltyPoints = null;
+            Object loyaltyPointsObj = request.get("applyLoyaltyPoints");
+            if (loyaltyPointsObj != null) {
+                applyLoyaltyPoints = loyaltyPointsObj instanceof Integer ? (Integer) loyaltyPointsObj
+                        : Integer.parseInt(loyaltyPointsObj.toString());
+            }
+
+            // Parse optional preferred shipping service
+            String preferredShipping = (String) request.get("preferredShippingService");
+
+            // Build service request
+            CheckoutService.CheckoutPreparationRequest prepRequest = new CheckoutService.CheckoutPreparationRequest(
+                    cartId, shippingAddress, originAddress, userId, applyLoyaltyPoints, preferredShipping,
+                    UUID.randomUUID().toString());
+
+            // Call service
+            CheckoutService.CheckoutSummary summary = checkoutService.prepareCheckout(prepRequest);
+
+            // Build response DTO
+            Map<String, Object> response = buildCheckoutSummaryResponse(summary);
+
+            return Response.ok(response).build();
+
+        } catch (IllegalArgumentException e) {
+            LOG.warnf("Invalid checkout preparation request - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage()))
+                    .build();
+
+        } catch (IllegalStateException e) {
+            LOG.warnf("Checkout preparation failed - tenantId=%s, error=%s", tenantId, e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST).entity(ProblemDetailsUtil.badRequest(e.getMessage()))
+                    .build();
+
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Checkout preparation failed - tenantId=%s", tenantId);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity(ProblemDetailsUtil.internalServerError("Failed to prepare checkout. Please try again."))
+                    .build();
+        }
+    }
+
+    /**
      * Complete checkout and create order.
      *
      * <p>
@@ -352,6 +490,102 @@ public class CheckoutResource {
     // ========================================
     // HELPER METHODS
     // ========================================
+
+    private CheckoutService.CheckoutAddress parseAddressFromMap(Map<String, Object> map) {
+        String street1 = (String) map.get("street1");
+        String street2 = (String) map.get("street2");
+        String city = (String) map.get("city");
+        String state = (String) map.get("state");
+        String postalCode = (String) map.get("postalCode");
+        String country = (String) map.get("country");
+        Boolean residential = map.get("residential") != null ? (Boolean) map.get("residential") : true;
+
+        return new CheckoutService.CheckoutAddress(street1, street2, city, state, postalCode, country, residential);
+    }
+
+    private Map<String, Object> buildCheckoutSummaryResponse(CheckoutService.CheckoutSummary summary) {
+        Map<String, Object> response = new HashMap<>();
+
+        // Cart info
+        response.put("cartId", summary.cartId().toString());
+        response.put("currency", summary.currency());
+        response.put("calculatedAt", summary.calculatedAt().toString());
+
+        // Totals breakdown
+        Map<String, Object> totals = new HashMap<>();
+        totals.put("subtotal", summary.totals().subtotal().toString());
+        totals.put("discount", summary.totals().discount().toString());
+        totals.put("tax", summary.totals().tax().toString());
+        totals.put("shipping", summary.totals().shipping().toString());
+        totals.put("total", summary.totals().total().toString());
+        totals.put("currency", summary.totals().currency());
+        response.put("totals", totals);
+
+        // Shipping options
+        List<Map<String, Object>> shippingOptions = new ArrayList<>();
+        for (CheckoutService.ShippingOption option : summary.shippingOptions()) {
+            Map<String, Object> optionMap = new HashMap<>();
+            optionMap.put("carrierCode", option.carrierCode());
+            optionMap.put("serviceLevel", option.serviceLevel().name());
+            optionMap.put("serviceName", option.serviceName());
+            optionMap.put("cost", option.cost().toString());
+            optionMap.put("currency", option.currency());
+            optionMap.put("estimatedDays", option.estimatedDays());
+            if (option.estimatedDelivery() != null) {
+                optionMap.put("estimatedDelivery", option.estimatedDelivery().toString());
+            }
+            optionMap.put("fallbackUsed", option.fallbackUsed());
+            shippingOptions.add(optionMap);
+        }
+        response.put("shippingOptions", shippingOptions);
+
+        // Selected shipping
+        if (summary.selectedShipping() != null) {
+            Map<String, Object> selected = new HashMap<>();
+            selected.put("carrierCode", summary.selectedShipping().carrierCode());
+            selected.put("serviceLevel", summary.selectedShipping().serviceLevel().name());
+            selected.put("serviceName", summary.selectedShipping().serviceName());
+            selected.put("cost", summary.selectedShipping().cost().toString());
+            selected.put("currency", summary.selectedShipping().currency());
+            selected.put("estimatedDays", summary.selectedShipping().estimatedDays());
+            if (summary.selectedShipping().estimatedDelivery() != null) {
+                selected.put("estimatedDelivery", summary.selectedShipping().estimatedDelivery().toString());
+            }
+            response.put("selectedShipping", selected);
+        }
+
+        // Address validation result
+        Map<String, Object> addressValidation = new HashMap<>();
+        addressValidation.put("status", summary.addressValidation().status().name());
+        if (summary.addressValidation().normalizedAddress() != null) {
+            addressValidation.put("normalizedAddress",
+                    buildAddressMap(summary.addressValidation().normalizedAddress()));
+        }
+        if (summary.addressValidation().warnings() != null && !summary.addressValidation().warnings().isEmpty()) {
+            addressValidation.put("warnings", summary.addressValidation().warnings());
+        }
+        if (summary.addressValidation().errorMessage() != null
+                && !summary.addressValidation().errorMessage().isBlank()) {
+            addressValidation.put("errorMessage", summary.addressValidation().errorMessage());
+        }
+        response.put("addressValidation", addressValidation);
+
+        // Loyalty reservation (if present)
+        if (summary.loyaltyReservation() != null) {
+            Map<String, Object> loyalty = new HashMap<>();
+            loyalty.put("pointsRequested", summary.loyaltyReservation().pointsRequested());
+            loyalty.put("availableBalance", summary.loyaltyReservation().availableBalance());
+            loyalty.put("discountValue", summary.loyaltyReservation().discountValue().toString());
+            loyalty.put("currency", summary.loyaltyReservation().currency());
+            loyalty.put("success", summary.loyaltyReservation().success());
+            if (summary.loyaltyReservation().errorMessage() != null) {
+                loyalty.put("errorMessage", summary.loyaltyReservation().errorMessage());
+            }
+            response.put("loyaltyReservation", loyalty);
+        }
+
+        return response;
+    }
 
     private Map<String, String> buildAddressMap(
             villagecompute.storefront.integration.shipping.CarrierRateAdapter.Address address) {
