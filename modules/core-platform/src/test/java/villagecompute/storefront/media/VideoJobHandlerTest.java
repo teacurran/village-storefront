@@ -8,11 +8,16 @@ import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -202,18 +207,55 @@ public class VideoJobHandlerTest {
 
     @Test
     @Transactional
-    void throwsExceptionOnProcessingFailure() {
-        // Arrange: Create asset with invalid source file
+    void throwsExceptionOnProcessingFailure() throws IOException {
+        // Arrange
         MediaAsset asset = createTestAsset();
-        Path invalidFile = tempDir.resolve("nonexistent.mp4");
+        Path sourceFile = createFakeVideoFile();
+        String failureMessage = "FFmpeg stub crashed unexpectedly";
+        stubMediaProcessor.failNextVideoProcessing(failureMessage);
+
+        double initialFailureCount = meterRegistry.counter("media.video.transcode.failed").count();
+        TestLogHandler logHandler = new TestLogHandler();
+        Logger logger = Logger.getLogger(VideoJobHandler.class.getName());
+        logger.addHandler(logHandler);
+
+        try {
+            // Act & Assert
+            MediaProcessingException exception = assertThrows(MediaProcessingException.class,
+                    () -> videoJobHandler.processVideo(asset, sourceFile, tempDir, tenant.id));
+            assertTrue(exception.getMessage().contains("FFmpeg stub crashed"), "Should surface processor exception");
+
+            double finalFailureCount = meterRegistry.counter("media.video.transcode.failed").count();
+            assertEquals(1, finalFailureCount - initialFailureCount, "Should increment failure counter");
+
+            assertTrue(logHandler.contains(Level.SEVERE, "Video processing failed for asset " + asset.id),
+                    "Should log an error for failed processing");
+        } finally {
+            logger.removeHandler(logHandler);
+        }
+    }
+
+    @Test
+    @Transactional
+    void incrementsTimeoutCounterOnProcessorTimeout() throws IOException {
+        // Arrange
+        MediaAsset asset = createTestAsset();
+        Path sourceFile = createFakeVideoFile();
+        stubMediaProcessor.timeoutNextVideoProcessing();
+
+        double initialTimeoutCount = meterRegistry.counter("media.video.transcode.timeout").count();
+        double initialFailureCount = meterRegistry.counter("media.video.transcode.failed").count();
 
         // Act & Assert
-        assertThrows(Exception.class, () -> {
-            videoJobHandler.processVideo(asset, invalidFile, tempDir, tenant.id);
-        });
+        MediaProcessingException exception = assertThrows(MediaProcessingException.class,
+                () -> videoJobHandler.processVideo(asset, sourceFile, tempDir, tenant.id));
+        assertTrue(exception.getMessage().toLowerCase().contains("timeout"), "Should include timeout details");
 
-        double failureCount = meterRegistry.counter("media.video.transcode.failed").count();
-        assertTrue(failureCount > 0, "Should increment failure counter");
+        double finalTimeoutCount = meterRegistry.counter("media.video.transcode.timeout").count();
+        assertEquals(1, finalTimeoutCount - initialTimeoutCount, "Should increment timeout counter");
+
+        double finalFailureCount = meterRegistry.counter("media.video.transcode.failed").count();
+        assertEquals(initialFailureCount, finalFailureCount, "Timeouts should not count as generic failures");
     }
 
     @Test
@@ -340,5 +382,30 @@ public class VideoJobHandlerTest {
         byte[] fakeData = new byte[1024];
         Files.write(videoFile, fakeData);
         return videoFile;
+    }
+
+    private static class TestLogHandler extends Handler {
+
+        private final List<LogRecord> records = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void publish(LogRecord record) {
+            records.add(record);
+        }
+
+        @Override
+        public void flush() {
+            // No-op
+        }
+
+        @Override
+        public void close() {
+            records.clear();
+        }
+
+        boolean contains(Level level, String text) {
+            return records.stream().anyMatch(
+                    record -> record.getLevel().intValue() >= level.intValue() && record.getMessage().contains(text));
+        }
     }
 }

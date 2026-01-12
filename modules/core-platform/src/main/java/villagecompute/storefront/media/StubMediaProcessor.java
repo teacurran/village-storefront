@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -38,6 +40,9 @@ public class StubMediaProcessor implements MediaProcessor {
 
     @Inject
     MediaWorkerConfig mediaConfig;
+
+    private final AtomicReference<String> nextVideoFailureMessage = new AtomicReference<>();
+    private final AtomicBoolean timeoutNextVideo = new AtomicBoolean(false);
 
     @Override
     public List<ImageDerivative> processImage(Path sourceFile, Path outputDir) {
@@ -84,6 +89,19 @@ public class StubMediaProcessor implements MediaProcessor {
         try {
             // Create output directory
             Files.createDirectories(outputDir);
+
+            if (!Files.exists(sourceFile)) {
+                throw new MediaProcessingException("Source file missing: " + sourceFile);
+            }
+
+            if (timeoutNextVideo.getAndSet(false)) {
+                throw new MediaProcessingException("FFmpeg stub timeout");
+            }
+
+            String failureMessage = nextVideoFailureMessage.getAndSet(null);
+            if (failureMessage != null) {
+                throw new MediaProcessingException(failureMessage);
+            }
 
             List<HLSVariant> variants = new ArrayList<>();
             Path masterPlaylist = null;
@@ -145,6 +163,20 @@ public class StubMediaProcessor implements MediaProcessor {
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate stub video derivatives", e);
         }
+    }
+
+    /**
+     * Configure the stub to fail the next video processing invocation with a custom message.
+     */
+    public void failNextVideoProcessing(String message) {
+        nextVideoFailureMessage.set(message != null ? message : "Stub video processing failure");
+    }
+
+    /**
+     * Configure the stub to simulate a timeout for the next video processing invocation.
+     */
+    public void timeoutNextVideoProcessing() {
+        timeoutNextVideo.set(true);
     }
 
     @Override

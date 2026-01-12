@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -183,7 +184,10 @@ public class VideoJobHandler {
             return totalSize;
 
         } catch (MediaProcessingException e) {
-            if (e.getMessage() != null && e.getMessage().contains("timeout")) {
+            String message = e.getMessage();
+            boolean timedOut = message != null && message.toLowerCase(Locale.ROOT).contains("timeout");
+            LOG.errorf(e, "Video processing failed for asset %s (timeout=%s)", asset.id, timedOut);
+            if (timedOut) {
                 transcodeTimeoutCounter.increment();
             } else {
                 transcodeFailureCounter.increment();
