@@ -810,9 +810,34 @@ kubectl exec -it postgres-pod -- psql -U storefront -d storefront -c \
 
 **Action:**
 - Check carrier status pages: UPS, FedEx, USPS
-- If single carrier down: Expected, fallback handles gracefully
-- If all carriers down: Notify merchants, consider disabling checkout temporarily
+- If single carrier down: Expected, system aggregates rates from available carriers
+- If all carriers down: Fallback table rates activate automatically (if enabled)
 - Monitor orders: Actual shipping cost reconciled at fulfillment
+
+**Fallback Rate Configuration:**
+- Enable/disable fallback: Set `shipping.fallback.enabled=true` in `application.properties`
+- Disable carrier rates entirely: Set `shipping.rates.enabled=false` (emergency kill switch)
+- Per-carrier control: Configure availability via API credentials (empty credentials = carrier disabled)
+  - USPS: `shipping.usps.user-id`
+  - UPS: `shipping.ups.access-key`
+  - FedEx: `shipping.fedex.api-key`
+- Table rate logic: Flat rates based on package weight (see `ShippingService.getFallbackTableRates`)
+  - ≤16 oz: $5.99 ground, $11.98 priority
+  - >16 oz: $9.99 ground, $19.98 priority
+- Cache TTL: 15 minutes (`shipping-rate-cache` expire-after-write=PT15M)
+
+**Carrier Adapter Resilience:**
+- Retry policy: 3 attempts with 500ms exponential backoff (Resilience4j)
+- Timeout: 10 seconds per carrier API call (configurable via `shipping.{carrier}.timeout-ms`)
+- Circuit breaker: Managed by adapter `isAvailable()` health checks
+- Partial failures: If 1+ carriers succeed, their rates are returned without fallback
+- Total failure: All carriers down → fallback rates (if enabled), else empty rate list
+
+**Monitoring:**
+- `shipping.adapter.requests{carrier,operation,status}` - per-carrier API call metrics
+- `shipping.rate.fallback_used{reason}` - fallback activation counter
+- `shipping.rate.cache.hit` / `.miss` / `.invalidated` - cache effectiveness
+- `shipping.rate.fetch{fallback=true/false}` - overall rate fetch latency
 
 **No Compensation Required:**
 - Fallback rate is estimate, no money collected yet

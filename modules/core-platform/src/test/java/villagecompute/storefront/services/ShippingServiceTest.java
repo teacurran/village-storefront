@@ -245,6 +245,162 @@ class ShippingServiceTest {
         assertEquals("123 Main St", result.normalizedAddress().street1());
     }
 
+    @Test
+    void fetchRates_partialCarrierFailure_aggregatesAvailableRates() {
+        // Arrange
+        RecordingCache cache = new RecordingCache("shipping-rate-cache");
+        when(cacheManager.getCache("shipping-rate-cache")).thenReturn(Optional.of(cache));
+
+        Address origin = new Address("123 Main St", null, "San Francisco", "CA", "94102", "US", false);
+        Address destination = new Address("456 Market St", null, "New York", "NY", "10001", "US", false);
+        CarrierRateAdapter.Package pkg = new CarrierRateAdapter.Package(new BigDecimal("16"), new BigDecimal("10"),
+                new BigDecimal("8"), new BigDecimal("6"), new BigDecimal("100"), "Test package");
+
+        ShippingRateRequest request = new ShippingRateRequest(origin, destination, pkg, List.of(ServiceLevel.GROUND));
+
+        // USPS returns rates, UPS throws exception
+        Rate uspsRate = new Rate("USPS", ServiceLevel.GROUND, "USPS Ground", new BigDecimal("5.00"), "USD", 5,
+                OffsetDateTime.now().plusDays(5));
+        RateResult uspsResult = new RateResult(RateStatus.OK, List.of(uspsRate), null, Map.of());
+        when(mockUSPSAdapter.fetchRates(any(RateRequest.class))).thenReturn(uspsResult);
+        when(mockUPSAdapter.fetchRates(any(RateRequest.class))).thenThrow(new RuntimeException("UPS API timeout"));
+
+        // Act
+        AggregatedRateResult result = shippingService.fetchRates(request, "test-correlation-id");
+
+        // Assert - Should still return USPS rates without fallback
+        assertNotNull(result);
+        assertFalse(result.fallbackUsed());
+        assertEquals(1, result.rates().size());
+        assertEquals("USPS", result.rates().get(0).carrierCode());
+    }
+
+    @Test
+    void fetchRates_allCarriersReturnProviderDown_usesFallback() {
+        // Arrange
+        RecordingCache cache = new RecordingCache("shipping-rate-cache");
+        when(cacheManager.getCache("shipping-rate-cache")).thenReturn(Optional.of(cache));
+
+        Address origin = new Address("123 Main St", null, "San Francisco", "CA", "94102", "US", false);
+        Address destination = new Address("456 Market St", null, "New York", "NY", "10001", "US", false);
+        CarrierRateAdapter.Package pkg = new CarrierRateAdapter.Package(new BigDecimal("16"), new BigDecimal("10"),
+                new BigDecimal("8"), new BigDecimal("6"), new BigDecimal("100"), "Test package");
+
+        ShippingRateRequest request = new ShippingRateRequest(origin, destination, pkg, List.of(ServiceLevel.GROUND));
+
+        // Both adapters available but return PROVIDER_DOWN status
+        RateResult downResult = new RateResult(RateStatus.PROVIDER_DOWN, Collections.emptyList(),
+                "Service temporarily unavailable", Map.of());
+        when(mockUSPSAdapter.fetchRates(any(RateRequest.class))).thenReturn(downResult);
+        when(mockUPSAdapter.fetchRates(any(RateRequest.class))).thenReturn(downResult);
+
+        // Act
+        AggregatedRateResult result = shippingService.fetchRates(request, "test-correlation-id");
+
+        // Assert - Should use fallback rates
+        assertNotNull(result);
+        assertTrue(result.fallbackUsed());
+        assertNotNull(result.fallbackReason());
+        assertFalse(result.rates().isEmpty());
+        assertTrue(result.rates().stream().allMatch(r -> r.carrierCode().equals("FALLBACK")));
+    }
+
+    @Test
+    void fetchRates_fallbackDisabled_returnsEmptyRatesWhenCarriersDown() {
+        // Arrange
+        shippingService.fallbackEnabled = false;
+
+        RecordingCache cache = new RecordingCache("shipping-rate-cache");
+        when(cacheManager.getCache("shipping-rate-cache")).thenReturn(Optional.of(cache));
+
+        when(mockUSPSAdapter.isAvailable()).thenReturn(false);
+        when(mockUPSAdapter.isAvailable()).thenReturn(false);
+
+        Address origin = new Address("123 Main St", null, "San Francisco", "CA", "94102", "US", false);
+        Address destination = new Address("456 Market St", null, "New York", "NY", "10001", "US", false);
+        CarrierRateAdapter.Package pkg = new CarrierRateAdapter.Package(new BigDecimal("16"), new BigDecimal("10"),
+                new BigDecimal("8"), new BigDecimal("6"), new BigDecimal("100"), "Test package");
+
+        ShippingRateRequest request = new ShippingRateRequest(origin, destination, pkg, List.of(ServiceLevel.GROUND));
+
+        // Act
+        AggregatedRateResult result = shippingService.fetchRates(request, "test-correlation-id");
+
+        // Assert - Should return empty rates, no fallback
+        assertNotNull(result);
+        assertFalse(result.fallbackUsed());
+        assertTrue(result.rates().isEmpty());
+    }
+
+    @Test
+    void invalidateRateCache_clearsCache_andLogsMetrics() {
+        // Arrange
+        RecordingCache cache = new RecordingCache("shipping-rate-cache");
+        when(cacheManager.getCache("shipping-rate-cache")).thenReturn(Optional.of(cache));
+
+        UUID tenantId = TenantContext.getCurrentTenantId();
+
+        // Populate cache
+        Address origin = new Address("123 Main St", null, "San Francisco", "CA", "94102", "US", false);
+        Address destination = new Address("456 Market St", null, "New York", "NY", "10001", "US", false);
+        CarrierRateAdapter.Package pkg = new CarrierRateAdapter.Package(new BigDecimal("16"), new BigDecimal("10"),
+                new BigDecimal("8"), new BigDecimal("6"), new BigDecimal("100"), "Test package");
+        ShippingRateRequest request = new ShippingRateRequest(origin, destination, pkg, List.of(ServiceLevel.GROUND));
+
+        Rate uspsRate = new Rate("USPS", ServiceLevel.GROUND, "USPS Ground", new BigDecimal("5.00"), "USD", 5,
+                OffsetDateTime.now().plusDays(5));
+        when(mockUSPSAdapter.fetchRates(any(RateRequest.class)))
+                .thenReturn(new RateResult(RateStatus.OK, List.of(uspsRate), null, Map.of()));
+        when(mockUPSAdapter.fetchRates(any(RateRequest.class)))
+                .thenReturn(new RateResult(RateStatus.OK, Collections.emptyList(), null, Map.of()));
+
+        shippingService.fetchRates(request, "populate-cache");
+        assertTrue(cache.store.size() > 0);
+
+        // Act
+        shippingService.invalidateRateCache(tenantId, "test invalidation");
+
+        // Assert
+        assertEquals(0, cache.store.size());
+        assertTrue(
+                meterRegistry.counter("shipping.rate.cache.invalidated", "tenant_id", tenantId.toString()).count() > 0);
+    }
+
+    @Test
+    void fetchRates_cachesPerOriginDestinationWeight() {
+        // Arrange
+        RecordingCache cache = new RecordingCache("shipping-rate-cache");
+        when(cacheManager.getCache("shipping-rate-cache")).thenReturn(Optional.of(cache));
+
+        Address origin1 = new Address("123 Main St", null, "San Francisco", "CA", "94102", "US", false);
+        Address dest1 = new Address("456 Market St", null, "New York", "NY", "10001", "US", false);
+        Address dest2 = new Address("789 Broadway", null, "Boston", "MA", "02101", "US", false);
+
+        CarrierRateAdapter.Package pkg1 = new CarrierRateAdapter.Package(new BigDecimal("16"), new BigDecimal("10"),
+                new BigDecimal("8"), new BigDecimal("6"), new BigDecimal("100"), "Package 1");
+        CarrierRateAdapter.Package pkg2 = new CarrierRateAdapter.Package(new BigDecimal("32"), new BigDecimal("12"),
+                new BigDecimal("10"), new BigDecimal("8"), new BigDecimal("200"), "Package 2");
+
+        Rate mockRate = new Rate("USPS", ServiceLevel.GROUND, "USPS Ground", new BigDecimal("5.00"), "USD", 5,
+                OffsetDateTime.now().plusDays(5));
+        when(mockUSPSAdapter.fetchRates(any(RateRequest.class)))
+                .thenReturn(new RateResult(RateStatus.OK, List.of(mockRate), null, Map.of()));
+        when(mockUPSAdapter.fetchRates(any(RateRequest.class)))
+                .thenReturn(new RateResult(RateStatus.OK, Collections.emptyList(), null, Map.of()));
+
+        // Act - Create three different requests
+        ShippingRateRequest req1 = new ShippingRateRequest(origin1, dest1, pkg1, List.of(ServiceLevel.GROUND));
+        ShippingRateRequest req2 = new ShippingRateRequest(origin1, dest2, pkg1, List.of(ServiceLevel.GROUND));
+        ShippingRateRequest req3 = new ShippingRateRequest(origin1, dest1, pkg2, List.of(ServiceLevel.GROUND));
+
+        shippingService.fetchRates(req1, "req1");
+        shippingService.fetchRates(req2, "req2");
+        shippingService.fetchRates(req3, "req3");
+
+        // Assert - Should create 3 separate cache entries (different destination or weight)
+        assertEquals(3, cache.store.size());
+    }
+
     /**
      * Minimal in-memory cache implementation for unit testing.
      */
