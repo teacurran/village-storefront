@@ -773,6 +773,29 @@ The test strategy is delivered incrementally across iterations I1-I5. Each itera
   - Payment state transitions (pending/captured/refunded)
   - Refund logic negative cases
 - **I3.T5:** Media pipeline with FFmpeg integration tests (target: ≥85% media module coverage)
+- **I3.T6:** API contract coverage for checkout/payment/shipping (this task)
+  - **OpenAPI Contract Validation:**
+    - Checkout endpoints (`/checkout/preview`, `/checkout/commit`) include security metadata (OAuth scopes `checkout:read`, `checkout:write`), rate limits (60-300 req/min), feature flags (`checkout.preview.enabled`, `checkout.order-creation.enabled`), and RFC7807 error schemas
+    - Shipping endpoints (`/shipping/rates`, `/shipping/validate-address`, `/shipping/labels`, `/shipping/profiles/*`) include security metadata (OAuth scope `shipping:read`, `shipping:write`), rate limits (500-1000 req/min), and feature flags (`shipping.rate-shopping.enabled`)
+    - Payment endpoints (`/admin/orders/{orderId}/refund`, `/webhooks/stripe`) include security metadata and idempotency key support
+  - **Schema Completeness:**
+    - All checkout/payment/shipping schemas reference shared components (`Money`, `Address`, `PaginationMetadata`, `ProblemDetails`)
+    - Realistic examples provided for `CheckoutPreviewRequest`, `CheckoutPreview`, `ShippingRateRequest`, `ShippingProfile`, `OrderCreatedResponse`
+    - Payment intent details embedded in `OrderDetail` schema with Stripe payment method references
+  - **REST-assured Contract Tests:**
+    - Validate `/checkout/preview` calculates correct totals with tax/shipping/discounts (sample test: `CheckoutContractIT.testCheckoutPreview_WithPromoCode_AppliesDiscount`)
+    - Validate `/checkout/commit` creates order + charges payment with idempotency key handling (sample test: `CheckoutContractIT.testCheckoutCommit_IdempotentRetry_ReturnsCachedOrder`)
+    - Validate `/shipping/rates` returns carrier quotes with fallback handling (sample test: `ShippingContractIT.testShippingRates_CarrierUnavailable_ReturnsFallback`)
+    - Validate OpenAPI schema compliance for all requests/responses using REST Assured's JSON Schema Validator
+  - **Playwright E2E Tests:**
+    - Storefront checkout flow: cart review → address entry → shipping selection → payment → order confirmation (test file: `tests/e2e/storefront/checkout.spec.ts`)
+    - Guest checkout: anonymous cart conversion to order with session ID tracking
+    - Registered checkout: authenticated user with saved addresses and loyalty points redemption
+    - Admin refund workflow: partial/full refund processing with payment state verification (test file: `tests/e2e/admin/orders.spec.ts`)
+  - **Coverage Targets:**
+    - REST-assured contract tests: 100% coverage of checkout/payment/shipping endpoints defined in OpenAPI spec
+    - Playwright E2E tests: Guest checkout, registered checkout, admin refund, shipping rate selection scenarios
+    - Schema validation: All request/response bodies must validate against OpenAPI schemas
 - **I3.T8:** Performance + chaos testing implementation
   - Gatling/Locust load tests for checkout/cart APIs
   - Chaos scripts for DB failover, Stripe outages

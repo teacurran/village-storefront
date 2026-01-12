@@ -1430,6 +1430,93 @@ public class OpenAPIContractTest {
 6. **Add operation descriptions:** Every operation must have a `description:` field explaining its purpose
 7. **Define OAuth scopes:** All scopes referenced in security must be defined in the security scheme
 
+### API Contract Change Log
+
+This section documents significant API contract changes to help developers track compatibility impacts and plan SDK regeneration.
+
+#### 2026-01-11: Checkout, Payment, and Shipping API Expansion (Iteration 3)
+
+**Summary:**
+Added comprehensive cart persistence, checkout orchestration, payment integration, and shipping rate endpoints to support end-to-end order creation workflows. This update completes the ecommerce transaction pipeline from cart to order fulfillment.
+
+**New Endpoints:**
+
+- **Checkout:**
+  - `POST /api/v1/checkout/preview` - Preview checkout totals with tax/shipping calculation
+  - `POST /api/v1/checkout/commit` - Complete checkout and create order with payment authorization
+
+- **Shipping:**
+  - `POST /api/v1/shipping/rates` - Get real-time carrier rates (USPS, UPS, FedEx)
+  - `POST /api/v1/shipping/validate-address` - Validate and normalize shipping addresses
+  - `POST /api/v1/shipping/labels` - Create shipping labels (admin)
+  - `GET /api/v1/shipping/labels/{labelId}` - Retrieve label details
+  - `GET /api/v1/shipping/profiles` - List shipping profiles (admin)
+  - `POST /api/v1/shipping/profiles` - Create shipping profile (admin)
+  - `GET /api/v1/shipping/profiles/{profileId}` - Get shipping profile (admin)
+  - `PUT /api/v1/shipping/profiles/{profileId}` - Update shipping profile (admin)
+  - `DELETE /api/v1/shipping/profiles/{profileId}` - Delete shipping profile (admin)
+  - `POST /api/v1/shipping/profiles/{profileId}/default` - Set default profile (admin)
+
+- **Payments:**
+  - `POST /api/v1/admin/orders/{orderId}/refund` - Refund order payment (admin)
+  - `POST /api/v1/webhooks/stripe` - Stripe webhook callback for payment events
+
+**New Schemas:**
+
+- **Checkout:** `CheckoutPreviewRequest`, `CheckoutPreview`, `CheckoutCommitRequest`, `OrderCreatedResponse`
+- **Shipping:** `ShippingRateRequest`, `ShippingRateResponse`, `ShippingRate`, `ShippingProfile`, `ShippingProfileRequest`, `ShippingAddress`, `PackageInfo`, `AddressValidationRequest`, `AddressValidationResponse`, `LabelCreateRequest`, `LabelResponse`
+- **Cart:** `Cart`, `CartItem`, `SavedCartItem`, `CartLoyaltySummary` (enhanced with loyalty integration)
+- **Orders:** `OrderSummary`, `OrderDetail` (includes `paymentIntent` object with Stripe payment details)
+
+**Security & Rate Limiting:**
+
+All new endpoints now include comprehensive security metadata:
+- **OAuth Scopes:** `checkout:read`, `checkout:write`, `orders:write`, `shipping:read`, `shipping:write`
+- **Feature Flags:** `checkout.preview.enabled`, `checkout.order-creation.enabled`, `shipping.rate-shopping.enabled`, `shipping.labels.enabled`, `shipping.profile-management.enabled`, `payments.refunds.enabled`
+- **Rate Limits:** Checkout (60 req/min), Shipping (500 req/min), Admin (1000 req/min)
+- **Tenant Scoping:** All endpoints require `x-tenant-scope: required`
+
+**Compatibility Notes:**
+
+- **Additive (Non-Breaking):** This release adds new endpoints without modifying existing contracts. All current integrations remain compatible.
+- **Feature Flags:** Checkout and shipping endpoints are gated by feature flags. Tenants must enable `checkout.order-creation.enabled`, `shipping.rate-shopping.enabled`, `shipping.labels.enabled`, and `shipping.profile-management.enabled`; payment teams can toggle `payments.refunds.enabled` per tenant rollout.
+- **Payment Integration:** Checkout commit requires Stripe payment method ID (`pm_*`). Clients must integrate Stripe Elements SDK for PCI-compliant card collection.
+- **Idempotency:** Checkout commit endpoint requires `X-Idempotency-Key` header for safe retries. Clients should generate a unique UUID v4 per order attempt.
+
+**SDK Regeneration:**
+
+After pulling this spec update, regenerate client SDKs:
+
+```bash
+# TypeScript SDK
+openapi-generator-cli generate \
+  -i api/v1/openapi.yaml \
+  -g typescript-axios \
+  -o generated/typescript-client
+
+# Java SDK
+openapi-generator-cli generate \
+  -i api/v1/openapi.yaml \
+  -g java \
+  -o generated/java-client \
+  --library microprofile
+```
+
+**Testing Impact:**
+
+- **Contract Tests:** New REST-assured tests added in `I3.T6` validate checkout/payment/shipping endpoint compliance
+- **E2E Tests:** Playwright suite updated with guest/registered checkout flows, shipping rate selection, and order confirmation scenarios
+- **Coverage Targets:** Checkout module (≥85%), Payment module (≥85%), Shipping module (≥85%)
+
+**References:**
+
+- **Task:** I3.T6 (Spec + Client Updates)
+- **Dependencies:** I3.T1 (Cart Service), I3.T2 (Checkout Orchestrator), I3.T3 (Payment Integration), I3.T5 (Shipping Adapters)
+- **Test Strategy:** See [docs/quality/test_strategy.md](docs/quality/test_strategy.md#iteration-3-checkout-payments-media)
+- **Architecture:** Blueprint §5.0 (Contract), ADR-003 (Checkout Saga)
+
+---
+
 ## Testing
 
 ### Unit Tests

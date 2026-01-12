@@ -1481,6 +1481,18 @@ paths:
         **Idempotent:** Safe to call multiple times with same cart state.
         Does not create order or charge payment method.
       tags: [Storefront, Headless]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - checkout.preview.enabled
+      x-rate-limit:
+        limit: 300
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - checkout:read
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1526,6 +1538,20 @@ paths:
 
         **Requires authentication:** Must be logged-in customer or use valid API key.
       tags: [Storefront, Headless]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - checkout.order-creation.enabled
+      x-rate-limit:
+        limit: 60
+        window: 60s
+        scope: user
+        note: "Lower limit due to payment processing and inventory locking overhead"
+      x-required-scopes:
+        - checkout:write
+        - orders:write
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1589,6 +1615,18 @@ paths:
 
         **Correlation Tracking:** Pass `X-Correlation-ID` header for distributed tracing.
       tags: [Shipping]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.rate-shopping.enabled
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:read
       parameters:
         - name: X-Correlation-ID
           in: header
@@ -1638,6 +1676,18 @@ paths:
 
         Falls back to returning original address if all carriers are unavailable.
       tags: [Shipping]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.rate-shopping.enabled
+      x-rate-limit:
+        limit: 500
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:read
       parameters:
         - name: X-Correlation-ID
           in: header
@@ -1675,6 +1725,18 @@ paths:
 
         **Requires authentication:** Admin or API key with shipping permissions.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.labels.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:write
       parameters:
         - name: X-Correlation-ID
           in: header
@@ -1721,6 +1783,18 @@ paths:
       description: |
         Retrieves shipping label details including tracking number and label URL.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.labels.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:read
       parameters:
         - name: labelId
           in: path
@@ -1750,6 +1824,18 @@ paths:
       description: |
         Lists shipping profiles for the current tenant including origin addresses and enabled carriers.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.profile-management.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:read
       parameters:
         - name: X-Correlation-ID
           in: header
@@ -1776,6 +1862,18 @@ paths:
       description: |
         Creates a new shipping profile containing carrier credentials and default origin address.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.profile-management.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:write
       parameters:
         - name: X-Correlation-ID
           in: header
@@ -1813,6 +1911,18 @@ paths:
       summary: Get shipping profile
       description: Retrieve one shipping profile including carrier credentials and origins.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.profile-management.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:read
       parameters:
         - name: profileId
           in: path
@@ -1848,6 +1958,18 @@ paths:
       summary: Update shipping profile
       description: Update carrier credentials, origins, or rules on an existing profile.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.profile-management.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:write
       parameters:
         - name: profileId
           in: path
@@ -1889,6 +2011,18 @@ paths:
       summary: Delete shipping profile
       description: Delete a shipping profile that is no longer needed.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.profile-management.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:write
       parameters:
         - name: profileId
           in: path
@@ -1918,6 +2052,18 @@ paths:
       summary: Mark profile as default
       description: Mark a profile as the default origin/carrier bundle for checkout.
       tags: [Shipping, Admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - shipping.profile-management.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - shipping:write
       parameters:
         - name: profileId
           in: path
@@ -2224,6 +2370,16 @@ paths:
       tags: [Admin]
       security:
         - bearerAuth: []
+      x-tenant-scope: required
+      x-feature-flags:
+        - payments.refunds.enabled
+      x-rate-limit:
+        limit: 1000
+        window: 60s
+        scope: user
+      x-required-scopes:
+        - payments:refunds
+        - orders:write
       parameters:
         - name: orderId
           in: path
@@ -2258,24 +2414,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - refundId
-                  - amount
-                  - status
-                  - createdAt
-                properties:
-                  refundId:
-                    type: string
-                    format: uuid
-                  amount:
-                    $ref: '#/components/schemas/Money'
-                  status:
-                    type: string
-                    enum: [pending, succeeded, failed]
-                  createdAt:
-                    type: string
-                    format: date-time
+                $ref: '#/components/schemas/RefundSummary'
         '400':
           description: Invalid refund request (exceeds order total, etc.)
           content:
@@ -5266,6 +5405,55 @@ components:
           format: date-time
         loyalty:
           $ref: '#/components/schemas/CartLoyaltySummary'
+      example:
+        id: "c6a7c7c4-0cf2-4db0-a8da-32e9f037af3f"
+        userId: "7c0e7cb7-2372-4e68-8ff6-1d96d7b8cc8b"
+        sessionId: null
+        items:
+          - id: "ci-9d8877b8-7ef7-4f95-8fcb-7e4198cdb0f6"
+            variantId: "0b7a4951-847d-4c9f-8a7e-b39ef5bc1a33"
+            productName: "Classic T-Shirt"
+            variantName: "Medium / Blue"
+            sku: "TSHIRT-M-BLU"
+            quantity: 2
+            unitPrice:
+              amount: "25.00"
+              currency: "USD"
+            lineTotal:
+              amount: "50.00"
+              currency: "USD"
+            createdAt: "2026-01-11T15:20:00Z"
+            updatedAt: "2026-01-11T15:20:00Z"
+        savedForLater:
+          - id: "ci-save-1"
+            variantId: "9e1a2f21-e1b0-4fc3-9fd4-541d4fa5b092"
+            productName: "Sticker Pack"
+            variantName: "Default"
+            sku: "STICKER-001"
+            quantity: 1
+            unitPrice:
+              amount: "5.00"
+              currency: "USD"
+            savedAt: "2026-01-11T14:00:00Z"
+        subtotal:
+          amount: "55.00"
+          currency: "USD"
+        itemCount: 1
+        expiresAt: "2026-01-12T15:20:00Z"
+        createdAt: "2026-01-11T15:00:00Z"
+        updatedAt: "2026-01-11T15:20:00Z"
+        loyalty:
+          programEnabled: true
+          programId: "b52ad1ef-8c65-4e5f-a0da-820f1be4e6a3"
+          memberPointsBalance: 125
+          estimatedPointsEarned: 55
+          estimatedRewardValue:
+            amount: "5.50"
+            currency: "USD"
+          availableRedemptionValue:
+            amount: "10.00"
+            currency: "USD"
+          currentTier: "Gold"
 
     CartItem:
       type: object
@@ -5312,6 +5500,21 @@ components:
         updatedAt:
           type: string
           format: date-time
+      example:
+        id: "ci-9d8877b8-7ef7-4f95-8fcb-7e4198cdb0f6"
+        variantId: "0b7a4951-847d-4c9f-8a7e-b39ef5bc1a33"
+        productName: "Classic T-Shirt"
+        variantName: "Medium / Blue"
+        sku: "TSHIRT-M-BLU"
+        quantity: 2
+        unitPrice:
+          amount: "25.00"
+          currency: "USD"
+        lineTotal:
+          amount: "50.00"
+          currency: "USD"
+        createdAt: "2026-01-11T15:20:00Z"
+        updatedAt: "2026-01-11T15:20:00Z"
     SavedCartItem:
       type: object
       required:
@@ -5351,6 +5554,17 @@ components:
           type: string
           format: date-time
           description: Timestamp when the item was saved
+      example:
+        id: "ci-save-1"
+        variantId: "9e1a2f21-e1b0-4fc3-9fd4-541d4fa5b092"
+        productName: "Sticker Pack"
+        variantName: "Default"
+        sku: "STICKER-001"
+        quantity: 1
+        unitPrice:
+          amount: "5.00"
+          currency: "USD"
+        savedAt: "2026-01-11T14:00:00Z"
 
     CartLoyaltySummary:
       type: object
@@ -5385,6 +5599,18 @@ components:
           type: string
           nullable: true
           description: Tier name resolved from the tenant's tier configuration
+      example:
+        programEnabled: true
+        programId: "b52ad1ef-8c65-4e5f-a0da-820f1be4e6a3"
+        memberPointsBalance: 125
+        estimatedPointsEarned: 55
+        estimatedRewardValue:
+          amount: "5.50"
+          currency: "USD"
+        availableRedemptionValue:
+          amount: "10.00"
+          currency: "USD"
+        currentTier: "Gold"
         dataFreshnessTimestamp:
           type: string
           format: date-time
@@ -6057,6 +6283,20 @@ components:
           type: string
           description: Promotional/discount code
           example: "SAVE20"
+      example:
+        lineItems:
+          - variantId: "0b7a4951-847d-4c9f-8a7e-b39ef5bc1a33"
+            quantity: 2
+          - variantId: "74c71b11-32c8-4b4f-8884-91a30d06485f"
+            quantity: 1
+        shippingAddress:
+          line1: "123 Main St"
+          line2: "Apt 4B"
+          city: "San Francisco"
+          state: "CA"
+          postalCode: "94105"
+          country: "US"
+        promoCode: "SAVE20"
 
     CheckoutPreview:
       type: object
@@ -6102,6 +6342,42 @@ components:
                 $ref: '#/components/schemas/Money'
               lineTotal:
                 $ref: '#/components/schemas/Money'
+      example:
+        subtotal:
+          amount: "75.00"
+          currency: "USD"
+        discounts:
+          - code: "SAVE20"
+            amount:
+              amount: "10.00"
+              currency: "USD"
+        tax:
+          amount: "5.40"
+          currency: "USD"
+        shipping:
+          amount: "9.50"
+          currency: "USD"
+        total:
+          amount: "79.90"
+          currency: "USD"
+        currency: "USD"
+        lineItems:
+          - variantId: "0b7a4951-847d-4c9f-8a7e-b39ef5bc1a33"
+            quantity: 2
+            unitPrice:
+              amount: "25.00"
+              currency: "USD"
+            lineTotal:
+              amount: "50.00"
+              currency: "USD"
+          - variantId: "74c71b11-32c8-4b4f-8884-91a30d06485f"
+            quantity: 1
+            unitPrice:
+              amount: "25.00"
+              currency: "USD"
+            lineTotal:
+              amount: "25.00"
+              currency: "USD"
 
     CheckoutCommitRequest:
       allOf:
@@ -6118,6 +6394,23 @@ components:
               type: string
               description: Stripe payment method ID (from Stripe Elements)
               example: "pm_1234567890abcdef"
+          example:
+            lineItems:
+              - variantId: "0b7a4951-847d-4c9f-8a7e-b39ef5bc1a33"
+                quantity: 2
+            shippingAddress:
+              line1: "123 Main St"
+              city: "San Francisco"
+              state: "CA"
+              postalCode: "94105"
+              country: "US"
+            billingAddress:
+              line1: "123 Main St"
+              city: "San Francisco"
+              state: "CA"
+              postalCode: "94105"
+              country: "US"
+            paymentMethodId: "pm_1234567890abcdef"
 
     OrderCreatedResponse:
       type: object
@@ -6147,6 +6440,15 @@ components:
           type: string
           format: date
           description: Estimated delivery date
+      example:
+        orderId: "f5429d8a-89f4-4c9f-8f03-0c3aa1e77770"
+        orderNumber: "ORD-2026-00042"
+        status: "processing"
+        total:
+          amount: "79.90"
+          currency: "USD"
+        createdAt: "2026-01-11T15:21:10Z"
+        estimatedDelivery: "2026-01-15"
 
     OrderSummary:
       type: object
@@ -6273,17 +6575,8 @@ components:
           type: string
           example: "USD"
         paymentIntent:
-          type: object
+          $ref: '#/components/schemas/PaymentIntentSummary'
           nullable: true
-          properties:
-            paymentIntentId:
-              type: string
-              description: Stripe payment intent ID
-            status:
-              type: string
-              enum: [pending, succeeded, failed, refunded]
-            amount:
-              $ref: '#/components/schemas/Money'
         shipments:
           type: array
           items:
@@ -6358,6 +6651,111 @@ components:
       description: |
         Partial update request for order properties. Only provided fields are updated.
         Use dedicated endpoints for cancellation and refunds.
+
+    # Payment Schemas
+
+    PaymentIntentSummary:
+      type: object
+      required:
+        - paymentIntentId
+        - provider
+        - status
+        - amount
+      properties:
+        paymentIntentId:
+          type: string
+          description: Stripe payment intent ID
+          example: "pi_3Nkxz2LQ5rV9oQf612345"
+        provider:
+          type: string
+          description: Payment provider identifier
+          example: "stripe"
+        status:
+          type: string
+          enum: [requires_payment_method, requires_confirmation, processing, succeeded, canceled, failed, refunded]
+          example: "succeeded"
+        amount:
+          $ref: '#/components/schemas/Money'
+        applicationFeeAmount:
+          $ref: '#/components/schemas/Money'
+          nullable: true
+        captureMethod:
+          type: string
+          enum: [automatic, manual]
+          example: "automatic"
+        paymentMethodType:
+          type: string
+          description: Stripe payment method type associated with the intent
+          example: "card"
+        lastEventAt:
+          type: string
+          format: date-time
+          description: Timestamp of the last webhook or status update
+        failureCode:
+          type: string
+          nullable: true
+        failureMessage:
+          type: string
+          nullable: true
+      example:
+        paymentIntentId: "pi_3Nkxz2LQ5rV9oQf612345"
+        provider: "stripe"
+        status: "succeeded"
+        amount:
+          amount: "79.90"
+          currency: "USD"
+        applicationFeeAmount:
+          amount: "2.40"
+          currency: "USD"
+        captureMethod: "automatic"
+        paymentMethodType: "card"
+        lastEventAt: "2026-01-11T15:21:15Z"
+
+    RefundSummary:
+      type: object
+      required:
+        - refundId
+        - amount
+        - status
+        - createdAt
+      properties:
+        refundId:
+          type: string
+          format: uuid
+        paymentIntentId:
+          type: string
+          description: Associated payment intent ID
+          nullable: true
+        amount:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [pending, succeeded, failed]
+          example: "pending"
+        reason:
+          type: string
+          description: Refund reason captured for audit
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+        providerReference:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        refundId: "5a9b9f8c-cc57-4d87-97cb-b1a1c2ed77fb"
+        paymentIntentId: "pi_3Nkxz2LQ5rV9oQf612345"
+        amount:
+          amount: "25.00"
+          currency: "USD"
+        status: "succeeded"
+        reason: "Damaged item"
+        processedAt: "2026-01-12T09:00:00Z"
+        providerReference: "re_1Nkxz2LQ5rV9oQf6XYZ"
+        createdAt: "2026-01-11T16:00:00Z"
 
     # --------------------------------------------------------------------------
     # Shared/Utility Schemas
@@ -6957,6 +7355,28 @@ components:
             enum: [GROUND, TWO_DAY, NEXT_DAY_AIR, PRIORITY, FIRST_CLASS, MEDIA_MAIL]
           description: Service levels to fetch rates for
           example: [GROUND, PRIORITY]
+      example:
+        origin:
+          street1: "123 Warehouse Rd"
+          city: "Oakland"
+          state: "CA"
+          postalCode: "94607"
+          country: "US"
+        destination:
+          street1: "55 Howard St"
+          city: "San Francisco"
+          state: "CA"
+          postalCode: "94105"
+          country: "US"
+          residential: true
+        packageInfo:
+          weightOz: 22
+          lengthIn: 10
+          widthIn: 8
+          heightIn: 4
+          declaredValue: 120
+          description: "Two cotton shirts"
+        serviceLevels: [GROUND, PRIORITY]
 
     ShippingAddress:
       type: object
@@ -6995,6 +7415,14 @@ components:
           type: boolean
           default: false
           description: Whether this is a residential address
+      example:
+        street1: "55 Howard St"
+        street2: "Suite 320"
+        city: "San Francisco"
+        state: "CA"
+        postalCode: "94105"
+        country: "US"
+        residential: true
 
     PackageInfo:
       type: object
@@ -7032,6 +7460,13 @@ components:
           type: string
           maxLength: 200
           example: "Books and magazines"
+      example:
+        weightOz: 22
+        lengthIn: 10
+        widthIn: 8
+        heightIn: 4
+        declaredValue: 120
+        description: "Two cotton shirts"
 
     ShippingRateResponse:
       type: object
@@ -7050,6 +7485,24 @@ components:
           type: string
           description: Reason for fallback (if applicable)
           example: "Carriers unavailable, using fallback rates"
+      example:
+        rates:
+          - carrierCode: "USPS"
+            serviceLevel: "PRIORITY"
+            serviceName: "USPS Priority Mail"
+            cost: 9.5
+            currency: "USD"
+            estimatedDays: 2
+            estimatedDelivery: "2026-01-14T17:00:00Z"
+          - carrierCode: "UPS"
+            serviceLevel: "GROUND"
+            serviceName: "UPS Ground"
+            cost: 12.25
+            currency: "USD"
+            estimatedDays: 4
+            estimatedDelivery: "2026-01-16T17:00:00Z"
+        fallbackUsed: false
+        fallbackReason: ""
 
     ShippingRate:
       type: object
@@ -7086,6 +7539,14 @@ components:
           type: string
           format: date-time
           example: "2026-01-11T17:00:00Z"
+      example:
+        carrierCode: "USPS"
+        serviceLevel: "PRIORITY"
+        serviceName: "USPS Priority Mail"
+        cost: 9.5
+        currency: "USD"
+        estimatedDays: 2
+        estimatedDelivery: "2026-01-14T17:00:00Z"
 
     ShippingProfileRequest:
       type: object
@@ -7122,6 +7583,23 @@ components:
         active:
           type: boolean
           default: true
+      example:
+        name: "Default Fulfillment"
+        isDefault: true
+        enabledCarriers: ["USPS", "UPS"]
+        originAddress:
+          line1: "123 Warehouse Rd"
+          city: "Oakland"
+          state: "CA"
+          postalCode: "94607"
+          country: "US"
+        carrierCredentials:
+          USPS:
+            accountNumber: "123456"
+            apiKey: "live_xxx"
+        metadata:
+          pickupWindow: "09:00-17:00 PT"
+        active: true
 
     ShippingProfile:
       type: object
@@ -7162,6 +7640,25 @@ components:
         updatedAt:
           type: string
           format: date-time
+      example:
+        id: "a1c6c1a8-6f36-4616-8130-885cdb2f8fc1"
+        name: "Default Fulfillment"
+        isDefault: true
+        active: true
+        enabledCarriers: ["USPS", "UPS"]
+        originAddress:
+          line1: "123 Warehouse Rd"
+          city: "Oakland"
+          state: "CA"
+          postalCode: "94607"
+          country: "US"
+        carrierCredentials:
+          USPS:
+            accountNumber: "123456"
+        metadata:
+          pickupWindow: "09:00-17:00 PT"
+        createdAt: "2026-01-10T08:00:00Z"
+        updatedAt: "2026-01-11T12:30:00Z"
 
     AddressValidationRequest:
       type: object
@@ -7190,6 +7687,13 @@ components:
         country:
           type: string
           maxLength: 2
+      example:
+        street1: "55 Howard St"
+        street2: "Suite 320"
+        city: "San Francisco"
+        state: "CA"
+        postalCode: "94105"
+        country: "US"
 
     AddressValidationResponse:
       type: object
@@ -7210,6 +7714,17 @@ components:
         errorMessage:
           type: string
           example: "All carriers unavailable"
+      example:
+        status: "CORRECTED"
+        normalizedAddress:
+          street1: "55 Howard St"
+          street2: "STE 320"
+          city: "San Francisco"
+          state: "CA"
+          postalCode: "94105-1234"
+          country: "US"
+        warnings:
+          - "Zip code corrected to 94105-1234"
 
     LabelCreateRequest:
       type: object
@@ -7242,6 +7757,29 @@ components:
           type: string
           maxLength: 500
           description: Return address (optional)
+      example:
+        orderId: "f5429d8a-89f4-4c9f-8f03-0c3aa1e77770"
+        carrierCode: "USPS"
+        serviceLevel: "PRIORITY"
+        origin:
+          street1: "123 Warehouse Rd"
+          city: "Oakland"
+          state: "CA"
+          postalCode: "94607"
+          country: "US"
+        destination:
+          street1: "55 Howard St"
+          city: "San Francisco"
+          state: "CA"
+          postalCode: "94105"
+          country: "US"
+        packageInfo:
+          weightOz: 22
+          lengthIn: 10
+          widthIn: 8
+          heightIn: 4
+          declaredValue: 120
+        returnAddress: "Returns Dept, 123 Warehouse Rd, Oakland, CA 94607"
 
     LabelResponse:
       type: object
@@ -7274,6 +7812,13 @@ components:
           type: string
           format: date-time
           example: "2026-01-11T17:00:00Z"
+      example:
+        labelId: "3e2e0a9a-e5ff-4c3a-87c0-094a52e0c61c"
+        trackingNumber: "9400100000000000000000"
+        labelUrl: "https://cdn.usps.com/labels/9400100000000000000000.pdf"
+        cost: 9.5
+        currency: "USD"
+        estimatedDelivery: "2026-01-14T17:00:00Z"
 
     # ============================================================================
     # THEME & CUSTOMIZATION SCHEMAS
