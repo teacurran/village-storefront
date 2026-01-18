@@ -1118,3 +1118,67 @@ jobs:
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "cosign verify --certificate-identity-regexp=github ghcr.io/${{ github.repository }}:sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  promote-to-dev:
+    name: Auto-Deploy to Development
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger deployment to dev environment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: deploy-dev
+          client-payload: |
+            {
+              "image_tag": "sha-${{ github.sha }}",
+              "environment": "dev",
+              "triggered_by": "${{ github.actor }}",
+              "commit_sha": "${{ github.sha }}",
+              "commit_message": "${{ github.event.head_commit.message }}"
+            }
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Promoted to Development" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** dev" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment workflow will start automatically." >> $GITHUB_STEP_SUMMARY
+
+  promote-to-staging:
+    name: Auto-Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/beta' && github.event_name == 'push'
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger deployment to staging environment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: deploy-staging
+          client-payload: |
+            {
+              "image_tag": "sha-${{ github.sha }}",
+              "environment": "staging",
+              "triggered_by": "${{ github.actor }}",
+              "commit_sha": "${{ github.sha }}",
+              "commit_message": "${{ github.event.head_commit.message }}"
+            }
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Promoted to Staging" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** sha-${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** staging" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment workflow will start automatically." >> $GITHUB_STEP_SUMMARY

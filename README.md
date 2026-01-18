@@ -1,7 +1,10 @@
 # Village Storefront
 
 [![CI](https://github.com/teacurran/village-storefront/actions/workflows/ci.yml/badge.svg)](https://github.com/teacurran/village-storefront/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-80%25-green)](https://sonarcloud.io/dashboard?id=teacurran_village-storefront)
+[![Deployment](https://github.com/teacurran/village-storefront/actions/workflows/deploy.yml/badge.svg)](https://github.com/teacurran/village-storefront/actions/workflows/deploy.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=teacurran_village-storefront&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=teacurran_village-storefront)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=teacurran_village-storefront&metric=coverage)](https://sonarcloud.io/summary/new_code?id=teacurran_village-storefront)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=teacurran_village-storefront&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=teacurran_village-storefront)
 [![License](https://img.shields.io/badge/license-UNLICENSED-red)](LICENSE)
 
 A multi-tenant SaaS ecommerce platform built with Java Quarkus for VillageCompute.
@@ -33,7 +36,9 @@ The platform provides comprehensive SaaS ecommerce capabilities:
 
 **👉 For New Developers:** Start with the [Developer Guide](docs/architecture/developer-guide.md) for setup, coding standards, and contribution guidelines.
 
-**👉 For Operations:** See the [Runbook Index](docs/architecture/ops/runbook-index.md) for incident response procedures and the [Hypercare Plan](docs/architecture/ops/hypercare-plan.md) for post-launch monitoring.
+**👉 For Operations:** See the [Runbook Index](docs/architecture/ops/runbook-index.md) for incident response procedures, the [Hypercare Plan](docs/architecture/ops/hypercare-plan.md) for post-launch monitoring, and the [Release Runbook](docs/operations/release-runbook.md) for deployment procedures.
+
+**👉 For CI/CD:** See the [Workflow Architecture](.github/workflows/README.md) for detailed pipeline documentation.
 
 ## Continuous Integration & Quality Gates
 

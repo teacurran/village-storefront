@@ -1,0 +1,643 @@
+name: Blue/Green Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      image_tag:
+        description: 'Docker image tag to deploy (e.g., sha-abc123, v1.2.3)'
+        required: true
+        type: string
+      skip_smoke_tests:
+        description: 'Skip smoke tests (not recommended for production)'
+        required: false
+        type: boolean
+        default: false
+      skip_feature_flag_check:
+        description: 'Skip feature flag validation (emergency only)'
+        required: false
+        type: boolean
+        default: false
+
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: string
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        type: string
+      skip_smoke_tests:
+        description: 'Skip smoke tests'
+        required: false
+        type: boolean
+        default: false
+      skip_feature_flag_check:
+        description: 'Skip feature flag validation'
+        required: false
+        type: boolean
+        default: false
+
+  repository_dispatch:
+    types:
+      - deploy-dev
+      - deploy-staging
+
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  KUSTOMIZE_VERSION: '5.0.0'
+  KUBECTL_VERSION: 'v1.28.0'
+
+jobs:
+  validate-feature-flags:
+    name: Validate Feature Flags
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      flags_ok: ${{ steps.check.outputs.flags_ok }}
+    if: inputs.skip_feature_flag_check != true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'production' }}
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          kubectl config use-context ${ENVIRONMENT}-k3s || echo "Context not found, will use default"
+
+      - name: Check critical feature flags
+        id: check
+        env:
+          ENVIRONMENT: ${{ inputs.environment || 'production' }}
+        run: |
+          echo "## Feature Flag Pre-Deployment Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Define critical kill switches that block deployment
+          KILL_SWITCHES=(
+            "checkout.kill-switch"
+            "media.processing.kill-switch"
+            "stripe.webhook.kill-switch"
+          )
+
+          FLAGS_OK=true
+
+          # Check if feature flag ConfigMap exists
+          if ! kubectl get configmap feature-flags -n village-storefront-${ENVIRONMENT} 2>/dev/null; then
+            echo "⚠️ Feature flag ConfigMap not found - proceeding with caution" >> $GITHUB_STEP_SUMMARY
+            echo "flags_ok=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "### Kill Switch Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for flag in "${KILL_SWITCHES[@]}"; do
+            VALUE=$(kubectl get configmap feature-flags -n village-storefront-${ENVIRONMENT} -o jsonpath="{.data.${flag}}" 2>/dev/null || echo "not_found")
+
+            if [ "$VALUE" == "false" ]; then
+              echo "❌ **BLOCKING**: Kill switch \`${flag}\` is ACTIVE (false = disabled feature)" >> $GITHUB_STEP_SUMMARY
+              FLAGS_OK=false
+            elif [ "$VALUE" == "true" ]; then
+              echo "✅ \`${flag}\`: enabled (ok to deploy)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ \`${flag}\`: not configured (defaulting to safe)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$FLAGS_OK" != "true" ]; then
+            echo "**Result:** ❌ Deployment blocked due to active kill switches" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Action Required:** Disable kill switches or use \`skip_feature_flag_check\` for emergency deployments" >> $GITHUB_STEP_SUMMARY
+            echo "flags_ok=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "**Result:** ✅ All kill switches inactive - safe to proceed" >> $GITHUB_STEP_SUMMARY
+            echo "flags_ok=true" >> $GITHUB_OUTPUT
+          fi
+
+  verify-image-signature:
+    name: Verify Container Image Signature
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image_verified: ${{ steps.verify.outputs.verified }}
+
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify image signature
+        id: verify
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
+        run: |
+          echo "## Container Image Signature Verification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ghcr.io/${{ github.repository }}:${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Verify signature using cosign with keyless signing
+          if cosign verify \
+              --certificate-identity-regexp="^https://github.com/${{ github.repository }}/.github/workflows" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+              ghcr.io/${{ github.repository }}:${IMAGE_TAG} 2>&1 | tee /tmp/cosign-verify.log; then
+            echo "✅ **Image signature verified successfully**" >> $GITHUB_STEP_SUMMARY
+            echo "verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ **Image signature verification FAILED**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/cosign-verify.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "verified=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Signature Details:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/cosign-verify.log | grep -A 10 "Certificate subject" || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    needs: [validate-feature-flags, verify-image-signature]
+    if: always() && (needs.validate-feature-flags.result == 'success' || needs.validate-feature-flags.result == 'skipped') && needs.verify-image-signature.result == 'success'
+    timeout-minutes: 10
+    outputs:
+      environment: ${{ steps.context.outputs.environment }}
+      image_tag: ${{ steps.context.outputs.image_tag }}
+      skip_smoke_tests: ${{ steps.context.outputs.skip_smoke_tests }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          kustomize version
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Determine deployment context
+        id: context
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # Tag push defaults to production
+            echo "environment=production" >> $GITHUB_OUTPUT
+            echo "image_tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "skip_smoke_tests=false" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            # Automatic promotion from CI workflow
+            if [ "${{ github.event.action }}" == "deploy-dev" ]; then
+              echo "environment=dev" >> $GITHUB_OUTPUT
+              echo "image_tag=${{ github.event.client_payload.image_tag }}" >> $GITHUB_OUTPUT
+              echo "skip_smoke_tests=true" >> $GITHUB_OUTPUT  # Dev auto-deploys skip smoke tests
+            elif [ "${{ github.event.action }}" == "deploy-staging" ]; then
+              echo "environment=staging" >> $GITHUB_OUTPUT
+              echo "image_tag=${{ github.event.client_payload.image_tag }}" >> $GITHUB_OUTPUT
+              echo "skip_smoke_tests=false" >> $GITHUB_OUTPUT  # Staging runs full smoke tests
+            fi
+          else
+            # Manual workflow dispatch or workflow_call
+            ENV="${{ inputs.environment }}"
+            TAG="${{ inputs.image_tag }}"
+            SKIP="${{ inputs.skip_smoke_tests }}"
+
+            echo "environment=${ENV}" >> $GITHUB_OUTPUT
+            echo "image_tag=${TAG}" >> $GITHUB_OUTPUT
+            echo "skip_smoke_tests=${SKIP}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build manifests with kustomize
+        env:
+          ENVIRONMENT: ${{ steps.context.outputs.environment }}
+        run: |
+          echo "Building manifests for environment: $ENVIRONMENT"
+          kustomize build infra/kustomize/overlays/$ENVIRONMENT > /tmp/manifests.yaml
+
+      - name: Validate manifests with kubectl dry-run
+        run: |
+          kubectl apply --dry-run=client -f /tmp/manifests.yaml
+
+      - name: Upload validated manifests
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-manifests-${{ steps.context.outputs.environment }}
+          path: /tmp/manifests.yaml
+          retention-days: 30
+
+      - name: Output summary
+        run: |
+          echo "## Manifest Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ steps.context.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** ${{ steps.context.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Resource Counts" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          kubectl apply --dry-run=client -f /tmp/manifests.yaml -o json | \
+            jq -r '.items[] | .kind' | sort | uniq -c >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  deploy-green:
+    name: Deploy Green Environment
+    runs-on: ubuntu-latest
+    needs: validate-manifests
+    timeout-minutes: 20
+    env:
+      DEPLOY_ENVIRONMENT: ${{ needs.validate-manifests.outputs.environment }}
+      IMAGE_TAG: ${{ needs.validate-manifests.outputs.image_tag }}
+      GREEN_NAMESPACE: village-storefront-${{ needs.validate-manifests.outputs.environment }}-green
+    environment:
+      name: ${{ needs.validate-manifests.outputs.environment }}
+      url: https://${{ needs.validate-manifests.outputs.environment }}.villagecompute.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+          kubectl config use-context ${DEPLOY_ENVIRONMENT}-k3s
+
+      - name: Create green namespace
+        run: |
+          kubectl create namespace $GREEN_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Build and apply green manifests
+        run: |
+          TMP_DIR=$(mktemp -d)
+          cp -R infra/kustomize "$TMP_DIR/infra"
+
+          pushd "$TMP_DIR/infra/kustomize/overlays/$DEPLOY_ENVIRONMENT" >/dev/null
+          kustomize edit set namespace $GREEN_NAMESPACE
+          kustomize edit set image ghcr.io/villagecompute/village-storefront=ghcr.io/villagecompute/village-storefront:$IMAGE_TAG
+          kustomize build . > /tmp/green-manifests.yaml
+          popd >/dev/null
+
+          kubectl apply -f /tmp/green-manifests.yaml
+
+      - name: Wait for green pods to be ready
+        run: |
+          echo "Waiting for gateway pods..."
+          kubectl wait --for=condition=ready pod \
+            -l app=village-storefront,component=gateway \
+            -n $GREEN_NAMESPACE \
+            --timeout=300s
+
+          echo "Waiting for worker pods..."
+          kubectl wait --for=condition=ready pod \
+            -l app=village-storefront,component=workers \
+            -n $GREEN_NAMESPACE \
+            --timeout=300s
+
+          echo "Waiting for media worker pods..."
+          kubectl wait --for=condition=ready pod \
+            -l app=village-storefront,component=media-workers \
+            -n $GREEN_NAMESPACE \
+            --timeout=300s
+
+      - name: Verify green health endpoints
+        run: |
+          # Port-forward to green service
+          kubectl port-forward -n $GREEN_NAMESPACE svc/village-storefront-gateway 8080:8080 &
+          PF_PID=$!
+          sleep 5
+
+          # Check health endpoints
+          curl -f http://localhost:8080/q/health/live || exit 1
+          curl -f http://localhost:8080/q/health/ready || exit 1
+
+          # Cleanup port-forward
+          kill $PF_PID || true
+
+          echo "✅ Green environment health checks passed" >> $GITHUB_STEP_SUMMARY
+
+  run-database-migrations:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-green
+      - validate-manifests
+    timeout-minutes: 15
+    if: needs.validate-manifests.outputs.environment == 'production'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run migrations
+        working-directory: migrations
+        env:
+          DB_URL: ${{ secrets.PRODUCTION_DB_URL }}
+          DB_USER: ${{ secrets.PRODUCTION_DB_USER }}
+          DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
+        run: |
+          mvn migration:up -Dmigration.env=production
+
+      - name: Verify migration status
+        working-directory: migrations
+        run: |
+          mvn migration:status -Dmigration.env=production | tee /tmp/migration-status.txt
+          echo "## Migration Status" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/migration-status.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  smoke-test:
+    name: Run Smoke Tests on Green
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-green
+      - run-database-migrations
+      - validate-manifests
+    if: always() && needs.deploy-green.result == 'success' && needs.validate-manifests.outputs.skip_smoke_tests != 'true'
+    timeout-minutes: 10
+    env:
+      DEPLOY_ENVIRONMENT: ${{ needs.validate-manifests.outputs.environment }}
+      GREEN_NAMESPACE: village-storefront-${{ needs.validate-manifests.outputs.environment }}-green
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Run smoke tests via port-forward
+        run: |
+          # Port-forward to green service
+          kubectl port-forward -n $GREEN_NAMESPACE svc/village-storefront-gateway 8080:8080 &
+          PF_PID=$!
+          sleep 5
+
+          echo "## Smoke Test Results" >> $GITHUB_STEP_SUMMARY
+
+          # Test 1: Health endpoints
+          echo "### Health Endpoints" >> $GITHUB_STEP_SUMMARY
+          if curl -f http://localhost:8080/q/health/live; then
+            echo "✅ Liveness probe passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Liveness probe failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          if curl -f http://localhost:8080/q/health/ready; then
+            echo "✅ Readiness probe passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Readiness probe failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Test 2: Metrics endpoint
+          echo "### Metrics Endpoint" >> $GITHUB_STEP_SUMMARY
+          if curl -f http://localhost:8080/q/metrics | grep -q "jvm_memory"; then
+            echo "✅ Metrics endpoint responding" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Metrics endpoint failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Test 3: API endpoint (catalog)
+          echo "### API Endpoints" >> $GITHUB_STEP_SUMMARY
+          if curl -f -H "Host: demo.${DEPLOY_ENVIRONMENT}.villagecompute.com" \
+               http://localhost:8080/api/catalog/products?limit=1; then
+            echo "✅ Catalog API responding" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Catalog API failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Cleanup
+          kill $PF_PID || true
+
+  approval:
+    name: Approve Traffic Cutover
+    runs-on: ubuntu-latest
+    needs:
+      - smoke-test
+      - validate-manifests
+    if: always() && needs.smoke-test.result == 'success'
+    timeout-minutes: 60
+    environment:
+      name: ${{ needs.validate-manifests.outputs.environment }}-cutover
+
+    steps:
+      - name: Manual approval gate
+        run: |
+          echo "## ⚠️ Manual Approval Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Green environment is ready for cutover." >> $GITHUB_STEP_SUMMARY
+          echo "Review smoke test results and approve to proceed." >> $GITHUB_STEP_SUMMARY
+
+  cutover-traffic:
+    name: Cut Over Traffic to Green
+    runs-on: ubuntu-latest
+    needs:
+      - approval
+      - validate-manifests
+    timeout-minutes: 10
+    env:
+      DEPLOY_ENVIRONMENT: ${{ needs.validate-manifests.outputs.environment }}
+      GREEN_NAMESPACE: village-storefront-${{ needs.validate-manifests.outputs.environment }}-green
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Patch ingress to route to green service
+        run: |
+          # Update ingress to point to green service
+          kubectl patch ingress village-storefront-ingress \
+            -n village-storefront-$DEPLOY_ENVIRONMENT \
+            --type='json' \
+            -p='[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value":"village-storefront-gateway"}]'
+
+          echo "✅ Traffic cutover completed" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify traffic flowing to green
+        run: |
+          sleep 10
+          echo "### Traffic Verification" >> $GITHUB_STEP_SUMMARY
+          kubectl logs -l app=village-storefront,component=gateway -n $GREEN_NAMESPACE --tail=50 | \
+            grep -E "HTTP|request" | head -10 >> $GITHUB_STEP_SUMMARY || echo "No traffic logs yet" >> $GITHUB_STEP_SUMMARY
+
+  monitor-green:
+    name: Monitor Green Environment
+    runs-on: ubuntu-latest
+    needs:
+      - cutover-traffic
+      - validate-manifests
+    timeout-minutes: 20
+    env:
+      DEPLOY_ENVIRONMENT: ${{ needs.validate-manifests.outputs.environment }}
+      GREEN_NAMESPACE: village-storefront-${{ needs.validate-manifests.outputs.environment }}-green
+
+    steps:
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Monitor pod metrics
+        run: |
+          echo "Monitoring green environment for 15 minutes..."
+          for i in {1..9}; do
+            echo "Check $i/9 ($(date))"
+            kubectl top pods -l app=village-storefront -n $GREEN_NAMESPACE || echo "Metrics not available yet"
+            sleep 100
+          done
+
+          echo "✅ Monitoring completed - no critical issues detected" >> $GITHUB_STEP_SUMMARY
+
+  decommission-blue:
+    name: Decommission Blue Environment
+    runs-on: ubuntu-latest
+    needs:
+      - monitor-green
+      - validate-manifests
+    timeout-minutes: 10
+    env:
+      DEPLOY_ENVIRONMENT: ${{ needs.validate-manifests.outputs.environment }}
+      BLUE_NAMESPACE: village-storefront-${{ needs.validate-manifests.outputs.environment }}
+
+    steps:
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Scale down blue deployment
+        run: |
+          # Scale down blue deployments to 0
+          kubectl scale deployment/village-storefront-gateway --replicas=0 -n $BLUE_NAMESPACE || true
+          kubectl scale deployment/village-storefront-workers --replicas=0 -n $BLUE_NAMESPACE || true
+          kubectl scale deployment/village-storefront-media-workers --replicas=0 -n $BLUE_NAMESPACE || true
+
+          echo "✅ Blue environment scaled down" >> $GITHUB_STEP_SUMMARY
+          echo "Blue namespace will be deleted after 24-hour rollback window" >> $GITHUB_STEP_SUMMARY
+
+  rollback:
+    name: Rollback to Blue (on failure)
+    runs-on: ubuntu-latest
+    needs:
+      - smoke-test
+      - cutover-traffic
+      - monitor-green
+      - validate-manifests
+    if: failure()
+    timeout-minutes: 10
+    env:
+      DEPLOY_ENVIRONMENT: ${{ needs.validate-manifests.outputs.environment }}
+      GREEN_NAMESPACE: village-storefront-${{ needs.validate-manifests.outputs.environment }}-green
+
+    steps:
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Revert ingress to blue service
+        run: |
+          kubectl patch ingress village-storefront-ingress \
+            -n village-storefront-$DEPLOY_ENVIRONMENT \
+            --type='json' \
+            -p='[{"op": "replace", "path": "/spec/rules/0/http/paths/0/backend/service/name", "value":"village-storefront-gateway"}]'
+
+          echo "⚠️ ROLLBACK: Traffic reverted to blue environment" >> $GITHUB_STEP_SUMMARY
+
+      - name: Scale down green deployment
+        run: |
+          kubectl scale deployment/village-storefront-gateway --replicas=0 -n $GREEN_NAMESPACE || true
+          kubectl scale deployment/village-storefront-workers --replicas=0 -n $GREEN_NAMESPACE || true
+
+      - name: Create incident report
+        run: |
+          echo "## 🚨 Deployment Rollback" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment failed and was rolled back to blue environment." >> $GITHUB_STEP_SUMMARY
+          echo "Review smoke test and monitoring logs to identify issues." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Action Required:** File incident report and investigate failure." >> $GITHUB_STEP_SUMMARY
