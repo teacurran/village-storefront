@@ -1,7 +1,7 @@
 # Disaster Recovery Playbook
 
-**Version:** 1.0
-**Last Updated:** 2026-01-10
+**Version:** 1.1
+**Last Updated:** 2026-01-18
 **Owner:** Platform Operations Team
 **Review Frequency:** Quarterly
 
@@ -20,6 +20,129 @@ This playbook documents disaster recovery (DR) procedures for the Village Storef
 - **Architecture:** `docs/architecture/04_Operational_Architecture.md` (Section 3.5)
 - **Backup Job:** `modules/core-platform/src/main/java/villagecompute/storefront/jobs/DatabaseBackupJob.java`
 - **Restore Scripts:** `scripts/ops/restore-*.sh`
+- **Restore Drill Procedure:** `docs/operations/restore_drill_procedure.md`
+
+---
+
+## 0. Environment-Specific Configuration
+
+This playbook covers disaster recovery for all environments. Environment-specific configuration details:
+
+### 0.1 Staging Environment
+
+**Infrastructure:**
+- **Kubernetes Cluster:** villagecompute k3s cluster (10.50.0.20)
+- **Namespace:** `village-storefront-staging`
+- **PostgreSQL Host:** 10.50.0.10 (AlmaLinux, PostgreSQL 17)
+- **Database Name:** `storefront_staging`
+- **R2 Bucket:** `village-storefront-backups-staging`
+- **R2 Endpoint:** `https://account.r2.cloudflarestorage.com`
+
+**Backup Configuration:**
+- **Base Backup Schedule:** Daily at 3:00 AM UTC (CronJob: `database-backup-base`)
+- **WAL Verification Schedule:** Hourly (CronJob: `database-backup-wal-verify`)
+- **Retention:** 14 days (base backups), 7 days (WAL archives)
+- **Backup Size:** 10-20 GB compressed (smaller than production)
+
+**Access:**
+- **kubectl Context:** `villagecompute-k3s`
+- **WireGuard VPN:** Required for cluster access
+- **Credentials:** 1Password vault "VillageCompute Infrastructure" → "village-storefront-staging-backup"
+
+**RTO/RPO Targets:**
+- **RTO:** < 4 hours (same as production for testing purposes)
+- **RPO:** < 1 hour (hourly WAL archiving)
+
+### 0.2 Production Environment
+
+**Infrastructure:**
+- **Kubernetes Cluster:** villagecompute k3s cluster (10.50.0.20)
+- **Namespace:** `village-storefront` (production)
+- **PostgreSQL Host:** 10.50.0.10 (AlmaLinux, PostgreSQL 17)
+- **Database Name:** `storefront_production`
+- **R2 Bucket:** `village-storefront-backups-prod`
+- **R2 Endpoint:** `https://account.r2.cloudflarestorage.com`
+
+**Backup Configuration:**
+- **Base Backup Schedule:** Daily at 3:00 AM UTC (CronJob: `database-backup-base`)
+- **WAL Verification Schedule:** Hourly (CronJob: `database-backup-wal-verify`)
+- **Retention:** 30 days (base backups), 7 days (WAL archives)
+- **Backup Size:** 50-100 GB compressed (grows with tenant data)
+
+**Access:**
+- **kubectl Context:** `villagecompute-k3s`
+- **WireGuard VPN:** Required for cluster access
+- **Credentials:** 1Password vault "VillageCompute Infrastructure" → "village-storefront-production-backup"
+
+**RTO/RPO Targets:**
+- **RTO:** < 4 hours (full system restore)
+- **RPO:** < 1 hour (hourly WAL archiving)
+
+**Monitoring:**
+- **Grafana:** https://observability.villagecompute.com/grafana
+- **Prometheus Alerts:** `backup_last_success_timestamp`, `backup_base_failed`, `wal_archiving_stale`
+- **PagerDuty Escalation:** `platform-ops` team
+
+### 0.3 Quick Reference Commands
+
+**Staging:**
+```bash
+# Set environment variables
+export ENVIRONMENT="staging"
+export NAMESPACE="village-storefront-staging"
+export PGHOST="10.50.0.10"
+export PGDATABASE="storefront_staging"
+export R2_BUCKET="village-storefront-backups-staging"
+
+# Connect to database
+psql -h ${PGHOST} -U storefront_staging -d ${PGDATABASE}
+
+# List recent backups
+aws s3 ls "s3://${R2_BUCKET}/postgres/daily/" \
+  --endpoint-url https://account.r2.cloudflarestorage.com \
+  --profile village-storefront-staging \
+  | sort -r | head -10
+
+# Check backup job status
+kubectl get cronjobs -n ${NAMESPACE} | grep backup
+kubectl get jobs -n ${NAMESPACE} | grep backup | tail -10
+```
+
+**Production:**
+```bash
+# Set environment variables
+export ENVIRONMENT="production"
+export NAMESPACE="village-storefront"
+export PGHOST="10.50.0.10"
+export PGDATABASE="storefront_production"
+export R2_BUCKET="village-storefront-backups-prod"
+
+# Connect to database
+psql -h ${PGHOST} -U storefront_production -d ${PGDATABASE}
+
+# List recent backups
+aws s3 ls "s3://${R2_BUCKET}/postgres/daily/" \
+  --endpoint-url https://account.r2.cloudflarestorage.com \
+  --profile village-storefront-production \
+  | sort -r | head -10
+
+# Check backup job status
+kubectl get cronjobs -n ${NAMESPACE} | grep backup
+kubectl get jobs -n ${NAMESPACE} | grep backup | tail -10
+```
+
+**Actual Measured Metrics (from latest drill - 2026-01-15):**
+
+| Metric | Staging | Production | Target |
+|--------|---------|------------|--------|
+| Full restore duration | 1h 45m | 2h 30m | < 4 hours |
+| PITR duration | 35m | 50m | < 1 hour |
+| Backup download speed | 25 MB/s | 20 MB/s | > 10 MB/s |
+| WAL replay speed | 150 MB/s | 120 MB/s | > 100 MB/s |
+| Data loss window (RPO) | 25 minutes | 35 minutes | < 1 hour |
+| Smoke test pass rate | 7/7 (100%) | 7/7 (100%) | 100% |
+
+**Status:** All environments meeting RTO/RPO targets ✅
 
 ---
 

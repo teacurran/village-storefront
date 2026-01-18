@@ -1,0 +1,70 @@
+---
+# Staging-specific Backup Configuration
+#
+# Overrides base backup configuration with staging environment values.
+# This patch is applied via Kustomize to customize backup settings for staging.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+data:
+  # Staging R2 endpoint (use staging Cloudflare account)
+  r2-endpoint: "https://account.r2.cloudflarestorage.com"
+
+  # Staging backup bucket (separate from production)
+  r2-bucket: "village-storefront-backups-staging"
+
+  # Shorter retention for staging (reduce storage costs)
+  retention-days: "14"
+
+  # WAL retention aligned with staging testing needs
+  wal-retention-days: "7"
+
+---
+# Staging PostgreSQL Configuration
+#
+# Database connection settings for staging environment.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+data:
+  # Staging PostgreSQL host (managed by VillageCompute infrastructure)
+  # See: villagecompute/infra/ansible/inventory/hosts.yml
+  host: "10.50.0.10"
+
+  # Standard PostgreSQL port
+  port: "5432"
+
+  # Staging database name
+  database: "storefront_staging"
+
+---
+# Instructions for Sealed Secrets (DO NOT COMMIT REAL CREDENTIALS)
+#
+# To create sealed secrets for staging, run:
+#
+# 1. R2 Backup Credentials:
+#    kubectl create secret generic r2-backup-credentials \
+#      --namespace village-storefront-staging \
+#      --from-literal=access-key-id='STAGING_R2_ACCESS_KEY' \
+#      --from-literal=secret-access-key='STAGING_R2_SECRET_KEY' \
+#      --dry-run=client -o yaml | \
+#      kubeseal --controller-name sealed-secrets --controller-namespace kube-system -o yaml > sealed-secret-r2-backup.yaml
+#
+# 2. PostgreSQL Credentials:
+#    kubectl create secret generic postgres-credentials \
+#      --namespace village-storefront-staging \
+#      --from-literal=username='storefront_staging' \
+#      --from-literal=password='STAGING_DB_PASSWORD' \
+#      --dry-run=client -o yaml | \
+#      kubeseal --controller-name sealed-secrets --controller-namespace kube-system -o yaml > sealed-secret-postgres.yaml
+#
+# 3. Apply sealed secrets:
+#    kubectl apply -f sealed-secret-r2-backup.yaml
+#    kubectl apply -f sealed-secret-postgres.yaml
+#
+# Note: Store actual credentials in 1Password vault "VillageCompute Infrastructure"
+#       under entry "village-storefront-staging-backup"
