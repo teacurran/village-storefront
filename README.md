@@ -1545,6 +1545,135 @@ open target/site/jacoco/index.html
 ./mvnw verify -Pnative
 ```
 
+### End-to-End (E2E) Tests
+
+The project includes comprehensive Playwright-based E2E tests covering multi-tenant flows, checkout, payments, admin operations, POS offline mode, and headless API integrations.
+
+**Prerequisites:**
+- Docker and docker-compose (for services)
+- Node.js 20+
+- Running application instance
+
+**Quick Start:**
+
+```bash
+# Option 1: Run all E2E tests (recommended)
+./scripts/qa/run_e2e.sh
+
+# Option 2: Run specific test suite
+cd tests/e2e/playwright
+npm ci
+npx playwright install --with-deps
+npm run test tests/e2e/storefront/checkout.spec.ts
+
+# Option 3: Run in headed mode (see browser)
+HEADLESS=false ./scripts/qa/run_e2e.sh
+```
+
+**Test Coverage:**
+
+The E2E test suite covers:
+
+1. **Storefront Checkout Flows:**
+   - Guest checkout with Stripe payment (`tests/e2e/storefront/checkout.spec.ts`)
+   - Logged-in checkout with loyalty points redemption
+   - Gift card application
+   - Shipping method selection
+   - Order confirmation verification
+
+2. **Admin Dashboard Operations:**
+   - Catalog CRUD operations (`tests/e2e/playwright/admin-flows.spec.ts`)
+   - Inventory adjustments
+   - Order management and refunds
+
+3. **Consignment Vendor Portal:**
+   - Payout balance viewing (`tests/e2e/playwright/consignment-payout.spec.ts`)
+   - Payout request submission
+   - Sales history and earnings tracking
+
+4. **Loyalty Program:**
+   - Points balance display (tested via checkout flows)
+   - Loyalty redemption at checkout
+
+5. **POS Terminal:**
+   - Offline transaction processing (`tests/e2e/pos/offline.spec.ts`)
+   - Split tender workflow
+   - Queue sync when reconnecting
+   - Retry/backoff for failed syncs
+
+6. **Headless API:**
+   - OAuth authentication (`tests/e2e/playwright/headless-api.spec.ts`)
+   - Cart creation and order submission via API
+   - Catalog retrieval
+   - OAuth scope enforcement
+
+7. **Multi-Tenant Isolation:**
+   - Product isolation verification (`tests/e2e/playwright/multi-tenant-isolation.spec.ts`)
+   - Cross-tenant access prevention
+   - Feature flag enforcement per tenant
+
+**Test Data:**
+
+E2E tests use deterministic fixtures from `tests/fixtures/tenants.ts`:
+- **Tenant A:** `tenant-a.test.local` (loyalty enabled, full catalog)
+- **Tenant B:** `tenant-b.test.local` (loyalty enabled, tech products)
+- **Tenant C:** `tenant-c.test.local` (loyalty disabled, artisan products)
+
+Each tenant includes:
+- Admin, customer, consignor, and loyalty member accounts (fixed passwords)
+- Pre-defined products with variants and inventory
+- Gift cards with known balances
+- OAuth clients for headless API testing
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BASE_URL` | `http://localhost:8080` | Application URL to test against |
+| `HEADLESS` | `true` | Run browsers in headless mode |
+| `CI` | auto-detected | Uses npm ci instead of npm install |
+| `SEED_DATA` | `true` | Seed deterministic catalog/inventory data |
+
+**Output Artifacts:**
+
+After running E2E tests, artifacts are available at:
+- `target/playwright-report/index.html` - HTML test report (browsable)
+- `target/playwright-results.json` - JSON results (CI-parseable)
+- `target/playwright-junit.xml` - JUnit XML (CI integration)
+- `target/playwright-traces/` - Playwright traces (on failure, replay via `npx playwright show-trace`)
+
+**Debugging Failed Tests:**
+
+```bash
+# View HTML report
+npx playwright show-report target/playwright-report
+
+# Replay trace for failed test
+npx playwright show-trace target/playwright-traces/trace-{test-id}.zip
+
+# Run specific test in headed mode with debugger
+cd tests/e2e/playwright
+npx playwright test tests/e2e/storefront/checkout.spec.ts --headed --debug
+```
+
+**CI Integration:**
+
+E2E tests run automatically in CI on all PRs and main branch pushes. The pipeline:
+1. Starts PostgreSQL and MinIO services
+2. Builds and starts Quarkus application
+3. Seeds deterministic test data
+4. Runs Playwright tests across 5 browsers (Chromium, Firefox, WebKit, mobile Chrome, mobile Safari)
+5. Uploads artifacts (reports, traces, videos)
+6. Fails pipeline if tests fail or execution time exceeds 30 minutes
+
+**Performance Budget:**
+
+E2E tests must complete within 20 minutes (4 parallel workers). Tests are designed for deterministic results with:
+- 2 retries on failure (configured in `playwright.config.ts`)
+- Explicit waits for API responses
+- `data-test` attributes for stable selectors
+- Visual regression masking for dynamic content (order numbers, timestamps)
+
 ### Test Database
 
 Integration tests use H2 in-memory database by default (configured via `@QuarkusTest` profiles).
