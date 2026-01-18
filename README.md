@@ -129,14 +129,40 @@ Native builds benefit from warm caches when dependencies haven't changed:
 
 ## Technology Stack
 
-- **Backend:** Java 21, Quarkus 3.17+, Maven
-- **Database:** PostgreSQL 17 (multi-tenant with RLS)
-- **Frontend (Admin):** Vue 3, PrimeVue, Tailwind CSS (via Quinoa)
-- **Frontend (Storefront):** Qute templates, Tailwind CSS, PrimeUI
-- **Authentication:** JWT tokens (stateless)
-- **Caching:** Caffeine (in-memory)
-- **Observability:** OpenTelemetry, Prometheus, Jaeger
-- **Deployment:** Kubernetes (k3s), GraalVM native images
+**Backend:**
+- Java 21 (LTS) with Quarkus 3.17+ framework
+- PostgreSQL 17 with PostGIS (tenant-scoped RLS policies)
+- Hibernate ORM with Panache active record pattern
+- RESTEasy Reactive for JAX-RS REST APIs
+- MyBatis Migrations for database schema changes
+- Maven 3.9+ for build automation
+
+**Frontend:**
+- Vue.js 3 with Composition API (admin dashboard + POS)
+- Qute templates + Tailwind CSS (customer-facing storefront)
+- PrimeVue component library (admin UI)
+- PrimeUI (storefront progressive enhancement)
+- Quinoa for Vue build integration
+
+**Integrations:**
+- Stripe Connect for payments and consignment payouts
+- Cloudflare R2 for media storage (S3-compatible)
+- FFmpeg for video transcoding
+- USPS/UPS/FedEx carrier APIs for shipping rates
+
+**Infrastructure:**
+- Kubernetes (k3s) for container orchestration
+- GraalVM for native executable builds (~50-100MB containers, <100ms cold start)
+- Prometheus + Grafana + Jaeger for observability
+- GitHub Actions for CI/CD pipeline
+- SonarCloud for static analysis and quality gates
+
+**Development Tools:**
+- Spotless + Eclipse formatter for code formatting
+- JaCoCo for test coverage (80% requirement enforced)
+- PlantUML/Mermaid for architecture diagrams
+- Spectral for OpenAPI spec linting
+- k6 + Lighthouse CI for performance testing
 
 ## Quick Start
 
@@ -1107,6 +1133,104 @@ Each merchant store is a **tenant** identified by subdomain or custom domain. Al
 
 See [ADR-001](docs/adr/ADR-001-tenancy.md) for detailed architecture and data model.
 
+## Architecture
+
+Village Storefront uses a **layered modular monolith** architecture optimized for rapid feature delivery while maintaining multi-tenant data isolation.
+
+**Key Architectural Patterns:**
+- **Multi-Tenancy:** Shared PostgreSQL database with tenant-scoped queries + Row-Level Security (RLS) enforcement
+- **Dual Frontend:** Server-rendered Qute storefront for customers + Vue SPA for admin/POS
+- **Background Jobs:** Database-backed DelayedJob pattern for async processing (media, payouts, reports)
+- **Payment Integration:** Stripe Connect with adapter abstraction for future payment providers
+- **Media Pipeline:** FFmpeg worker pods with R2 storage and signed URL access control
+- **Feature Flags:** Per-tenant progressive rollout with emergency kill switches
+- **Observability:** OpenTelemetry tracing + Prometheus metrics + Grafana dashboards
+
+**Architecture Documentation:**
+- [Architecture Overview](docs/architecture_overview.md)
+- [Component Diagram](docs/diagrams/component_overview.puml) ([PNG](docs/diagrams/component_overview.png))
+- [Multi-Tenancy Strategy (ADR-001)](docs/adr/ADR-001-tenancy.md)
+- [Background Jobs (ADR-006)](docs/adr/ADR-006-background-jobs.md)
+- [Media Pipeline (ADR-005)](docs/adr/ADR-005-media-pipeline.md)
+- [Feature Flags (ADR-007)](docs/adr/ADR-007-feature-flags.md)
+- [All ADRs](docs/adr/ADR-README.md)
+
+**ERD & Data Model:**
+- [Domain ERD](docs/diagrams/domain_erd.puml) (Products, Orders, Inventory, Consignment, Loyalty)
+- [Tenant Isolation Blueprint](docs/architecture/tenant_isolation.md)
+
+## Deployment
+
+### Production Environment
+
+**Target Infrastructure:**
+- k3s Kubernetes cluster (self-hosted on Proxmox)
+- GraalVM native executables (~50-100MB containers, <100ms cold start)
+- PostgreSQL 17 with automated backups (WAL archiving + daily base backups to R2)
+- Cloudflare R2 for media storage + CDN
+
+**Deployment Strategy:**
+- Blue/green deployments with feature flag gating
+- GitHub Actions pipeline: lint → test → build → sonarcloud → native image → kubernetes apply
+- Automated SSL via cert-manager + Cloudflare DNS
+- Zero-downtime rolling updates with readiness probes
+
+**Deployment Documentation:**
+- [Release Runbook](docs/operations/release-runbook.md) - Step-by-step deployment procedures
+- [Deployment Architecture](docs/architecture/ops/deployment-architecture.md) - Infrastructure topology
+- [Hypercare Plan](docs/architecture/ops/hypercare-plan.md) - First 30 days monitoring (KPIs, rotations)
+- [Disaster Recovery Playbook](docs/operations/dr_playbook.md) - Backup/restore procedures
+
+### Local Testing
+
+```bash
+# JVM mode (fast iteration, hot reload)
+./mvnw quarkus:dev
+
+# Native mode (production simulation)
+./mvnw package -Pnative
+./target/village-storefront-1.0.0-SNAPSHOT-runner
+```
+
+## Contributing
+
+We welcome contributions! Please follow these guidelines:
+
+1. **Read the [Developer Guide](docs/architecture/developer-guide.md)** for setup, coding standards, and testing requirements
+2. **Follow the [Java Project Standards](docs/java-project-standards.adoc)** for code formatting and quality gates
+3. **Create an ADR** for architectural changes (see [ADR Template](docs/adr/ADR-README.md))
+4. **Write tests** to maintain 80% code coverage (enforced by JaCoCo + SonarCloud)
+5. **Run quality checks** before pushing:
+   ```bash
+   ./mvnw spotless:apply     # Format code
+   ./mvnw verify             # Run tests with coverage
+   npm run lint:openapi      # Validate API specs
+   ```
+6. **Create a PR** with descriptive title and link to relevant issue/ticket
+7. **Wait for CI** to pass (all quality gates must be green)
+
+**Code Review Checklist:**
+- [ ] All tests passing locally (`./mvnw verify`)
+- [ ] Code coverage ≥80% (`./mvnw jacoco:check`)
+- [ ] No Spotless violations (`./mvnw spotless:check`)
+- [ ] Tenant filtering verified (if data access changes)
+- [ ] ADR created (if architectural change)
+- [ ] Documentation updated (if user-facing change)
+
+**For questions, reach out on Slack:** #village-storefront
+
+## License
+
+**UNLICENSED** - Proprietary software for VillageCompute. All rights reserved.
+
+## Support
+
+- **Documentation:** [Developer Guide](docs/architecture/developer-guide.md) | [Runbooks](docs/architecture/ops/runbook-index.md) | [ADRs](docs/adr/ADR-README.md)
+- **Issues:** [GitHub Issues](https://github.com/teacurran/village-storefront/issues)
+- **Slack:** #village-storefront (general), #team-backend (Java/Quarkus), #team-frontend (Vue/Qute)
+- **Email:** engineering@villagecompute.com
+- **On-Call:** PagerDuty rotation for production incidents (see [Hypercare Plan](docs/architecture/ops/hypercare-plan.md))
+
 ## Storefront Development
 
 The customer-facing storefront uses **Qute templates** with **Tailwind CSS** for server-side rendering (SSR). This approach provides excellent SEO, fast initial page loads, and progressive enhancement.
@@ -2023,6 +2147,12 @@ psql -h 10.50.0.10 -U storefront_production -d storefront_production
   - [ADR-002: CI/CD Quality Gates](docs/adr/ADR-002-quality-gates.md)
   - [ADR-003: Checkout Saga](docs/adr/ADR-003-checkout-saga.md)
   - [ADR-004: Consignment Payouts](docs/adr/ADR-004-consignment-payouts.md)
+  - [ADR-005: Media Pipeline](docs/adr/ADR-005-media-pipeline.md)
+  - [ADR-006: Background Jobs](docs/adr/ADR-006-background-jobs.md)
+  - [ADR-007: Feature Flags](docs/adr/ADR-007-feature-flags.md)
+  - [ADR-008: Headless API](docs/adr/ADR-008-headless-api.md)
+  - [ADR-009: Observability](docs/adr/ADR-009-observability.md)
+  - [ADR-010: Session Management](docs/adr/ADR-010-session-management.md)
 
 ### For Operations
 
@@ -2049,17 +2179,8 @@ psql -h 10.50.0.10 -U storefront_production -d storefront_production
 - **[Storefront Theming](docs/storefront-theming.md)** - Tailwind, design tokens, localization
 - **[Feature Flag Governance](docs/feature_flags/governance.md)** - Kill switches, rollout process, flag lifecycle
 - **[API Spec](api/v1/openapi.yaml)** - OpenAPI specification
+- **[API Onboarding Guide](api/ONBOARDING.md)** - Headless API authentication, OAuth setup, code examples, Postman collection
 - **[Diagrams](docs/diagrams/)** - PlantUML source files (system context, containers, components, ERD)
-
-## License
-
-UNLICENSED - Proprietary software for VillageCompute internal use.
-
-## Support
-
-- **GitHub Issues:** https://github.com/teacurran/village-storefront/issues
-- **Architecture Team:** Contact via Slack #village-storefront
-- **Documentation:** See `docs/` directory
 
 ---
 

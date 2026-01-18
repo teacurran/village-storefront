@@ -1,7 +1,7 @@
 # Architectural Decision Records (ADRs)
 
-**Version:** 1.0
-**Last Updated:** 2026-01-10
+**Version:** 1.1
+**Last Updated:** 2026-01-18
 **Owner:** Architecture Team
 **Review Cycle:** Quarterly
 
@@ -23,10 +23,28 @@ An ADR captures:
 
 | ID | Title | Status | Date | Key Areas | Related ADRs |
 |----|-------|--------|------|-----------|--------------|
-| [ADR-0001](ADR-001-tenancy.md) | Multi-Tenancy & Tenant Isolation Strategy | Accepted | 2026-01-02 | Tenancy, Data Model, Security | ADR-0003, ADR-0004 |
+| [ADR-0001](ADR-001-tenancy.md) | Multi-Tenancy & Tenant Isolation Strategy | Accepted | 2026-01-02 | Tenancy, Data Model, Security | ADR-0003, ADR-0004, ADR-0006 |
 | [ADR-0002](ADR-002-quality-gates.md) | CI/CD Quality Gates & Build Pipeline | Accepted | 2026-01-02 | CI/CD, Testing, SonarCloud | - |
 | [ADR-0003](ADR-003-checkout-saga.md) | Checkout Saga Pattern & Adapter Contracts | Accepted | 2026-01-03 | Checkout, Payments, Transactions | ADR-0001 |
 | [ADR-0004](ADR-004-consignment-payouts.md) | Consignment Payout Automation & Compliance | Accepted | 2026-01-03 | Consignment, Stripe Connect, Compliance | ADR-0001 |
+| [ADR-0005](ADR-005-media-pipeline.md) | Media Pipeline Architecture & FFmpeg Worker Isolation | Accepted | 2026-01-18 | Media Processing, Background Jobs, R2 Storage | ADR-0001, ADR-0006 |
+| [ADR-0006](ADR-006-background-jobs.md) | Background Job Architecture & DelayedJob Pattern | Accepted | 2026-01-18 | Async Processing, Job Queues, Worker Scaling | ADR-0001, ADR-0005 |
+| [ADR-0007](ADR-007-feature-flags.md) | Feature Flag Governance & Progressive Rollout | Accepted | 2026-01-18 | Feature Flags, Deployment Safety, Kill Switches | ADR-0001 |
+| [ADR-0008](ADR-008-headless-api.md) | Headless API Design & OAuth Scopes | Accepted | 2026-01-18 | API Design, OAuth, Partner Integrations | ADR-0001 |
+| [ADR-0009](ADR-009-observability.md) | Observability Framework & Telemetry Strategy | Accepted | 2026-01-18 | Monitoring, Metrics, Tracing, Logging | ADR-0001 |
+| [ADR-0010](ADR-010-session-management.md) | Session Management & JWT Token Strategy | Accepted | 2026-01-18 | Authentication, Security, Impersonation | ADR-0001, ADR-0006 |
+
+---
+
+## Status Summary
+
+**Total ADRs:** 10
+**Accepted:** 10 (100%)
+**Proposed:** 0
+**Superseded:** 0
+**Deprecated:** 0
+
+All ADRs document implemented architectural decisions as of January 2026 (production-ready).
 
 ---
 
