@@ -2,7 +2,7 @@
 -- Introduces shipping_profiles (per-tenant carrier configuration) and shipping_labels (label + tracking records)
 
 -- Shipping profiles store carrier preferences, credentials, and origin addresses
-CREATE TABLE IF NOT EXISTS shipping_profiles (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS shipping_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
@@ -25,7 +25,7 @@ COMMENT ON TABLE shipping_profiles IS 'Tenant-scoped shipping configurations (or
 COMMENT ON COLUMN shipping_profiles.enabled_carriers IS 'Comma-separated carrier codes (USPS,UPS,FEDEX,...)';
 
 -- Shipping labels persist label/tracking metadata emitted to carriers
-CREATE TABLE IF NOT EXISTS shipping_labels (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS shipping_labels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,

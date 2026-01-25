@@ -125,7 +125,7 @@ COMMENT ON COLUMN inventory_levels.version IS 'Optimistic locking version for co
 -- Audit trail for inventory changes (cycle counts, damage, theft, corrections)
 
 CREATE TABLE inventory_adjustments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     variant_id UUID NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
     location_id UUID NOT NULL REFERENCES inventory_locations(id) ON DELETE CASCADE,
@@ -136,6 +136,7 @@ CREATE TABLE inventory_adjustments (
     adjusted_by VARCHAR(255) NOT NULL,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, created_at),
     CONSTRAINT chk_inventory_adjustments_reason CHECK (reason IN ('CYCLE_COUNT', 'DAMAGE', 'RETURN', 'SHRINKAGE', 'FOUND', 'OTHER')),
     CONSTRAINT chk_inventory_adjustments_quantity_nonnegative CHECK (quantity_before >= 0 AND quantity_after >= 0),
     CONSTRAINT chk_inventory_adjustments_balance CHECK (quantity_before + quantity_change = quantity_after)

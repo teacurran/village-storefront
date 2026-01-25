@@ -19,7 +19,7 @@
 -- Watermark/checkpoint tracking for idempotent domain event processing
 -- Each processor (sales, inventory, loyalty, consignment) maintains independent checkpoint
 
-CREATE TABLE reporting_checkpoints (
+CREATE TABLE IF NOT EXISTS reporting_checkpoints (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     processor_name VARCHAR(100) NOT NULL UNIQUE,
     last_processed_at TIMESTAMPTZ NOT NULL,
@@ -51,7 +51,7 @@ VALUES
 -- ----------------------------------------------------------------------------
 -- Read-optimized table for loyalty program reporting
 
-CREATE TABLE loyalty_aggregates (
+CREATE TABLE IF NOT EXISTS loyalty_aggregates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     period_date DATE NOT NULL,

@@ -2,7 +2,7 @@
 -- Description: Create loyalty_redemption_reservations table for cart holds
 --              including optimistic locking + tenant RLS policies.
 
-CREATE TABLE loyalty_redemption_reservations (
+CREATE TABLE IF NOT EXISTS loyalty_redemption_reservations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     member_id UUID NOT NULL REFERENCES loyalty_members(id) ON DELETE CASCADE,

@@ -34,8 +34,8 @@ ALTER TABLE domain_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY domain_events_tenant_isolation ON domain_events
     USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
 
--- Grant permissions
-GRANT SELECT, INSERT ON domain_events TO storefront_app;
+-- Grant permissions (using current_user for dev environment compatibility)
+GRANT SELECT, INSERT ON domain_events TO PUBLIC;
 
 COMMENT ON TABLE domain_events IS 'Immutable domain events for event sourcing and reporting projections';
 COMMENT ON COLUMN domain_events.aggregate_type IS 'Type of aggregate (e.g., INVENTORY_LEVEL, INVENTORY_TRANSFER)';

@@ -1676,76 +1676,247 @@ open target/site/jacoco/index.html
 
 ### End-to-End (E2E) Tests
 
-The project includes comprehensive Playwright-based E2E tests covering multi-tenant flows, checkout, payments, admin operations, POS offline mode, and headless API integrations.
+The project includes comprehensive Playwright-based E2E tests covering multi-tenant flows, checkout, payments, admin operations, POS offline mode, loyalty redemption, consignment payouts, and headless API integrations. All critical user flows are tested across multiple tenants to verify data isolation.
 
 **Prerequisites:**
-- Docker and docker-compose (for services)
+- Docker and docker-compose (for PostgreSQL, MinIO services)
 - Node.js 20+
-- Running application instance
+- Running application instance at `http://localhost:8080`
 
 **Quick Start:**
 
 ```bash
-# Option 1: Run all E2E tests (recommended)
+# Option 1: Run all E2E tests (recommended - includes data seeding)
 ./scripts/qa/run_e2e.sh
 
 # Option 2: Run specific test suite
 cd tests/e2e/playwright
 npm ci
 npx playwright install --with-deps
-npm run test tests/e2e/storefront/checkout.spec.ts
+npm run test checkout-guest-vs-auth.spec.ts
 
 # Option 3: Run in headed mode (see browser)
 HEADLESS=false ./scripts/qa/run_e2e.sh
+
+# Option 4: Run tests with video recording and traces
+npm run test -- --trace on --video on
+
+# Option 5: View HTML report
+npx playwright show-report target/playwright-report
+```
+
+**Environment Variables:**
+
+```bash
+BASE_URL=http://localhost:8080  # Base URL for application
+HEADLESS=true                   # Run in headless mode (default: true)
+SEED_DATA=true                  # Seed test data before running (default: true)
+CI=true                         # Enable CI-specific settings
 ```
 
 **Test Coverage:**
 
-The E2E test suite covers:
+The comprehensive E2E test suite covers all critical user workflows:
 
 1. **Storefront Checkout Flows:**
-   - Guest checkout with Stripe payment (`tests/e2e/storefront/checkout.spec.ts`)
-   - Logged-in checkout with loyalty points redemption
-   - Gift card application
-   - Shipping method selection
-   - Order confirmation verification
+   - **Guest checkout** (`checkout-guest-vs-auth.spec.ts`)
+     - Guest checkout with Stripe test card
+     - Email validation and shipping address entry
+     - Guest users cannot see loyalty features
+   - **Authenticated checkout** (`checkout-guest-vs-auth.spec.ts`)
+     - Pre-filled address from user profile
+     - Loyalty points earned on purchase
+     - Saved payment methods
+   - **Gift card application** (`storefront-checkout.spec.ts`)
+   - **Shipping method selection** with carrier rate calculation
+   - **Order confirmation** with order number and email receipt
 
-2. **Admin Dashboard Operations:**
-   - Catalog CRUD operations (`tests/e2e/playwright/admin-flows.spec.ts`)
-   - Inventory adjustments
-   - Order management and refunds
+2. **Loyalty Program End-to-End:**
+   - **Points earning** on purchases (`loyalty-end-to-end.spec.ts`)
+     - Tenant A: 10 points per dollar, $1 per 100 points
+     - Tenant B: 5 points per dollar, $0.50 per 100 points
+   - **Points redemption** during checkout
+   - **Balance verification** before and after transactions
+   - **Transaction history** showing earn/redeem events
+   - **Tenant C** verification (loyalty disabled)
+   - **Minimum redemption threshold** enforcement
 
-3. **Consignment Vendor Portal:**
-   - Payout balance viewing (`tests/e2e/playwright/consignment-payout.spec.ts`)
-   - Payout request submission
-   - Sales history and earnings tracking
+3. **Admin Catalog Management:**
+   - **Product CRUD** (`admin-catalog-crud.spec.ts`)
+     - Create products with pricing, inventory, SKU
+     - Edit existing product details
+     - Delete products with confirmation
+     - Product validation (duplicate SKU prevention, price validation)
+   - **Variant management**
+     - Create products with size/color variants
+     - Generate variant combinations
+     - Set inventory per variant
+   - **Bulk import** via CSV
+     - Upload CSV file with products
+     - Preview imported data
+     - Validation before import
+     - Confirmation of successful import
+   - **Multi-tenant catalog isolation**
+     - Tenant A sees only `TA-*` SKUs
+     - Tenant B sees only `TB-*` SKUs
 
-4. **Loyalty Program:**
-   - Points balance display (tested via checkout flows)
-   - Loyalty redemption at checkout
+4. **POS Offline Queue:**
+   - **Offline transaction submission** (`pos-offline-queue.spec.ts`)
+     - Submit transactions when network unavailable
+     - Verify offline indicator displayed
+     - Transactions queued locally
+   - **Queue viewing**
+     - View all queued transactions
+     - Transaction details preserved
+   - **Sync when online**
+     - Trigger sync when network restored
+     - Verify queue cleared after sync
+     - No data loss during sync
+   - **Multi-tenant offline isolation**
+     - Tenant A queue does not show Tenant B transactions
 
-5. **POS Terminal:**
-   - Offline transaction processing (`tests/e2e/pos/offline.spec.ts`)
-   - Split tender workflow
-   - Queue sync when reconnecting
-   - Retry/backoff for failed syncs
+5. **Consignment Payout Verification:**
+   - **Balance viewing** (`consignment-payout.spec.ts`)
+     - Consignor portal login
+     - View pending payout balance
+     - View total earnings
+   - **Payout request**
+     - Request payout via Stripe Express
+     - Confirmation message displayed
+     - Payout appears in history with "PENDING" status
+   - **Payout schedule validation**
+     - Minimum threshold enforcement ($10)
+     - Button disabled below threshold
+   - **Sales history**
+     - View sales transactions
+     - Verify consignment commission calculations
+   - **Multi-tenant payout isolation**
+     - Tenant B consignor sees only TB- SKU sales
+     - No cross-tenant balance leakage
 
 6. **Headless API:**
-   - OAuth authentication (`tests/e2e/playwright/headless-api.spec.ts`)
-   - Cart creation and order submission via API
-   - Catalog retrieval
-   - OAuth scope enforcement
+   - **OAuth authentication** (`headless-api.spec.ts`)
+     - Client credentials grant
+     - Access token retrieval
+     - Token expiration handling
+   - **API order creation**
+     - Cart creation via API
+     - Item addition with SKU
+     - Shipping rate calculation
+     - Checkout commit
+   - **OAuth scope enforcement**
+     - Catalog read scope validation
+     - Cart write scope validation
 
 7. **Multi-Tenant Isolation:**
-   - Product isolation verification (`tests/e2e/playwright/multi-tenant-isolation.spec.ts`)
-   - Cross-tenant access prevention
-   - Feature flag enforcement per tenant
+   - **Product isolation** (`multi-tenant-isolation.spec.ts`)
+     - Products scoped by tenant_id
+     - No ID overlap between tenants
+     - 404 errors on cross-tenant product access
+   - **Order isolation**
+     - Orders only visible to owning tenant
+   - **Feature flag enforcement**
+     - Tenant A vs Tenant C loyalty flag differences
+   - **Subdomain-based routing**
+     - Tenant A: `tenant-a.test.local`
+     - Tenant B: `tenant-b.test.local`
+     - Tenant C: `tenant-c.test.local` + `custom-store.example.com`
 
-**Test Data:**
+**Test Data Fixtures:**
 
-E2E tests use deterministic fixtures from `tests/fixtures/tenants.ts`:
-- **Tenant A:** `tenant-a.test.local` (loyalty enabled, full catalog)
-- **Tenant B:** `tenant-b.test.local` (loyalty enabled, tech products)
+E2E tests use deterministic fixtures from `tests/fixtures/tenants.ts` to ensure reproducible results:
+
+- **Tenant A:** `tenant-a.test.local`
+  - Admin: `admin@tenant-a.com`
+  - Customer: `customer@tenant-a.com`
+  - Loyalty Member: `loyalty@tenant-a.com` (has points balance)
+  - Consignor: `consignor@tenant-a.com`
+  - Products: Premium T-Shirt ($29.99), Deluxe Jeans ($79.99), Sneakers ($99.99)
+  - Gift Cards: `GIFT-A-100` ($100), `GIFT-A-50` ($50)
+  - Loyalty: 10 points/$, $1 per 100 points
+
+- **Tenant B:** `tenant-b.test.local`
+  - Admin: `admin@tenant-b.com`
+  - Customer: `customer@tenant-b.com`
+  - Loyalty Member: `loyalty@tenant-b.com`
+  - Consignor: `consignor@tenant-b.com`
+  - Products: Laptop Bag ($49.99), Wireless Mouse ($24.99), Keyboard ($129.99)
+  - Gift Cards: `GIFT-B-75` ($75)
+  - Loyalty: 5 points/$, $0.50 per 100 points
+
+- **Tenant C:** `tenant-c.test.local` / `custom-store.example.com`
+  - Admin: `admin@tenant-c.com`
+  - Customer: `customer@tenant-c.com`
+  - Products: Artisan Coffee ($18.99), Tea Set ($45.00)
+  - Gift Cards: `GIFT-C-25` ($25)
+  - Loyalty: DISABLED (tests feature flag variations)
+
+**Seeding Test Data:**
+
+```bash
+# Seed test data (creates tenants, products, users)
+./scripts/dev/tenant_seed.sh --catalog
+
+# Clear test database (WARNING: destructive)
+./scripts/dev/reset_test_db.sh
+```
+
+**CI Integration:**
+
+E2E tests run automatically in CI (`.github/workflows/ci.yml`) on every PR and push to `main`/`beta`:
+
+- **Timeout:** 30 minutes (tests must complete in ≤20 minutes)
+- **Parallelization:** 4 workers (Playwright config)
+- **Retries:** 2 retries in CI, 0 retries locally
+- **Artifacts:** HTML report, JSON results, JUnit XML, traces (on failure)
+- **Quality Gate:** Tests must pass before merge
+
+**Debugging Failed Tests:**
+
+```bash
+# View HTML report
+npx playwright show-report target/playwright-report
+
+# Run specific test in debug mode
+npx playwright test checkout-guest-vs-auth.spec.ts --debug
+
+# View traces for failed tests
+npx playwright show-trace target/playwright-traces/trace.zip
+
+# Run with video recording
+npm run test -- --video on
+
+# Generate screenshots on failure
+npm run test -- --screenshot only-on-failure
+```
+
+**Writing New E2E Tests:**
+
+See `tests/e2e/playwright/README.md` for developer guide including:
+- Page Object pattern usage
+- Multi-tenant test structure
+- Fixture integration
+- Best practices for deterministic tests
+
+**Performance Budget:**
+
+Tests execute in parallel (4 workers) and must complete within 20 minutes:
+- Multi-tenant isolation: ~2 min
+- Checkout flows: ~5 min
+- Admin CRUD: ~3 min
+- POS offline: ~4 min
+- Loyalty + consignment: ~3 min
+- Headless API: ~2 min
+- Buffer: ~1 min
+
+**Test Determinism:**
+
+All tests are designed to be deterministic and resilient:
+- Fixed test data seeded before each run
+- No dependencies on external services (mocks for Stripe, carriers)
+- Explicit waits using Playwright auto-retry (no hardcoded `sleep()`)
+- Tenant context verification before assertions
+- Video recording for debugging flaky tests
 - **Tenant C:** `tenant-c.test.local` (loyalty disabled, artisan products)
 
 Each tenant includes:

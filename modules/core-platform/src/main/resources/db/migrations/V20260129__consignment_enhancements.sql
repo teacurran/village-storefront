@@ -21,7 +21,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ----------------------------------------------------------------------------
 -- Intake Batches Table
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS intake_batches (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS intake_batches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     consignor_id UUID NOT NULL REFERENCES consignors(id) ON DELETE CASCADE,
@@ -50,7 +50,7 @@ COMMENT ON COLUMN intake_batches.processed_items IS 'Successfully processed item
 -- ----------------------------------------------------------------------------
 -- Commission Schedules Table
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS commission_schedules (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS commission_schedules (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     consignor_id UUID NOT NULL REFERENCES consignors(id) ON DELETE CASCADE,
@@ -114,7 +114,7 @@ COMMENT ON COLUMN consignors.tax_id_last_rotated IS 'Last key rotation timestamp
 -- ----------------------------------------------------------------------------
 -- Consignment Data Retention Hooks
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS consignment_retention_hooks (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS consignment_retention_hooks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     resource_type VARCHAR(50) NOT NULL,
@@ -154,7 +154,7 @@ CREATE POLICY consignment_retention_tenant_isolation ON consignment_retention_ho
 -- ----------------------------------------------------------------------------
 -- Audit Logging for Commission Schedule Changes
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS commission_schedule_audit_log (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS commission_schedule_audit_log (
     id BIGSERIAL PRIMARY KEY,
     tenant_id UUID NOT NULL,
     schedule_id UUID NOT NULL,
@@ -246,7 +246,7 @@ COMMENT ON FUNCTION decrypt_tax_id IS 'Decrypt tax identifier using specified ke
 -- Note: In production, implement time-based partitioning for batches older than 2 years
 
 -- Create archive table for completed batches (7-year retention per Clarification 4)
-CREATE TABLE IF NOT EXISTS intake_batches_archive (
+CREATE TABLE IF NOT EXISTS IF NOT EXISTS intake_batches_archive (
     LIKE intake_batches INCLUDING ALL
 );
 

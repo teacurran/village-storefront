@@ -6,6 +6,8 @@
 -- Refunds Table
 -- ============================================================================
 -- Tracks refund lifecycle with provider-agnostic status
+-- Drop existing refunds table from baseline to replace with enhanced schema
+DROP TABLE IF EXISTS refunds CASCADE;
 CREATE TABLE refunds (
     id BIGSERIAL PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -42,25 +44,7 @@ COMMENT ON COLUMN refunds.failure_reason IS 'Provider-specific failure reason if
 -- Enable RLS for multi-tenancy
 ALTER TABLE refunds ENABLE ROW LEVEL SECURITY;
 
--- ============================================================================
--- Default Feature Flags
--- ============================================================================
--- Ensure critical payment kill switches default to enabled state
-INSERT INTO feature_flags (tenant_id, flag_key, enabled, config, created_at, updated_at, owner, risk_level,
-    review_cadence_days, description, rollback_instructions)
-SELECT NULL, 'payments.stripe.enabled', TRUE, '{}', NOW(), NOW(), 'payments-team', 'CRITICAL', 30,
-    'Emergency kill switch for Stripe payment processing',
-    'Set enabled=false to immediately halt Stripe payment creation/capture requests'
-WHERE NOT EXISTS (
-    SELECT 1 FROM feature_flags WHERE tenant_id IS NULL AND flag_key = 'payments.stripe.enabled');
-
-INSERT INTO feature_flags (tenant_id, flag_key, enabled, config, created_at, updated_at, owner, risk_level,
-    review_cadence_days, description, rollback_instructions)
-SELECT NULL, 'payments.payout.reconciliation.enabled', TRUE, '{}', NOW(), NOW(), 'payments-team', 'HIGH', 90,
-    'Controls payout reconciliation workers to pause processing during provider incidents',
-    'Disable the flag to stop enqueueing and processing payout reconciliation jobs')
-WHERE NOT EXISTS (
-    SELECT 1 FROM feature_flags WHERE tenant_id IS NULL AND flag_key = 'payments.payout.reconciliation.enabled');
+-- Default feature flags moved to seed scripts (columns added in later migration)
 
 -- ============================================================================
 -- End of Migration

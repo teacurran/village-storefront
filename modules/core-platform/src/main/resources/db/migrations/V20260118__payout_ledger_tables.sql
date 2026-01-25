@@ -69,25 +69,7 @@ ALTER TABLE payout_ledger_entries ENABLE ROW LEVEL SECURITY;
 
 -- Policies will be added in a separate RLS policy migration
 
--- ============================================================================
--- Feature Flags
--- ============================================================================
--- Add feature flag for automated payout settlement
-INSERT INTO feature_flags (tenant_id, flag_key, enabled, config, created_at, updated_at, owner, risk_level,
-    review_cadence_days, description, rollback_instructions)
-SELECT NULL, 'consignment.payout.settlement.enabled', TRUE, '{"hold_period_days": 7}', NOW(), NOW(), 'consignment-team', 'HIGH', 30,
-    'Controls automated settlement of pending balances to available after hold period',
-    'Disable the flag to stop automated settlement jobs; manually trigger settlements if needed'
-WHERE NOT EXISTS (
-    SELECT 1 FROM feature_flags WHERE tenant_id IS NULL AND flag_key = 'consignment.payout.settlement.enabled');
-
-INSERT INTO feature_flags (tenant_id, flag_key, enabled, config, created_at, updated_at, owner, risk_level,
-    review_cadence_days, description, rollback_instructions)
-SELECT NULL, 'consignment.payout.auto_sweep.enabled', FALSE, '{"min_balance": 50.00, "schedule": "weekly"}', NOW(), NOW(), 'consignment-team', 'HIGH', 90,
-    'Controls automated payout batch creation and processing for consignors',
-    'Disable the flag to stop auto-generating payout batches; payouts can still be triggered manually'
-WHERE NOT EXISTS (
-    SELECT 1 FROM feature_flags WHERE tenant_id IS NULL AND flag_key = 'consignment.payout.auto_sweep.enabled');
+-- Feature flag INSERTs moved to seed scripts (columns added in later migration)
 
 -- ============================================================================
 -- End of Migration

@@ -83,10 +83,10 @@ CREATE TABLE gift_card_transactions (
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
 
     CONSTRAINT chk_gift_card_txn_type CHECK (transaction_type IN ('issued', 'redeemed', 'refunded', 'adjusted', 'expired')),
-    CONSTRAINT chk_gift_card_txn_balance CHECK (balance_after >= 0),
-    CONSTRAINT uq_gift_card_txn_idempotency UNIQUE (idempotency_key) WHERE idempotency_key IS NOT NULL
+    CONSTRAINT chk_gift_card_txn_balance CHECK (balance_after >= 0)
 );
 
+CREATE UNIQUE INDEX uq_gift_card_txn_idempotency ON gift_card_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX idx_gift_card_txn_tenant_id ON gift_card_transactions(tenant_id);
 CREATE INDEX idx_gift_card_txn_gift_card_id ON gift_card_transactions(gift_card_id);
 CREATE INDEX idx_gift_card_txn_order_id ON gift_card_transactions(order_id) WHERE order_id IS NOT NULL;
@@ -158,10 +158,10 @@ CREATE TABLE store_credit_transactions (
     created_by UUID REFERENCES users(id) ON DELETE SET NULL,
 
     CONSTRAINT chk_store_credit_txn_type CHECK (transaction_type IN ('issued', 'redeemed', 'refunded', 'adjusted', 'converted', 'expired')),
-    CONSTRAINT chk_store_credit_txn_balance CHECK (balance_after >= 0),
-    CONSTRAINT uq_store_credit_txn_idempotency UNIQUE (idempotency_key) WHERE idempotency_key IS NOT NULL
+    CONSTRAINT chk_store_credit_txn_balance CHECK (balance_after >= 0)
 );
 
+CREATE UNIQUE INDEX uq_store_credit_txn_idempotency ON store_credit_transactions(idempotency_key) WHERE idempotency_key IS NOT NULL;
 CREATE INDEX idx_store_credit_txn_tenant_id ON store_credit_transactions(tenant_id);
 CREATE INDEX idx_store_credit_txn_account_id ON store_credit_transactions(account_id);
 CREATE INDEX idx_store_credit_txn_order_id ON store_credit_transactions(order_id) WHERE order_id IS NOT NULL;

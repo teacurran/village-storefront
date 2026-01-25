@@ -14,7 +14,7 @@
 -- PRIVACY REQUESTS (export/delete workflows)
 -- ============================================================================
 
-CREATE TABLE privacy_requests (
+CREATE TABLE IF NOT EXISTS privacy_requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     request_type VARCHAR(50) NOT NULL,
@@ -47,7 +47,7 @@ COMMENT ON COLUMN privacy_requests.subject_identifier_hash IS 'SHA-256 hash of t
 -- MARKETING CONSENTS (per-channel opt-in/out timeline)
 -- ============================================================================
 
-CREATE TABLE marketing_consents (
+CREATE TABLE IF NOT EXISTS marketing_consents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -70,7 +70,7 @@ COMMENT ON TABLE marketing_consents IS 'Immutable timeline of marketing consent 
 -- PRIVACY DELETIONS (retention + purge scheduling metadata)
 -- ============================================================================
 
-CREATE TABLE privacy_deletions (
+CREATE TABLE IF NOT EXISTS privacy_deletions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     privacy_request_id UUID NOT NULL UNIQUE REFERENCES privacy_requests(id) ON DELETE CASCADE,
