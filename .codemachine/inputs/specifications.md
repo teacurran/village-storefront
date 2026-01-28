@@ -1,901 +1,231 @@
-# Village Storefront - Project Specifications
+# objective
 
-## Overview
+This is a half finished quarkus applicaiton with a lot of errors.  tonights task is to refactor the app and fix all knowna nd unknown errors.
 
-Village Storefront is a **SaaS multi-tenant ecommerce platform** that enables merchants to create and manage their own online stores. The platform is designed for small-to-medium businesses, including those with consignment-based inventory models. It combines the flexibility of platforms like Spree and Medusa with the consignment-specific features of ConsignCloud.
+## Known issues:
+1. The project contains TODO comments where logic needs to be impletmented (refer to .codemachine_2/inputs/specifications.md for original feature specification)
+2. Named queries are refereced but never defined. for example this bit of code is using a constant that appears to define a named query, but is trying to use it as if the constant contains JPQL. `return find("#" + QUERY_FIND_BY_URL + " WHERE url = :url", Parameters.with("url", url)).firstResultOptional();` the constnat should be used to defined a named query, and the named query MUST be defined in a @NamedQuery annotation on the entity class so it gets validated at startup.  If JPQL concationation is required for sorting (not supported in Named queries) then the named query should be defined using a constnat for the JPQL portion.  the JPQL constnat then can be used to create a dynamic query, the portion used in the named query will benifit from validation at startup.
+3. All finder methods that call named queries shoudl be defined as Static methods on the entity class.
+4. Unit tests must cover 95% of all lines and code branches. Double check to make sure all unit tests make sense and validate correct logic according to the goals of the application.
 
-## Business Model
-
-- **Multi-tenant SaaS**: Multiple merchants operate independent stores on a shared platform
-- **Subdomain access**: Each store is accessible at `{storename}.{platform-domain}.com`
-- **Custom domains**: Merchants can configure their own domains to point to their store
-- **Consignment support**: Full consignment vendor management with commission tracking and automated payouts
-
-## Technology Stack (Mandated)
-
-Per VillageCompute Java Project Standards (see `docs/java-project-standards.adoc`):
+## Technology Stack
 
 ### Backend
-- **Runtime**: Java 21 + Quarkus framework
-- **Native compilation**: GraalVM for native executables
-- **Database**: PostgreSQL 17
-- **Build**: Maven with Spotless formatting, JaCoCo coverage (80% required, enforced by SonarCloud)
-- **API**: OpenAPI 3.0 spec-first REST API design
-- **Migrations**: MyBatis Migrations
-- **Payments**: Stripe (including Stripe Connect for platform fees)
-- **Email**: Quarkus Mailer with domain filtering for non-production environments
-- **Object Storage**: AWS SDK S3 client (compatible with Cloudflare R2)
-- **Code Standards**: Java code should follow the included java-project-standards.md guidelines
-- **Media Processing**:
-  - Images: Java ImageIO + Thumbnailator for resizing/compression
-  - Video: FFmpeg (via process execution) for transcoding
+- **Java 21** (LTS) - minimum version
+- **Quarkus** framework (latest stable, currently 3.26.x)
+- **Maven** build system
+- **PostgreSQL 17** database
+- **MyBatis Migrations** for database schema changes
+- **Panache** for ORM with ActiveRecord pattern
+- **LangChain4j** for AI integration (model-agnostic, initially Claude)
 
 ### Frontend (Customer-Facing Storefront)
-- **Templating**: Qute templates for all customer-facing server-rendered HTML
-- **JavaScript**: PrimeUI components for interactive elements (cart, checkout)
-- **Styling**: Tailwind CSS
-- **Routes**: All paths except `/admin/*` are rendered with Qute
-- **Headless API**: REST endpoints for cart status, product data (for static site integration)
+- **Qute templates** for server-rendered HTML
+- **PrimeUI components** for interactive elements (cart, checkout)
+- **Tailwind CSS** for styling
+- All paths except `/admin/*` are rendered with Qute
 
 ### Frontend (Admin Dashboard - `/admin/*` only)
-- **Framework**: Vue.js 3 + Vite + TypeScript (via Quinoa)
-- **UI Components**: PrimeVue
-- **Styling**: Tailwind CSS
-- **Routes**: All `/admin/*` paths served by Vue.js SPA
-- **Users**: Store owners, staff, consignment vendors, and platform super-users
+- **Vue.js 3 + Vite + TypeScript** (via Quinoa)
+- **PrimeVue** for UI components
+- **Tailwind CSS** for styling
 
-### Deployment
-- **Container**: GraalVM native image in minimal Docker container
-- **Orchestration**: Kubernetes (k3s target)
-- **K8s manifests**: Generated via Quarkus Kubernetes extension
-- **CI/CD**: GitHub Actions with native build
+### External APIs
+- **Stripe** - Payment processing with Connect
+- **USPS, UPS, FedEx** - Shipping rates and labels
 
-## Local Development
 
-The project should include set-up and instructions for runnint the application locally.  These should include:
-* a docker-compose file to run dependent services (PostgreSQL, MinIO for S3, etc.)
-* services within docker-compose for running migrations and doing other setup tasks a developer might need
+## Architecture Constraints
 
----
+### Database Access Pattern
 
-## Core Features
+All database access MUST be via **static methods on model entities** using the Panache ActiveRecord pattern. Do NOT create separate repository classes.
 
-### 1. Multi-Tenancy & Store Management
+```java
+@Entity
+public class User extends PanacheEntityBase {
 
-#### Tenant Isolation Architecture
-- **Database strategy**: Shared database with `tenant_id` discriminator column on all tenant-scoped tables
-- **Enforcement model**: Application-Primary with RLS Safety Net
-  - **Primary isolation**: Panache base entity/repository applies `tenant_id` filter to all queries
-  - **Safety net**: PostgreSQL RLS policies serve as defense-in-depth to catch filter bypass bugs
-  - **Rationale**: Simpler connection pooling (no session variable management) while maintaining security guarantee
-- **RLS policy pattern**: `CREATE POLICY tenant_isolation ON table_name FOR ALL USING (tenant_id = current_setting('app.tenant_id')::uuid)`
-- **Application responsibility**: All tenant-scoped queries MUST go through Panache base class; direct SQL requires manual tenant filter
+    public static final String QUERY_FIND_BY_EMAIL = "User.findByEmail";
 
-#### Tenant Resolution (Request Filter Pattern)
-- **TenantContext**: `@RequestScoped` CDI bean holding current tenant ID
-  ```java
-  @RequestScoped
-  public class TenantContext {
-      private UUID tenantId;
-      private Store store;
-      // getters/setters
-  }
-  ```
-- **TenantFilter**: `@Provider` JAX-RS `ContainerRequestFilter` executes before all requests
-  - Extracts tenant from Host header subdomain (e.g., `acme.storefront.com` → `acme`)
-  - Resolves subdomain to Store entity, populates TenantContext
-  - For custom domains: lookup domain in `custom_domains` table
-  - Returns 404 if tenant not found (invalid subdomain/domain)
-- **Service injection**: All services `@Inject TenantContext` for tenant-aware operations
-- **Panache integration**: Base repository class automatically applies `tenant_id` filter to all queries
+    @NamedQuery(name = QUERY_FIND_BY_EMAIL,
+                query = "SELECT u FROM User u WHERE u.email = :email")
 
-#### Store Features
-- **Store creation**: Merchants sign up and create a store with unique subdomain
-- **Custom domains**: Merchants can add custom domains with automatic SSL via Let's Encrypt (ACME HTTP-01 challenge)
-- **Store settings**: Business info, branding (logo, colors, fonts), policies
-- **Tenant isolation**: All data strictly scoped to tenant; no cross-tenant data leakage
-- **Store suspension/deletion**: Platform admin can manage store lifecycle
-- **CORS configuration**: Enable cross-origin requests for subdomain-based access
-
-### 2. User Authentication & Accounts
-
-- **Merchant accounts**: Store owners with full admin access
-- **Staff accounts**: Store employees with role-based permissions
-  - **Roles**: Owner, Admin, Manager, Staff (with customizable permissions)
-- **Customer accounts**: Shoppers can register, save addresses, view order history
-- **Guest checkout**: Customers can purchase without creating an account
-- **Social login**: Optional OAuth with Google, Facebook, Apple
-
-#### Session Management
-- **JWT tokens**: Stateless authentication with short-lived access tokens + refresh tokens
-- **Session activity logging**: All sessions written to database with:
-  - Login timestamp, IP address, user agent
-  - Last activity timestamp
-  - Logout or expiration
-  - Device/browser fingerprinting
-- **Active session management**: Users can view and revoke active sessions
-
-#### Platform Admin (SaaS Super-Users)
-- **Platform admin accounts**: Super-users who manage the entire SaaS platform
-- **Capabilities**:
-  - View all stores and their status
-  - Suspend/unsuspend stores
-  - Access platform-wide analytics
-  - Customer service tools across all stores
-- **Impersonation**:
-  - Impersonate any store's admin/staff to troubleshoot
-  - Impersonate any store's customers for support
-  - All impersonation is logged with:
-    - Who impersonated whom
-    - Timestamp and duration
-    - Actions taken during impersonation
-    - Reason/ticket reference (required field)
-  - Visual indicator shown during impersonation ("Acting as X")
-  - Exit impersonation returns to admin session
-
-#### Session & Activity Reports
-- **Store admin reports**:
-  - Customer login activity (frequency, devices, locations)
-  - Staff login history and session duration
-  - Failed login attempts
-- **Platform admin reports**:
-  - Impersonation audit log
-  - Cross-store login patterns
-  - Suspicious activity detection
-  - Customer service session history
-
-### 3. Product Catalog
-
-#### Product Types
-- **Physical products**: Traditional inventory with shipping
-- **Digital products**: Downloadable files with secure delivery after purchase
-- **Subscriptions**: Recurring billing (weekly, monthly, yearly, custom intervals)
-- **Services/Bookings**: Appointments, classes, consultations with calendar integration
-
-#### Product Features
-- **Unlimited products** per store
-- **Product variants**: Shopify-level support
-  - Unlimited option types (Size, Color, Material, etc.)
-  - Up to 2,000 variants per product
-  - Per-variant SKU, pricing, images, inventory
-- **Categories**: Hierarchical product categories with unlimited depth
-- **Collections**: Curated product groups (manual or rule-based)
-- **Product visibility**: Draft, Active, Scheduled, Archived states
-- **Product scheduling**: Set future publish/unpublish dates
-- **Bulk import/export**: CSV/Excel for mass product management
-- **Custom attributes**: Store-defined fields for product metadata
-- **SEO metadata**: Title, description, URL slug per product
-
-#### Media Management
-- **Supported formats**:
-  - **Images**: JPEG, PNG, WebP, GIF (uploaded in any format)
-  - **Video**: MP4, MOV, WebM (uploaded in any format)
-- **Object storage**: Configurable S3-compatible storage (Cloudflare R2 default)
-  - All original uploads stored permanently
-  - Processed variants stored alongside originals
-  - Tenant-isolated storage paths
-- **Image processing**:
-  - Automatic recompression to WebP for web delivery
-  - Multiple size variants generated:
-    - Thumbnail (150px)
-    - Small (300px)
-    - Medium (600px)
-    - Large (1200px)
-    - Original (preserved)
-  - Aspect ratio preserved, longest edge sized
-  - EXIF data stripped for privacy
-  - Lazy generation: create on first request, cache permanently
-- **Video processing**:
-  - Transcode to H.264/MP4 for universal playback
-  - Generate HLS segments for adaptive streaming (optional)
-  - Extract poster frame as thumbnail image
-  - Compress to configurable quality/bitrate targets
-- **Processing modes**:
-  - **Background job**: Large uploads queued for async processing
-  - **On-demand**: Variants generated on first request if not cached
-  - **Results cached**: Processed media saved to object storage, never reprocessed
-- **CDN integration**: Signed URLs with configurable expiration for private content
-- **Upload limits**: Configurable per-tenant (default: 50MB images, 500MB video)
-
-### 4. Inventory Management
-
-- **Stock tracking**: Real-time quantity tracking per variant
-- **Multi-location inventory**: Track stock across warehouses, stores, suppliers
-- **Stock transfers**: Move inventory between locations with transfer records
-- **Low-stock alerts**: Configurable thresholds with email notifications
-- **Inventory adjustments**: Manual adjustments with reason codes and audit trail
-- **Item aging/expiration**: Track days-in-store, set expiration policies by category
-- **Barcode management**: Generate, print, and scan barcodes (Code 128, QR)
-- **Inventory valuation**: Track cost and calculate margins
-
-### 5. Consignment Management (Full ConsignCloud Parity)
-
-- **Consignor registration**: Add vendors with contact info, tax details
-- **Commission rates**: Per-consignor or per-category commission percentages
-- **Product assignment**: Link products/variants to consignor with cost basis
-- **Balance tracking**: Automatic calculation as items sell
-- **Consignor portal**: Web-based portal where vendors can:
-  - View current balance and pending payouts
-  - See item status (in-store, sold, expired, returned)
-  - Review sales history and commission statements
-  - Update contact information
-- **Batch inventory intake**: Streamlined entry for receiving consignment batches
-  - Auto-generate purchase orders
-  - Bulk pricing and categorization
-- **Aging reports**: Track how long items have been in store
-- **Expiration policies**: Auto-expire items after configurable periods
-- **Automated payouts**: Integration with payment service for vendor payments
-- **Consignor notifications**: Email on item receipt, sale, expiration, payout
-- **Payout reports**: Generate statements for consignor payments
-
-### 6. Shopping Cart & Checkout
-
-- **Persistent cart**: Saved to database for logged-in users
-- **Guest cart**: Session-based with optional email capture
-- **Cart operations**: Add, update quantity, remove, save for later
-- **One-page checkout**: Streamlined single-page flow
-  1. Cart review with quantity adjustments
-  2. Customer info (guest email or login)
-  3. Shipping address with validation
-  4. Shipping method selection
-  5. Payment (Stripe Elements)
-  6. Order confirmation
-- **Address validation**: Integration with postal service APIs
-- **Shipping calculator**: Real-time rates in cart
-- **Discount codes**: Apply at checkout
-- **Gift cards & store credit**: Redeem as payment method
-- **Order notes**: Customer can add notes to order
-
-### 7. Orders & Fulfillment
-
-#### Order Management
-- **Order dashboard**: View, search, filter by status/date/customer/product
-- **Order statuses**: Pending Payment, Paid, Processing, Partially Shipped, Shipped, Delivered, Cancelled, Refunded
-- **Order editing**: Modify orders before fulfillment (add/remove items, change shipping)
-- **Order notes**: Internal notes and customer communication log
-
-#### Shipping
-- **Rate calculation**: Real-time rates from USPS, UPS, FedEx
-- **Label generation**: Generate and print shipping labels
-- **Shipment tracking**: Automatic tracking updates from carriers
-- **Split shipments**: Ship order in multiple packages/shipments
-- **Shipping profiles**: Different rates/methods by product or destination
-
-#### Returns & Refunds
-- **RMA management**: Create and track return authorizations
-- **Return reasons**: Configurable reason codes
-- **Refund processing**: Full or partial refunds via Stripe
-- **Restocking**: Automatic or manual inventory adjustment on return
-- **Store credit option**: Issue credit instead of refund
-
-### 8. Payment Processing
-
-#### Pluggable Architecture
-- **Payment Provider Interface**: Abstract interface for all payment processors
-  - `PaymentProvider` - core payment operations (charge, refund, capture)
-  - `PaymentMethodProvider` - payment method management (cards, wallets)
-  - `MarketplaceProvider` - optional interface for platform fee splitting
-  - `WebhookHandler` - processor-specific webhook handling
-- **Provider registration**: Providers registered at startup, selectable per-store
-- **Multi-provider support**: Stores can enable multiple providers simultaneously
-- **Provider-agnostic models**: Internal payment/refund models map to provider-specific APIs
-
-#### Stripe (Primary Implementation)
-- Stripe Connect for platform fee collection
-- Each store connects their own Stripe account
-- Configurable platform percentage fee
-- Payment methods: Credit/debit cards, Apple Pay, Google Pay, Link
-
-#### Future Providers (Interface-Ready)
-- **PayPal**: PayPal Checkout, Venmo integration
-- **CashApp**: CashApp Pay for younger demographics
-- **Square**: Alternative card processing
-- Additional providers implementable via `PaymentProvider` interface
-
-#### Common Features (All Providers)
-- **Gift cards**: Sell and redeem store-branded gift cards (internal, provider-agnostic)
-- **Store credit**: Issue credit for returns, goodwill, promotions (internal ledger)
-- **Refunds**: Full and partial refund processing (delegated to provider)
-- **Payment status**: Pending, Completed, Failed, Refunded, Disputed
-- **Webhook processing**: Provider-specific webhooks mapped to common events
-- **Audit logging**: All payment operations logged with provider details
-
-### 9. Loyalty & Rewards Program
-
-- **Points earning**: Configurable points per dollar spent
-- **Points redemption**: Convert points to discount at checkout
-- **Tier levels**: Bronze, Silver, Gold, Platinum (or custom names)
-- **Tier benefits**: Bonus point multipliers, exclusive discounts
-- **Points expiration**: Optional expiration after inactivity
-- **Points history**: Customer can view earning/redemption history
-
-### 10. Point of Sale (POS)
-
-- **Web-based POS**: Works on tablets and computers
-- **Hardware support**:
-  - Barcode scanners (USB, Bluetooth)
-  - Receipt printers (thermal, network)
-  - Card readers (Stripe Terminal)
-  - Cash drawers
-- **POS features**:
-  - Quick product search and barcode scanning
-  - Custom sale items (for unlisted items)
-  - Split payments
-  - Hold/retrieve transactions
-  - Cash management (open/close register, cash counts)
-  - Receipt printing and email
-- **Offline mode**: Queue transactions when connection lost
-- **Staff login**: PIN-based quick login for register
-
-### 11. Admin Dashboard
-
-#### Dashboard Home
-- Sales overview (today, week, month, year)
-- Recent orders requiring attention
-- Low-stock alerts
-- Key metrics and trends
-
-#### Products
-- CRUD products with rich editor
-- Variant management with matrix view
-- Category and collection management
-- Bulk operations (update prices, archive, etc.)
-- Import/export tools
-
-#### Orders
-- Order list with filters and search
-- Order detail view with fulfillment actions
-- Batch fulfillment tools
-- Returns/refund processing
-
-#### Customers
-- Customer list with search and filters
-- Customer profile with order history
-- Customer groups/segments
-- Loyalty points management
-
-#### Consignment
-- Consignor list and management
-- Inventory by consignor
-- Sales and commission reports
-- Payout generation and history
-- Consignor communication
-
-#### Inventory
-- Stock levels across locations
-- Transfer creation and tracking
-- Adjustment history
-- Aging and expiration reports
-- Barcode printing
-
-#### Reports (Pre-defined)
-- Sales by period, product, category, customer
-- Product performance (views, conversion, revenue)
-- Inventory valuation and movement
-- Consignor sales and commissions
-- Customer acquisition and retention
-- Tax collected by jurisdiction
-
-#### Settings
-- Store profile and branding
-- Payment configuration (Stripe Connect)
-- Shipping methods and profiles
-- Tax settings
-- Email templates
-- Staff accounts and permissions
-- Loyalty program configuration
-- POS settings
-
-### 14. Platform Admin (SaaS Management)
-
-#### Dashboard
-- Total stores, active stores, new signups
-- Platform revenue (fees collected)
-- System health and performance
-
-#### Store Management
-- List all stores with status, plan, revenue
-- Suspend/unsuspend stores
-- View store details and activity
-
-#### Customer Service
-- Search customers across all stores
-- Impersonate users (with required reason/ticket)
-- View impersonation audit log
-
-#### User Management
-- Platform admin accounts
-- Role assignments (Super Admin, Support, Finance)
-
-#### Reports
-- Platform revenue by period
-- Store growth and churn
-- Impersonation audit trail
-- Session activity across platform
-- Support ticket correlation
-
-### 12. Storefront (Customer-Facing)
-
-#### Theme & Customization
-- **Fixed theme**: Clean, professional design
-- **Branding**: Logo, colors, fonts customizable
-- **Custom navigation**: Merchant can add custom links to header
-- **Footer customization**: Links, social media, policies
-- **Designed for familiarity**: Help stores match their main website look
-
-#### Pages
-- **Home page**: Featured products, categories, promotions
-- **Category pages**: Product grid with filters and sorting
-- **Product pages**: Images, description, variants, add to cart
-- **Search**: Full-text search with filters
-- **Cart**: Review items, apply discounts, proceed to checkout
-- **Checkout**: One-page checkout flow
-- **Account pages**: Login, register, order history, addresses, loyalty points
-- **Static pages**: About, Contact, Policies (merchant-editable)
-
-#### Responsive Design
-- Mobile-first approach
-- Touch-friendly on all devices
-- Fast loading with optimized images
-
-### 13. Headless API
-
-For static site integration and custom frontends:
-
-- **Cart API**: Get cart contents, item count, subtotal
-- **Product API**: List products, get product details
-- **Search API**: Search products with filters
-- **Customer API**: Authentication, account management
-- **Order API**: Order history, order details
-
----
-
-## Non-Functional Requirements
-
-### Security
-- Passwords hashed with bcrypt (work factor 12)
-- JWT-based authentication with refresh tokens
-- CSRF protection on all forms
-- Input validation and sanitization
-- SQL injection prevention via Panache parameterized queries
-- XSS prevention via Qute auto-escaping
-- Rate limiting on authentication endpoints
-- PCI-DSS compliance via Stripe Elements (no card data touches server)
-
-### Performance
-- Page load < 2 seconds (server-rendered)
-- API response < 200ms for standard operations
-- Native compilation for fast cold starts (< 100ms)
-- Efficient database queries with proper indexing
-- Image optimization and lazy loading
-- CDN support for static assets
-
-### Scalability
-- Stateless application servers (horizontal scaling via JWT)
-- Database connection pooling
-- Background job processing for heavy operations
-- Caffeine in-memory caching for product catalog, rate limiting
-- Designed for multi-pod Kubernetes deployment
-
-### Observability
-- Structured JSON logging
-- OpenTelemetry tracing with Jaeger
-- Prometheus metrics endpoint
-- Health check endpoints (/q/health/live, /q/health/ready)
-- Kubernetes liveness/readiness probes
-
-### Multi-Currency
-- **Display**: Show prices in customer's preferred currency
-- **Conversion**: Real-time or daily exchange rates
-- **Settlement**: All payments in store's base currency via Stripe
-
----
-
-## Constraints & Assumptions
-
-1. **Single base currency per store**: Payments processed in one currency, display in multiple
-2. **Internationalized UI**: English and Spanish supported from v1 (see Internationalization section)
-3. **Stripe-only payments for v1**: Pluggable provider architecture ready for PayPal, CashApp, etc.
-4. **US shipping focus**: USPS, UPS, FedEx direct API integrations
-5. **No marketplace features**: Stores are independent; no cross-store discovery
-6. **No AI features in v1**: Focus on core functionality first
-7. **No B2B features in v1**: Wholesale pricing, purchase orders deferred
-8. **No Redis**: Stateless JWT auth + Caffeine caching; add distributed cache later if needed
-
----
-
-## Technical Architecture Decisions
+    public static Optional<User> findByEmail(String email) {
+        return find("#" + QUERY_FIND_BY_EMAIL,
+                    Parameters.with("email", email))
+               .firstResultOptional();
+    }
+}
+```
 
 ### Background Job Processing
-- **Async tasks (emails, media processing, payouts)**: DelayedJob pattern (see `java-project-standards.adoc`)
-  - Database-persisted job queue with retry logic
-  - Priority queues (CRITICAL, HIGH, DEFAULT, LOW, BULK)
-  - Exponential backoff retry strategy
-- **Recurring batch jobs (cleanup, reports, cert renewal)**: Quarkus `@Scheduled` annotations
-- **No external message broker**: Adheres to "No Redis" constraint
 
-### Shipping Rate Integration
-- **Direct carrier API integrations**: USPS Web Tools, UPS Rating API, FedEx Web Services
-- **Per-carrier credential management**: Store-level API keys
-- **Fallback strategy**: Table-rate/flat-rate shipping if carrier API unavailable
-- **Rate caching**: Cache rates for identical origin/destination/weight for 15 minutes
+Use the **Delayed Job pattern** for all asynchronous operations. Reference: `../village-calendar/src/main/java/villagecompute/calendar/services/DelayedJobService.java`
 
-### Consignment Vendor Payouts
-- **Stripe Connect Express accounts**: Vendors onboard via Stripe-hosted flow
-- **Compliance delegation**: Stripe handles 1099-K reporting and identity verification
-- **Platform fee collection**: Deducted at time of charge via Stripe Connect
-- **Vendor tax details**: SSN/EIN collected during Stripe onboarding
-- **Balance model**: Two-Phase Balance (Path A)
-  - **Database columns**: `pending_balance` and `available_balance` per vendor
-  - **On sale**: Credit `pending_balance` immediately (sale amount minus commission)
-  - **Balance sweep**: Scheduled job runs daily, moves `pending_balance → available_balance` for items fulfilled >30 days ago
-  - **On refund**: Deduct from `pending_balance` if still pending; otherwise deduct from `available_balance`
-  - **On chargeback**: Deduct from `available_balance`; if insufficient, flag as negative balance requiring merchant resolution
-- **Negative balance handling**:
-  - Vendor payouts suspended when `available_balance < 0`
-  - Merchant notified via email with vendor details and amount owed
-  - Future sales credits applied to negative balance until resolved
-- **Payout timing**: Controlled by Stripe (2-7 day settlement) after funds transferred from `available_balance`
-- **Payout frequency**: Configurable per-store (daily, weekly, monthly)
+### REST API Design
 
-### Media Processing Execution
-- **Short operations (image resize, thumbnail)**: In-process via Thumbnailator, immediate response
-- **Long operations (video transcode)**: Queued via DelayedJob, processed asynchronously
-- **Execution model**: Dedicated Worker Pods (Tier 2)
-  - **Web pods**: `DELAYED_JOB_QUEUES=HIGH,DEFAULT,LOW` (no media processing)
-  - **Media worker pods**: `DELAYED_JOB_QUEUES=CRITICAL` (video transcoding isolated)
-  - **Rationale**: Clean resource isolation; video processing cannot starve web requests
-- **Worker pod resources**:
-  - CPU request: 1 core, limit: 4 cores
-  - Memory request: 2Gi, limit: 8Gi
-  - Concurrency: 2 concurrent video jobs per pod (configurable via env)
-- **Autoscaling**: HPA triggered when queue depth > 10 jobs for 2 minutes
-- **Execution environment**: FFmpeg invoked via ProcessBuilder within worker pods
-- **Resource limits**:
-  - Image processing timeout: 30 seconds
-  - Video processing timeout: 10 minutes
-  - Upload limits enforced before processing begins
-- **Failure handling**: Failed transcodes logged, original preserved, retry via DelayedJob (max 3 retries)
+- Traditional REST endpoints (not GraphQL)
+- OpenAPI spec-first design when applicable
+- Follow Quarkus REST best practices
 
-### Session & Audit Log Storage
-- **Hot storage**: PostgreSQL with time-based partitioning (monthly partitions)
-- **Retention in database**: 90 days of session activity and audit logs
-- **Archival**: Records older than 90 days compressed and archived to R2 object storage
-- **Archive format**: JSONL (newline-delimited JSON) with gzip compression
-- **Partition maintenance**: Scheduled job creates new partitions, archives and drops old ones
-- **Historical query strategy**: Admin Export Tool (Tier 2)
-  - **In-database queries**: Date ranges within 90 days query PostgreSQL directly
-  - **Archived data access**: "Export to CSV" feature for date ranges beyond 90 days
-  - **Export workflow**:
-    1. Admin selects date range and data type (sessions, audit logs, etc.)
-    2. If range includes archived data, backend streams from R2
-    3. Decompress JSONL, convert to CSV, return as download
-  - **Export limits**: Maximum 1 year per export; larger ranges require multiple exports
-  - **Export formats**: CSV (primary), JSON (optional)
-  - **Latency SLA**: Archived data exports complete within 60 seconds for 30-day ranges
-- **No unified query layer**: Interactive queries limited to 90-day hot storage; historical data via exports only
+### Code Standards
 
-### Platform Admin Data Access
-- **Access scope**: Store-Level Metadata (Scope B)
-  - **Without impersonation**: Platform admins can view store-level summaries only
-    - Store name, subdomain, custom domain, plan/tier
-    - Aggregate metrics: revenue, order count, product count, customer count
-    - Store status: active, suspended, created date, last activity
-  - **Requires impersonation**: Access to customer PII, order details, product data, or any tenant-scoped records
-  - **Rationale**: Enables platform operations while enforcing privacy boundaries; GDPR/SOC2 compliant
-- **Impersonation workflow**:
-  - Platform admin selects store and provides reason/ticket reference (required)
-  - System creates impersonation session with start timestamp
-  - Admin operates with tenant context override (sees what store admin sees)
-  - All actions logged with impersonation context
-  - Admin explicitly ends session or auto-expires after 1 hour
-- **Audit logging**: All platform admin actions logged to separate audit tables (outside RLS scope)
-- **Audit log retention**: 7 years for compliance (SOC2, GDPR, financial regulations)
-- **Access reviews**: Quarterly review of platform admin access patterns required
+Follow VillageCompute Java Project Standards (`docs/java-project-standards.adoc`)
 
-### SSL Certificate Management
-- **Strategy**: Merchant-Managed DNS with HTTP-01 (Path B)
-- **ACME provider**: Let's Encrypt with HTTP-01 challenges
-- **Certificate lifecycle**: cert-manager handles issuance, renewal, and secret management
-- **Domain verification workflow**:
-  1. Merchant adds custom domain in admin UI (e.g., `shop.example.com`)
-  2. Application displays required CNAME: `shop.example.com → {store}.platform.com`
-  3. Merchant creates CNAME record in their DNS provider
-  4. Merchant clicks "Verify Domain" in admin UI
-  5. Application validates CNAME target resolves correctly
-  6. Application creates cert-manager Certificate resource
-  7. cert-manager performs HTTP-01 challenge via Ingress
-  8. Domain activated upon successful certificate issuance
-- **Error states**:
-  - CNAME not found: "DNS record not detected. Please wait up to 24 hours for propagation."
-  - CNAME wrong target: "DNS record points to wrong destination. Expected: {store}.platform.com"
-  - Challenge failed: "Certificate issuance failed. Please verify DNS and try again."
-  - Certificate expiring: Email notification 14 days and 3 days before expiration
-- **Infrastructure dependency**: Requires cert-manager operator installed in k8s cluster
+### Package Structure
 
-### Multi-Currency Display
-- **Conversion model**: Display-only conversion
-- **Exchange rate source**: Daily-refreshed cache from free API (e.g., exchangerate-api.com)
-- **Settlement**: All transactions charged in store's base currency at Stripe's market rate
-- **Customer UX**: Prominent disclaimer that final charge is in store's base currency
-- **Rate caching**: Caffeine cache with 24-hour TTL, fallback to last known rate
-
-### Consignment Payout Mechanics
-- **Fee deduction timing**: Platform fee deducted at point-of-sale via Stripe Connect application fee
-- **Commission crediting**: Vendor balance credited after refund window expires (30 days post-fulfillment)
-- **Chargeback handling**: Chargebacks deducted from vendor balance; if insufficient, flagged for merchant resolution
-- **Payout frequency**: Configurable per-store (daily, weekly, monthly)
-- **Stripe settlement**: 2-7 day payout timing controlled by Stripe Express account settings
-
-### Session & Audit Log Analytics
-- **Query tier**: Tier 2 - Moderate analytics with indexed searches
-- **Indexing strategy**: Composite indexes on (tenant_id, timestamp), (tenant_id, user_id), (session_type, timestamp)
-- **Aggregation**: Scheduled jobs roll up data into aggregate tables for dashboard performance
-- **Tenant isolation**: All reports scoped to single tenant; no cross-tenant queries in store admin
-- **Platform admin reports**: Aggregate counts only (tenant count, logins, account creations, etc.)
-- **Query SLA**: Admin dashboard queries < 500ms for 30-day ranges
-- **Archive access**: CSV export tool for archived data beyond 90 days
-
-### Media Processing Deployment
-- **Execution model**: In-process within application pods via DelayedJob
-- **Queue configuration**: Per-pod configurable queue subscriptions via environment variables
-  - `DELAYED_JOB_QUEUES=CRITICAL,HIGH,DEFAULT` - which queues this pod processes
-  - `DELAYED_JOB_ENABLED=true|false` - enable/disable job processing entirely
-- **Deployment flexibility**:
-  - Web-only pods: `DELAYED_JOB_ENABLED=false`
-  - Video processing pods: `DELAYED_JOB_QUEUES=CRITICAL` (media jobs)
-  - Notification pods: `DELAYED_JOB_QUEUES=HIGH,DEFAULT` (emails, webhooks)
-  - All-purpose pods: `DELAYED_JOB_QUEUES=CRITICAL,HIGH,DEFAULT,LOW,BULK`
-- **Resource limits**: JVM heap constraints, 10-minute timeout for video, 30-second for images
-- **Scaling**: Horizontal pod autoscaling based on queue depth metrics
-
-### Loyalty Program Configuration
-- **Multi-model support**: Stores can configure one or more redemption models
-- **Available models**:
-  - **Points-to-Currency**: Flexible conversion (e.g., 1 point = $0.01), applied as payment method
-  - **Fixed Tiers**: Threshold rewards (e.g., 100 points = $5 discount code)
-  - **Product Rewards**: Punch-card style (e.g., buy 10 coffees, get 1 free)
-- **Earning rules**: Configurable points-per-dollar or points-per-item by category
-- **Stacking rules**: Merchant-configurable; default allows one loyalty reward + one coupon code
-- **Expiration**: Optional points expiration after configurable inactivity period
-- **Tier benefits**: Optional tier levels with bonus multipliers and exclusive rewards
-- **Point redemption atomicity**: Two-Phase Commit (Path B)
-  - **Reservation phase**: At checkout, points reserved via `points_reserved` column; available points decremented
-  - **Commit phase**: Upon payment success, reservation converted to permanent deduction + order created in single transaction
-  - **Rollback phase**: If payment fails, reservation released (points restored to available)
-  - **Reservation timeout**: 15 minutes; expired reservations auto-released by scheduled job
-  - **Concurrent redemption**: Second checkout attempt while reservation active will see reduced available balance
-- **Refund handling**:
-  - **Full refund**: Points reinstated immediately to available balance
-  - **Partial refund**: Points reinstated proportionally (e.g., 50% refund = 50% points reinstated)
-  - **Timing**: Points reinstated asynchronously via background job (within 5 minutes of refund)
-
-### Internationalization (i18n)
-- **Supported languages**: English (en), Spanish (es) at launch; extensible for future languages
-- **Language selection**:
-  - Customer storefront: Browser `Accept-Language` header with manual override (stored in cookie/session)
-  - Admin dashboard: User preference stored in account settings
-- **Translation strategy**:
-  - **Qute templates (storefront)**: Quarkus `MessageBundle` with `.properties` files per locale
-  - **Vue.js admin**: `vue-i18n` with JSON message files per locale
-  - **API error messages**: Localized via `MessageBundle`, locale from request header
-- **Message file structure**:
-  ```
-  src/main/resources/messages/
-  ├── messages.properties        # English (default)
-  ├── messages_es.properties     # Spanish
-  src/main/webui/src/locales/
-  ├── en.json                    # English (admin)
-  └── es.json                    # Spanish (admin)
-  ```
-- **Content translation**: Product descriptions, store policies, email templates are merchant-managed (not system-translated)
-- **Date/number formatting**: Locale-aware formatting via `java.time` and `Intl` APIs
-- **RTL support**: Not required for v1 (English/Spanish are LTR)
-
----
-
-## Architecture Clarifications
-
-*Decisions made 2026-01-11 to resolve specification ambiguities.*
-
-### Clarification 1: Custom Domain Tenant Resolution
-
-**Decision: Application-First Routing (Path A)**
-
-- **Routing strategy**: JAX-RS `TenantFilter` handles all tenant resolution (both subdomains and custom domains)
-- **Ingress configuration**: Wildcard rules (`*.platform.com` + catch-all for custom domains)
-- **Unknown hosts**: Application returns 404 for unrecognized hosts
-- **DNS validation**: Asynchronous via background job
-  - Domain added immediately to `custom_domains` table with `status=PENDING`
-  - Background job validates DNS (CNAME points to correct target)
-  - Domain activated (`status=ACTIVE`) upon successful validation
-  - Retries with exponential backoff for DNS propagation delays
-- **SSL certificates**: cert-manager with Let's Encrypt
-  - Certificate resource created after DNS validation succeeds
-  - HTTP-01 challenge via Ingress
-  - cert-manager handles renewal automatically
-
-### Clarification 2: Media Processing Execution Environment
-
-**Decision: FFmpeg Binary in Alpine-based Worker Pods (Path A)**
-
-- **Video processing required for MVP**: Yes
-- **Container strategy**:
-  - **Web pods**: Distroless base, no FFmpeg, ~50-100MB
-  - **Media worker pods**: Alpine-based with FFmpeg static binary, ~150-200MB
-- **FFmpeg integration**:
-  - FFmpeg 6.x static build included in worker image at build time
-  - Invoked via `ProcessBuilder` with configurable timeout (10 minutes default)
-  - Subprocess resource limits enforced by pod resource constraints
-- **Queue isolation**: Media workers subscribe only to `CRITICAL` queue
-- **Autoscaling**: HPA triggered when media queue depth > 10 jobs for 2 minutes
-
-### Clarification 3: Background Job Queue Persistence
-
-**Decision: Row-Level Locking with SELECT FOR UPDATE SKIP LOCKED (Path A)**
-
-- **Concurrency model**: PostgreSQL native row-level locking
-- **Job claim query**: `SELECT FOR UPDATE SKIP LOCKED` for atomic job acquisition
-- **Job table schema** (key columns):
-  - `id` (UUID, PK)
-  - `queue` (VARCHAR - CRITICAL, HIGH, DEFAULT, LOW, BULK)
-  - `priority` (INTEGER - higher = more urgent within queue)
-  - `status` (ENUM - PENDING, PROCESSING, COMPLETED, FAILED)
-  - `locked_by` (VARCHAR - pod identifier, nullable)
-  - `locked_at` (TIMESTAMP - when job was claimed)
-  - `attempts` (INTEGER - retry count)
-  - `max_attempts` (INTEGER - default 3)
-  - `last_error` (TEXT - error message from last failure)
-  - `scheduled_at` (TIMESTAMP - when to run, for delayed jobs)
-  - `created_at`, `updated_at` (TIMESTAMP)
-- **Orphan detection**: Scheduled cleanup task runs every 5 minutes
-  - Jobs in `PROCESSING` status with `locked_at` > 10 minutes ago reset to `PENDING`
-  - `attempts` incremented; job marked `FAILED` if `attempts >= max_attempts`
-- **Job history retention**: 30 days
-  - Completed/failed jobs pruned by daily scheduled job
-  - Archived to R2 in JSONL format before deletion (optional, for audit)
-
-### Clarification 4: Consignment Vendor Balance Crediting
-
-**Decision: Trigger on Shipment Confirmation (Path B)**
-
-- **Refund window trigger**: 30-day countdown starts when order status = `SHIPPED` with tracking number
-- **Split shipments**: Each shipment triggers independent 30-day window for its line items
-  - Vendor balance credited per-shipment as each window expires
-  - Partial orders may have staggered vendor credits
-- **Digital products**: 30-day window starts on payment capture (instant "delivery")
-- **Duration**: Platform-wide 30-day policy (not store-configurable)
-- **Never-shipped orders**: Items remain in `pending_balance` indefinitely until fulfilled or cancelled
-- **Balance sweep job**: Runs daily, moves eligible `pending_balance → available_balance`
-
-### Clarification 5: Platform Admin Impersonation Audit
-
-**Decision: Mutation-Only Audit Logging (Path B)**
-
-- **Audit granularity**: Only POST/PUT/PATCH/DELETE requests logged during impersonation
-  - GET requests not logged (reduces volume ~80-90%)
-  - Sufficient for SOC2 Type II compliance
-- **Audit table schema** (`platform_impersonation_audit`):
-  - `id` (UUID, PK)
-  - `session_id` (UUID, FK to `platform_impersonation_sessions`)
-  - `platform_admin_id` (UUID)
-  - `impersonated_user_id` (UUID)
-  - `tenant_id` (UUID)
-  - `timestamp` (TIMESTAMP)
-  - `http_method` (VARCHAR)
-  - `request_path` (VARCHAR)
-  - `request_body_hash` (VARCHAR - SHA-256, nullable)
-  - `response_status` (INTEGER)
-- **Session table** (`platform_impersonation_sessions`):
-  - `id` (UUID, PK)
-  - `platform_admin_id`, `impersonated_user_id`, `tenant_id`
-  - `reason` (TEXT, NOT NULL via application validation)
-  - `ticket_reference` (VARCHAR, nullable)
-  - `started_at`, `ended_at` (TIMESTAMP)
-- **Reason field enforcement**: Application-level validation (API rejects empty reason)
-- **Visibility**: Platform admins only
-  - Store admins cannot see when they were impersonated
-  - Impersonation logs restricted to platform admin audit reports
-- **Retention**: 7 years for all impersonation audit data
-
-### Clarification 6: Session Activity Partitioning
-
-**Decision: Calendar Month Partitions with Monthly Archive (Path A)**
-
-- **Partition alignment**: Calendar months (`sessions_2026_01`, `sessions_2026_02`, etc.)
-- **Partition naming**: `{table_name}_YYYY_MM` (e.g., `session_activity_2026_01`)
-- **Partition creation**: Automated via scheduled job
-  - Job runs on 1st of each month
-  - Creates partition for current month + next month (2 months ahead buffer)
-- **Archive job**: Runs on 1st of each month
-  - Archives partitions older than 90 days to R2
-  - Drops archived partitions from PostgreSQL
-  - Format: JSONL with gzip compression
-- **Multi-partition queries**: Application-layer UNION
-  - Application code determines relevant partitions from date range
-  - Issues UNION ALL query across partitions
-  - Provides fine-grained query optimization control
-- **Archived data**: Accessible only via CSV export (no live queries)
-
-### Clarification 7: Loyalty Points Redemption Reservation
-
-**Decision: 1-Minute Scheduled Job with Optimistic Locking (Path A)**
-
-- **Reservation release**: Quarkus `@Scheduled` job every 60 seconds
-  - Queries `WHERE reserved_at < NOW() - INTERVAL '15 minutes' AND status = 'RESERVED'`
-  - Releases expired reservations using JPA `@Version` column for optimistic locking
-  - Prevents conflicts with concurrent checkout completion
-- **Expired reservation UX**: Graceful error with re-reserve option
-  - If checkout attempts to complete after reservation expires:
-    1. Show friendly message: "Your points reservation expired. Would you like to apply points again?"
-    2. Check if points still available
-    3. Offer to re-reserve if available, or proceed without points
-  - Never hard-fail the order; allow customer to complete without points
-- **Reservation timeout**: Store-configurable (5-30 minutes)
-  - Default: 15 minutes
-  - Configurable in store settings under Loyalty Program
-  - Shorter timeouts for high-traffic stores, longer for complex checkouts
-
----
-
-## Deployment Architecture
-
-### Container Build
 ```
-Quarkus Native Build (GraalVM)
-  → Minimal Docker image (distroless or Alpine)
-  → ~50-100MB container size
-  → <100ms cold start
+src/main/java/villagecompute/storefront/
+├── api/
+│   ├── rest/              # REST resources
+│   └── types/             # API DTOs (Type suffix)
+├── config/                # Configuration classes
+├── data/
+│   └── models/            # JPA entities with static finder methods
+├── exceptions/            # Custom exceptions
+├── integration/
+│   ├── stripe/            # Stripe payment client
+│   ├── shipping/          # USPS, UPS, FedEx clients
+│   └── storage/           # S3/R2 object storage client
+├── jobs/                  # Delayed job handlers
+├── services/              # Business logic
+└── util/                  # Utilities
 ```
 
-### Kubernetes (k3s)
-- Quarkus Kubernetes extension generates manifests
-- Deployment, Service, Ingress resources
-- ConfigMaps for environment-specific config
-- Secrets for sensitive data (DB credentials, Stripe keys)
-- HorizontalPodAutoscaler for scaling
+---
 
-### Infrastructure
-- **Database**: PostgreSQL (managed or in-cluster)
-- **Cache**: Caffeine (in-memory, per-pod)
-- **Object Storage**: Cloudflare R2 (S3-compatible) for product images and video
-- **Email**: SMTP or SES for transactional email
-- **DNS**: Wildcard subdomain for tenant stores
+## Refactoring Decision Responses
+
+Based on the Specification Review (`.codemachine_2/artifacts/requirements/00_Specification_Review.md`), the following decisions have been made:
+
+### Decision 1: TODO Implementation Strategy
+
+**Selected: Option B - Complete Implementation**
+
+All TODO comments must be fully implemented before v1 release. This includes:
+- Payment service integration (Stripe Connect)
+- Multi-tenant isolation (TenantFilter, TenantContext)
+- Media processing (image resize, video transcode)
+- Consignment vendor balance tracking and payouts
+- Email notification system
+- OAuth flow completion
+- WebP image conversion
+- All other incomplete business logic
+
+No TODOs are deferred to v2.
+
+### Decision 2: Test Coverage Strategy
+
+**Selected: Option B - Comprehensive Coverage with Minimal Mocking**
+
+Requirements:
+- **95% line coverage** across all packages
+- **95% branch coverage** across all packages
+- **Minimal or no mocking** - tests should use real implementations where possible
+- Use `@QuarkusTest` with test containers for database integration
+- Use WireMock or similar only for external API boundaries (Stripe, shipping carriers)
+- Entity finders, services, and job handlers must be tested with real database interactions
+
+Test approach:
+1. Prefer integration tests over unit tests with mocks
+2. Use `@TestTransaction` for database isolation
+3. Use embedded/containerized PostgreSQL for realistic query validation
+4. Mock only at system boundaries (external HTTP APIs)
+5. Parameterized tests for edge cases and boundary values
+
+### DRY Principles for Tests (Critical)
+
+**Minimizing duplication in test code is mandatory.** Apply these principles rigorously:
+
+1. **Constants for Repeated Strings**
+   - Define constants for any string used more than once (URLs, error messages, test data values, JSON paths)
+   - Place shared constants in a `TestConstants` class or as static fields in test base classes
+   - Example: `private static final String VALID_EMAIL = "test@example.com";`
+
+2. **Parameterized Tests for Similar Scenarios**
+   - Use `@ParameterizedTest` with `@MethodSource`, `@CsvSource`, or `@ValueSource` for tests that vary only by input/output
+   - Never copy-paste a test method to test different values
+   - Example: Testing validation with valid/invalid emails, boundary values, edge cases
+
+3. **Shared Test Fixtures**
+   - Extract common setup into `@BeforeEach` methods or test base classes
+   - Use factory methods for creating test entities (e.g., `createTestUser()`, `createTestStore()`, `createTestProduct()`)
+   - Share WireMock stubs via helper methods
+
+4. **Test Base Classes**
+   - Create abstract base classes for common test infrastructure (e.g., `BaseIntegrationTest`, `BaseResourceTest`)
+   - Centralize `@QuarkusTest` configuration, test containers, and common assertions
+
+5. **Custom Assertions**
+   - Extract repeated assertion patterns into reusable assertion methods
+   - Example: `assertValidationError(response, "email", "must not be blank")`
+
+6. **No Magic Numbers or Strings**
+   - Every literal value that appears more than once must be a named constant
+   - Test data builders preferred over inline object construction
+
+### Decision 3: Named Query Architecture
+
+**Selected: Option B - Hybrid Approach**
+
+- Use `@NamedQuery` annotations for all simple lookup queries (validated at startup)
+- For queries requiring dynamic sorting/filtering, define the static JPQL portion as a constant
+- The JPQL constant can be used both in `@NamedQuery` (for validation) and composed with dynamic parts at runtime
+- Never use raw string JPQL without a constant
+
+Example pattern for dynamic queries:
+```java
+// Static portion validated at startup via @NamedQuery
+public static final String JPQL_FIND_ACTIVE = "SELECT p FROM Product p WHERE p.status = 'ACTIVE'";
+public static final String QUERY_FIND_ACTIVE = "Product.findActive";
+
+@NamedQuery(name = QUERY_FIND_ACTIVE, query = JPQL_FIND_ACTIVE)
+
+// Dynamic sorting uses the validated JPQL constant
+public static List<Product> findActiveSorted(String sortField, String sortDir) {
+    return find(JPQL_FIND_ACTIVE + " ORDER BY p." + sortField + " " + sortDir).list();
+}
+```
+
+### Decision 4: Multi-Tenancy Implementation
+
+**Selected: Option A - Application-Primary with RLS Safety Net**
+
+- Primary isolation via Panache base class that applies `tenant_id` filter
+- PostgreSQL RLS policies as defense-in-depth
+- TenantContext as @RequestScoped CDI bean
+- TenantFilter as JAX-RS ContainerRequestFilter
+- All tenant-scoped queries MUST go through Panache base class
+
+### Decision 5: Media Processing Strategy
+
+**Selected: Option B - Async Processing with DelayedJob**
+
+- Image processing: Immediate for small files, queued for large
+- Video processing: Always queued via DelayedJob CRITICAL queue
+- Worker pods with FFmpeg for video transcoding
+- Thumbnailator for image operations
+- WebP conversion via sejda-imageio plugin
+
+### Decision 6: Payment Integration
+
+**Selected: Option A - Stripe Connect with Express Accounts**
+
+- Each store connects their own Stripe Express account
+- Platform fee deducted via Stripe Connect application fees
+- Consignment vendor payouts via Stripe Transfer API
+- Gift cards and store credit as internal ledger (not Stripe)
 
 ---
 
-## Related Documentation
+## Implementation Priority Order
 
-- `docs/java-project-standards.adoc` - VillageCompute Java coding standards
-- `.codemachine/inputs/competitor-research.md` - Feature comparison research
+Based on dependencies and risk, implement in this order:
 
----
-
-## Feature Priority for MVP
-
-### Phase 1: Core Platform
-1. Multi-tenancy with subdomain routing
-2. User authentication (merchants, staff, customers)
-3. Product catalog (physical products, variants)
-4. Basic inventory management
-5. Shopping cart and checkout
-6. Stripe payments
-7. Order management
-8. Basic admin dashboard
-9. Basic storefront
-
-### Phase 2: Enhanced Features
-1. Digital products and subscriptions
-2. Consignment management
-3. Multi-location inventory
-4. Shipping integrations
-5. Gift cards and store credit
-6. Full reporting suite
-
-### Phase 3: Advanced Features
-1. Services/bookings
-2. Loyalty program
-3. POS system
-4. Custom domains with SSL
-5. Headless API
-6. Multi-currency display
+1. **Test Infrastructure** - Must be first to validate all other changes
+2. **Named Query Refactoring** - Enables startup validation
+3. **Multi-Tenant Isolation** - Core architectural requirement
+4. **Payment Integration (Stripe)** - Unblocks checkout flow
+5. **Media Processing** - Required for product images
+6. **Consignment Balance Tracking** - Required for vendor payouts
+7. **Email Notifications** - Lower priority, can run in background

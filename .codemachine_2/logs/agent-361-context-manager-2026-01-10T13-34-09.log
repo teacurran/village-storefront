@@ -1,0 +1,237 @@
+[CYAN]===╭─ Agent 361: context-manager ───────────────────────────────────
+[CYAN]   Started: 2026-01-10 13:34:09
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Claude is analyzing your request...
+I'll help you execute the Context Assembler protocol to generate a comprehensive task briefing package. Let me start by mapping the codebase structure.
+[RUNNING]● Command: Bash
+Let me get the full directory listing from the persisted file:
+[RUNNING]● Command: Read
+[ERROR]● Command: Read
+[ERROR]⎿ <tool_use_error>File content (1.3MB) exceeds maximum allowed size (256KB). Please use offset and limit parameters to read specific portions of the file, or use the GrepTool to search for specific content.</tool_use_error>
+Let me take a more efficient approach - I'll analyze the task data to identify the target task first, then gather the relevant context.
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I3.json
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I2.json
+[SUCCESS]⎿ ./.codemac...
+Now let me identify the target task by analyzing which tasks are complete and which are next:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I6.T1",
+[SUCCESS]⎿   "done": true,
+[SUCCESS]⎿   "dependencies": [
+[SUCCESS]⎿     "I4.T7",
+[SUCCESS]⎿     "I5"
+[SUCCESS]⎿   ]
+[SUCCESS]⎿ }
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id...
+Perfect! I've identified that **I6.T5** is the next target task (I6.T6 has no dependencies so both are candidates, but T5 comes first sequentially). Let me verify the dependencies are complete and get the full task details:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I5.T2",
+[SUCCESS]⎿   "done": true
+[SUCCESS]⎿ }
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I3.T5",
+[SUCCESS]⎿   "done": true
+[SUCCESS]⎿ }
+Excellent! Both dependencies are complete. Now let me get the full details of I6.T5:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I6.T5",
+[SUCCESS]⎿   "iteration_id": "I6",
+[SUCCESS]⎿   "iteration_goal": "Finalize CI/CD, security/perfor...
+Perfect! Now let me gather the relevant documentary context. Based on the task description, I need to focus on:
+1. DR/backup architecture
+2. Retention policies (from I5.T2)
+3. Platform commands architecture
+4. Tenant management
+5. Migration infrastructure
+
+Let me start by exploring the relevant architecture and plan documents:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ .codemachine/artifacts/tasks/I6.T4-completion-report.md
+[SUCCESS]⎿ .codemachine/artifacts/tasks/I3.T2_implement...
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ .codemachine/artifacts/architecture/03_Behavior_and_Communication.md
+[SUCCESS]⎿ .codemachine/artifacts/architec...
+Now let me search for relevant sections in the operational architecture document (most relevant for DR/backup):
+[RUNNING]● Command: Grep
+[SUCCESS]● Command: Grep
+[SUCCESS]⎿ <persisted-output>
+[SUCCESS]⎿ Output too large (27.4KB). Full output saved to: /Users/tea/.codemachine/claude/p...
+Let me read the relevant sections from the operational architecture:
+[RUNNING]● Command: Read
+Now let me search for tenant suspension and platform command sections:
+[RUNNING]● Command: Grep
+Let me check the System Structure document for data retention and archival details:
+[RUNNING]● Command: Grep
+[SUCCESS]● Command: Grep
+[SUCCESS]⎿ 41-    - Structured JSON logging with tenant_id, store_id, user_id, and correlation_id on every log ...
+Now let me check the I5.T2 completion report to see what was implemented for retention:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ ./docs/operations/data-retention.md
+[SUCCESS]⎿ ./docs/operations/archive_runbook.md
+Perfect! Let me read the retention documentation:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→# Data Retention & Archival
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→**Task Reference:** I5.T2 - Reporting & Retention pipel...
+Now let me check the existing backup/DR infrastructure:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ ./modules/core-platform/src/main/webui/src/api/generated/models/Address.ts
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ k8s/overlays/prod/service-monitor.yaml
+[SUCCESS]⎿ k8s/overlays/prod/patches/deployment-workers-prod.yaml
+[SUCCESS]⎿ k8s/ov...
+Let me check what migration infrastructure exists:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ ./node_modules/@asyncapi/specs/migrations
+[SUCCESS]⎿ ./node_modules/rxjs/migrations
+[SUCCESS]⎿ ./modules/core-platform/tar...
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ total 536
+[SUCCESS]⎿ drwxr-xr-x  28 tea  staff    896 Jan 10 08:00 .
+[SUCCESS]⎿ drwxr-xr-x   3 tea  staff     96 Jan  7 23...
+Now let me check existing platform commands or admin scripts:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ empty
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ scripts/ThemeExporter.class
+[SUCCESS]⎿ scripts/ThemeExporter.java
+[SUCCESS]⎿ scripts/dev/README.md
+[SUCCESS]⎿ scripts/dev/bootstrap.s...
+Let me check if there are any existing tenant admin or platform files:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ modules/core-platform/target/jacoco-report/villagecompute.storefront.platformops.data.models/Platfor...
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/tenant/TenantFilterTest.java
+[SUCCESS]⎿ modules/c...
+Let me check the Tenant model and see what status fields exist:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→package villagecompute.storefront.data.models;
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→import java.time.OffsetDateTime;
+[SUCCESS]⎿    ...
+Now let me check the baseline schema to understand what database infrastructure exists:
+[RUNNING]● Command: Grep
+Excellent! Now let me check what backup/restore documentation exists:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→# Compliance Archival Runbook
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→## Overview
+[SUCCESS]⎿      4→
+[SUCCESS]⎿      5→This runbook describes ope...
+Now let me check what R2/storage client already exists:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/reporting/StubReportStorageClient.java...
+Perfect! Let me check the R2ReportStorageClient to understand the R2 interface pattern:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→package villagecompute.storefront.reporting;
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→import java.io.InputStream;
+[SUCCESS]⎿      4→imp...
+Now let me check existing background jobs infrastructure:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/jobs/PartitionMaintenanceJob.java
+Excellent! Let me read the partition maintenance job to understand the existing pattern:
+[RUNNING]● Command: Read
+Now let me check the operational architecture document sections on DR and backup requirements. Let me read the current context.md to see what's there:
+[RUNNING]● Command: Read
+Perfect! Now I can see the context.md file is for the previous task (I6.T4). I need to create a new briefing for I6.T5. Now let me gather more context about PostgreSQL WAL backups and Kubernetes CronJob patterns. Let me also read relevant architecture sections:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 279→Rel(tenantPods,storage,"Signed URL generation","HTTPS")
+[SUCCESS]⎿    280→@enduml
+[SUCCESS]⎿    281→```
+[SUCCESS]⎿    282→
+[SUCCESS]⎿    283...
+Perfect! Now I have enough context. Let me write the comprehensive task briefing package for I6.T5:
+[RUNNING]● Command: Write
+Perfect! I have successfully generated a comprehensive Task Briefing Package for I6.T5 (Data Ops + DR Automation). The briefing includes:
+
+## Summary of the Context Assembler Analysis
+
+I've completed the **Phase 0-2** workflow of the Context Assembler protocol:
+
+### Phase 0: Project Reconnaissance
+- ✅ Mapped the codebase structure (identified existing infrastructure)
+- ✅ Established ground truth for file locations
+
+### Phase 1: Target Task Identification & Context Gathering
+- ✅ **Identified I6.T5** as the next target task (DR automation)
+- ✅ Verified all dependencies complete (I5.T2, I3.T5)
+- ✅ Gathered documentary context from:
+  - Operational architecture (backup strategy, RTO/RPO requirements)
+  - Data retention policies (I5.T2 deliverables)
+  - Tenant status management infrastructure
+  - Existing archival runbook patterns
+- ✅ Gathered codebase context from:
+  - `PartitionMaintenanceJob.java` - Archival job patterns
+  - `R2ReportStorageClient.java` - R2 storage integration
+  - `Tenant.java` - Status field infrastructure
+  - Feature flag system
+  - Archive runbook documentation
+
+### Phase 2: Synthesis & Briefing Generation
+- ✅ Created comprehensive `.codemachine/prompts/context.md` with:
+  1. **Complete task specification** (I6.T5 JSON)
+  2. **Architectural context** (5 sections with RTO/RPO requirements, backup strategy, tenant suspension patterns)
+  3. **Codebase analysis** (5 sections analyzing existing patterns to reuse)
+  4. **Implementation strategy** (5 detailed subsections with code templates for backup jobs, restore scripts, tenant suspension, K8s CronJobs, and DR playbook)
+  5. **Acceptance criteria checklist** (40+ specific deliverables)
+  6. **Common pitfalls** (10 scenarios with solutions)
+  7. **Success criteria recap**
+
+## Key Strategic Guidance Provided
+
+The briefing emphasizes:
+
+1. **Reuse Existing Patterns:** The Coder Agent MUST follow the patterns from `PartitionMaintenanceJob.java` (scheduled jobs, R2 upload, metrics)
+
+2. **Two-Tier Backup Strategy:**
+   - Daily base backups (full snapshots)
+   - Hourly WAL archiving (point-in-time recovery)
+
+3. **Tenant Suspension Architecture:**
+   - Leverage existing `status` field in `tenants` table
+   - Backup feature flags before suspension
+   - Update `TenantResolutionFilter` to check status
+
+4. **Testing First, Documentation Second:**
+   - Scripts MUST be tested in staging before documenting
+   - DR playbook should reflect ACTUAL tested procedures
+
+The briefing package is now ready for the Coder Agent to implement I6.T5. All necessary context, patterns, templates, and guidance have been assembled.
+⏱️  Duration: 369422ms | Cost: $1.38275745 | Tokens: 2527361in/14815out (2527329 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

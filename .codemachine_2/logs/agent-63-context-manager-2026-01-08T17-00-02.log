@@ -1,0 +1,479 @@
+[CYAN]===╭─ Agent 63: context-manager ────────────────────────────────────
+[CYAN]   Started: 2026-01-08 17:00:02
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing repository files recursively**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Determining next task and gathering source docs**
+
+I'm identifying the next undone task with satisfied dependencies, settling on task I2.T3 about extending OpenAPI and Quarkus resources. Now I’m figuring out which docs and sections mention key terms like catalog, inventory, and REST controllers to extract focused context—planning to check iteration and architecture manifests, then read relevant parts from files like `02_Iteration_I2.md`. I'll rely on my earlier file map and selective content extraction rather than running broad directory listings again.
+[RUNNING]● Command: bash -lc "sed -n '1,220p' 02_Iteration_I2.md"
+[ERROR]● Command: bash -lc "sed -n '1,220p' 02_Iteration_I2.md"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for documentation in docs/plan**
+[RUNNING]● Command: bash -lc "rg --files -g '02_Iteration_I2.md'"
+[ERROR]● Command: bash -lc "rg --files -g '02_Iteration_I2.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for plan documents**
+[RUNNING]● Command: bash -lc "rg --files | grep 'Blueprint'"
+[ERROR]● Command: bash -lc "rg --files | grep 'Blueprint'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for Blueprint references in docs**
+[RUNNING]● Command: bash -lc 'rg -n "Blueprint" -g "*.md"'
+[SUCCESS]● Command: bash -lc 'rg -n "Blueprint" -g "*.md"'
+[SUCCESS]⎿ I2T2_MIGRATION_SUMMARY.md:425:- `docs/architecture/01_Blueprint_Foundation.md` - Section 2 (Implemen...
+[THINKING]● Thinking: **Searching for .codemachine artifacts**
+[RUNNING]● Command: bash -lc "rg --files | grep '.codemachine'"
+[ERROR]● Command: bash -lc "rg --files | grep '.codemachine'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Exploring hidden directories and files**
+[RUNNING]● Command: bash -lc "rg --files --hidden | grep '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]● Command: bash -lc "rg --files --hidden | grep '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]⎿ .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md
+[THINKING]● Thinking: **Waiting for more input**
+[RUNNING]● Command: bash -lc "rg --files --hidden | grep '01_Blueprint_Foundation.md'"
+[SUCCESS]● Command: bash -lc "rg --files --hidden | grep '01_Blueprint_Foundation.md'"
+[SUCCESS]⎿ .codemachine/artifacts/architecture/01_Blueprint_Foundation.md
+[THINKING]● Thinking: **Identifying relevant documentation sections**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' .codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' .codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ <!-- anchor: iteration-2-plan -->
+[SUCCESS]⎿ ### Iteration 2: Catalog, Inventory, and Core Domain APIs
+[SUCCESS]⎿
+[SUCCESS]⎿ *   **I...
+[THINKING]● Thinking: **Collecting architecture snippets for plan context**
+[RUNNING]● Command: bash -lc 'rg -n "Catalog" -n .codemachine/artifacts/architecture/01_Blueprint_Foundation.md | head -n 20'
+[SUCCESS]● Command: bash -lc 'rg -n "Catalog" -n .codemachine/artifacts/architecture/01_Blueprint_Foundation.md | head -n 20'
+[SUCCESS]⎿ 53:    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, ...
+[THINKING]● Thinking: **Capturing context around Section 4**
+[RUNNING]● Command: bash -lc "sed -n '40,80p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '40,80p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ These rules bind all teams; deviations require documented architectural decision records referencing...
+[THINKING]● Thinking: **Gathering API documentation snippets**
+[RUNNING]● Command: bash -lc 'rg -n "Catalog" .codemachine/artifacts/architecture/02_System_Structure_and_Data.md | head -n 5'
+[SUCCESS]● Command: bash -lc 'rg -n "Catalog" .codemachine/artifacts/architecture/02_System_Structure_and_Data.md | head -n 5'
+[SUCCESS]⎿ 376:    *   **Description:** Focuses on the Quarkus API container, highlighting components mandated ...
+[THINKING]● Thinking: **Extracting PlantUML component snippet**
+[RUNNING]● Command: bash -lc "sed -n '356,410p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '356,410p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Rel(reportingProjection, cloudflareR2, "Stores large exports and shareable assets", "S3 API")
+[SUCCESS]⎿       ...
+[THINKING]● Thinking: **Searching for OpenAPI references**
+[RUNNING]● Command: bash -lc 'rg -n "OpenAPI" .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md'
+[SUCCESS]● Command: bash -lc 'rg -n "OpenAPI" .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md'
+[SUCCESS]⎿ 19:    - Headless APIs and developer experience (OpenAPI spec-first, OAuth scopes, signed media URLs...
+[THINKING]● Thinking: **Extracting code snippet with context**
+[RUNNING]● Command: bash -lc "sed -n '40,120p' .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md"
+[SUCCESS]● Command: bash -lc "sed -n '40,120p' .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md"
+[SUCCESS]⎿ - Identity & Session Service (JWT/refresh, OAuth clients, session logs, impersonation controls).
+[SUCCESS]⎿    ...
+[THINKING]● Thinking: **Compiling documentation and code context snippets**
+
+I’m gathering key doc snippets on API contracts, module blueprints, and task iterations to build rich context. Simultaneously, I’m confirming exact paths for critical OpenAPI specs and Java resource classes like ProductResource by searching the repo. This way, I can blend architectural references with live code for thorough analysis.
+[RUNNING]● Command: bash -lc 'rg -n "class ProductResource" -g "*.java"'
+[SUCCESS]● Command: bash -lc 'rg -n "class ProductResource" -g "*.java"'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java:43:c...
+[THINKING]● Thinking: **Examining ProductResource.java file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java"
+[SUCCESS]⎿ package villagecompute.storefront.api.rest;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.HashMap;
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import...
+[THINKING]● Thinking: **Scrolling to bottom**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java"
+[SUCCESS]⎿ Map<String, Object> problem = new HashMap<>();
+[SUCCESS]⎿         problem.put("type", "about:blank");
+[SUCCESS]⎿         p...
+[THINKING]● Thinking: **Searching for InventoryResource file**
+[RUNNING]● Command: bash -lc 'rg -n "class InventoryResource" -g "*.java" -n'
+[ERROR]● Command: bash -lc 'rg -n "class InventoryResource" -g "*.java" -n'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for InventoryResource**
+[RUNNING]● Command: bash -lc "rg -n \"Inventory\" modules/core-platform/src/main/java/villagecompute/storefront/api/rest -g '*.java'"
+[SUCCESS]● Command: bash -lc "rg -n \"Inventory\" modules/core-platform/src/main/java/villagecompute/storefront/api/rest -g '*.java'"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/api/rest/StorefrontResource.java:178: ...
+[THINKING]● Thinking: **Reading InventoryAdminResource file**
+[RUNNING]● Command: bash -lc "sed -n '1,220p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,220p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]⎿ package villagecompute.storefront.api.rest;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import ja...
+[THINKING]● Thinking: **Searching OpenAPI spec near Catalog section**
+[RUNNING]● Command: bash -lc 'rg -n "Catalog" api/v1/openapi.yaml | head -n 20'
+[SUCCESS]● Command: bash -lc 'rg -n "Catalog" api/v1/openapi.yaml | head -n 20'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Checking alternative file locations**
+[RUNNING]● Command: bash -lc 'head -n 80 api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'head -n 80 api/v1/openapi.yaml'
+[SUCCESS]⎿ # Village Storefront API - OpenAPI 3.0.3 Specification
+[SUCCESS]⎿ #
+[SUCCESS]⎿ # Lint command: npx @stoplight/spectral-cli...
+[THINKING]● Thinking: **Searching for catalog paths**
+[RUNNING]● Command: bash -lc 'rg -n "/catalog" api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'rg -n "/catalog" api/v1/openapi.yaml'
+[SUCCESS]⎿ 303:  /catalog/products:
+[SUCCESS]⎿ 375:  /catalog/products/{productId}:
+[SUCCESS]⎿ 1494:  /api/v1/headless/catalog/produc...
+[THINKING]● Thinking: **Examining path usage in code**
+[RUNNING]● Command: bash -lc "sed -n '280,380p' api/v1/openapi.yaml"
+[SUCCESS]● Command: bash -lc "sed -n '280,380p' api/v1/openapi.yaml"
+[SUCCESS]⎿ Useful for headless clients to verify tenant context and retrieve theme settings.
+[SUCCESS]⎿
+[SUCCESS]⎿         **No auth...
+[THINKING]● Thinking: **Locating relevant test file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java"
+[SUCCESS]⎿ package villagecompute.storefront.api.rest;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static io.restassured.RestAssured.given;
+[SUCCESS]⎿ import ...
+[THINKING]● Thinking: **Planning context file creation**
+[RUNNING]● Command: bash -lc "rg --files --hidden | grep 'tasks_I2.json'"
+[SUCCESS]● Command: bash -lc "rg --files --hidden | grep 'tasks_I2.json'"
+[SUCCESS]⎿ .codemachine/artifacts/tasks/tasks_I2.json
+[THINKING]● Thinking: **Parsing JSON from file**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+with open('.codemachine/artifacts/tasks/tasks_I2.json') as f:
+    tasks=json.load(f)
+for t in tasks:
+    if t['task_id']=='I2.T3':
+        import pprint
+        import json
+        print(json.dumps(t, indent=2))
+        break
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+with open('.codemachine/artifacts/tasks/tasks_I2.json') as f:
+    tasks=json.load(f)
+for t in tasks:
+    if t['task_id']=='I2.T3':
+        import pprint
+        import json
+        print(json.dumps(t, indent=2))
+        break
+PY"
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I2.T3",
+[SUCCESS]⎿   "iteration_id": "I2",
+[SUCCESS]⎿   "iteration_goal": "Implement catalog + inventory d...
+[THINKING]● Thinking: **Organizing context snippets and code summaries**
+
+I’m gathering relevant snippets from plan, blueprint, and iteration documents to build the final context, carefully selecting key sections on API style and architecture. After that, I’ll summarize important code files—API spec, resource endpoints, tests—highlighting dependencies, patterns, and implementation notes to prepare for the final write-up. I’ll also check for and handle the existing context prompt file as needed before moving forward.
+[RUNNING]● Command: bash -lc 'if [ -f .codemachine/prompts/context.md ]; then cat .codemachine/prompts/context.md; fi'
+[SUCCESS]● Command: bash -lc 'if [ -f .codemachine/prompts/context.md ]; then cat .codemachine/prompts/context.md; fi'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing new context file content**
+[RUNNING]● Command: bash -lc "nl -ba api/v1/openapi.yaml | sed -n '300,360p'"
+[SUCCESS]● Command: bash -lc "nl -ba api/v1/openapi.yaml | sed -n '300,360p'"
+[SUCCESS]⎿ 300	  # STOREFRONT - CATALOG ENDPOINTS (Placeholder)
+[SUCCESS]⎿    301	  # ====================================...
+[THINKING]● Thinking: **Checking for ProductResource location**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java | sed -n '1,200p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java | sed -n '1,200p'"
+[SUCCESS]⎿ 1	package villagecompute.storefront.api.rest;
+[SUCCESS]⎿      2	
+[SUCCESS]⎿      3	import java.util.HashMap;
+[SUCCESS]⎿      4	import...
+[THINKING]● Thinking: **Searching for createProblem references**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java | sed -n '1,220p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java | sed -n '1,220p'"
+[SUCCESS]⎿ 1	package villagecompute.storefront.api.rest;
+[SUCCESS]⎿      2	
+[SUCCESS]⎿      3	import java.util.List;
+[SUCCESS]⎿      4	import ja...
+[THINKING]● Thinking: **Preparing to reference test file lines**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java | sed -n '1,200p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java | sed -n '1,200p'"
+[SUCCESS]⎿ 1	package villagecompute.storefront.api.rest;
+[SUCCESS]⎿      2	
+[SUCCESS]⎿      3	import static io.restassured.RestAssure...
+[THINKING]● Thinking: **Crafting detailed context content**
+
+I’m gathering precise document snippets from the plan overview, blueprint section, and the iteration file to assemble a comprehensive context file with embedded JSON and relevant summaries. I’ll carefully select portions to balance completeness and length, then include summaries and recommendations for key code files to guide implementation effectively.
+[RUNNING]● Command: bash -lc "sed -n '1,160p' modules/core-platform/src/main/java/villagecompute/storefront/api/types/ProductSummary.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,160p' modules/core-platform/src/main/java/villagecompute/storefront/api/types/ProductSummary.java"
+[SUCCESS]⎿ package villagecompute.storefront.api.types;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ import com.fasterxml.jackson.a...
+[THINKING]● Thinking: **Searching for RateLimit header references**
+[RUNNING]● Command: bash -lc 'rg -n "X-RateLimit" api/v1/openapi.yaml | head -n 5'
+[SUCCESS]● Command: bash -lc 'rg -n "X-RateLimit" api/v1/openapi.yaml | head -n 5'
+[SUCCESS]⎿ 66:    - `X-RateLimit-Limit`: Request limit per window
+[SUCCESS]⎿ 67:    - `X-RateLimit-Remaining`: Remaining r...
+[THINKING]● Thinking: **Preparing final context file content**
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T3",
+  "iteration_id": "I2",
+  "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
+  "description": "Extend OpenAPI spec + Quarkus resources for catalog (list/search products, variant matrix, categories/collections CRUD) and inventory endpoints; include pagination/filter parameter definitions.",
+  "agent_type_hint": "DocumentationAgent",
+  "inputs": "Task I2.T1 output, API skeleton.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "REST controllers (storefront + admin scopes) respecting TenantContext + feature flags; spec includes request/response schemas, ProblemDetails, RateLimit metadata.",
+  "acceptance_criteria": "OpenAPI passes lint; Quarkus endpoints return 200/404/403 as expected; integration test uses RestAssured verifying tenant isolation; spec referencing new tags `Catalog` + `Inventory`.",
+  "dependencies": [
+    "I2.T1",
+    "I1.T4"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: API Contract Style & Communication Patterns (from 01_Plan_Overview_and_Setup.md)
+
+```markdown
+*   **API Contract Style:** RESTful OpenAPI 3.0 spec-first for storefront, admin, headless, and platform APIs; Problem Details error responses; DTO layering via MapStruct; per-endpoint metadata for tenant scope, feature flags, rate limits; OAuth scopes for partner integrations. (Initial OpenAPI skeleton in I1.T4, extended each iteration.)
+*   **Communication Patterns:**
+    - TenantContext filter populates per-request context before REST/GraphQL (future) controllers execute; CDI events broadcast resolution results to caches.
+    - Modules interact synchronously via CDI/service interfaces but publish domain events to `domain_events` table for asynchronous reporting, media, and integration pipelines.
+    - Background workloads operate via DelayedJob queue with prioritized worker deployments; job payloads versioned for safe retries.
+    - External integrations (Stripe, carriers, address validation, cert-manager, Cloudflare R2) encapsulated inside adapter layer with retry/fallback policies and OpenTelemetry spans.
+    - Feature flags combined with Caffeine caches and PostgreSQL overrides provide runtime control for phased rollouts; SSE/WebSocket updates keep admin UX aware of toggles.
+```
+
+### Context: Section 4 – Core Components & Catalog Ownership (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-4-blueprint -->
+### **4.0 The "Blueprint" (Core Components & Boundaries)**
+
+*   **System Overview:** Village Storefront is a layered modular monolith where Quarkus hosts tenant-aware REST APIs, storefront Qute templates, admin Vue SPA assets, and background job executors; PostgreSQL anchors multi-tenant data with RLS, while object storage, Stripe, carrier APIs, and FFmpeg-driven media processors run as integration edges controlled via explicit adapters.
+*   **Core Architectural Principle:** Separation of Concerns is enforced through CDI interfaces, Panache repositories per domain, and DTO mappers isolating API schemas from persistence; modules communicate via domain events recorded in the database so that replacing Stripe, adding loyalty engines, or extracting POS services later does not ripple through storefront rendering or checkout orchestration.
+*   **Key Components/Services:**
+    *   **Tenant Access Gateway:** Handles subdomain/custom-domain resolution, populates TenantContext, enforces CORS, and rejects unknown tenants before routing deeper into the stack.
+    *   **Identity & Session Service:** Issues JWT/refresh tokens, maintains session/activity logs, and exposes impersonation workflows with audit logging.
+    *   **Storefront Rendering Engine:** Delivers Qute-templated storefront pages, injects branding/theme tokens, and coordinates PrimeUI interactions plus Tailwind builds.
+    *   **Admin SPA Delivery Service:** Serves Vue 3 assets under `/admin/*`, provides bootstrapped config (tenant, feature flags, RBAC scopes), and proxies API calls through authenticated endpoints.
+    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, multi-location inventory, adjustments, transfers, and reporting projections.
+    *   **Consignment Domain Module:** Manages consignor profiles, commission schedules, intake batches, payouts, vendor portals, and related notifications.
+    *   **Checkout & Order Orchestrator:** Coordinates cart persistence, address validation, shipping rate fetch, Stripe intents, order lifecycle transitions, refunds, and returns.
+    *   **Payment Integration Layer:** Implements PaymentProvider interfaces (Stripe first) plus generic payment, refund, dispute, and ledger models; handles Stripe Connect onboarding and payouts.
+    *   **Loyalty & Rewards Module:** Tracks points balances, tier upgrades, expirations, and redemption hooks invoked during checkout and customer account flows.
+    *   **POS & Offline Processor:** Provides browser-based POS UI assets, hardware integrations (Stripe Terminal, printers), offline queueing, and reconciliation jobs syncing queued sales.
+    *   **Media Pipeline Controller:** Accepts uploads, enforces limits, queues FFmpeg jobs, generates thumbnails/WebP variants, and persists metadata plus signed URLs in object storage.
+    *   **Background Job Scheduler & Worker:** Implements DelayedJob semantics, executes email dispatch, media processing, payouts, report generation, and certificate renewals via Quarkus `@Scheduled` triggers.
+    *   **Reporting & Analytics Projection Service:** Builds read-optimized aggregates for sales, inventory, consignment, loyalty, and platform metrics; powers admin dashboard widgets and platform-level reports.
+    *   **Platform Admin Console Backend:** Provides SaaS-level store management APIs, impersonation controls, plan/billing observability, and health monitoring endpoints for operations.
+    *   **Integration Adapter Layer:** Abstracts external services (Stripe, USPS/UPS/FedEx APIs, address validation, SMTP, Cloudflare R2) behind versioned interfaces with retry/fallback policies and OpenTelemetry spans.
+
+Component boundaries must remain thin yet explicit: each module exposes interfaces plus OpenAPI-documented endpoints; no module may reach around another via shared tables without going through defined repositories or service contracts. Shared utilities live in a `platform-kit` module (validation, money, feature flags) to avoid duplication while preserving clarity.
+```
+
+### Context: Task 2.3 – Catalog & Inventory APIs (from 02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t3 -->
+*   **Task 2.3:**
+    *   **Task ID:** `I2.T3`
+    *   **Description:** Extend OpenAPI spec + Quarkus resources for catalog (list/search products, variant matrix, categories/collections CRUD) and inventory endpoints; include pagination/filter parameter definitions.
+    *   **Agent Type Hint:** `DocumentationAgent`
+    *   **Inputs:** Task I2.T1 output, API skeleton.
+    *   **Input Files:** [`api/storefront-admin-platform.yaml`, `modules/catalog/src/main/java/.../ProductResource.java`]
+    *   **Target Files:** [`api/storefront-admin-platform.yaml`, `modules/catalog/src/main/java/.../ProductResource.java`, `.../InventoryResource.java`, `modules/catalog/src/test/java/.../ProductResourceTest.java`]
+    *   **Deliverables:** REST controllers (storefront + admin scopes) respecting TenantContext + feature flags; spec includes request/response schemas, ProblemDetails, RateLimit metadata.
+    *   **Acceptance Criteria:** OpenAPI passes lint; Quarkus endpoints return 200/404/403 as expected; integration test uses RestAssured verifying tenant isolation; spec referencing new tags `Catalog` + `Inventory`.
+    *   **Dependencies:** `I2.T1`, `I1.T4`.
+    *   **Parallelizable:** Yes.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `api/v1/openapi.yaml:1`
+    *   **Summary:** Central OpenAPI 3.0.3 spec defining servers, auth schemes, ProblemDetails, shared parameters, and placeholder catalog routes (`/catalog/products`, `/catalog/products/{productId}`) plus headless analogs at `api/v1/headless/*`. Catalog paths currently marked TODO and still tagged `[Storefront, Headless]` without the dedicated `Catalog` / `Inventory` tags the iteration calls for, but shared pagination parameters and rate-limit headers (`lines 303-360`, `66-68`, `1529+`) are already modeled.
+    *   **Recommendation:** Flesh out the catalog + inventory sections in-place by reusing existing components (e.g., `ProductSummary`, `PaginationMetadata`, standard headers) and introduce the mandated `Catalog` and `Inventory` tags. Keep all operations spec-first (document request/response schemas, ProblemDetails, rate-limit headers) and run `npx @stoplight/spectral-cli lint api/v1/openapi.yaml` before handing changes to CI.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java:1`
+    *   **Summary:** Storefront-facing resource providing `/api/v1/catalog/products` listing with pagination/search + `/api/v1/catalog/products/{productId}` detail retrieval. It injects `CatalogService`, `CatalogCacheService`, `ProductMapper`, `FeatureToggle`, `MeterRegistry`, pulls the tenant from `TenantContext`, and emits rate-limit headers while mapping domain models to DTOs (`ProductSummary`, `ProductDetail`).
+    *   **Recommendation:** When expanding endpoints (filters, variants, categories) keep the same patterns: validate/query params, rely on `CatalogService` for tenant-safe access, surface results through existing DTOs/mappers, and reuse `createProblemDetails` + meter counters. Honor feature flags and rate-limit headers so HTTP behavior matches the spec.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java:1`
+    *   **Summary:** Admin-only inventory controller under `/api/v1/admin/inventory` providing CRUD-ish endpoints for locations, transfers, and adjustments. Uses `InventoryLocationRepository`, `InventoryTransferService`, `InventoryMapper`, includes detailed logging, tenant resolution, validation, and consistent HTTP codes for conflicts, not-found cases, and bad requests.
+    *   **Recommendation:** Mirror this structure for any new catalog/inventory admin APIs—wire into the same repositories/services, propagate `TenantContext` resolution, log with context, and reuse DTOs in `villagecompute.storefront.api.types` rather than inventing new payloads. Follow its use of `Status.CREATED/CONFLICT/NOT_FOUND` so tests and the spec stay aligned.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java:1`
+    *   **Summary:** Quarkus integration tests that seed multiple tenants/products via `EntityManager`, use `TenantContext` to scope data setup, and exercise `/api/v1/catalog/products` through RestAssured with explicit `Host` headers. Assertions verify pagination metadata, search, and tenant isolation while checking `X-RateLimit-*` headers.
+    *   **Recommendation:** Use this suite as the canonical template for any new catalog/inventory resource tests: leverage the `request(subdomain)` helper, seed domain data in `@BeforeEach`, and add cases covering 200/404/403 flows for both storefront and admin endpoints so acceptance criteria about tenant isolation and status codes are provable.
+
+### Implementation Tips & Notes
+*   **Tip:** DTOs such as `ProductSummary` and `ProductDetail` (`modules/core-platform/src/main/java/villagecompute/storefront/api/types/*.java`) plus `ProductMapper` already encapsulate the schema defined in the spec—extend them if new fields are needed rather than crafting bespoke maps inside the resources.
+*   **Tip:** The spec defines reusable pagination params/objects (`#/components/parameters/PageNumber`, `PageSize`, `#/components/schemas/PaginationMetadata`). Reference those parameters in every new GET path and keep the response envelope structure (`{ data, pagination }`) identical to `ProductResource` so the mapper and tests keep working.
+*   **Note:** Rate-limit headers are modeled globally (`api/v1/openapi.yaml:66-68` plus header components) and already emitted in `ProductResource`. Ensure any new resource and the spec both include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` to satisfy the governance checklist.
+*   **Tip:** Feature flags and tenant gating happen early via `TenantContext` and `FeatureToggle`. Thread these through new endpoints (e.g., disable beta catalog adjustments via kill switches) and describe the flag behavior directly in the OpenAPI `description`/`x-feature-flag` metadata when applicable.
+*   **Warning:** All HTTP tests rely on `Host` header-based tenant routing. Forgetting this (or bypassing `TenantContext`) will silently hit the default tenant and break the RLS promises, so keep the test helper + filter path intact when adding new suites.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T3",
+  "iteration_id": "I2",
+  "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
+  "description": "Extend OpenAPI spec + Quarkus resources for catalog (list/search products, variant matrix, categories/collections CRUD) and inventory endpoints; include pagination/filter parameter definitions.",
+  "agent_type_hint": "DocumentationAgent",
+  "inputs": "Task I2.T1 output, API skeleton.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "REST controllers (storefront + admin scopes) respecting TenantContext + feature flags; spec includes request/response schemas, ProblemDetails, RateLimit metadata.",
+  "acceptance_criteria": "OpenAPI passes lint; Quarkus endpoints return 200/404/403 as expected; integration test uses RestAssured verifying tenant isolation; spec referencing new tags `Catalog` + `Inventory`.",
+  "dependencies": [
+    "I2.T1",
+    "I1.T4"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: API Contract Style & Communication Patterns (from 01_Plan_Overview_and_Setup.md)
+
+```markdown
+*   **API Contract Style:** RESTful OpenAPI 3.0 spec-first for storefront, admin, headless, and platform APIs; Problem Details error responses; DTO layering via MapStruct; per-endpoint metadata for tenant scope, feature flags, rate limits; OAuth scopes for partner integrations. (Initial OpenAPI skeleton in I1.T4, extended each iteration.)
+*   **Communication Patterns:**
+    - TenantContext filter populates per-request context before REST/GraphQL (future) controllers execute; CDI events broadcast resolution results to caches.
+    - Modules interact synchronously via CDI/service interfaces but publish domain events to `domain_events` table for asynchronous reporting, media, and integration pipelines.
+    - Background workloads operate via DelayedJob queue with prioritized worker deployments; job payloads versioned for safe retries.
+    - External integrations (Stripe, carriers, address validation, cert-manager, Cloudflare R2) encapsulated inside adapter layer with retry/fallback policies and OpenTelemetry spans.
+    - Feature flags combined with Caffeine caches and PostgreSQL overrides provide runtime control for phased rollouts; SSE/WebSocket updates keep admin UX aware of toggles.
+```
+
+### Context: Section 4 – Core Components & Catalog Ownership (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-4-blueprint -->
+### **4.0 The "Blueprint" (Core Components & Boundaries)**
+
+*   **System Overview:** Village Storefront is a layered modular monolith where Quarkus hosts tenant-aware REST APIs, storefront Qute templates, admin Vue SPA assets, and background job executors; PostgreSQL anchors multi-tenant data with RLS, while object storage, Stripe, carrier APIs, and FFmpeg-driven media processors run as integration edges controlled via explicit adapters.
+*   **Core Architectural Principle:** Separation of Concerns is enforced through CDI interfaces, Panache repositories per domain, and DTO mappers isolating API schemas from persistence; modules communicate via domain events recorded in the database so that replacing Stripe, adding loyalty engines, or extracting POS services later does not ripple through storefront rendering or checkout orchestration.
+*   **Key Components/Services:**
+    *   **Tenant Access Gateway:** Handles subdomain/custom-domain resolution, populates TenantContext, enforces CORS, and rejects unknown tenants before routing deeper into the stack.
+    *   **Identity & Session Service:** Issues JWT/refresh tokens, maintains session/activity logs, and exposes impersonation workflows with audit logging.
+    *   **Storefront Rendering Engine:** Delivers Qute-templated storefront pages, injects branding/theme tokens, and coordinates PrimeUI interactions plus Tailwind builds.
+    *   **Admin SPA Delivery Service:** Serves Vue 3 assets under `/admin/*`, provides bootstrapped config (tenant, feature flags, RBAC scopes), and proxies API calls through authenticated endpoints.
+    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, multi-location inventory, adjustments, transfers, and reporting projections.
+    *   **Consignment Domain Module:** Manages consignor profiles, commission schedules, intake batches, payouts, vendor portals, and related notifications.
+    *   **Checkout & Order Orchestrator:** Coordinates cart persistence, address validation, shipping rate fetch, Stripe intents, order lifecycle transitions, refunds, and returns.
+    *   **Payment Integration Layer:** Implements PaymentProvider interfaces (Stripe first) plus generic payment, refund, dispute, and ledger models; handles Stripe Connect onboarding and payouts.
+    *   **Loyalty & Rewards Module:** Tracks points balances, tier upgrades, expirations, and redemption hooks invoked during checkout and customer account flows.
+    *   **POS & Offline Processor:** Provides browser-based POS UI assets, hardware integrations (Stripe Terminal, printers), offline queueing, and reconciliation jobs syncing queued sales.
+    *   **Media Pipeline Controller:** Accepts uploads, enforces limits, queues FFmpeg jobs, generates thumbnails/WebP variants, and persists metadata plus signed URLs in object storage.
+    *   **Background Job Scheduler & Worker:** Implements DelayedJob semantics, executes email dispatch, media processing, payouts, report generation, and certificate renewals via Quarkus `@Scheduled` triggers.
+    *   **Reporting & Analytics Projection Service:** Builds read-optimized aggregates for sales, inventory, consignment, loyalty, and platform metrics; powers admin dashboard widgets and platform-level reports.
+    *   **Platform Admin Console Backend:** Provides SaaS-level store management APIs, impersonation controls, plan/billing observability, and health monitoring endpoints for operations.
+    *   **Integration Adapter Layer:** Abstracts external services (Stripe, USPS/UPS/FedEx APIs, address validation, SMTP, Cloudflare R2) behind versioned interfaces with retry/fallback policies and OpenTelemetry spans.
+
+Component boundaries must remain thin yet explicit: each module exposes interfaces plus OpenAPI-documented endpoints; no module may reach around another via shared tables without going through defined repositories or service contracts. Shared utilities live in a `platform-kit` module (validation, money, feature flags) to avoid duplication while preserving clarity.
+```
+
+### Context: Task 2.3 – Catalog & Inventory APIs (from 02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t3 -->
+*   **Task 2.3:**
+    *   **Task ID:** `I2.T3`
+    *   **Description:** Extend OpenAPI spec + Quarkus resources for catalog (list/search products, variant matrix, categories/collections CRUD) and inventory endpoints; include pagination/filter parameter definitions.
+    *   **Agent Type Hint:** `DocumentationAgent`
+    *   **Inputs:** Task I2.T1 output, API skeleton.
+    *   **Input Files:** [`api/storefront-admin-platform.yaml`, `modules/catalog/src/main/java/.../ProductResource.java`]
+    *   **Target Files:** [`api/storefront-admin-platform.yaml`, `modules/catalog/src/main/java/.../ProductResource.java`, `.../InventoryResource.java`, `modules/catalog/src/test/java/.../ProductResourceTest.java`]
+    *   **Deliverables:** REST controllers (storefront + admin scopes) respecting TenantContext + feature flags; spec includes request/response schemas, ProblemDetails, RateLimit metadata.
+    *   **Acceptance Criteria:** OpenAPI passes lint; Quarkus endpoints return 200/404/403 as expected; integration test uses RestAssured verifying tenant isolation; spec referencing new tags `Catalog` + `Inventory`.
+    *   **Dependencies:** `I2.T1`, `I1.T4`.
+    *   **Parallelizable:** Yes.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `api/v1/openapi.yaml:1`
+    *   **Summary:** Central OpenAPI 3.0.3 spec defining servers, auth schemes, ProblemDetails, shared parameters, and placeholder catalog routes (`/catalog/products`, `/catalog/products/{productId}`) plus headless analogs at `api/v1/headless/*`. Catalog paths currently marked TODO and still tagged `[Storefront, Headless]` without the dedicated `Catalog` / `Inventory` tags the iteration calls for, but shared pagination parameters and rate-limit headers (`lines 303-360`, `66-68`, `1529+`) are already modeled.
+    *   **Recommendation:** Flesh out the catalog + inventory sections in-place by reusing existing components (e.g., `ProductSummary`, `PaginationMetadata`, standard headers) and introduce the mandated `Catalog` and `Inventory` tags. Keep all operations spec-first (document request/response schemas, ProblemDetails, rate-limit headers) and run `npx @stoplight/spectral-cli lint api/v1/openapi.yaml` before handing changes to CI.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java:1`
+    *   **Summary:** Storefront-facing resource providing `/api/v1/catalog/products` listing with pagination/search + `/api/v1/catalog/products/{productId}` detail retrieval. It injects `CatalogService`, `CatalogCacheService`, `ProductMapper`, `FeatureToggle`, `MeterRegistry`, pulls the tenant from `TenantContext`, and emits rate-limit headers while mapping domain models to DTOs (`ProductSummary`, `ProductDetail`).
+    *   **Recommendation:** When expanding endpoints (filters, variants, categories) keep the same patterns: validate/query params, rely on `CatalogService` for tenant-safe access, surface results through existing DTOs/mappers, and reuse `createProblemDetails` + meter counters. Honor feature flags and rate-limit headers so HTTP behavior matches the spec.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java:1`
+    *   **Summary:** Admin-only inventory controller under `/api/v1/admin/inventory` providing CRUD-ish endpoints for locations, transfers, and adjustments. Uses `InventoryLocationRepository`, `InventoryTransferService`, `InventoryMapper`, includes detailed logging, tenant resolution, validation, and consistent HTTP codes for conflicts, not-found cases, and bad requests.
+    *   **Recommendation:** Mirror this structure for any new catalog/inventory admin APIs—wire into the same repositories/services, propagate `TenantContext` resolution, log with context, and reuse DTOs in `villagecompute.storefront.api.types` rather than inventing new payloads. Follow its use of `Status.CREATED/CONFLICT/NOT_FOUND` so tests and the spec stay aligned.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/api/rest/ProductResourceTest.java:1`
+    *   **Summary:** Quarkus integration tests that seed multiple tenants/products via `EntityManager`, use `TenantContext` to scope data setup, and exercise `/api/v1/catalog/products` through RestAssured with explicit `Host` headers. Assertions verify pagination metadata, search, and tenant isolation while checking `X-RateLimit-*` headers.
+    *   **Recommendation:** Use this suite as the canonical template for any new catalog/inventory resource tests: leverage the `request(subdomain)` helper, seed domain data in `@BeforeEach`, and add cases covering 200/404/403 flows for both storefront and admin endpoints so acceptance criteria about tenant isolation and status codes are provable.
+
+### Implementation Tips & Notes
+*   **Tip:** DTOs such as `ProductSummary` and `ProductDetail` (`modules/core-platform/src/main/java/villagecompute/storefront/api/types/*.java`) plus `ProductMapper` already encapsulate the schema defined in the spec—extend them if new fields are needed rather than crafting bespoke maps inside the resources.
+*   **Tip:** The spec defines reusable pagination params/objects (`#/components/parameters/PageNumber`, `PageSize`, `#/components/schemas/PaginationMetadata`). Reference those parameters in every new GET path and keep the response envelope structure (`{ data, pagination }`) identical to `ProductResource` so the mapper and tests keep working.
+*   **Note:** Rate-limit headers are modeled globally (`api/v1/openapi.yaml:66-68` plus header components) and already emitted in `ProductResource`. Ensure any new resource and the spec both include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` to satisfy the governance checklist.
+*   **Tip:** Feature flags and tenant gating happen early via `TenantContext` and `FeatureToggle`. Thread these through new endpoints (e.g., disable beta catalog adjustments via kill switches) and describe the flag behavior directly in the OpenAPI `description`/`x-feature-flag` metadata when applicable.
+*   **Warning:** All HTTP tests rely on `Host` header-based tenant routing. Forgetting this (or bypassing `TenantContext`) will silently hit the default tenant and break the RLS promises, so keep the test helper + filter path intact when adding new suites.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Preparing final briefing message**
+
+I’m putting together a clear summary that highlights creating the updated context file with task briefing details, referencing its exact file path and line numbers. I’ll include bullet points about the architecture context and related code, note that no tests were run since none were requested, and suggest logical next steps for verifying or extending the spec. This way, the user gets a concise, well-referenced overview of what was done and what can come next.
+[RUNNING]● Message: **Briefing Ready**
+- Compiled a fresh Task Briefing Package for `I2.T3`, covering the task JSON, plan/architecture excerpts, and actionable guidance in `.codemachine/prompts/context.md:1`. The new version captures the API contract directives, Blueprint component mandates, and the detailed Task 2.3 spec straight from the manifests.
+- Summarized the current OpenAPI placeholders plus the existing catalog and inventory REST resources/tests, highlighting how they handle TenantContext, rate limits, DTO mapping, and tenant-isolation checks so the coder can extend them confidently.
+- Added implementation tips on reusing shared DTOs/parameters, keeping rate-limit metadata synchronized between code and spec, threading feature-flag behavior, and following the RestAssured tenant-routing pattern for integration tests.
+
+Ready for the Coder Agent to implement the catalog/inventory API slice; no tests were run (documentation-only task).
+⏱️  Tokens: 3213602in/12278out (1417088 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

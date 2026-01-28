@@ -1,0 +1,569 @@
+[CYAN]===╭─ Agent 38: context-manager ────────────────────────────────────
+[CYAN]   Started: 2026-01-08 15:20:18
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing files recursively**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Determining next task and locating manifest files**
+
+I'm identifying the next incomplete task whose dependencies are done, which appears to be I1.T6. To get context, I want to locate relevant architecture and plan manifest files—especially "01_Blueprint_Foundation.md"—using ripgrep to find these within the repo since the initial directory listing was truncated and not fully clear on file locations. This will help me extract the right sections for feature flag governance and related inputs.
+[RUNNING]● Command: bash -lc "rg --files -g '01_Blueprint_Foundation.md'"
+[ERROR]● Command: bash -lc "rg --files -g '01_Blueprint_Foundation.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for blueprint files**
+[RUNNING]● Command: bash -lc "rg --files -g '*Blueprint*'"
+[ERROR]● Command: bash -lc "rg --files -g '*Blueprint*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for architecture documents**
+[RUNNING]● Command: bash -lc "rg --files | grep '01_'"
+[ERROR]● Command: bash -lc "rg --files | grep '01_'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for Blueprint markdown files**
+[RUNNING]● Command: bash -lc "rg --files | grep -i 'blueprint'"
+[ERROR]● Command: bash -lc "rg --files | grep -i 'blueprint'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for missing documentation files**
+[RUNNING]● Command: bash -lc "find . -name '01_Blueprint_Foundation.md' -print"
+[SUCCESS]● Command: bash -lc "find . -name '01_Blueprint_Foundation.md' -print"
+[SUCCESS]⎿ ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md
+[THINKING]● Thinking: **Searching for feature flag references in docs**
+[RUNNING]● Command: bash -lc 'rg -n "feature flag" ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "feature flag" ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]⎿ 24:*   **Cloud Platform:** Neutral stance but optimized for Cloudflare R2 object storage, Stripe int...
+[THINKING]● Thinking: **Collecting feature flag document snippets**
+[RUNNING]● Command: bash -lc "find . -name '02_Iteration_I1.md' -print"
+[SUCCESS]● Command: bash -lc "find . -name '02_Iteration_I1.md' -print"
+[SUCCESS]⎿ ./.codemachine/artifacts/plan/02_Iteration_I1.md
+[THINKING]● Thinking: **Searching for I1.T6 snippet**
+[RUNNING]● Command: bash -lc 'rg -n "I1.T6" ./.codemachine/artifacts/plan/02_Iteration_I1.md'
+[SUCCESS]● Command: bash -lc 'rg -n "I1.T6" ./.codemachine/artifacts/plan/02_Iteration_I1.md'
+[SUCCESS]⎿ 82:    *   **Task ID:** `I1.T6`
+[THINKING]● Thinking: **Retrieving context snippet**
+[RUNNING]● Command: bash -lc "sed -n '70,120p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]● Command: bash -lc "sed -n '70,120p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]⎿ *   **Description:** Implement TenantContext, TenantResolver (subdomain/custom domain), Request filt...
+[THINKING]● Thinking: **Planning snippet extraction and code search**
+[RUNNING]● Command: bash -lc 'rg -n "FeatureToggle" -g"*.java"'
+[SUCCESS]● Command: bash -lc 'rg -n "FeatureToggle" -g"*.java"'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/services/FeatureToggleTest.java:26: * ...
+[THINKING]● Thinking: **Selecting critical source files for FeatureToggle**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/FeatureToggle.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/FeatureToggle.java"
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import java.util.logging.Level;
+[SUCCESS]⎿ ...
+[THINKING]● Thinking: **Continuing to review file**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/FeatureToggle.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/FeatureToggle.java"
+[SUCCESS]⎿ .getSingleResult();
+[SUCCESS]⎿         } catch (jakarta.persistence.NoResultException e) {
+[SUCCESS]⎿             return n...
+[THINKING]● Thinking: **Choosing files for context**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/services/FeatureToggleTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/services/FeatureToggleTest.java"
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static org.junit.jupiter.api.Assertions.assertFa...
+[THINKING]● Thinking: **Selecting key source files**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.Objects;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ import ...
+[THINKING]● Thinking: **Checking for FeatureFlagSnapshot relevance**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/FeatureFlagSnapshot.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/FeatureFlagSnapshot.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.Collect...
+[THINKING]● Thinking: **Checking for feature flags documentation**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/feature_flags/governance.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/feature_flags/governance.md"
+[SUCCESS]⎿ # Feature Flag Governance
+[SUCCESS]⎿
+[SUCCESS]⎿ This document defines the governance process, lifecycle, and best practic...
+[THINKING]● Thinking: **Extracting relevant architecture snippets**
+[RUNNING]● Command: bash -lc "sed -n '40,150p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '40,150p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ These rules bind all teams; deviations require documented architectural decision records referencing...
+[THINKING]● Thinking: **Extracting feature flag snippets**
+[RUNNING]● Command: bash -lc "sed -n '110,150p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '110,150p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ *   **Governing Assumptions:**
+[SUCCESS]⎿     *   Reporting MVP delivers scheduled CSV/JSON exports and aggrega...
+[THINKING]● Thinking: **Organizing doc snippets for feature flags**
+
+I'm figuring out which doc snippets to include for the feature flag context, balancing architecture, plan, and governance docs—even those not listed in the manifest—to provide thorough background. I'll also look at the actual feature flag implementation code to better inform the snippets.
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/FeatureFlag.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/FeatureFlag.java"
+[SUCCESS]⎿ package villagecompute.storefront.data.models;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.UU...
+[THINKING]● Thinking: **Compiling detailed documentation snippets**
+
+I’m gathering targeted excerpts from the blueprint, plan, and feature flag governance docs to include clear context on phase sequencing, feature flag governance, and kill switches. I’ll ensure to summarize relevant code files and provide implementation tips, preparing everything for the final context document while carefully handling existing content updates.
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing updated context content**
+
+I’m gathering relevant document snippets and checking key files to overwrite the outdated context with a fresh version tailored for task I1.T6, focusing on feature flag directives and rationale sections to build a solid updated context.
+[RUNNING]● Command: bash -lc "sed -n '80,140p' ./.codemachine/artifacts/architecture/05_Rationale_and_Future.md"
+[SUCCESS]● Command: bash -lc "sed -n '80,140p' ./.codemachine/artifacts/architecture/05_Rationale_and_Future.md"
+[SUCCESS]⎿ - Artifacts include OpenAPI specs, Tailwind token bundles, Kubernetes manifests, and PlantUML diagra...
+[THINKING]● Thinking: **Preparing context and task JSON**
+
+I’m gathering relevant snippets from architecture and governance docs to build context for feature flags, noting a filename mismatch to clarify, and planning to extract and pretty-print the exact JSON task object I1.T6 from tasks_I1.json using jq to ensure accuracy before writing the final prompt context file.
+[RUNNING]● Command: bash -lc "jq '.[] | select(.task_id==\"I1.T6\")' tasks_I1.json"
+[ERROR]● Command: bash -lc "jq '.[] | select(.task_id==\"I1.T6\")' tasks_I1.json"
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for tasks_I1.json file**
+[RUNNING]● Command: bash -lc "find . -name 'tasks_I1.json' -print"
+[SUCCESS]● Command: bash -lc "find . -name 'tasks_I1.json' -print"
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I1.json
+[THINKING]● Thinking: **Checking jq usage path**
+[RUNNING]● Command: bash -lc "jq '.[] | select(.task_id==\"I1.T6\")' ./.codemachine/artifacts/tasks/tasks_I1.json"
+[SUCCESS]● Command: bash -lc "jq '.[] | select(.task_id==\"I1.T6\")' ./.codemachine/artifacts/tasks/tasks_I1.json"
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I1.T6",
+[SUCCESS]⎿   "iteration_id": "I1",
+[SUCCESS]⎿   "iteration_goal": "Stand up repository scaffolding...
+[THINKING]● Thinking: **Compiling feature flag documentation excerpts**
+
+I'm gathering precise snippets from several docs and plan files to build a cohesive feature flag context. I'll extract relevant lines about governance, metadata, architectural assumptions, rationale, and specific plan tasks while including file paths with approximate line numbers for clear referencing. This will help create a focused yet thorough overview integrating blueprint guidance, rationale sections, governance model details, and implementation tasks all tied to feature flag usage.
+[RUNNING]● Command: bash -lc "sed -n '94,114p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]● Command: bash -lc "sed -n '94,114p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]⎿ *   **Task 1.7:**
+[SUCCESS]⎿     *   **Task ID:** `I1.T7`
+[SUCCESS]⎿     *   **Description:** Provision local development ...
+[THINKING]● Thinking: **Extracting specific code lines**
+[RUNNING]● Command: bash -lc "sed -n '84,104p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]● Command: bash -lc "sed -n '84,104p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]⎿ *   **Agent Type Hint:** `BackendAgent`
+[SUCCESS]⎿     *   **Inputs:** Section 4 directives, requirements.
+[SUCCESS]⎿     ...
+[THINKING]● Thinking: **Preparing Task 1.6 snippet extraction**
+[RUNNING]● Command: bash -lc "sed -n '76,90p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]● Command: bash -lc "sed -n '76,90p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]⎿ *   **Acceptance Criteria:** Multi-tenant filter enforces 404 on unknown domain, populates feature f...
+[THINKING]● Thinking: **Verifying presence of Parallelizable note**
+[RUNNING]● Command: bash -lc "sed -n '82,108p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]● Command: bash -lc "sed -n '82,108p' ./.codemachine/artifacts/plan/02_Iteration_I1.md"
+[SUCCESS]⎿ *   **Task ID:** `I1.T6`
+[SUCCESS]⎿     *   **Description:** Create Feature Flag governance matrix + README gui...
+[THINKING]● Thinking: **Extracting specific documentation sections**
+[RUNNING]● Command: bash -lc "sed -n '20,120p' docs/feature_flags/governance.md"
+[SUCCESS]● Command: bash -lc "sed -n '20,120p' docs/feature_flags/governance.md"
+[SUCCESS]⎿ ### Purpose
+[SUCCESS]⎿
+[SUCCESS]⎿ Feature flags enable:
+[SUCCESS]⎿
+[SUCCESS]⎿ - **Dark launches**: Deploy code without exposing it to users
+[SUCCESS]⎿ - ...
+[THINKING]● Thinking: **Preparing comprehensive context document**
+
+I'm gathering and organizing detailed context from architecture, planning, governance docs, and key code files to create a complete task briefing package. I'll carefully craft the final `context.md` file content including relevant code references, implementation tips, and document snippets per instructions, ensuring formatting and quoting are accurate before overwriting the file.
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T6",
+  "iteration_id": "I1",
+  "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+  "description": "Create Feature Flag governance matrix + README guidance; implement FeatureToggle service skeleton referencing PostgreSQL storage + Caffeine; include emergency kill switches for checkout/media/impersonation.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "Section 4 directives, requirements.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Governance doc (owner, rollout, expiry fields), service + repository stub, tests verifying cache + override precedence.",
+  "acceptance_criteria": "Service resolves platform default + tenant override + emergency flags; governance doc lists initial kill switches; README references process.",
+  "dependencies": [
+    "I1.T5"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Governing Assumptions & Directives (from .codemachine/artifacts/architecture/01_Blueprint_Foundation.md)
+
+```markdown
+*   **Governing Assumptions:**
+    *   Reporting MVP delivers scheduled CSV/JSON exports and aggregated dashboards using precomputed tables; ad-hoc drill-downs beyond defined filters fall to later releases unless explicitly funded.
+    *   Digital products enforce max download attempts per purchase and signed URLs with 24-hour expiry; licensing integrations (DRM) are out-of-scope for v1, but contract seams must allow plugin modules later.
+    *   Subscription billing supports fixed cadences (weekly/monthly/quarterly/yearly) with Stripe Billing handling proration; platform stores configuration but delegates proration math to Stripe.
+    *   POS offline mode stores encrypted transaction blobs locally and replays sequentially; conflicts resolved by "first accepted" rule, and duplicates avoided through offline-generated UUIDs validated server-side.
+    *   Headless API tokens issued via OAuth Client Credentials per tenant with scopes (`catalog:read`, `cart:write`, `orders:read`); no anonymous API access allowed.
+    *   Data privacy requests leverage existing archival mechanism: export generates JSONL package pulled from PostgreSQL + R2, delete requests soft-delete then purge after retention timer; full GDPR automation deferred but hooks must exist.
+    *   Multi-currency display uses daily FX rates cached per tenant; rounding follows standard bankers'"' rounding to two decimals, and fallback currency is tenant base currency if conversion fails.
+    *   Media CDN invalidation relies on versioned object keys (hash in filename) to avoid explicit purge calls; signed URLs include version to ensure clients fetch latest asset.
+    *   Phase sequencing uses feature flags plus queue-based throttling; dependent modules must degrade gracefully when upstream feature disabled.
+    *   Platform analytics run hourly batch ETL jobs populating aggregates; real-time streaming dashboards are future scope but schema must keep timestamp precision for later expansion.
+    *   Stripe-only payment constraint holds for MVP; PaymentProvider interface must still be production-ready to onboard PayPal without rewriting checkout orchestration.
+    *   No Redis mandate means rate limiting and throttling rely on token bucket implemented via PostgreSQL + Caffeine hybrid caches, and architects shall not design flows that assume cross-pod shared cache.
+
+#### Section 1 Extended Directives
+
+*   Treat the Large classification as justification for allocating separate CI lanes (storefront, admin, backend, infra); architects must design interfaces that let each lane progress independently without blocking others.
+*   All architectural proposals must cite affected domains, expected tenant impact, and rollback plans; submissions lacking this triad are automatically rejected by the Foundation Architect.
+*   Roadmaps must maintain at least one sprint buffer dedicated to technical debt remediation; this prevents deferred cleanups from eroding the separation-of-concerns mandate.
+*   Architects must define explicit KPIs (latency, uptime, throughput) for their components and communicate them in their specialized blueprints to ensure consistent expectations across teams.
+*   Threat modeling sessions are mandatory before releasing any module touching payments, impersonation, or media uploads; outputs feed security backlog items with owners.
+*   Architectural artifacts must include dependency diagrams annotated with feature flags controlling each integration point to simplify phased rollouts.
+*   Platform governance reviews occur monthly to reconcile new requirements with this blueprint; any accepted amendments must be versioned and redistributed to all architects.
+*   Cross-team spike work (e.g., experimenting with alternative shipping providers) must run in isolated sandboxes and cannot touch production schemas without signed approval.
+"'```
+
+### Context: Feature Flag Discipline (from .codemachine/artifacts/architecture/05_Rationale_and_Future.md)
+
+```markdown
+#### 4.1.12 Feature Flag Discipline
+
+- All merchant-facing features ship behind flags stored in PostgreSQL `feature_flags` table with tenant overrides.
+- Flags double as emergency kill switches for checkout, media, impersonation, and payments per §3 Rulebook.
+- Governance requires owner, review cadence, and expiry, preventing "flag debt".
+- Platform admin UI surfaces per-tenant overrides to control Phase 2/3 features gracefully.
+```
+
+### Context: Iteration 1 Task 1.6 (from .codemachine/artifacts/plan/02_Iteration_I1.md)
+
+```markdown
+<!-- anchor: task-i1-t6 -->
+*   **Task 1.6:**
+    *   **Task ID:** `I1.T6`
+    *   **Description:** Create Feature Flag governance matrix + README guidance; implement FeatureToggle service skeleton referencing PostgreSQL storage + Caffeine; include emergency kill switches for checkout/media/impersonation.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Section 4 directives, requirements.
+    *   **Input Files:** [`docs/architecture/governance/feature-flags.md`, `modules/core-platform/src/main/java/...`]
+    *   **Target Files:** [`docs/architecture/governance/feature-flags.md`, `modules/core-platform/src/main/java/.../FeatureToggleService.java`, `modules/core-platform/src/test/java/.../FeatureToggleServiceTest.java`]
+    *   **Deliverables:** Governance doc (owner, rollout, expiry fields), service + repository stub, tests verifying cache + override precedence.
+    *   **Acceptance Criteria:** Service resolves platform default + tenant override + emergency flags; governance doc lists initial kill switches; README references process.
+    *   **Dependencies:** `I1.T5` (tenant context).
+    *   **Parallelizable:** Yes.
+```
+
+### Context: Feature Flag Governance Overview (from docs/feature_flags/governance.md)
+
+```markdown
+### Purpose
+
+Feature flags enable:
+
+- **Dark launches**: Deploy code without exposing it to users
+- **Gradual rollouts**: Enable features for subset of tenants
+- **Emergency kill switches**: Instantly disable problematic features
+- **A/B testing**: Experiment with different implementations
+
+### Governance Goals
+
+1. **Prevent flag debt**: Remove flags when no longer needed
+2. **Maintain accountability**: Every flag has an owner
+3. **Ensure safety**: Critical flags have rollback instructions
+4. **Track health**: Metrics and dashboards monitor flag lifecycle
+
+### References
+
+- **Architecture**: Blueprint Foundation Section 3 (Feature Flag Strategy)
+- **Rationale**: Section 4.1.12 (Feature Flag Discipline)
+- **UI Design**: Section 4.9 (Feature Flag Exposure)
+- **Task**: I5.T7 (Feature flag governance + release process)
+
+---
+
+## Governance Model
+
+### Required Metadata
+
+Every feature flag MUST include:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `flagKey` | String | Yes | Unique identifier (e.g., `storefront.hero.beta`) |
+| `enabled` | Boolean | Yes | Current state (true/false) |
+| `owner` | Email/Team | Yes | Who owns this flag'"'s lifecycle |
+| "'`riskLevel` | Enum | Yes | LOW, MEDIUM, HIGH, CRITICAL |
+| `reviewCadenceDays` | Integer | No | How often to review (default: 90 days) |
+| `expiryDate` | Timestamp | No | When to remove from codebase |
+| `description` | Text | No | What this flag controls and why |
+| `rollbackInstructions` | Text | Recommended | How to safely disable |
+
+### Ownership Model
+
+**Owner Responsibilities:**
+
+- Monitor flag usage and performance
+- Respond to incidents related to the flag
+- Review flag every `reviewCadenceDays`
+- Remove flag when no longer needed
+- Document rollback steps for HIGH/CRITICAL flags
+
+**Acceptable Owners:**
+
+- Individual email: `alice@example.com`
+- Team alias: `platform-team`
+- Shared inbox: `payments@example.com`
+
+**Unacceptable:**
+
+- Generic emails: `admin@example.com`
+- Departed employees
+- Null/empty values
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/FeatureToggle.java:1`
+    *   **Summary:** CDI `@ApplicationScoped` service that resolves feature flags via `EntityManager` queries against `FeatureFlag` and caches tenant/global states in the `feature-flag-cache` Caffeine cache; exposes helpers for tenant/global checks plus cache invalidation.
+    *   **Recommendation:** Reuse `FeatureToggle#isEnabled`, `isGlobalEnabled`, and the provided `invalidate*` helpers instead of inventing new lookup logic; new emergency switches should follow this class'"'s cache-key convention ("'`tenant:{id}:flag:{key}`) so invalidation works consistently.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/FeatureFlag.java:1`
+    *   **Summary:** JPA entity backing the `feature_flags` table, already modeling metadata fields such as `owner`, `riskLevel`, `reviewCadenceDays`, `expiryDate`, and `rollbackInstructions` alongside tenant scoping.
+    *   **Recommendation:** Extend this entity (and migrations) if additional governance fields are required, and keep `FeatureToggle` queries in sync with any column or table name changes to avoid breaking JPQL statements.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java:1`
+    *   **Summary:** Thread-local holder that seeds a placeholder `FeatureFlagSnapshot` whenever a tenant is resolved, guaranteeing per-request awareness of pending feature flag hydration.
+    *   **Recommendation:** Anytime you hydrate feature flag data for a request, call `TenantContext.setFeatureFlagSnapshot(...)` with the resolved map so downstream services (and logging) can inspect flag states without hitting the database again.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/services/FeatureToggleTest.java:1`
+    *   **Summary:** Quarkus integration tests that insert global and tenant-specific `FeatureFlag` rows, assert precedence/order of evaluation, and exercise cache invalidation + argument validation paths.
+    *   **Recommendation:** Use this class as the template for any new cache-precedence tests—seed tenants via `TenantContext.setCurrentTenant` and wrap persistence helpers in `@Transactional` methods so the in-memory H2 profile mirrors production behavior.
+
+### Implementation Tips & Notes
+*   **Tip:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/FeatureFlagSnapshot.java:1` provides the immutable per-tenant snapshot; populate it with all kill-switch values after DB fetches so other filters (logging, observability) can short-circuit without repeated lookups.
+*   **Tip:** The plan references `docs/architecture/governance/feature-flags.md`, but the actual repo path is `docs/feature_flags/governance.md`—reuse this file for the governance matrix and update references elsewhere to avoid duplication.
+*   **Note:** `FeatureToggle` pulls a reactive cache instance (`cacheManager.getCache("feature-flag-cache")`) and blocks via `.await().indefinitely()`; keep new code paths non-blocking friendly and prefer cache invalidation over bypassing the cache to ensure consistent performance under load.
+*   **Warning:** `FeatureToggleTest` truncates many domain tables before each run; if you extend the schema (e.g., new kill-switch audit logs), add matching cleanup statements or rely on Panache utilities to prevent leftover fixtures from contaminating later assertions.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T6",
+  "iteration_id": "I1",
+  "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+  "description": "Create Feature Flag governance matrix + README guidance; implement FeatureToggle service skeleton referencing PostgreSQL storage + Caffeine; include emergency kill switches for checkout/media/impersonation.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "Section 4 directives, requirements.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Governance doc (owner, rollout, expiry fields), service + repository stub, tests verifying cache + override precedence.",
+  "acceptance_criteria": "Service resolves platform default + tenant override + emergency flags; governance doc lists initial kill switches; README references process.",
+  "dependencies": [
+    "I1.T5"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Governing Assumptions & Directives (from .codemachine/artifacts/architecture/01_Blueprint_Foundation.md)
+
+```markdown
+*   **Governing Assumptions:**
+    *   Reporting MVP delivers scheduled CSV/JSON exports and aggregated dashboards using precomputed tables; ad-hoc drill-downs beyond defined filters fall to later releases unless explicitly funded.
+    *   Digital products enforce max download attempts per purchase and signed URLs with 24-hour expiry; licensing integrations (DRM) are out-of-scope for v1, but contract seams must allow plugin modules later.
+    *   Subscription billing supports fixed cadences (weekly/monthly/quarterly/yearly) with Stripe Billing handling proration; platform stores configuration but delegates proration math to Stripe.
+    *   POS offline mode stores encrypted transaction blobs locally and replays sequentially; conflicts resolved by "first accepted" rule, and duplicates avoided through offline-generated UUIDs validated server-side.
+    *   Headless API tokens issued via OAuth Client Credentials per tenant with scopes (`catalog:read`, `cart:write`, `orders:read`); no anonymous API access allowed.
+    *   Data privacy requests leverage existing archival mechanism: export generates JSONL package pulled from PostgreSQL + R2, delete requests soft-delete then purge after retention timer; full GDPR automation deferred but hooks must exist.
+    *   Multi-currency display uses daily FX rates cached per tenant; rounding follows standard bankers'"' rounding to two decimals, and fallback currency is tenant base currency if conversion fails.
+    *   Media CDN invalidation relies on versioned object keys (hash in filename) to avoid explicit purge calls; signed URLs include version to ensure clients fetch latest asset.
+    *   Phase sequencing uses feature flags plus queue-based throttling; dependent modules must degrade gracefully when upstream feature disabled.
+    *   Platform analytics run hourly batch ETL jobs populating aggregates; real-time streaming dashboards are future scope but schema must keep timestamp precision for later expansion.
+    *   Stripe-only payment constraint holds for MVP; PaymentProvider interface must still be production-ready to onboard PayPal without rewriting checkout orchestration.
+    *   No Redis mandate means rate limiting and throttling rely on token bucket implemented via PostgreSQL + Caffeine hybrid caches, and architects shall not design flows that assume cross-pod shared cache.
+
+#### Section 1 Extended Directives
+
+*   Treat the Large classification as justification for allocating separate CI lanes (storefront, admin, backend, infra); architects must design interfaces that let each lane progress independently without blocking others.
+*   All architectural proposals must cite affected domains, expected tenant impact, and rollback plans; submissions lacking this triad are automatically rejected by the Foundation Architect.
+*   Roadmaps must maintain at least one sprint buffer dedicated to technical debt remediation; this prevents deferred cleanups from eroding the separation-of-concerns mandate.
+*   Architects must define explicit KPIs (latency, uptime, throughput) for their components and communicate them in their specialized blueprints to ensure consistent expectations across teams.
+*   Threat modeling sessions are mandatory before releasing any module touching payments, impersonation, or media uploads; outputs feed security backlog items with owners.
+*   Architectural artifacts must include dependency diagrams annotated with feature flags controlling each integration point to simplify phased rollouts.
+*   Platform governance reviews occur monthly to reconcile new requirements with this blueprint; any accepted amendments must be versioned and redistributed to all architects.
+*   Cross-team spike work (e.g., experimenting with alternative shipping providers) must run in isolated sandboxes and cannot touch production schemas without signed approval.
+"'```
+
+### Context: Feature Flag Discipline (from .codemachine/artifacts/architecture/05_Rationale_and_Future.md)
+
+```markdown
+#### 4.1.12 Feature Flag Discipline
+
+- All merchant-facing features ship behind flags stored in PostgreSQL `feature_flags` table with tenant overrides.
+- Flags double as emergency kill switches for checkout, media, impersonation, and payments per §3 Rulebook.
+- Governance requires owner, review cadence, and expiry, preventing "flag debt".
+- Platform admin UI surfaces per-tenant overrides to control Phase 2/3 features gracefully.
+```
+
+### Context: Iteration 1 Task 1.6 (from .codemachine/artifacts/plan/02_Iteration_I1.md)
+
+```markdown
+<!-- anchor: task-i1-t6 -->
+*   **Task 1.6:**
+    *   **Task ID:** `I1.T6`
+    *   **Description:** Create Feature Flag governance matrix + README guidance; implement FeatureToggle service skeleton referencing PostgreSQL storage + Caffeine; include emergency kill switches for checkout/media/impersonation.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Section 4 directives, requirements.
+    *   **Input Files:** [`docs/architecture/governance/feature-flags.md`, `modules/core-platform/src/main/java/...`]
+    *   **Target Files:** [`docs/architecture/governance/feature-flags.md`, `modules/core-platform/src/main/java/.../FeatureToggleService.java`, `modules/core-platform/src/test/java/.../FeatureToggleServiceTest.java`]
+    *   **Deliverables:** Governance doc (owner, rollout, expiry fields), service + repository stub, tests verifying cache + override precedence.
+    *   **Acceptance Criteria:** Service resolves platform default + tenant override + emergency flags; governance doc lists initial kill switches; README references process.
+    *   **Dependencies:** `I1.T5` (tenant context).
+    *   **Parallelizable:** Yes.
+```
+
+### Context: Feature Flag Governance Overview (from docs/feature_flags/governance.md)
+
+```markdown
+### Purpose
+
+Feature flags enable:
+
+- **Dark launches**: Deploy code without exposing it to users
+- **Gradual rollouts**: Enable features for subset of tenants
+- **Emergency kill switches**: Instantly disable problematic features
+- **A/B testing**: Experiment with different implementations
+
+### Governance Goals
+
+1. **Prevent flag debt**: Remove flags when no longer needed
+2. **Maintain accountability**: Every flag has an owner
+3. **Ensure safety**: Critical flags have rollback instructions
+4. **Track health**: Metrics and dashboards monitor flag lifecycle
+
+### References
+
+- **Architecture**: Blueprint Foundation Section 3 (Feature Flag Strategy)
+- **Rationale**: Section 4.1.12 (Feature Flag Discipline)
+- **UI Design**: Section 4.9 (Feature Flag Exposure)
+- **Task**: I5.T7 (Feature flag governance + release process)
+
+---
+
+## Governance Model
+
+### Required Metadata
+
+Every feature flag MUST include:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `flagKey` | String | Yes | Unique identifier (e.g., `storefront.hero.beta`) |
+| `enabled` | Boolean | Yes | Current state (true/false) |
+| `owner` | Email/Team | Yes | Who owns this flag'"'s lifecycle |
+| "'`riskLevel` | Enum | Yes | LOW, MEDIUM, HIGH, CRITICAL |
+| `reviewCadenceDays` | Integer | No | How often to review (default: 90 days) |
+| `expiryDate` | Timestamp | No | When to remove from codebase |
+| `description` | Text | No | What this flag controls and why |
+| `rollbackInstructions` | Text | Recommended | How to safely disable |
+
+### Ownership Model
+
+**Owner Responsibilities:**
+
+- Monitor flag usage and performance
+- Respond to incidents related to the flag
+- Review flag every `reviewCadenceDays`
+- Remove flag when no longer needed
+- Document rollback steps for HIGH/CRITICAL flags
+
+**Acceptable Owners:**
+
+- Individual email: `alice@example.com`
+- Team alias: `platform-team`
+- Shared inbox: `payments@example.com`
+
+**Unacceptable:**
+
+- Generic emails: `admin@example.com`
+- Departed employees
+- Null/empty values
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/FeatureToggle.java:1`
+    *   **Summary:** CDI `@ApplicationScoped` service that resolves feature flags via `EntityManager` queries against `FeatureFlag` and caches tenant/global states in the `feature-flag-cache` Caffeine cache; exposes helpers for tenant/global checks plus cache invalidation.
+    *   **Recommendation:** Reuse `FeatureToggle#isEnabled`, `isGlobalEnabled`, and the provided `invalidate*` helpers instead of inventing new lookup logic; new emergency switches should follow this class'"'s cache-key convention ("'`tenant:{id}:flag:{key}`) so invalidation works consistently.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/FeatureFlag.java:1`
+    *   **Summary:** JPA entity backing the `feature_flags` table, already modeling metadata fields such as `owner`, `riskLevel`, `reviewCadenceDays`, `expiryDate`, and `rollbackInstructions` alongside tenant scoping.
+    *   **Recommendation:** Extend this entity (and migrations) if additional governance fields are required, and keep `FeatureToggle` queries in sync with any column or table name changes to avoid breaking JPQL statements.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java:1`
+    *   **Summary:** Thread-local holder that seeds a placeholder `FeatureFlagSnapshot` whenever a tenant is resolved, guaranteeing per-request awareness of pending feature flag hydration.
+    *   **Recommendation:** Anytime you hydrate feature flag data for a request, call `TenantContext.setFeatureFlagSnapshot(...)` with the resolved map so downstream services (and logging) can inspect flag states without hitting the database again.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/services/FeatureToggleTest.java:1`
+    *   **Summary:** Quarkus integration tests that insert global and tenant-specific `FeatureFlag` rows, assert precedence/order of evaluation, and exercise cache invalidation + argument validation paths.
+    *   **Recommendation:** Use this class as the template for any new cache-precedence tests—seed tenants via `TenantContext.setCurrentTenant` and wrap persistence helpers in `@Transactional` methods so the in-memory H2 profile mirrors production behavior.
+
+### Implementation Tips & Notes
+*   **Tip:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/FeatureFlagSnapshot.java:1` provides the immutable per-tenant snapshot; populate it with all kill-switch values after DB fetches so other filters (logging, observability) can short-circuit without repeated lookups.
+*   **Tip:** The plan references `docs/architecture/governance/feature-flags.md`, but the actual repo path is `docs/feature_flags/governance.md`—reuse this file for the governance matrix and update references elsewhere to avoid duplication.
+*   **Note:** `FeatureToggle` pulls a reactive cache instance (`cacheManager.getCache("feature-flag-cache")`) and blocks via `.await().indefinitely()`; keep new code paths non-blocking friendly and prefer cache invalidation over bypassing the cache to ensure consistent performance under load.
+*   **Warning:** `FeatureToggleTest` truncates many domain tables before each run; if you extend the schema (e.g., new kill-switch audit logs), add matching cleanup statements or rely on Panache utilities to prevent leftover fixtures from contaminating later assertions.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Preparing final summary message**
+
+I’m organizing a concise final message that confirms the context file update, specifies the file path changed, outlines what was included in the update, and suggests next steps for the coder agent. The goal is to clearly summarize what’s been done and what can happen next.
+[RUNNING]● Message: **Briefing Ready**
+- Overwrote `.codemachine/prompts/context.md:1` with a new Task Briefing Package targeting `I1.T6`, including the precise JSON task spec and curated excerpts from the Blueprint, Rationale, Iteration plan, and the feature-flag governance guide.
+- Documented relevant source files (`FeatureToggle`, `FeatureFlag`, `TenantContext`, `FeatureToggleTest`) with summaries plus actionable recommendations so the coder can extend the flag service and governance docs safely.
+- Added implementation tips covering `FeatureFlagSnapshot`, the actual governance doc path, cache-usage nuances, and test cleanup requirements to head off common pitfalls.
+
+Ready for the next agent to implement the feature-flag governance and service updates.
+⏱️  Tokens: 2703641in/15676out (1232384 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

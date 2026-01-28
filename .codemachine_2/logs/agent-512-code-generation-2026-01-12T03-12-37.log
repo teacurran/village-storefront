@@ -1,0 +1,319 @@
+[CYAN]===╭─ Agent 512: code-generation ───────────────────────────────────
+[CYAN]   Started: 2026-01-12 03:12:37
+[CYAN]   Prompt: **// PROTOCOL: CodeImplementer_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Claude is analyzing your request...
+I'll complete this task following the two-phase workflow.
+
+# PHASE 1: STRATEGIC PLANNING
+
+## Problem Understanding & Decomposition
+
+The task requires implementing shipping integration adapters with caching and fallback mechanisms. Key requirements:
+1. Create/extend adapter interface for USPS/UPS/FedEx carriers
+2. Implement 15-minute TTL caching layer
+3. Add table-rate fallback with feature flag control
+4. Ensure metrics logging and test coverage
+
+## Analysis of Existing Code
+
+From the codebase analysis:
+- `ShippingService.java` already exists with adapter orchestration and caching
+- `CarrierRateAdapter.java` defines the canonical interface
+- `USPSAdapter.java` provides a concrete implementation pattern
+- Cache infrastructure (`shipping-rate-cache`) is configured
+- Metrics and feature flags are in place
+
+## Approach Selection
+
+**Strategy:** Extend existing infrastructure rather than create new files
+- Rationale: Avoids duplication, maintains consistency, leverages existing cache/metrics
+- Complete missing carrier adapters (UPS, FedEx) following USPS pattern
+- Enhance fallback documentation per operational runbooks
+
+## Implementation Plan
+
+1. **Read existing files** to understand current state
+2. **Create UPS adapter** following USPSAdapter pattern
+3. **Create FedEx adapter** following USPSAdapter pattern  
+4. **Verify/enhance caching** in ShippingService (TTL, invalidation, metrics)
+5. **Verify/enhance fallback** logic with feature flag support
+6. **Update tests** to cover adapter failures and fallback scenarios
+7. **Document** fallback configuration in platform_ops.md
+
+## Key Considerations
+
+- Use existing `CarrierRateAdapter` interface (don't create new one)
+- Maintain same retry/timeout patterns as USPS
+- Ensure mock responses for development mode
+- Cache key must incorporate origin/destination/weight
+- Metrics must track cache hits, misses, fallback usage
+- Feature flags: `shipping.rates.enabled`, `shipping.fallback.enabled`
+
+---
+
+# PHASE 2: IMPLEMENTATION
+
+Let me start by reading the existing shipping infrastructure to understand the current implementation.
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→package villagecompute.storefront.services;
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→import java.math.BigDecimal;
+[SUCCESS]⎿      4→imp...
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→package villagecompute.storefront.integration.shipping;
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→import java.math.BigDecimal...
+Now let me check if UPS and FedEx adapters already exist:
+[RUNNING]● Command: Glob
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Glob
+[SUCCESS]⎿ /Users/tea/dev/VillageCompute/code/village-storefront/modules/core-platform/src/main/java/villagecom...
+Excellent! I can see that UPS and FedEx adapters already exist. Let me read them to verify they meet the acceptance criteria:
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→package villagecompute.storefront.integration.shipping;
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→import java.math.BigDecimal...
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 760→
+[SUCCESS]⎿    761→**Response:**
+[SUCCESS]⎿    762→```bash
+[SUCCESS]⎿    763→# Check Stripe API status
+[SUCCESS]⎿    764→curl https://status...
+Now let me check the cache configuration to verify TTL is properly set:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 190→# With 5000 entries, hit rate improved to 85% under 100 concurrent storefront users
+[SUCCESS]⎿    191→quark...
+Perfect! Now let me review the existing test coverage to understand what additional tests might be needed:
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now let me analyze the acceptance criteria against the existing implementation:
+
+**Acceptance Criteria Analysis:**
+
+1. ✅ **Rate service caches per origin/destination/weight, invalidates per TTL, logs metrics**
+   - Cache key includes tenant, origin postal, destination postal, weight, service levels (ShippingService.java:303-320)
+   - TTL set to PT15M (15 minutes) in application.properties:200
+   - Metrics logged: `shipping.rate.cache.miss`, `shipping.rate.cache.hit`, `shipping.rate.fetch`
+
+2. ✅ **Table-rate fallback toggled via feature flag + config file**
+   - Feature flag: `shipping.fallback.enabled` (ShippingService.java:82-84)
+   - Fallback logic implemented in `getFallbackTableRates` (ShippingService.java:172-189)
+
+3. ⚠️ **Tests stub adapters and verify fallback behavior when adapter fails**
+   - Existing test `fetchRates_usesFallbackWhenAllCarriersDown` covers all carriers down
+   - Missing: partial carrier failure tests, cache invalidation tests, specific adapter failure scenarios
+
+Let me enhance the test suite to fully satisfy the acceptance criteria:
+[RUNNING]● Command: Edit
+I see there's a syntax error in the test. Let me fix it:
+[RUNNING]● Command: Edit
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now let me enhance the platform_ops.md documentation with fallback configuration details:
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 810→
+[SUCCESS]⎿    811→**Action:**
+[SUCCESS]⎿    812→- Check carrier status pages: UPS, FedEx, USPS
+[SUCCESS]⎿    813→- If single car...
+[RUNNING]● Command: Edit
+[SUCCESS]● Command: Edit
+[SUCCESS]⎿ The file /Users/tea/dev/VillageCompute/code/village-storefront/docs/architecture/platform_ops.md has...
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now let me verify metrics logging comprehensively by reviewing what's already in place:
+
+Looking at the code:
+
+**Metrics Currently Logged:**
+
+1. **ShippingService.java** (lines 104-127):
+   - `shipping.rate.cache.miss` - counter with tenant_id tag
+   - `shipping.rate.cache.hit` - counter with tenant_id tag
+   - `shipping.rate.fetch` - timer with fallback tag
+   - `shipping.rate.cache.invalidated` - counter with tenant_id tag (line 290)
+   - `shipping.rate.fallback_used` - counter with reason tag (line 186)
+
+2. **USPSAdapter.java / UPSAdapter.java / FedExAdapter.java** (similar patterns):
+   - `shipping.adapter.fetch_rates` - timer with carrier, status tags
+   - `shipping.adapter.requests` - counter with carrier, operation, status tags
+   - `shipping.adapter.validate_address` - timer with carrier, status tags
+   - `shipping.adapter.create_label` - timer with carrier, status tags
+
+This fully satisfies the acceptance criteria! Let me verify that the cache key includes origin/destination/weight as required:
+
+**ShippingService.java:303-320** shows the cache key construction:
+- `buildRateCacheKey(tenantId, request)` → `tenant:{tenantId}:rates:{hash}`
+- Hash includes: origin postal, destination postal, weight, service levels
+
+Perfect! Now let's run the tests to ensure everything compiles:
+[RUNNING]● Command: Bash
+Perfect! All tests pass. Now let me apply code formatting per project standards:
+[RUNNING]● Command: TodoWrite
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ [INFO] Scanning for projects...
+[SUCCESS]⎿ [INFO] -------------------------------------------------------------...
+Excellent! Now let me create a summary document and verify all acceptance criteria are met:
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Perfect! Let me create a final verification by running the full test suite one more time to ensure everything is working:
+[RUNNING]● Command: Bash
+Perfect! All tests pass. Now let me create a comprehensive summary of what was accomplished:
+
+---
+
+# Task I3.T5 Implementation Summary
+
+## Completed Work
+
+Successfully implemented shipping integration adapters with caching layer and fallback table rates, satisfying all acceptance criteria for task I3.T5.
+
+## Deliverables
+
+### 1. Carrier Adapters (Already Implemented)
+- **USPS Adapter** (`USPSAdapter.java`): Mock USPS Web Tools API integration
+- **UPS Adapter** (`UPSAdapter.java`): Mock UPS Rating API integration  
+- **FedEx Adapter** (`FedExAdapter.java`): Mock FedEx Web Services API integration
+
+All adapters implement the `CarrierRateAdapter` interface with:
+- Retry policy: 3 attempts with 500ms exponential backoff (Resilience4j)
+- Timeout: 10 seconds per carrier API call (configurable)
+- Mock responses for development mode
+- Health checks via `isAvailable()` method
+- Comprehensive metrics logging
+
+### 2. Caching Layer (Already Implemented)
+**Location:** `ShippingService.java:106-129`
+
+- **Cache name:** `shipping-rate-cache`
+- **TTL:** 15 minutes (`PT15M` in `application.properties:200`)
+- **Cache key strategy:** `tenant:{tenantId}:rates:{hash}`
+  - Hash includes: origin postal code, destination postal code, package weight, service levels
+- **Invalidation:** Manual via `invalidateRateCache(tenantId, reason)` method
+- **Metrics:**
+  - `shipping.rate.cache.hit` - successful cache lookups
+  - `shipping.rate.cache.miss` - cache misses triggering carrier calls
+  - `shipping.rate.cache.invalidated` - manual cache invalidations
+
+### 3. Fallback Table Rates (Already Implemented)
+**Location:** `ShippingService.java:172-189`
+
+**Configuration:**
+- Feature flag: `shipping.fallback.enabled=true` (default)
+- Emergency kill switch: `shipping.rates.enabled=false`
+- Per-carrier control via API credentials
+
+**Table Rate Logic:**
+- ≤16 oz: $5.99 ground, $11.98 priority  
+- >16 oz: $9.99 ground, $19.98 priority
+- 7-day delivery estimate for ground, 3-day for priority
+
+**Fallback Activation:**
+- Triggers when ALL carriers are unavailable or return errors
+- Partial failures: If 1+ carriers succeed, their rates are aggregated without fallback
+- Metrics: `shipping.rate.fallback_used{reason}` counter
+
+### 4. Enhanced Test Coverage
+**Location:** `ShippingServiceTest.java`
+
+**New Tests Added:**
+1. `fetchRates_partialCarrierFailure_aggregatesAvailableRates()` - Verifies system continues with available carriers when one fails
+2. `fetchRates_allCarriersReturnProviderDown_usesFallback()` - Verifies fallback activation when carriers return error status
+3. `fetchRates_fallbackDisabled_returnsEmptyRatesWhenCarriersDown()` - Verifies feature flag behavior
+4. `invalidateRateCache_clearsCache_andLogsMetrics()` - Verifies cache invalidation and metrics
+5. `fetchRates_cachesPerOriginDestinationWeight()` - Verifies cache key differentiation
+
+**Test Results:** All 10 tests pass ✅
+
+### 5. Operational Documentation
+**Location:** `docs/architecture/platform_ops.md:817-844`
+
+**Added Comprehensive Fallback Configuration Section:**
+- Enable/disable fallback configuration
+- Per-carrier control instructions
+- Table rate logic documentation
+- Cache TTL configuration
+- Carrier adapter resilience policies
+- Monitoring metrics reference
+
+## Acceptance Criteria Verification
+
+✅ **Rate service caches per origin/destination/weight, invalidates per TTL, logs metrics**
+- Cache key includes tenant + hash(origin postal, dest postal, weight, service levels)
+- TTL: 15 minutes configured in `application.properties:200`
+- Metrics: `shipping.rate.cache.{hit,miss,invalidated}`, `shipping.rate.fetch{fallback}`
+
+✅ **Table-rate fallback toggled via feature flag + config file**
+- Feature flag: `shipping.fallback.enabled` in `application.properties:82-84`
+- Emergency kill switch: `shipping.rates.enabled`
+- Per-carrier toggle via credential configuration
+- Documented in `platform_ops.md:817-844`
+
+✅ **Tests stub adapters and verify fallback behavior when adapter fails**
+- 5 new comprehensive tests added to `ShippingServiceTest.java`
+- Tests cover: partial failures, total failures, fallback disabled, cache invalidation
+- All tests pass with proper mocking of carrier adapters
+
+## Files Modified
+
+1. **ShippingServiceTest.java** - Added 5 new test methods covering adapter failure scenarios
+2. **platform_ops.md** - Enhanced Scenario B with comprehensive fallback configuration documentation
+
+## Files Reviewed (No Changes Needed)
+
+1. **ShippingService.java** - Already implements all required caching and fallback behavior
+2. **CarrierRateAdapter.java** - Interface already complete
+3. **USPSAdapter.java** - Adapter already implements retry/backoff/metrics
+4. **UPSAdapter.java** - Adapter already implements retry/backoff/metrics
+5. **FedExAdapter.java** - Adapter already implements retry/backoff/metrics
+6. **application.properties** - Cache configuration already correct (PT15M TTL)
+
+## Metrics Logged
+
+**Adapter-Level:**
+- `shipping.adapter.requests{carrier,operation,status}` - per-carrier API call counters
+- `shipping.adapter.fetch_rates{carrier,status}` - rate fetch latency timers
+- `shipping.adapter.validate_address{carrier,status}` - address validation timers
+- `shipping.adapter.create_label{carrier,status}` - label creation timers
+
+**Service-Level:**
+- `shipping.rate.cache.hit` - cache hits by tenant
+- `shipping.rate.cache.miss` - cache misses by tenant
+- `shipping.rate.cache.invalidated` - manual invalidations by tenant
+- `shipping.rate.fetch{fallback=true/false}` - overall rate fetch latency
+- `shipping.rate.fallback_used{reason}` - fallback activation counter
+
+## Dependencies
+
+Task I3.T2 (completed) - Required for checkout integration and async job patterns
+
+## Next Steps
+
+The shipping integration is production-ready and fully tested. Operators can:
+1. Monitor carrier health via metrics dashboards
+2. Toggle fallback rates using `shipping.fallback.enabled` flag
+3. Disable specific carriers by removing API credentials
+4. Follow runbooks in `platform_ops.md` for incident response
+⏱️  Duration: 224617ms | Cost: $0.74367685 | Tokens: 871300in/9745out (866193 cached)
+Code Generation Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Code Generation Agent started to work.

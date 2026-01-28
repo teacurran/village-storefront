@@ -1,0 +1,1054 @@
+[CYAN]===╭─ Agent 454: context-manager ───────────────────────────────────
+[CYAN]   Started: 2026-01-11 13:18:30
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Setting working directory and listing files**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Identifying next unfinished task and planning context extraction**
+
+I'm pinpointing the earliest unfinished task whose dependencies are all done, which is I2.T2, and gathering its key terms and relevant document references. Since the task involves multiple steps with nuanced document navigation, I'll create a multi-step plan using the plan tool to organize extracting the needed context from the manifests and architecture files.
+[RUNNING]● Command: bash -lc "plan '1. Parse task completion data and select target task. 2. Collect relevant documentation snippets from architecture/plan files. 3. Review key code files related to target task. 4. Compose Task Briefing Package into .codemachine/prompts/context.md.'"
+[ERROR]● Command: bash -lc "plan '1. Parse task completion data and select target task. 2. Collect relevant documentation snippets from architecture/plan files. 3. Review key code files related to target task. 4. Compose Task Briefing Package into .codemachine/prompts/context.md.'"
+[ERROR]⎿ Exit code 127
+[THINKING]● Thinking: **Verifying plan tool availability and gathering context**
+[RUNNING]● Command: bash -lc 'rg -n "task-i2-t2" -n 02_Iteration_I2.md'
+[ERROR]● Command: bash -lc 'rg -n "task-i2-t2" -n 02_Iteration_I2.md'
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for iteration plan file**
+[RUNNING]● Command: bash -lc 'rg --files | rg "02_Iteration_I2"'
+[ERROR]● Command: bash -lc 'rg --files | rg "02_Iteration_I2"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for task files**
+[RUNNING]● Command: bash -lc 'rg --files docs | rg "Iteration_I2"'
+[ERROR]● Command: bash -lc 'rg --files docs | rg "Iteration_I2"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for iteration file**
+[RUNNING]● Command: bash -lc 'ls -1 0*'
+[ERROR]● Command: bash -lc 'ls -1 0*'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching iteration plan files**
+[RUNNING]● Command: bash -lc 'rg -n "Iteration I2" -g"*.md"'
+[SUCCESS]● Command: bash -lc 'rg -n "Iteration I2" -g"*.md"'
+[SUCCESS]⎿ docs/architecture_overview.md:411:### Iteration I2+ Dependencies
+[SUCCESS]⎿ docs/storefront-theming.md:428:**La...
+[THINKING]● Thinking: **Listing docs/tasks directory**
+[RUNNING]● Command: bash -lc 'ls docs/tasks'
+[SUCCESS]● Command: bash -lc 'ls docs/tasks'
+[SUCCESS]⎿ I1.T4-completion-report.md
+[SUCCESS]⎿ I2.T1_implementation_status.md
+[THINKING]● Thinking: **Searching for iteration markdown files**
+[RUNNING]● Command: bash -lc "find .. -name '02_Iteration_I2.md'"
+[SUCCESS]● Command: bash -lc "find .. -name '02_Iteration_I2.md'"
+[SUCCESS]⎿ ../.codemachine/artifacts/plan/02_Iteration_I2.md
+[SUCCESS]⎿ ../village-storefront/.codemachine/artifacts/plan/...
+[THINKING]● Thinking: **Analyzing repository paths and file locations**
+[RUNNING]● Command: bash -lc 'stat ./.codemachine/artifacts/plan/02_Iteration_I2.md'
+[SUCCESS]● Command: bash -lc 'stat ./.codemachine/artifacts/plan/02_Iteration_I2.md'
+[SUCCESS]⎿ 16777232 332003312 -rw-r--r-- 1 tea staff 0 13336 "Jan 11 01:41:26 2026" "Jan 11 01:38:06 2026" "Jan...
+[THINKING]● Thinking: **Verifying location of architecture documents**
+[RUNNING]● Command: bash -lc 'stat ./.codemachine/artifacts/architecture/02_System_Structure_and_Data.md'
+[SUCCESS]● Command: bash -lc 'stat ./.codemachine/artifacts/architecture/02_System_Structure_and_Data.md'
+[SUCCESS]⎿ 16777232 332003303 -rw-r--r-- 1 tea staff 0 71483 "Jan 10 23:54:00 2026" "Jan 10 23:53:55 2026" "Jan...
+[THINKING]● Thinking: **Extracting anchored documentation snippets**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/plan/02_Iteration_I2.md').read_text()
+anchor = '<"'!-- anchor: task-i2-t2 -->'"'
+start = text.find(anchor)
+if start == -1:
+    raise SystemExit('anchor not found')
+start = text.find('\\n', start) + 1
+end = text.find('<"'!-- anchor:'"', start)
+snippet = text[start:end].strip()
+print(snippet)
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/plan/02_Iteration_I2.md').read_text()
+anchor = '<"'!-- anchor: task-i2-t2 -->'"'
+start = text.find(anchor)
+if start == -1:
+    raise SystemExit('anchor not found')
+start = text.find('\\n', start) + 1
+end = text.find('<"'!-- anchor:'"', start)
+snippet = text[start:end].strip()
+print(snippet)
+PY"
+[SUCCESS]⎿ *   **Task 2.2:**
+[SUCCESS]⎿     *   **Task ID:** `I2.T2`
+[SUCCESS]⎿     *   **Description:** Build inventory subsystem wi...
+[THINKING]● Thinking: **Selecting relevant architecture sections**
+[RUNNING]● Command: bash -lc 'rg -n "Inventory" .codemachine/artifacts/architecture/02_System_Structure_and_Data.md | head'
+[SUCCESS]● Command: bash -lc 'rg -n "Inventory" .codemachine/artifacts/architecture/02_System_Structure_and_Data.md | head'
+[SUCCESS]⎿ 376:    *   **Description:** Focuses on the Quarkus API container, highlighting components mandated ...
+[THINKING]● Thinking: **Gathering inventory-related code snippet**
+[RUNNING]● Command: bash -lc "sed -n '360,420p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '360,420p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Rel(quarkusCore, addressValidation, "Validates addresses during checkout and account updates", "HTTP...
+[THINKING]● Thinking: **Extracting inventory-related snippet**
+[RUNNING]● Command: bash -lc "sed -n '420,470p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '420,470p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Rel(backgroundScheduler, platformAdminBackend, "Runs suspension audits and plan compliance checks", ...
+[THINKING]● Thinking: **Extracting Inventory table definitions**
+[RUNNING]● Command: bash -lc "sed -n '540,640p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '540,640p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ }
+[SUCCESS]⎿         entity "Category" as category {
+[SUCCESS]⎿             * id : uuid
+[SUCCESS]⎿             --
+[SUCCESS]⎿             tenant_...
+[THINKING]● Thinking: **Identifying relevant architecture snippets**
+[RUNNING]● Command: bash -lc 'rg -n "Inventory" docs/architecture/tenant_isolation.md'
+[ERROR]● Command: bash -lc 'rg -n "Inventory" docs/architecture/tenant_isolation.md'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Reviewing documentation around Inventory and RLS**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/architecture/tenant_isolation.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/architecture/tenant_isolation.md"
+[SUCCESS]⎿ # Tenant Isolation Architecture
+[SUCCESS]⎿
+[SUCCESS]⎿ <!-- anchor: tenant-isolation-blueprint -->
+[SUCCESS]⎿
+[SUCCESS]⎿ **Status:** Authoritat...
+[THINKING]● Thinking: **Searching for Row-Level Security section**
+[RUNNING]● Command: bash -lc 'rg -n "Row-Level Security" -n docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "Row-Level Security" -n docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ 22:4. [Row-Level Security (RLS)](#row-level-security-rls)
+[SUCCESS]⎿ 38:3. **Database Layer:** PostgreSQL Row-L...
+[THINKING]● Thinking: **Extracting specific snippet from documentation**
+[RUNNING]● Command: bash -lc "sed -n '390,520p' docs/architecture/tenant_isolation.md"
+[SUCCESS]● Command: bash -lc "sed -n '390,520p' docs/architecture/tenant_isolation.md"
+[SUCCESS]⎿ ## 4. Row-Level Security (RLS)
+[SUCCESS]⎿
+[SUCCESS]⎿ ### Architecture Overview
+[SUCCESS]⎿
+[SUCCESS]⎿ PostgreSQL Row-Level Security provides de...
+[THINKING]● Thinking: **Checking docs/inventory for snippets**
+[RUNNING]● Command: bash -lc 'ls docs/inventory'
+[SUCCESS]● Command: bash -lc 'ls docs/inventory'
+[SUCCESS]⎿ multi_location.md
+[THINKING]● Thinking: **Opening relevant file snippet**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/inventory/multi_location.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/inventory/multi_location.md"
+[SUCCESS]⎿ # Multi-Location Inventory System
+[SUCCESS]⎿
+[SUCCESS]⎿ ## Overview
+[SUCCESS]⎿
+[SUCCESS]⎿ The Village Storefront multi-location inventory syst...
+[THINKING]● Thinking: **Searching for low stock scheduler references**
+[RUNNING]● Command: bash -lc 'rg -n "low" docs/inventory/multi_location.md'
+[SUCCESS]● Command: bash -lc 'rg -n "low" docs/inventory/multi_location.md'
+[SUCCESS]⎿ 113:## Workflows
+[SUCCESS]⎿ 184:### 2. Inventory Transfer Workflow
+[SUCCESS]⎿ 324:When a transfer is created, the service ...
+[THINKING]● Thinking: **Reviewing inventory documentation snippet**
+[RUNNING]● Command: bash -lc "sed -n '400,520p' docs/inventory/multi_location.md"
+[SUCCESS]● Command: bash -lc "sed -n '400,520p' docs/inventory/multi_location.md"
+[SUCCESS]⎿ - Both locations must be active (`active = true`)
+[SUCCESS]⎿
+[SUCCESS]⎿ 2. **Quantity Validation:**
+[SUCCESS]⎿    - Transfer quantit...
+[THINKING]● Thinking: **Selecting relevant context snippets**
+
+I’m deciding to pick 2-3 key context snippets from documentation to keep things manageable, focusing on items like task plans, inventory modules, and data models. Next, I want to identify 2-4 critical source files tied to the task, such as inventory-related Java files, and look into their current contents by checking directories and reading the files fully.
+[RUNNING]● Command: bash -lc 'ls src/main/java/com/village/inventory'
+[ERROR]● Command: bash -lc 'ls src/main/java/com/village/inventory'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for inventory package**
+[RUNNING]● Command: bash -lc 'rg --files src/main | rg "inventory"'
+[ERROR]● Command: bash -lc 'rg --files src/main | rg "inventory"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Listing src directory contents**
+[RUNNING]● Command: bash -lc 'ls src'
+[ERROR]● Command: bash -lc 'ls src'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Exploring modules directory**
+[RUNNING]● Command: bash -lc 'ls modules'
+[SUCCESS]● Command: bash -lc 'ls modules'
+[SUCCESS]⎿ core-platform
+[THINKING]● Thinking: **Inspecting core-platform module**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java'
+[SUCCESS]⎿ io
+[SUCCESS]⎿ villagecompute
+[THINKING]● Thinking: **Locating inventory module**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront'
+[SUCCESS]⎿ api
+[SUCCESS]⎿ backup
+[SUCCESS]⎿ catalog
+[SUCCESS]⎿ compliance
+[SUCCESS]⎿ config
+[SUCCESS]⎿ data
+[SUCCESS]⎿ exceptions
+[SUCCESS]⎿ featureflags
+[SUCCESS]⎿ giftcard
+[SUCCESS]⎿ integration
+[SUCCESS]⎿ jobs
+[SUCCESS]⎿ loyalty
+[SUCCESS]⎿ ...
+[THINKING]● Thinking: **Searching for inventory service**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/services'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/services'
+[SUCCESS]⎿ CartService.java
+[SUCCESS]⎿ CatalogCacheService.java
+[SUCCESS]⎿ CatalogJobService.java
+[SUCCESS]⎿ CatalogService.java
+[SUCCESS]⎿ CheckoutSaga.ja...
+[THINKING]● Thinking: **Selecting key inventory files to review**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/api'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/api'
+[SUCCESS]⎿ headless
+[SUCCESS]⎿ rest
+[SUCCESS]⎿ types
+[SUCCESS]⎿ vendor
+[THINKING]● Thinking: **Considering resource class for inventory**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/api/rest'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/api/rest'
+[SUCCESS]⎿ CartResource.java
+[SUCCESS]⎿ CatalogAdminResource.java
+[SUCCESS]⎿ CheckoutResource.java
+[SUCCESS]⎿ ConsignmentResource.java
+[SUCCESS]⎿ CspReport...
+[THINKING]● Thinking: **Identifying relevant inventory code**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/data'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/data'
+[SUCCESS]⎿ models
+[SUCCESS]⎿ repositories
+[THINKING]● Thinking: **Searching for inventory entity**
+[RUNNING]● Command: bash -lc 'rg --files modules/core-platform/src/main/java | rg "InventoryLevel"'
+[SUCCESS]● Command: bash -lc 'rg --files modules/core-platform/src/main/java | rg "InventoryLevel"'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java
+[SUCCESS]⎿ module...
+[THINKING]● Thinking: **Locating relevant tests**
+[RUNNING]● Command: bash -lc 'rg --files modules/core-platform/src/test/java | rg "Inventory"'
+[SUCCESS]● Command: bash -lc 'rg --files modules/core-platform/src/test/java | rg "Inventory"'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/data/repositories/InventoryLevelReposi...
+[THINKING]● Thinking: **Selecting key inventory files**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]⎿ package villagecompute.storefront.api.rest;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import ja...
+[THINKING]● Thinking: **Continuing file exploration**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]⎿ Span span = spanWithTenant(tenantId);
+[SUCCESS]⎿         span.setAttribute("inventory.operation", "create_trans...
+[THINKING]● Thinking: **Opening next file InventoryService.java**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.Optional;
+[SUCCESS]⎿ impor...
+[THINKING]● Thinking: **Requesting additional context**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]⎿ // Add OpenTelemetry span attributes
+[SUCCESS]⎿         Span span = Span.current();
+[SUCCESS]⎿         span.setAttribute("...
+[THINKING]● Thinking: **Opening InventoryTransferService.java**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.List;...
+[THINKING]● Thinking: **Requesting more file content**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]⎿ InventoryTransfer transfer = transferRepository.findByIdForTenant(transferId)
+[SUCCESS]⎿                 .orEls...
+[THINKING]● Thinking: **Identifying required data model**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java"
+[SUCCESS]⎿ package villagecompute.storefront.data.models;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.UU...
+[THINKING]● Thinking: **Identifying key documentation snippets**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+path = Path('docs/inventory/multi_location.md')
+text = path.read_text()
+# extract first 120 lines approx? we'll take until '## Architecture' data model included? Use slicing
+lines = text.splitlines()
+excerpt = '\\n'.join(lines[:120])
+print(excerpt)
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+path = Path('docs/inventory/multi_location.md')
+text = path.read_text()
+# extract first 120 lines approx? we'll take until '## Architecture' data model included? Use slicing
+lines = text.splitlines()
+excerpt = '\\n'.join(lines[:120])
+print(excerpt)
+PY"
+[SUCCESS]⎿ # Multi-Location Inventory System
+[SUCCESS]⎿
+[SUCCESS]⎿ ## Overview
+[SUCCESS]⎿
+[SUCCESS]⎿ The Village Storefront multi-location inventory syst...
+[THINKING]● Thinking: **Extracting architecture doc snippet**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/02_System_Structure_and_Data.md').read_text()
+marker = '*   **3.6. Data Model Overview & ERD:**'
+start = text.find(marker)
+if start == -1:
+    raise SystemExit('marker not found')
+end = text.find('    *   **Diagram', start)
+print(text[start:end].strip())
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/02_System_Structure_and_Data.md').read_text()
+marker = '*   **3.6. Data Model Overview & ERD:**'
+start = text.find(marker)
+if start == -1:
+    raise SystemExit('marker not found')
+end = text.find('    *   **Diagram', start)
+print(text[start:end].strip())
+PY"
+[SUCCESS]⎿ *   **3.6. Data Model Overview & ERD:**
+[SUCCESS]⎿     *   **Description:** Captures the multi-tenant data enti...
+[THINKING]● Thinking: **Preparing snippet extraction**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/02_System_Structure_and_Data.md').read_text()
+start = text.find('        entity \"InventoryLocation\"')
+end = text.find('        entity \"Consignor\"', start)
+print(text[start:end].strip())
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/02_System_Structure_and_Data.md').read_text()
+start = text.find('        entity \"InventoryLocation\"')
+end = text.find('        entity \"Consignor\"', start)
+print(text[start:end].strip())
+PY"
+[SUCCESS]⎿ entity "InventoryLocation" as inventory_location {
+[SUCCESS]⎿             * id : uuid
+[SUCCESS]⎿             --
+[SUCCESS]⎿           ...
+[THINKING]● Thinking: **Gathering relevant documentation snippets**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('docs/architecture/tenant_isolation.md').read_text()
+anchor = '## 4. Row-Level Security (RLS)'
+start = text.find(anchor)
+end = text.find('### RLS Enforcement Flow', start)
+print(text[start:end].strip())
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('docs/architecture/tenant_isolation.md').read_text()
+anchor = '## 4. Row-Level Security (RLS)'
+start = text.find(anchor)
+end = text.find('### RLS Enforcement Flow', start)
+print(text[start:end].strip())
+PY"
+[SUCCESS]⎿ ## 4. Row-Level Security (RLS)
+[SUCCESS]⎿
+[SUCCESS]⎿ ### Architecture Overview
+[SUCCESS]⎿
+[SUCCESS]⎿ PostgreSQL Row-Level Security provides de...
+[THINKING]● Thinking: **Organizing code analysis and task data**
+
+I'm mapping out summaries for key inventory-related files to highlight their roles and important details like concurrency and domain events, while also preparing to include the full task JSON details in the final briefing package. Next, I'll verify access to the tasks_I2.json file to extract and format the target task information properly.
+[RUNNING]● Command: bash -lc 'stat tasks_I2.json'
+[ERROR]● Command: bash -lc 'stat tasks_I2.json'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for task files**
+[RUNNING]● Command: bash -lc "find . -name 'tasks_I2.json'"
+[SUCCESS]● Command: bash -lc "find . -name 'tasks_I2.json'"
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I2.json
+[THINKING]● Thinking: **Preparing to parse task_id**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+with open('.codemachine/artifacts/tasks/tasks_I2.json') as f:
+    tasks = json.load(f)
+for task in tasks:
+    if task['task_id'] == 'I2.T2':
+        import json
+        print(json.dumps(task, indent=2))
+        break
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+with open('.codemachine/artifacts/tasks/tasks_I2.json') as f:
+    tasks = json.load(f)
+for task in tasks:
+    if task['task_id'] == 'I2.T2':
+        import json
+        print(json.dumps(task, indent=2))
+        break
+PY"
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I2.T2",
+[SUCCESS]⎿   "iteration_id": "I2",
+[SUCCESS]⎿   "iteration_goal": "Deliver tenant-aware catalog + ...
+[THINKING]● Thinking: **Preparing context file update**
+[RUNNING]● Command: bash -lc 'ls .codemachine/prompts'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/prompts'
+[SUCCESS]⎿ context.md
+[THINKING]● Thinking: **Backing up current content**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Organizing comprehensive context document**
+
+I'm gathering detailed snippets from plan, architecture, and docs for I2.T2 task, thinking carefully about how to combine or separate contexts for clarity. I'll also analyze specific code files for relevant content, then summarize key insights and implementation tips. Finally, I'll compose a full context document with structured sections and code snippets, ready to replace the existing context.md file.
+[THINKING]● Thinking: **Handling patch failure by rewriting files**
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T2",
+  "iteration_id": "I2",
+  "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+  "description": "Build inventory subsystem with InventoryLocation, InventoryLevel, adjustments, transfers, and low-stock alert scheduler stub referencing Clarifications on multi-location + consignment coordination; integrate with catalog via variant IDs only.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "ERD, Safety Net, Clarification 4, existing catalog services.",
+  "target_files": [
+    "src/main/java/com/village/inventory/InventoryResource.java",
+    "src/main/java/com/village/inventory/TransferService.java",
+    "src/main/java/com/village/inventory/entity/InventoryLevelEntity.java",
+    "src/test/java/com/village/inventory/InventoryLevelTest.java",
+    "src/test/java/com/village/inventory/TransferServiceIT.java"
+  ],
+  "input_files": [
+    "src/main/java/com/village/inventory",
+    "docs/diagrams/domain_erd.puml",
+    "docs/architecture/tenant_isolation.md"
+  ],
+  "deliverables": "REST endpoints + services, scheduled job stubs, integration with audit events, unit/integration tests, config toggles for email alerts.",
+  "acceptance_criteria": "- Stock adjustments transactional with optimistic locking + reason codes, event log written per adjustment.'"\\n        - Transfer endpoints log audit events, queue notifications, and emit domain event placeholders for reporting.\\n        - Scheduler stub logs and respects feature flag gating + SLA metrics instrumentation.\",
+  \"dependencies\": [
+    \"I2.T1\"
+  ],
+  \"parallelizable\": false,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Iteration 2 – Task I2.T2 (from .codemachine/artifacts/plan/02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t2 -->
+*   **Task 2.2:**
+    *   **Task ID:** `I2.T2`
+    *   **Description:** Build inventory subsystem with InventoryLocation, InventoryLevel, adjustments, transfers, and low-stock alert scheduler stub referencing Clarifications on multi-location + consignment coordination; integrate with catalog via variant IDs only.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** ERD, Safety Net, Clarification 4, existing catalog services.
+    *   **Input Files:** ["src/main/java/com/village/inventory", "docs/diagrams/domain_erd.puml", "docs/architecture/tenant_isolation.md"]
+    *   **Target Files:** ["src/main/java/com/village/inventory/InventoryResource.java", "src/main/java/com/village/inventory/TransferService.java", "src/main/java/com/village/inventory/entity/InventoryLevelEntity.java", "src/test/java/com/village/inventory/InventoryLevelTest.java", "src/test/java/com/village/inventory/TransferServiceIT.java"]
+    *   **Deliverables:** REST endpoints + services, scheduled job stubs, integration with audit events, unit/integration tests, config toggles for email alerts.
+    *   **Acceptance Criteria:**
+        - Stock adjustments transactional with optimistic locking + reason codes, event log written per adjustment.
+        - Transfer endpoints log audit events, queue notifications, and emit domain event placeholders for reporting.
+        - Scheduler stub logs and respects feature flag gating + SLA metrics instrumentation.
+    *   **Dependencies:** [`I2.T1`]
+    *   **Parallelizable:** No.
+```
+
+### Context: Section 3.6 – Data Model Overview & ERD (from .codemachine/artifacts/architecture/02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.6. Data Model Overview & ERD:**
+    *   **Description:** Captures the multi-tenant data entities defined in Foundation Section 5.0, covering tenancy, users, customers, sessions, catalog, inventory, consignment, carts, orders, payments, shipments, returns, loyalty, feature flags, audit events, and background jobs. Every tenant-scoped table contains tenant_id and adheres to RLS policies.
+    *   **Key Entities:**
+        - `Tenant` governs store metadata, plan, status, branding, and configuration flags.
+        - `StoreUser` stores merchant/staff accounts with hashed passwords, roles, and status.
+        - `Customer` holds shopper identities, authentication, loyalty balances, and preferences.
+        - `Product` and `Variant` capture catalog hierarchy, SKUs, pricing, inventory policy, and media references.
+        - `InventoryLocation` and `InventoryLevel` define stock tracking across warehouses, stores, and suppliers.
+        - `Consignor` and `ConsignmentItem` store vendor agreements, commission rules, item aging, and payout state.
+        - `Cart`, `CartItem`, and `Order` maintain purchase journeys including discounts, shipping, taxes, and timeline events.
+        - `PaymentIntent` and `Refund` represent provider-agnostic payment operations with provider references and statuses.
+        - `Shipment` and `ReturnAuthorization` capture fulfillment and reverse logistics data.
+        - `LoyaltyLedgerEntry` tracks points accrual, redemption, tier progression, and expirations.
+        - `FeatureFlag`, `AuditEvent`, and `BackgroundJob` provide platform governance, observability, and async orchestration data.
+
+entity "InventoryLocation" as inventory_location {
+            * id : uuid
+            --
+            tenant_id : uuid
+            name : text
+            address : jsonb
+            type : text
+            capacity : jsonb
+            timezone : text
+            created_at : timestamptz
+        }
+        entity "InventoryLevel" as inventory_level {
+            * id : uuid
+            --
+            tenant_id : uuid
+            variant_id : uuid
+            location_id : uuid
+            on_hand : integer
+            reserved : integer
+            incoming : integer
+            safety_stock : integer
+            low_stock_threshold : integer
+            updated_at : timestamptz
+        }
+```
+
+### Context: Multi-Location Inventory System (from docs/inventory/multi_location.md)
+
+```markdown
+# Multi-Location Inventory System
+
+## Overview
+
+The Village Storefront multi-location inventory system enables tenants to track and manage inventory across multiple physical or virtual locations (warehouses, retail stores, supplier facilities, etc.). The system supports stock transfers between locations, manual adjustments with reason codes, and barcode label generation for physical inventory operations.
+
+**Key Features:**
+- Track inventory levels at multiple locations per tenant
+- Transfer stock between locations with audit trail
+- Record manual adjustments with reason codes
+- Background job coordination for barcode label printing
+- Full tenant isolation and row-level security
+
+**References:**
+- Task ID: `I3.T2`
+- Architecture: `docs/architecture/03_Behavior_and_Communication.md` (Multi-location communication patterns)
+- OpenAPI Spec: `api/v1/openapi.yaml` (Inventory admin endpoints)
+
+---
+
+### Data Model
+
+```
+┌─────────────────────┐
+│ Tenant              │
+└──────┬──────────────┘
+       │
+       │ 1:N
+       │
+┌──────▼──────────────┐       ┌─────────────────────┐
+│ InventoryLocation   │       │ ProductVariant      │
+│ ─────────────────   │       │ ──────────────────  │
+│ - id (UUID)         │       │ - id (UUID)         │
+│ - code (string)     │       │ - sku               │
+│ - name              │       │ - price             │
+│ - type              │       │ ...                 │
+│ - address (jsonb)   │       └──────┬──────────────┘
+│ - active            │              │
+└──────┬──────────────┘              │
+       │                              │
+       │ N:M                          │
+       │                              │
+┌──────▼──────────────────────────────▼──┐
+│ InventoryLevel                         │
+│ ────────────────────────────────────── │
+│ - id (UUID)                            │
+│ - variant_id → ProductVariant          │
+│ - location (string, FK to code)        │
+│ - quantity (integer)                   │
+│ - reserved (integer)                   │
+│ - version (optimistic lock)            │
+└────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ InventoryTransfer                       │
+│ ─────────────────────────────────────── │
+│ - id (UUID)                             │
+│ - source_location_id → InventoryLocation│
+│ - dest_location_id → InventoryLocation  │
+│ - status (enum: PENDING, IN_TRANSIT,    │
+│           RECEIVED, CANCELLED)          │
+│ - initiated_by (string)                 │
+│ - expected_arrival_date                 │
+│ - carrier, tracking_number              │
+│ - shipping_cost (cents)                 │
+│ - barcode_job_id (UUID, nullable)       │
+│ - version (optimistic lock)             │
+└──────┬──────────────────────────────────┘
+       │
+       │ 1:N
+       │
+┌──────▼──────────────────────────────────┐
+│ InventoryTransferLine                   │
+│ ─────────────────────────────────────── │
+│ - id (UUID)                             │
+│ - transfer_id → InventoryTransfer       │
+│ - variant_id → ProductVariant           │
+│ - quantity (integer)                    │
+│ - received_quantity (integer, nullable) │
+│ - notes                                 │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ InventoryAdjustment (Audit Log)         │
+│ ─────────────────────────────────────── │
+│ - id (UUID)                             │
+│ - variant_id → ProductVariant           │
+│ - location_id → InventoryLocation       │
+│ - quantity_change (integer)             │
+│ - quantity_before, quantity_after       │
+│ - reason (enum: CYCLE_COUNT, DAMAGE,    │
+│           RETURN, SHRINKAGE, FOUND,     │
+│           OTHER)                        │
+│ - adjusted_by (string)                  │
+│ - notes                                 │
+│ - created_at                            │
+└─────────────────────────────────────────┘
+```
+
+### Tenant Isolation
+
+All inventory operations are automatically scoped to the current tenant via `TenantContext`:
+
+- Repository queries filter by `tenant_id` using named parameters
+- JPA `@PrePersist` hooks inject tenant from context
+- REST endpoints resolve tenant from HTTP `Host` header
+- No cross-tenant data leakage possible (enforced at repository layer)
+```
+
+### Context: Row-Level Security Enforcement (from docs/architecture/tenant_isolation.md)
+
+```markdown
+## 4. Row-Level Security (RLS)
+
+### Architecture Overview
+
+PostgreSQL Row-Level Security provides defense-in-depth enforcement at the database layer. All tenant-scoped tables have `FORCE ROW LEVEL SECURITY` enabled, which means:
+
+1. RLS policies apply even to table owners (not just normal users)
+2. Queries without `app.tenant_id` session variable set → return zero rows
+3. Queries with mismatched `tenant_id` → return zero rows (unauthorized access blocked)
+
+**Migration:** `V20260113__enable_rls_policies.sql` (lines 1-350)
+
+### Helper Functions
+
+**Set Tenant Context (called by TenantResolutionFilter):**
+
+```sql
+CREATE OR REPLACE FUNCTION set_current_tenant_id(p_tenant_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM set_config('"'app.tenant_id', p_tenant_id::TEXT, FALSE);
+    PERFORM set_config('row_security', 'on', FALSE);
+END;
+"'$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+**Get Current Tenant (used in RLS policies):**
+
+```sql
+CREATE OR REPLACE FUNCTION get_current_tenant_id()
+RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('"'app.tenant_id', TRUE), '')::UUID;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN NULL;
+END;
+"'$$ LANGUAGE plpgsql STABLE;
+```
+
+### RLS Policy Template
+
+```sql
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY products_isolation_policy ON products
+    FOR ALL
+    USING (tenant_id = get_current_tenant_id());
+```
+
+**Protected Tables (excerpt):**
+- Catalog: `categories`, `products`, `product_variants`, `product_categories`, `product_images`, `inventory_levels`
+- Consignment: `consignors`, `consignment_items`, `payout_batches`, `payout_line_items`
+- Loyalty: `loyalty_programs`, `loyalty_members`, `loyalty_transactions`
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java`
+    *   **Summary:** JAX-RS resource handling admin inventory endpoints for locations, transfers, and adjustments. It injects `InventoryLocationRepository`, `InventoryTransferService`, `InventoryMapper`, and `InventoryMetrics`, decorates mutating endpoints with `@Timed`, logs the current tenant via `TenantContext`, and enriches OpenTelemetry spans with tenant/operation metadata before delegating to the service layer.
+    *   **Recommendation:** Reuse this resource for additional admin endpoints (e.g., scheduler toggles, low-stock alerts) so routing, DTO mapping, and telemetry stay consistent. Always fetch tenant from `TenantContext`, leverage `inventoryMapper` when returning DTOs, and surface validation failures using the existing `Response.status(...).entity(...)` patterns observed in the transfer/adjustment methods.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java`
+    *   **Summary:** Encapsulates inventory level mutations: `setInventoryLevel`, `adjustInventory`, `reserveInventory`, `releaseReservation`, `commitReservation`, and queries for totals. Methods are `@Transactional`, log tenant/variant/location data, emit Micrometer metrics via `InventoryMetrics`, and rely on `InventoryLevelRepository` lookups that are already tenant-scoped via `TenantContext`.
+    *   **Recommendation:** Route all quantity changes and reservations through this service—especially when implementing scheduler-driven low-stock checks—to benefit from the optimistic locking, warning logs for negative quantities, and consistent metric emission. Do not mutate `InventoryLevel` directly from REST resources or schedulers; let this service enforce availability checks and instrumentation.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java`
+    *   **Summary:** Implements business logic for transfers and manual adjustments. It validates locations/variants, reserves or commits inventory via `InventoryService`, persists transfers/adjustments, increments Micrometer counters and emits domain events (`TransferInitiated`, `TransferReceived`, `InventoryAdjusted`). It also enqueues barcode label jobs via `BarcodeLabelJobQueue` and ensures destination inventory levels exist before adjustments.
+    *   **Recommendation:** Extend this service rather than duplicating logic when adding audit logging, scheduler hooks, or notification fan-out. Reuse helper methods for ensuring inventory levels exist, and keep new events flowing through `DomainEventPublisher` so reporting projections remain consistent. Follow the pattern of wrapping operations in `@Transactional` and logging via `LOG.infof`.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java`
+    *   **Summary:** JPA entity representing `(tenant, variant, location)` stock levels with optimistic locking (`@Version`), quantity/reserved columns, timestamps, and `@PrePersist/@PreUpdate` hooks that hydrate `Tenant` from `TenantContext`. Provides `getAvailableQuantity()` helper used to enforce reservations.
+    *   **Recommendation:** When introducing new columns (e.g., safety stock thresholds) do so here and let `@PrePersist` continue setting tenant references automatically. Respect the uniqueness constraint on `(tenant_id, variant_id, location)`—if you need derived data, keep it in separate tables rather than bypassing this entity. Always work through repositories/services that honor the optimistic locking semantics.
+
+### Implementation Tips & Notes
+*   **Tip:** Instrument new workflows (low-stock scheduler, transfer notifications) by following the existing patterns—Micrometer counters live in `InventoryMetrics` and timers can be applied with `@Timed` plus explicit OpenTelemetry `Span` attributes as seen in `InventoryAdminResource`.
+*   **Tip:** Tenant safety is enforced via RLS and repository filters, but entities like `InventoryLevel` also call `TenantContext` in `@PrePersist`; never set `tenant_id` manually or bypass the context in tests—seed the context the way current services do before persisting entities.
+*   **Tip:** Domain events already exist for transfers and adjustments via `InventoryTransferService`. When adding scheduler-driven alerts or audit logs, publish new event types through `DomainEventPublisher` so downstream reporting/notifications remain decoupled.
+*   **Note:** `InventoryTransferService` expects ProductVariant status to be `active` and validates source/destination locations. Keep the same validation and error messages if you expose new APIs; callers (and tests) rely on `IllegalArgumentException` vs `IllegalStateException` distinctions for HTTP mapping.
+*   **Warning:** Reservation helpers throw when availability is insufficient and log warnings for negative quantities—wrap multi-step adjustments in transactions and be prepared to translate those exceptions into RFC 7807 responses so the acceptance criteria about transactional adjustments and audit logging stay intact.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T2",
+  "iteration_id": "I2",
+  "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+  "description": "Build inventory subsystem with InventoryLocation, InventoryLevel, adjustments, transfers, and low-stock alert scheduler stub referencing Clarifications on multi-location + consignment coordination; integrate with catalog via variant IDs only.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "ERD, Safety Net, Clarification 4, existing catalog services.",
+  "target_files": [
+    "src/main/java/com/village/inventory/InventoryResource.java",
+    "src/main/java/com/village/inventory/TransferService.java",
+    "src/main/java/com/village/inventory/entity/InventoryLevelEntity.java",
+    "src/test/java/com/village/inventory/InventoryLevelTest.java",
+    "src/test/java/com/village/inventory/TransferServiceIT.java"
+  ],
+  "input_files": [
+    "src/main/java/com/village/inventory",
+    "docs/diagrams/domain_erd.puml",
+    "docs/architecture/tenant_isolation.md"
+  ],
+  "deliverables": "REST endpoints + services, scheduled job stubs, integration with audit events, unit/integration tests, config toggles for email alerts.",
+  "acceptance_criteria": "- Stock adjustments transactional with optimistic locking + reason codes, event log written per adjustment.'"\\n        - Transfer endpoints log audit events, queue notifications, and emit domain event placeholders for reporting.\\n        - Scheduler stub logs and respects feature flag gating + SLA metrics instrumentation.\",
+  \"dependencies\": [
+    \"I2.T1\"
+  ],
+  \"parallelizable\": false,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Iteration 2 – Task I2.T2 (from .codemachine/artifacts/plan/02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t2 -->
+*   **Task 2.2:**
+    *   **Task ID:** `I2.T2`
+    *   **Description:** Build inventory subsystem with InventoryLocation, InventoryLevel, adjustments, transfers, and low-stock alert scheduler stub referencing Clarifications on multi-location + consignment coordination; integrate with catalog via variant IDs only.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** ERD, Safety Net, Clarification 4, existing catalog services.
+    *   **Input Files:** ["src/main/java/com/village/inventory", "docs/diagrams/domain_erd.puml", "docs/architecture/tenant_isolation.md"]
+    *   **Target Files:** ["src/main/java/com/village/inventory/InventoryResource.java", "src/main/java/com/village/inventory/TransferService.java", "src/main/java/com/village/inventory/entity/InventoryLevelEntity.java", "src/test/java/com/village/inventory/InventoryLevelTest.java", "src/test/java/com/village/inventory/TransferServiceIT.java"]
+    *   **Deliverables:** REST endpoints + services, scheduled job stubs, integration with audit events, unit/integration tests, config toggles for email alerts.
+    *   **Acceptance Criteria:**
+        - Stock adjustments transactional with optimistic locking + reason codes, event log written per adjustment.
+        - Transfer endpoints log audit events, queue notifications, and emit domain event placeholders for reporting.
+        - Scheduler stub logs and respects feature flag gating + SLA metrics instrumentation.
+    *   **Dependencies:** [`I2.T1`]
+    *   **Parallelizable:** No.
+```
+
+### Context: Section 3.6 – Data Model Overview & ERD (from .codemachine/artifacts/architecture/02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.6. Data Model Overview & ERD:**
+    *   **Description:** Captures the multi-tenant data entities defined in Foundation Section 5.0, covering tenancy, users, customers, sessions, catalog, inventory, consignment, carts, orders, payments, shipments, returns, loyalty, feature flags, audit events, and background jobs. Every tenant-scoped table contains tenant_id and adheres to RLS policies.
+    *   **Key Entities:**
+        - `Tenant` governs store metadata, plan, status, branding, and configuration flags.
+        - `StoreUser` stores merchant/staff accounts with hashed passwords, roles, and status.
+        - `Customer` holds shopper identities, authentication, loyalty balances, and preferences.
+        - `Product` and `Variant` capture catalog hierarchy, SKUs, pricing, inventory policy, and media references.
+        - `InventoryLocation` and `InventoryLevel` define stock tracking across warehouses, stores, and suppliers.
+        - `Consignor` and `ConsignmentItem` store vendor agreements, commission rules, item aging, and payout state.
+        - `Cart`, `CartItem`, and `Order` maintain purchase journeys including discounts, shipping, taxes, and timeline events.
+        - `PaymentIntent` and `Refund` represent provider-agnostic payment operations with provider references and statuses.
+        - `Shipment` and `ReturnAuthorization` capture fulfillment and reverse logistics data.
+        - `LoyaltyLedgerEntry` tracks points accrual, redemption, tier progression, and expirations.
+        - `FeatureFlag`, `AuditEvent`, and `BackgroundJob` provide platform governance, observability, and async orchestration data.
+
+entity "InventoryLocation" as inventory_location {
+            * id : uuid
+            --
+            tenant_id : uuid
+            name : text
+            address : jsonb
+            type : text
+            capacity : jsonb
+            timezone : text
+            created_at : timestamptz
+        }
+        entity "InventoryLevel" as inventory_level {
+            * id : uuid
+            --
+            tenant_id : uuid
+            variant_id : uuid
+            location_id : uuid
+            on_hand : integer
+            reserved : integer
+            incoming : integer
+            safety_stock : integer
+            low_stock_threshold : integer
+            updated_at : timestamptz
+        }
+```
+
+### Context: Multi-Location Inventory System (from docs/inventory/multi_location.md)
+
+```markdown
+# Multi-Location Inventory System
+
+## Overview
+
+The Village Storefront multi-location inventory system enables tenants to track and manage inventory across multiple physical or virtual locations (warehouses, retail stores, supplier facilities, etc.). The system supports stock transfers between locations, manual adjustments with reason codes, and barcode label generation for physical inventory operations.
+
+**Key Features:**
+- Track inventory levels at multiple locations per tenant
+- Transfer stock between locations with audit trail
+- Record manual adjustments with reason codes
+- Background job coordination for barcode label printing
+- Full tenant isolation and row-level security
+
+**References:**
+- Task ID: `I3.T2`
+- Architecture: `docs/architecture/03_Behavior_and_Communication.md` (Multi-location communication patterns)
+- OpenAPI Spec: `api/v1/openapi.yaml` (Inventory admin endpoints)
+
+---
+
+### Data Model
+
+```
+┌─────────────────────┐
+│ Tenant              │
+└──────┬──────────────┘
+       │
+       │ 1:N
+       │
+┌──────▼──────────────┐       ┌─────────────────────┐
+│ InventoryLocation   │       │ ProductVariant      │
+│ ─────────────────   │       │ ──────────────────  │
+│ - id (UUID)         │       │ - id (UUID)         │
+│ - code (string)     │       │ - sku               │
+│ - name              │       │ - price             │
+│ - type              │       │ ...                 │
+│ - address (jsonb)   │       └──────┬──────────────┘
+│ - active            │              │
+└──────┬──────────────┘              │
+       │                              │
+       │ N:M                          │
+       │                              │
+┌──────▼──────────────────────────────▼──┐
+│ InventoryLevel                         │
+│ ────────────────────────────────────── │
+│ - id (UUID)                            │
+│ - variant_id → ProductVariant          │
+│ - location (string, FK to code)        │
+│ - quantity (integer)                   │
+│ - reserved (integer)                   │
+│ - version (optimistic lock)            │
+└────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ InventoryTransfer                       │
+│ ─────────────────────────────────────── │
+│ - id (UUID)                             │
+│ - source_location_id → InventoryLocation│
+│ - dest_location_id → InventoryLocation  │
+│ - status (enum: PENDING, IN_TRANSIT,    │
+│           RECEIVED, CANCELLED)          │
+│ - initiated_by (string)                 │
+│ - expected_arrival_date                 │
+│ - carrier, tracking_number              │
+│ - shipping_cost (cents)                 │
+│ - barcode_job_id (UUID, nullable)       │
+│ - version (optimistic lock)             │
+└──────┬──────────────────────────────────┘
+       │
+       │ 1:N
+       │
+┌──────▼──────────────────────────────────┐
+│ InventoryTransferLine                   │
+│ ─────────────────────────────────────── │
+│ - id (UUID)                             │
+│ - transfer_id → InventoryTransfer       │
+│ - variant_id → ProductVariant           │
+│ - quantity (integer)                    │
+│ - received_quantity (integer, nullable) │
+│ - notes                                 │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ InventoryAdjustment (Audit Log)         │
+│ ─────────────────────────────────────── │
+│ - id (UUID)                             │
+│ - variant_id → ProductVariant           │
+│ - location_id → InventoryLocation       │
+│ - quantity_change (integer)             │
+│ - quantity_before, quantity_after       │
+│ - reason (enum: CYCLE_COUNT, DAMAGE,    │
+│           RETURN, SHRINKAGE, FOUND,     │
+│           OTHER)                        │
+│ - adjusted_by (string)                  │
+│ - notes                                 │
+│ - created_at                            │
+└─────────────────────────────────────────┘
+```
+
+### Tenant Isolation
+
+All inventory operations are automatically scoped to the current tenant via `TenantContext`:
+
+- Repository queries filter by `tenant_id` using named parameters
+- JPA `@PrePersist` hooks inject tenant from context
+- REST endpoints resolve tenant from HTTP `Host` header
+- No cross-tenant data leakage possible (enforced at repository layer)
+```
+
+### Context: Row-Level Security Enforcement (from docs/architecture/tenant_isolation.md)
+
+```markdown
+## 4. Row-Level Security (RLS)
+
+### Architecture Overview
+
+PostgreSQL Row-Level Security provides defense-in-depth enforcement at the database layer. All tenant-scoped tables have `FORCE ROW LEVEL SECURITY` enabled, which means:
+
+1. RLS policies apply even to table owners (not just normal users)
+2. Queries without `app.tenant_id` session variable set → return zero rows
+3. Queries with mismatched `tenant_id` → return zero rows (unauthorized access blocked)
+
+**Migration:** `V20260113__enable_rls_policies.sql` (lines 1-350)
+
+### Helper Functions
+
+**Set Tenant Context (called by TenantResolutionFilter):**
+
+```sql
+CREATE OR REPLACE FUNCTION set_current_tenant_id(p_tenant_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM set_config('"'app.tenant_id', p_tenant_id::TEXT, FALSE);
+    PERFORM set_config('row_security', 'on', FALSE);
+END;
+"'$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+**Get Current Tenant (used in RLS policies):**
+
+```sql
+CREATE OR REPLACE FUNCTION get_current_tenant_id()
+RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('"'app.tenant_id', TRUE), '')::UUID;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN NULL;
+END;
+"'$$ LANGUAGE plpgsql STABLE;
+```
+
+### RLS Policy Template
+
+```sql
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY products_isolation_policy ON products
+    FOR ALL
+    USING (tenant_id = get_current_tenant_id());
+```
+
+**Protected Tables (excerpt):**
+- Catalog: `categories`, `products`, `product_variants`, `product_categories`, `product_images`, `inventory_levels`
+- Consignment: `consignors`, `consignment_items`, `payout_batches`, `payout_line_items`
+- Loyalty: `loyalty_programs`, `loyalty_members`, `loyalty_transactions`
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java`
+    *   **Summary:** JAX-RS resource handling admin inventory endpoints for locations, transfers, and adjustments. It injects `InventoryLocationRepository`, `InventoryTransferService`, `InventoryMapper`, and `InventoryMetrics`, decorates mutating endpoints with `@Timed`, logs the current tenant via `TenantContext`, and enriches OpenTelemetry spans with tenant/operation metadata before delegating to the service layer.
+    *   **Recommendation:** Reuse this resource for additional admin endpoints (e.g., scheduler toggles, low-stock alerts) so routing, DTO mapping, and telemetry stay consistent. Always fetch tenant from `TenantContext`, leverage `inventoryMapper` when returning DTOs, and surface validation failures using the existing `Response.status(...).entity(...)` patterns observed in the transfer/adjustment methods.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java`
+    *   **Summary:** Encapsulates inventory level mutations: `setInventoryLevel`, `adjustInventory`, `reserveInventory`, `releaseReservation`, `commitReservation`, and queries for totals. Methods are `@Transactional`, log tenant/variant/location data, emit Micrometer metrics via `InventoryMetrics`, and rely on `InventoryLevelRepository` lookups that are already tenant-scoped via `TenantContext`.
+    *   **Recommendation:** Route all quantity changes and reservations through this service—especially when implementing scheduler-driven low-stock checks—to benefit from the optimistic locking, warning logs for negative quantities, and consistent metric emission. Do not mutate `InventoryLevel` directly from REST resources or schedulers; let this service enforce availability checks and instrumentation.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java`
+    *   **Summary:** Implements business logic for transfers and manual adjustments. It validates locations/variants, reserves or commits inventory via `InventoryService`, persists transfers/adjustments, increments Micrometer counters and emits domain events (`TransferInitiated`, `TransferReceived`, `InventoryAdjusted`). It also enqueues barcode label jobs via `BarcodeLabelJobQueue` and ensures destination inventory levels exist before adjustments.
+    *   **Recommendation:** Extend this service rather than duplicating logic when adding audit logging, scheduler hooks, or notification fan-out. Reuse helper methods for ensuring inventory levels exist, and keep new events flowing through `DomainEventPublisher` so reporting projections remain consistent. Follow the pattern of wrapping operations in `@Transactional` and logging via `LOG.infof`.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java`
+    *   **Summary:** JPA entity representing `(tenant, variant, location)` stock levels with optimistic locking (`@Version`), quantity/reserved columns, timestamps, and `@PrePersist/@PreUpdate` hooks that hydrate `Tenant` from `TenantContext`. Provides `getAvailableQuantity()` helper used to enforce reservations.
+    *   **Recommendation:** When introducing new columns (e.g., safety stock thresholds) do so here and let `@PrePersist` continue setting tenant references automatically. Respect the uniqueness constraint on `(tenant_id, variant_id, location)`—if you need derived data, keep it in separate tables rather than bypassing this entity. Always work through repositories/services that honor the optimistic locking semantics.
+
+### Implementation Tips & Notes
+*   **Tip:** Instrument new workflows (low-stock scheduler, transfer notifications) by following the existing patterns—Micrometer counters live in `InventoryMetrics` and timers can be applied with `@Timed` plus explicit OpenTelemetry `Span` attributes as seen in `InventoryAdminResource`.
+*   **Tip:** Tenant safety is enforced via RLS and repository filters, but entities like `InventoryLevel` also call `TenantContext` in `@PrePersist`; never set `tenant_id` manually or bypass the context in tests—seed the context the way current services do before persisting entities.
+*   **Tip:** Domain events already exist for transfers and adjustments via `InventoryTransferService`. When adding scheduler-driven alerts or audit logs, publish new event types through `DomainEventPublisher` so downstream reporting/notifications remain decoupled.
+*   **Note:** `InventoryTransferService` expects ProductVariant status to be `active` and validates source/destination locations. Keep the same validation and error messages if you expose new APIs; callers (and tests) rely on `IllegalArgumentException` vs `IllegalStateException` distinctions for HTTP mapping.
+*   **Warning:** Reservation helpers throw when availability is insufficient and log warnings for negative quantities—wrap multi-step adjustments in transactions and be prepared to translate those exceptions into RFC 7807 responses so the acceptance criteria about transactional adjustments and audit logging stay intact.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Checking file content**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Briefing Update**
+
+I’m preparing a summary message noting that `.codemachine/prompts/context.md` was updated with Task I2.T2 details, architecture snippets, and code guidance starting at line 1. I’ll mention that no tests were run since it’s documentation-only, and suggest that the coder can now proceed based on this updated context. This should align well with the final instructions for a clear and concise update.
+[RUNNING]● Message: **Briefing Update**
+- Updated `.codemachine/prompts/context.md:1` to target task `I2.T2`, embedding the plan JSON, architecture excerpts (plan doc, ERD details, multi-location guide, RLS policy), and a fresh code-analysis section covering `InventoryAdminResource`, `InventoryService`, `InventoryTransferService`, and `InventoryLevel`.
+- Added actionable recommendations plus implementation notes highlighting TenantContext/RLS usage, instrumentation patterns, and domain-event expectations so the coder agent can execute the inventory task safely.
+
+Tests: not run (documentation-only change).
+
+Next: Coder agent can proceed with I2.T2 implementation using the refreshed briefing.
+⏱️  Tokens: 5689302in/21203out (2564352 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+

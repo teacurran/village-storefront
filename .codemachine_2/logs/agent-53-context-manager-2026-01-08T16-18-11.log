@@ -1,0 +1,599 @@
+[CYAN]===╭─ Agent 53: context-manager ────────────────────────────────────
+[CYAN]   Started: 2026-01-08 16:18:11
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing all files recursively**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Identifying next actionable task and planning doc search**
+[RUNNING]● Command: bash -lc "rg --files -g '01_Blueprint_Foundation.md'"
+[ERROR]● Command: bash -lc "rg --files -g '01_Blueprint_Foundation.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for Blueprint files**
+[RUNNING]● Command: bash -lc "rg --files -g '*Blueprint*'"
+[ERROR]● Command: bash -lc "rg --files -g '*Blueprint*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Investigating blueprint document location**
+[RUNNING]● Command: bash -lc "rg --files -g '01_Plan_Overview_and_Setup.md'"
+[ERROR]● Command: bash -lc "rg --files -g '01_Plan_Overview_and_Setup.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for plan documents**
+[RUNNING]● Command: bash -lc "find .. -name '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]● Command: bash -lc "find .. -name '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]⎿ ../.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md
+[SUCCESS]⎿ ../village-storefront/.codemachine/arti...
+[THINKING]● Thinking: **Verifying local codemachine artifacts directory**
+[RUNNING]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]⎿ agents
+[SUCCESS]⎿ artifacts
+[SUCCESS]⎿ inputs
+[SUCCESS]⎿ logs
+[SUCCESS]⎿ memory
+[SUCCESS]⎿ prompts
+[SUCCESS]⎿ scripts
+[SUCCESS]⎿ template.json
+[THINKING]● Thinking: **Searching for 01_Blueprint document**
+[RUNNING]● Command: bash -lc "find .codemachine -name '01_Blueprint_Foundation.md'"
+[SUCCESS]● Command: bash -lc "find .codemachine -name '01_Blueprint_Foundation.md'"
+[SUCCESS]⎿ .codemachine/artifacts/architecture/01_Blueprint_Foundation.md
+[THINKING]● Thinking: **Preparing targeted document search**
+[RUNNING]● Command: bash -lc 'rg -n "I2.T2" .codemachine/artifacts/plan/02_Iteration_I2.md'
+[SUCCESS]● Command: bash -lc 'rg -n "I2.T2" .codemachine/artifacts/plan/02_Iteration_I2.md'
+[SUCCESS]⎿ 24:    *   **Task ID:** `I2.T2`
+[SUCCESS]⎿ 58:    *   **Dependencies:** `I2.T2`.
+[THINKING]● Thinking: **Requesting more context**
+[RUNNING]● Command: bash -lc "sed -n '20,80p' .codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "sed -n '20,80p' .codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ *   **Parallelizable:** No.
+[SUCCESS]⎿
+[SUCCESS]⎿ <!-- anchor: task-i2-t2 -->
+[SUCCESS]⎿ *   **Task 2.2:**
+[SUCCESS]⎿     *   **Task ID:** `I2....
+[THINKING]● Thinking: **Gathering architecture and plan context**
+[RUNNING]● Command: bash -lc 'rg -n "catalog" .codemachine/artifacts/architecture/02_System_Structure_and_Data.md'
+[SUCCESS]● Command: bash -lc 'rg -n "catalog" .codemachine/artifacts/architecture/02_System_Structure_and_Data.md'
+[SUCCESS]⎿ 15:    - Provide a Vue 3 + PrimeVue admin experience under /admin that orchestrates catalog, consign...
+[THINKING]● Thinking: **Extracting RLS-related snippets**
+[RUNNING]● Command: bash -lc "sed -n '420,470p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '420,470p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Rel(backgroundScheduler, platformAdminBackend, "Runs suspension audits and plan compliance checks", ...
+[THINKING]● Thinking: **Searching for RLS references**
+[RUNNING]● Command: bash -lc 'rg -n "RLS" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "RLS" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]⎿ 35:*   **Security:** JWT auth with refresh tokens is canonical; TenantFilter + RLS enforce data isol...
+[THINKING]● Thinking: **Extracting snippet about migrations**
+[RUNNING]● Command: bash -lc "sed -n '130,175p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '130,175p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ *   Architects must define explicit KPIs (latency, uptime, throughput) for their components and comm...
+[THINKING]● Thinking: **Gathering RLS and SQL file context**
+[RUNNING]● Command: bash -lc 'ls migrations'
+[ERROR]● Command: bash -lc 'ls migrations'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for migration and mybatis files**
+[RUNNING]● Command: bash -lc "find . -name '20240713_catalog.sql'"
+[SUCCESS]● Command: bash -lc "find . -name '20240713_catalog.sql'"
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Checking for migration files**
+[RUNNING]● Command: bash -lc "rg --files -g '*.sql' modules | head"
+[SUCCESS]● Command: bash -lc "rg --files -g '*.sql' modules | head"
+[SUCCESS]⎿ modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql
+[SUCCESS]⎿ modules/co...
+[THINKING]● Thinking: **Searching for migration files**
+[RUNNING]● Command: bash -lc "rg --files -g '*catalog*.sql'"
+[SUCCESS]● Command: bash -lc "rg --files -g '*catalog*.sql'"
+[SUCCESS]⎿ tools/scripts/sample_catalog_loader.sql
+[THINKING]● Thinking: **Checking migration files location**
+[RUNNING]● Command: bash -lc 'ls modules/catalog/src/main/resources'
+[ERROR]● Command: bash -lc 'ls modules/catalog/src/main/resources'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Listing modules directory**
+[RUNNING]● Command: bash -lc 'ls modules'
+[SUCCESS]● Command: bash -lc 'ls modules'
+[SUCCESS]⎿ core-platform
+[THINKING]● Thinking: **Checking core-platform module contents**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform'
+[SUCCESS]⎿ api
+[SUCCESS]⎿ pom.xml
+[SUCCESS]⎿ src
+[SUCCESS]⎿ target
+[THINKING]● Thinking: **Inspecting database migration files**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/resources/db'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/resources/db'
+[SUCCESS]⎿ migrations
+[THINKING]● Thinking: **Listing items**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/resources/db/migrations'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/resources/db/migrations'
+[SUCCESS]⎿ V20260102__baseline_schema.sql
+[SUCCESS]⎿ V20260105__headless_oauth_clients.sql
+[SUCCESS]⎿ V20260106__reporting_aggregates...
+[THINKING]● Thinking: **Reviewing baseline schema file**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[SUCCESS]⎿ -- ============================================================================
+[SUCCESS]⎿ -- Village Storefron...
+[THINKING]● Thinking: **Preparing to review database migration files**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql'
+[SUCCESS]⎿ -- ============================================================================
+[SUCCESS]⎿ -- Village Storefron...
+[THINKING]● Thinking: **Verifying complete file content**
+[RUNNING]● Command: bash -lc "sed -n '200,360p' modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql"
+[SUCCESS]● Command: bash -lc "sed -n '200,360p' modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql"
+[SUCCESS]⎿ CREATE POLICY cart_items_isolation_policy ON cart_items
+[SUCCESS]⎿     FOR ALL
+[SUCCESS]⎿     USING (tenant_id = get_curre...
+[THINKING]● Thinking: **Retrieving earlier catalog lines**
+[RUNNING]● Command: bash -lc "sed -n '110,200p' modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql"
+[SUCCESS]● Command: bash -lc "sed -n '110,200p' modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql"
+[SUCCESS]⎿ ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
+[SUCCESS]⎿ ALTER TABLE api_keys FORCE ROW LEVEL SECURITY;
+[SUCCESS]⎿
+[SUCCESS]⎿ CREA...
+[THINKING]● Thinking: **Preparing to read datamodel_erd.mmd**
+[RUNNING]● Command: bash -lc 'cat docs/diagrams/datamodel_erd.mmd'
+[SUCCESS]● Command: bash -lc 'cat docs/diagrams/datamodel_erd.mmd'
+[SUCCESS]⎿ %% Village Storefront - Entity Relationship Diagram (Mermaid)
+[SUCCESS]⎿ %% Version: Baseline (2026-01-08)
+[SUCCESS]⎿ %%
+[SUCCESS]⎿ %...
+[THINKING]● Thinking: **Summarizing architecture and modules**
+[RUNNING]● Command: bash -lc "sed -n '360,420p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '360,420p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Rel(quarkusCore, addressValidation, "Validates addresses during checkout and account updates", "HTTP...
+[THINKING]● Thinking: **Selecting code files and gathering task context**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj=json.load(open('tasks_I2.json'))
+for task in obj:
+    if task['task_id']=='I2.T2':
+        import pprint
+        print(json.dumps(task, indent=2))
+        break
+PY"
+[ERROR]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj=json.load(open('tasks_I2.json'))
+for task in obj:
+    if task['task_id']=='I2.T2':
+        import pprint
+        print(json.dumps(task, indent=2))
+        break
+PY"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for tasks_I2.json file**
+[RUNNING]● Command: bash -lc "find . -name 'tasks_I2.json'"
+[SUCCESS]● Command: bash -lc "find . -name 'tasks_I2.json'"
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I2.json
+[THINKING]● Thinking: **Updating command with new path**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj=json.load(open('.codemachine/artifacts/tasks/tasks_I2.json'))
+for task in obj:
+    if task['task_id']=='I2.T2':
+        print(json.dumps(task, indent=2))
+        break
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj=json.load(open('.codemachine/artifacts/tasks/tasks_I2.json'))
+for task in obj:
+    if task['task_id']=='I2.T2':
+        print(json.dumps(task, indent=2))
+        break
+PY"
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I2.T2",
+[SUCCESS]⎿   "iteration_id": "I2",
+[SUCCESS]⎿   "iteration_goal": "Implement catalog + inventory d...
+[THINKING]● Thinking: **Preparing comprehensive context snippets**
+
+I’m gathering precise text snippets from the plan and architecture files to include contextual references like task 2.2 from iteration docs, module descriptions, data model overviews, and blueprint implementation notes focusing on PostgreSQL tenancy and RLS. Then, I’ll prepare migration file summaries highlighting naming conventions, schema details, and verification recommendations to guide further code work.
+[RUNNING]● Command: bash -lc 'rg -n "CREATE TABLE products" -n modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[SUCCESS]● Command: bash -lc 'rg -n "CREATE TABLE products" -n modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[SUCCESS]⎿ 211:CREATE TABLE products (
+[THINKING]● Thinking: **Extracting specific file lines**
+[RUNNING]● Command: bash -lc "sed -n '211,340p' modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql"
+[SUCCESS]● Command: bash -lc "sed -n '211,340p' modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql"
+[SUCCESS]⎿ CREATE TABLE products (
+[SUCCESS]⎿     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+[SUCCESS]⎿     tenant_id UUID NOT NU...
+[THINKING]● Thinking: **Searching for inventory_locations table**
+[RUNNING]● Command: bash -lc 'rg -n "inventory_locations" modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[ERROR]● Command: bash -lc 'rg -n "inventory_locations" modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Verifying table definitions**
+[RUNNING]● Command: bash -lc "sed -n '170,230p' modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql"
+[SUCCESS]● Command: bash -lc "sed -n '170,230p' modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql"
+[SUCCESS]⎿ CREATE INDEX idx_api_keys_tenant_id ON api_keys(tenant_id);
+[SUCCESS]⎿ CREATE INDEX idx_api_keys_user_id ON api...
+[THINKING]● Thinking: **Searching for inventory references**
+[RUNNING]● Command: bash -lc 'rg -n "inventory" modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[SUCCESS]● Command: bash -lc 'rg -n "inventory" modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql'
+[SUCCESS]⎿ 182:-- Product catalog, variants, categories, images, and inventory management
+[SUCCESS]⎿ 239:COMMENT ON COLUMN...
+[THINKING]● Thinking: **Checking inventory_locations presence**
+[RUNNING]● Command: bash -lc "rg -n \"inventory_locations\" -g '*.sql' -n modules/core-platform/src/main/resources/db/migrations"
+[SUCCESS]● Command: bash -lc "rg -n \"inventory_locations\" -g '*.sql' -n modules/core-platform/src/main/resources/db/migrations"
+[SUCCESS]⎿ modules/core-platform/src/main/resources/db/migrations/V20260106__reporting_aggregates.sql:84:    lo...
+[THINKING]● Thinking: **Searching for inventory_locations references**
+[RUNNING]● Command: bash -lc 'rg -n "inventory_locations" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "inventory_locations" -n'
+[SUCCESS]⎿ docs/diagrams/datamodel_erd.mmd:174:    inventory_locations {
+[SUCCESS]⎿ docs/diagrams/datamodel_erd.mmd:189:  ...
+[THINKING]● Thinking: **Inspecting InventoryLocation entity file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLocation.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLocation.java"
+[SUCCESS]⎿ package villagecompute.storefront.data.models;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.UU...
+[THINKING]● Thinking: **Identifying missing inventory tables and migrations**
+
+I see that the `InventoryLocation` entity exists but its corresponding table is missing, causing runtime issues; I need to highlight that a new migration must add `inventory_locations` and likely `inventory_levels` tables too. To guide properly, I plan to review key files, including the baseline migration, RLS migration, ERD, and especially the `InventoryLocation` and `InventoryLevel` entity source files to understand the domain models involved before creating migration instructions.
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java"
+[SUCCESS]⎿ package villagecompute.storefront.data.models;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.UU...
+[THINKING]● Thinking: **Selecting key files and gathering context**
+[RUNNING]● Command: bash -lc 'ls .codemachine/prompts'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/prompts'
+[SUCCESS]⎿ context.md
+[THINKING]● Thinking: **Displaying existing prompt content**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing comprehensive task context**
+
+I’m putting together a detailed overwrite of the context file for I2.T2, carefully gathering and organizing multiple precise snippets from the plan, implementation notes, system architecture, and data model sections. This includes highlighting relevant migration files, entity inconsistencies, and implementation tips to provide clear instructions and prepare the file content for a clean rewrite.
+[THINKING]● Thinking: **Compiling detailed architecture and implementation snippets**
+
+I'm assembling the data model overview with key entity bullets and summarizing four core files with actionable recommendations. Then, I’m drafting implementation tips covering migration patterns, naming, constraints, RLS policies, and partition guidance to ensure a coherent context for the task briefing file update.
+[THINKING]● Thinking: **Confirming current file content**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing to overwrite file with new content**
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T2",
+  "iteration_id": "I2",
+  "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
+  "description": "Create MyBatis migrations for catalog/inventory tables (products, variants, categories, collections, inventory_locations/levels) with indexes, RLS policies, partition seeds for inventory logs.",
+  "agent_type_hint": "DatabaseAgent",
+  "inputs": "ERD, Task I2.T1 schema expectations.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Forward/backward migrations, verification script ensuring RLS policies exist, README snippet for migration order.",
+  "acceptance_criteria": "`mvn -pl modules/catalog quarkus:dev` with dev Postgres applies migrations clean; `psql` check shows RLS policy referencing `current_setting('"'app.tenant_id')"'`; rollback script passes dry run.",
+  "dependencies": [
+    "I2.T1",
+    "I1.T5"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: task-i2-t2 (from 02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t2 -->
+*   **Task 2.2:**
+    *   **Task ID:** `I2.T2`
+    *   **Description:** Create MyBatis migrations for catalog/inventory tables (products, variants, categories, collections, inventory_locations/levels) with indexes, RLS policies, partition seeds for inventory logs.
+    *   **Agent Type Hint:** `DatabaseAgent`
+    *   **Inputs:** ERD, Task I2.T1 schema expectations.
+    *   **Input Files:** [`migrations/mybatis`, `docs/diagrams/erd.mmd`]
+    *   **Target Files:** [`migrations/mybatis/20240713_catalog.sql`, `migrations/mybatis/20240713_inventory.sql`]
+    *   **Deliverables:** Forward/backward migrations, verification script ensuring RLS policies exist, README snippet for migration order.
+    *   **Acceptance Criteria:** `mvn -pl modules/catalog quarkus:dev` with dev Postgres applies migrations clean; `psql` check shows RLS policy referencing `current_setting('"'app.tenant_id')"'`; rollback script passes dry run.
+    *   **Dependencies:** `I2.T1` (attributes) + `I1.T5` (tenant config).
+    *   **Parallelizable:** Yes.
+```
+
+### Context: section-2-implementation-notes (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-2-implementation-notes -->
+#### Section 2 Implementation Notes
+
+*   Modularization: Create Maven submodules for `core-platform`, `catalog`, `orders`, `consignment`, `loyalty`, `pos`, `media`, `admin-ui`, `storefront-ui`, and `platform-ops`. Each module enforces visibility boundaries using Java 9 module-info where feasible.
+*   Storefront build pipeline: Tailwind configs per tenant compile during deployment using design tokens stored in the database; Hot reloading exists only for development pods to avoid runtime CSS compilation in production.
+*   Admin SPA hosting: Quinoa plugin builds Vue assets, which are embedded as static resources served via Quarkus; caching headers differentiate between SPA shell (long-lived) and API responses (short-lived) to honor data freshness.
+*   PostgreSQL tenancy: All tables include `tenant_id` plus `created_by` metadata; migration scripts must include RLS policy definitions to prevent manual drift between schema and security rules.
+*   Object storage layering: Media uploads use presigned URLs generated by backend; processing jobs read from storage, write derived assets under `tenant_id/media_type/hash/size.ext`, and store metadata referencing both original and processed variants.
+*   CI/CD specifics: GitHub Actions matrix builds run JVM tests, native image builds, and frontend lint/test steps in parallel. Artifacts include OpenAPI specs, Tailwind token bundles, and Kubernetes manifests published as pipeline outputs.
+*   Infrastructure as Code: Use the Quarkus Kubernetes extension outputs as canonical manifests, but wrap them in Kustomize overlays per environment (`dev`, `staging`, `prod`). Secrets are provisioned via sealed-secrets or equivalent mechanism approved by security.
+*   Queue visibility: DelayedJob tables expose Grafana dashboards via Prometheus metrics for job latency, failure rates, and worker concurrency; architects must ensure new job types emit these metrics.
+*   Payment sandboxing: Stripe Connect onboarding flows require separate webhook endpoints for sandbox and production; the Standard Kit mandates environment variables controlling API keys with zero hardcoding.
+*   Media processing dependencies: FFmpeg binaries packaged via container multi-stage build; health checks verify binary presence and version before pods become ready.
+*   Browser compatibility: PrimeUI/PrimeVue components must follow accessibility guidelines WCAG 2.1 AA; linting includes axe-core tests in CI to maintain compliance.
+*   CDN strategy: Static assets served through Cloudflare (or equivalent) with cache-busting hashed filenames; storefront-critical HTML remains server-rendered to preserve SEO and speed.
+```
+
+### Context: 3-proposed-architecture (from 02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.5. Component Diagram (C4 Level 3 - Quarkus API Core):**
+    *   **Description:** Focuses on the Quarkus API container, highlighting components mandated in the foundation: Tenant Access Gateway, Identity & Session Service, Catalog & Inventory Domain, Consignment Module, Checkout & Order Orchestrator, Payment Integration Layer, Loyalty & Rewards Module, POS Processor, Media Pipeline Controller, Reporting Projection Coordinator, Feature Flag Service, and Platform Admin Backend.
+    *   **Diagram (PlantUML):**
+        ~~~plantuml
+        @startuml
+        !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+        LAYOUT_LEFT_RIGHT()
+        Container_Boundary(quarkusCoreBoundary, "Quarkus API Core") {
+            Component(tenantGateway, "Tenant Access Gateway", "JAX-RS ContainerRequestFilter", "Parses Host/custom domain, resolves tenant, populates TenantContext, enforces CORS.")
+            Component(identityService, "Identity & Session Service", "JWT Issuer + Session Logger", "Handles authentication, refresh tokens, session logs, MFA, and impersonation controls.")
+            Component(catalogModule, "Catalog & Inventory Module", "Panache Repositories", "Manages products, variants, categories, collections, inventory locations, adjustments, and events.")
+            Component(consignmentModule, "Consignment Module", "Domain Service", "Manages consignor profiles, commission rules, intake batches, payouts, and notifications.")
+            Component(checkoutOrchestrator, "Checkout & Order Orchestrator", "Service Layer", "Coordinates cart persistence, address validation, shipping rates, payments, and order state transitions.")
+            Component(paymentIntegration, "Payment Integration Layer", "PaymentProvider Interfaces", "Wraps Stripe (and future providers) for charge, refund, capture, payout, and webhook idempotency.")
+            Component(loyaltyModule, "Loyalty & Rewards Module", "Domain Service", "Handles points accrual, redemption, tier upgrades, expirations, and ledger entries.")
+            Component(posProcessor, "POS & Offline Processor", "Service Layer", "Processes POS carts, offline transaction reconciliation, hardware integration hooks.")
+            Component(mediaController, "Media Pipeline Controller", "Service + Job Enqueuer", "Validates uploads, enforces limits, queues FFmpeg jobs, and tracks media metadata.")
+            Component(reportingCoordinator, "Reporting & Analytics Coordinator", "Projection Builder", "Consumes domain events, builds aggregates, and exposes report APIs.")
+            Component(featureFlagService, "Feature Flag Service", "Caffeine-backed Service", "Loads platform + tenant overrides, enforces kill switches, logs usage.")
+            Component(platformAdminBackend, "Platform Admin Backend", "SaaS Governance API", "Provides store lifecycle management, impersonation workflows, cross-tenant analytics.")
+            Component(backgroundScheduler, "Background Job Scheduler", "Quarkus Scheduler", "Enqueues recurring jobs (archival, certificate renewal, payout audits).")
+        }
+        Rel(tenantGateway, catalogModule, "Applies tenant filters to catalog queries", "CDI")
+        Rel(catalogModule, checkoutOrchestrator, "Supplies product availability, pricing, and inventory policies", "CDI")
+        Rel(catalogModule, consignmentModule, "Shares variant references for consignor assignments via domain services", "CDI")
+        Rel(mediaController, catalogModule, "Updates media references and signed URL metadata", "CDI")
+        Rel(featureFlagService, catalogModule, "Controls exposure of beta catalog features", "Caffeine Cache")
+        @enduml
+        ~~~
+```
+
+### Context: section-3-data-model (from 02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.6. Data Model Overview & ERD:**
+    *   **Description:** Captures the multi-tenant data entities defined in Foundation Section 5.0, covering tenancy, users, customers, sessions, catalog, inventory, consignment, carts, orders, payments, shipments, returns, loyalty, feature flags, audit events, and background jobs. Every tenant-scoped table contains tenant_id and adheres to RLS policies.
+    *   **Key Entities:**
+        - `Tenant` governs store metadata, plan, status, branding, and configuration flags.
+        - `StoreUser` stores merchant/staff accounts with hashed passwords, roles, and status.
+        - `Customer` holds shopper identities, authentication, loyalty balances, and preferences.
+        - `Product` and `Variant` capture catalog hierarchy, SKUs, pricing, inventory policy, and media references.
+        - `InventoryLocation` and `InventoryLevel` define stock tracking across warehouses, stores, and suppliers.
+        - `Consignor` and `ConsignmentItem` store vendor agreements, commission rules, item aging, and payout state.
+        - `Cart`, `CartItem`, and `Order` maintain purchase journeys including discounts, shipping, taxes, and timeline events.
+        - `PaymentIntent` and `Refund` represent provider-agnostic payment operations with provider references and statuses.
+        - `Shipment` and `ReturnAuthorization` capture fulfillment and reverse logistics data.
+        - `LoyaltyLedgerEntry` tracks points accrual, redemption, tier progression, and expirations.
+        - `FeatureFlag`, `AuditEvent`, and `BackgroundJob` provide platform governance, observability, and async orchestration data.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql`
+    *   **Summary:** 800+ line baseline migration that creates every tenant-scoped table (including categories, products, product_variants, product_categories, product_images, inventory_levels) using the MyBatis `-- +migrate Up/Down` convention, complete with indexes, unique constraints, and table/column comments plus a `schema_version_history` shim for Flyway compatibility.
+    *   **Recommendation:** Follow the same structure when adding catalog/inventory migrations—declare tables with `tenant_id` FKs (`ON DELETE CASCADE`), add slug/SKU uniqueness, include `COMMENT ON` statements, and update the Down section in reverse dependency order to keep rollbacks deterministic.
+*   **File:** `modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql`
+    *   **Summary:** Defines helper functions `set_current_tenant_id`/`get_current_tenant_id` and enables RLS (with named policies) on every tenant table by forcing `tenant_id = get_current_tenant_id()`; catalog tables (categories, products, product_variants, product_categories, product_images, inventory_levels) already follow this template.
+    *   **Recommendation:** New tables must include matching `ALTER TABLE ... ENABLE/FORCE ROW LEVEL SECURITY` statements and policies referencing `get_current_tenant_id()`. Either extend this migration or add a follow-up script so `psql '"\\d+"'` shows policies for the new relations called out in the acceptance criteria.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLocation.java`
+    *   **Summary:** Panache entity for an `inventory_locations` table (unique constraint `(tenant_id, code)`, fields for name, type, JSONB address, boolean `active`, and timestamp hooks seeded via `TenantContext`).
+    *   **Recommendation:** Ensure the migration creates this table exactly as modeled (UUID PK, tenant FK with `ON DELETE CASCADE`, varchar lengths, `address JSONB`, `active BOOLEAN DEFAULT TRUE`, `created_at/updated_at TIMESTAMPTZ`) so the entity maps cleanly without further code changes.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java`
+    *   **Summary:** Entity for `inventory_levels` that currently stores a free-form `location` string per variant, tracks `quantity`, `reserved`, and includes a `version BIGINT` for optimistic locking plus timestamp hooks.
+    *   **Recommendation:** Decide whether to keep the string `location` column or move to an FK (`inventory_locations.id`) as promised in the ERD; whichever schema you author, update the migration (and entity/tests if needed) so the unique constraint, indexes, and version column match the runtime model.
+
+### Implementation Tips & Notes
+*   **Tip:** Migrations live under `modules/core-platform/src/main/resources/db/migrations` and still use the MyBatis markers (`-- +migrate Up/Down`) even though the files are Flyway-compatible; keep that format so automation scripts (`mvn ... flyway:migrate`) and documentation stay consistent.
+*   **Tip:** The ERD (`docs/diagrams/datamodel_erd.mmd`) already defines column names, data types, and relationships for `inventory_locations`, `inventory_levels`, and planned inventory logs—reuse those definitions verbatim to avoid contract drift.
+*   **Tip:** After creating new tenant tables, immediately add `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` plus named policies referencing `get_current_tenant_id()`; the acceptance criteria explicitly checks for `current_setting('"'app.tenant_id')"'` so skipping this step will fail verification.
+*   **Tip:** Downstream reporting migrations (`modules/core-platform/src/main/resources/db/migrations/V20260106__reporting_aggregates.sql`) reference `inventory_locations(id)` today even though the table does not exist—once you ship the new schema, re-run Flyway locally to ensure those later migrations now succeed without missing-table errors.
+*   **Note:** Task inputs mention `migrations/mybatis/20240713_*.sql`, but the actual repo organizes migrations by Flyway-style version files; align with the `VYYYYMMDD__description.sql` naming and update the README snippet so future agents understand the divergence.
+*   **Note:** Include the requested verification guidance in `README.md` (or `docs/rls-setup.md`) describing how to query `pg_policies`/`pg_tables` so reviewers can quickly validate that the new catalog/inventory tables have active RLS policies.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T2",
+  "iteration_id": "I2",
+  "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
+  "description": "Create MyBatis migrations for catalog/inventory tables (products, variants, categories, collections, inventory_locations/levels) with indexes, RLS policies, partition seeds for inventory logs.",
+  "agent_type_hint": "DatabaseAgent",
+  "inputs": "ERD, Task I2.T1 schema expectations.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Forward/backward migrations, verification script ensuring RLS policies exist, README snippet for migration order.",
+  "acceptance_criteria": "`mvn -pl modules/catalog quarkus:dev` with dev Postgres applies migrations clean; `psql` check shows RLS policy referencing `current_setting('"'app.tenant_id')"'`; rollback script passes dry run.",
+  "dependencies": [
+    "I2.T1",
+    "I1.T5"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: task-i2-t2 (from 02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t2 -->
+*   **Task 2.2:**
+    *   **Task ID:** `I2.T2`
+    *   **Description:** Create MyBatis migrations for catalog/inventory tables (products, variants, categories, collections, inventory_locations/levels) with indexes, RLS policies, partition seeds for inventory logs.
+    *   **Agent Type Hint:** `DatabaseAgent`
+    *   **Inputs:** ERD, Task I2.T1 schema expectations.
+    *   **Input Files:** [`migrations/mybatis`, `docs/diagrams/erd.mmd`]
+    *   **Target Files:** [`migrations/mybatis/20240713_catalog.sql`, `migrations/mybatis/20240713_inventory.sql`]
+    *   **Deliverables:** Forward/backward migrations, verification script ensuring RLS policies exist, README snippet for migration order.
+    *   **Acceptance Criteria:** `mvn -pl modules/catalog quarkus:dev` with dev Postgres applies migrations clean; `psql` check shows RLS policy referencing `current_setting('"'app.tenant_id')"'`; rollback script passes dry run.
+    *   **Dependencies:** `I2.T1` (attributes) + `I1.T5` (tenant config).
+    *   **Parallelizable:** Yes.
+```
+
+### Context: section-2-implementation-notes (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-2-implementation-notes -->
+#### Section 2 Implementation Notes
+
+*   Modularization: Create Maven submodules for `core-platform`, `catalog`, `orders`, `consignment`, `loyalty`, `pos`, `media`, `admin-ui`, `storefront-ui`, and `platform-ops`. Each module enforces visibility boundaries using Java 9 module-info where feasible.
+*   Storefront build pipeline: Tailwind configs per tenant compile during deployment using design tokens stored in the database; Hot reloading exists only for development pods to avoid runtime CSS compilation in production.
+*   Admin SPA hosting: Quinoa plugin builds Vue assets, which are embedded as static resources served via Quarkus; caching headers differentiate between SPA shell (long-lived) and API responses (short-lived) to honor data freshness.
+*   PostgreSQL tenancy: All tables include `tenant_id` plus `created_by` metadata; migration scripts must include RLS policy definitions to prevent manual drift between schema and security rules.
+*   Object storage layering: Media uploads use presigned URLs generated by backend; processing jobs read from storage, write derived assets under `tenant_id/media_type/hash/size.ext`, and store metadata referencing both original and processed variants.
+*   CI/CD specifics: GitHub Actions matrix builds run JVM tests, native image builds, and frontend lint/test steps in parallel. Artifacts include OpenAPI specs, Tailwind token bundles, and Kubernetes manifests published as pipeline outputs.
+*   Infrastructure as Code: Use the Quarkus Kubernetes extension outputs as canonical manifests, but wrap them in Kustomize overlays per environment (`dev`, `staging`, `prod`). Secrets are provisioned via sealed-secrets or equivalent mechanism approved by security.
+*   Queue visibility: DelayedJob tables expose Grafana dashboards via Prometheus metrics for job latency, failure rates, and worker concurrency; architects must ensure new job types emit these metrics.
+*   Payment sandboxing: Stripe Connect onboarding flows require separate webhook endpoints for sandbox and production; the Standard Kit mandates environment variables controlling API keys with zero hardcoding.
+*   Media processing dependencies: FFmpeg binaries packaged via container multi-stage build; health checks verify binary presence and version before pods become ready.
+*   Browser compatibility: PrimeUI/PrimeVue components must follow accessibility guidelines WCAG 2.1 AA; linting includes axe-core tests in CI to maintain compliance.
+*   CDN strategy: Static assets served through Cloudflare (or equivalent) with cache-busting hashed filenames; storefront-critical HTML remains server-rendered to preserve SEO and speed.
+```
+
+### Context: 3-proposed-architecture (from 02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.5. Component Diagram (C4 Level 3 - Quarkus API Core):**
+    *   **Description:** Focuses on the Quarkus API container, highlighting components mandated in the foundation: Tenant Access Gateway, Identity & Session Service, Catalog & Inventory Domain, Consignment Module, Checkout & Order Orchestrator, Payment Integration Layer, Loyalty & Rewards Module, POS Processor, Media Pipeline Controller, Reporting Projection Coordinator, Feature Flag Service, and Platform Admin Backend.
+    *   **Diagram (PlantUML):**
+        ~~~plantuml
+        @startuml
+        !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+        LAYOUT_LEFT_RIGHT()
+        Container_Boundary(quarkusCoreBoundary, "Quarkus API Core") {
+            Component(tenantGateway, "Tenant Access Gateway", "JAX-RS ContainerRequestFilter", "Parses Host/custom domain, resolves tenant, populates TenantContext, enforces CORS.")
+            Component(identityService, "Identity & Session Service", "JWT Issuer + Session Logger", "Handles authentication, refresh tokens, session logs, MFA, and impersonation controls.")
+            Component(catalogModule, "Catalog & Inventory Module", "Panache Repositories", "Manages products, variants, categories, collections, inventory locations, adjustments, and events.")
+            Component(consignmentModule, "Consignment Module", "Domain Service", "Manages consignor profiles, commission rules, intake batches, payouts, and notifications.")
+            Component(checkoutOrchestrator, "Checkout & Order Orchestrator", "Service Layer", "Coordinates cart persistence, address validation, shipping rates, payments, and order state transitions.")
+            Component(paymentIntegration, "Payment Integration Layer", "PaymentProvider Interfaces", "Wraps Stripe (and future providers) for charge, refund, capture, payout, and webhook idempotency.")
+            Component(loyaltyModule, "Loyalty & Rewards Module", "Domain Service", "Handles points accrual, redemption, tier upgrades, expirations, and ledger entries.")
+            Component(posProcessor, "POS & Offline Processor", "Service Layer", "Processes POS carts, offline transaction reconciliation, hardware integration hooks.")
+            Component(mediaController, "Media Pipeline Controller", "Service + Job Enqueuer", "Validates uploads, enforces limits, queues FFmpeg jobs, and tracks media metadata.")
+            Component(reportingCoordinator, "Reporting & Analytics Coordinator", "Projection Builder", "Consumes domain events, builds aggregates, and exposes report APIs.")
+            Component(featureFlagService, "Feature Flag Service", "Caffeine-backed Service", "Loads platform + tenant overrides, enforces kill switches, logs usage.")
+            Component(platformAdminBackend, "Platform Admin Backend", "SaaS Governance API", "Provides store lifecycle management, impersonation workflows, cross-tenant analytics.")
+            Component(backgroundScheduler, "Background Job Scheduler", "Quarkus Scheduler", "Enqueues recurring jobs (archival, certificate renewal, payout audits).")
+        }
+        Rel(tenantGateway, catalogModule, "Applies tenant filters to catalog queries", "CDI")
+        Rel(catalogModule, checkoutOrchestrator, "Supplies product availability, pricing, and inventory policies", "CDI")
+        Rel(catalogModule, consignmentModule, "Shares variant references for consignor assignments via domain services", "CDI")
+        Rel(mediaController, catalogModule, "Updates media references and signed URL metadata", "CDI")
+        Rel(featureFlagService, catalogModule, "Controls exposure of beta catalog features", "Caffeine Cache")
+        @enduml
+        ~~~
+```
+
+### Context: section-3-data-model (from 02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.6. Data Model Overview & ERD:**
+    *   **Description:** Captures the multi-tenant data entities defined in Foundation Section 5.0, covering tenancy, users, customers, sessions, catalog, inventory, consignment, carts, orders, payments, shipments, returns, loyalty, feature flags, audit events, and background jobs. Every tenant-scoped table contains tenant_id and adheres to RLS policies.
+    *   **Key Entities:**
+        - `Tenant` governs store metadata, plan, status, branding, and configuration flags.
+        - `StoreUser` stores merchant/staff accounts with hashed passwords, roles, and status.
+        - `Customer` holds shopper identities, authentication, loyalty balances, and preferences.
+        - `Product` and `Variant` capture catalog hierarchy, SKUs, pricing, inventory policy, and media references.
+        - `InventoryLocation` and `InventoryLevel` define stock tracking across warehouses, stores, and suppliers.
+        - `Consignor` and `ConsignmentItem` store vendor agreements, commission rules, item aging, and payout state.
+        - `Cart`, `CartItem`, and `Order` maintain purchase journeys including discounts, shipping, taxes, and timeline events.
+        - `PaymentIntent` and `Refund` represent provider-agnostic payment operations with provider references and statuses.
+        - `Shipment` and `ReturnAuthorization` capture fulfillment and reverse logistics data.
+        - `LoyaltyLedgerEntry` tracks points accrual, redemption, tier progression, and expirations.
+        - `FeatureFlag`, `AuditEvent`, and `BackgroundJob` provide platform governance, observability, and async orchestration data.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql`
+    *   **Summary:** 800+ line baseline migration that creates every tenant-scoped table (including categories, products, product_variants, product_categories, product_images, inventory_levels) using the MyBatis `-- +migrate Up/Down` convention, complete with indexes, unique constraints, and table/column comments plus a `schema_version_history` shim for Flyway compatibility.
+    *   **Recommendation:** Follow the same structure when adding catalog/inventory migrations—declare tables with `tenant_id` FKs (`ON DELETE CASCADE`), add slug/SKU uniqueness, include `COMMENT ON` statements, and update the Down section in reverse dependency order to keep rollbacks deterministic.
+*   **File:** `modules/core-platform/src/main/resources/db/migrations/V20260113__enable_rls_policies.sql`
+    *   **Summary:** Defines helper functions `set_current_tenant_id`/`get_current_tenant_id` and enables RLS (with named policies) on every tenant table by forcing `tenant_id = get_current_tenant_id()`; catalog tables (categories, products, product_variants, product_categories, product_images, inventory_levels) already follow this template.
+    *   **Recommendation:** New tables must include matching `ALTER TABLE ... ENABLE/FORCE ROW LEVEL SECURITY` statements and policies referencing `get_current_tenant_id()`. Either extend this migration or add a follow-up script so `psql '"\\d+"'` shows policies for the new relations called out in the acceptance criteria.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLocation.java`
+    *   **Summary:** Panache entity for an `inventory_locations` table (unique constraint `(tenant_id, code)`, fields for name, type, JSONB address, boolean `active`, and timestamp hooks seeded via `TenantContext`).
+    *   **Recommendation:** Ensure the migration creates this table exactly as modeled (UUID PK, tenant FK with `ON DELETE CASCADE`, varchar lengths, `address JSONB`, `active BOOLEAN DEFAULT TRUE`, `created_at/updated_at TIMESTAMPTZ`) so the entity maps cleanly without further code changes.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/models/InventoryLevel.java`
+    *   **Summary:** Entity for `inventory_levels` that currently stores a free-form `location` string per variant, tracks `quantity`, `reserved`, and includes a `version BIGINT` for optimistic locking plus timestamp hooks.
+    *   **Recommendation:** Decide whether to keep the string `location` column or move to an FK (`inventory_locations.id`) as promised in the ERD; whichever schema you author, update the migration (and entity/tests if needed) so the unique constraint, indexes, and version column match the runtime model.
+
+### Implementation Tips & Notes
+*   **Tip:** Migrations live under `modules/core-platform/src/main/resources/db/migrations` and still use the MyBatis markers (`-- +migrate Up/Down`) even though the files are Flyway-compatible; keep that format so automation scripts (`mvn ... flyway:migrate`) and documentation stay consistent.
+*   **Tip:** The ERD (`docs/diagrams/datamodel_erd.mmd`) already defines column names, data types, and relationships for `inventory_locations`, `inventory_levels`, and planned inventory logs—reuse those definitions verbatim to avoid contract drift.
+*   **Tip:** After creating new tenant tables, immediately add `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` plus named policies referencing `get_current_tenant_id()`; the acceptance criteria explicitly checks for `current_setting('"'app.tenant_id')"'` so skipping this step will fail verification.
+*   **Tip:** Downstream reporting migrations (`modules/core-platform/src/main/resources/db/migrations/V20260106__reporting_aggregates.sql`) reference `inventory_locations(id)` today even though the table does not exist—once you ship the new schema, re-run Flyway locally to ensure those later migrations now succeed without missing-table errors.
+*   **Note:** Task inputs mention `migrations/mybatis/20240713_*.sql`, but the actual repo organizes migrations by Flyway-style version files; align with the `VYYYYMMDD__description.sql` naming and update the README snippet so future agents understand the divergence.
+*   **Note:** Include the requested verification guidance in `README.md` (or `docs/rls-setup.md`) describing how to query `pg_policies`/`pg_tables` so reviewers can quickly validate that the new catalog/inventory tables have active RLS policies.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Verifying file update**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing final summary message**
+[RUNNING]● Message: **Briefing Update**
+- Replaced `.codemachine/prompts/context.md:1` with a fresh Task Briefing for `I2.T2`, including the task’s JSON spec, targeted excerpts from the iteration plan and architecture blueprints, summaries of the key migration/RLS/entity files, and actionable implementation tips for the upcoming catalog/inventory migrations.
+
+Let me know if you want additional context gathered or further breakdowns before handing the task to the coder.
+⏱️  Tokens: 4295008in/23442out (1952000 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

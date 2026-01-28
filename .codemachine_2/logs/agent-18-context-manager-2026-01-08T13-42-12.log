@@ -1,0 +1,498 @@
+[CYAN]===╭─ Agent 18: context-manager ────────────────────────────────────
+[CYAN]   Started: 2026-01-08 13:42:12
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Running recursive directory listing**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Identifying next task and locating architecture files**
+
+I’m focusing on picking the first incomplete task whose dependencies are done, settling on I1.T3 about the Mermaid ERD for the multi-tenant schema. To gather context, I plan to locate relevant sections in architecture and plan manifests, especially in files like 01_Blueprint. Since I have a ground truth file map but incomplete visibility on 01_*.md files, I’m considering using `rg --files -g '01_*'` to precisely find these architecture docs. This will help me extract info about the data model and artifacts referenced in the task description.
+[RUNNING]● Command: bash -lc "rg --files -g '01_*.md'"
+[ERROR]● Command: bash -lc "rg --files -g '01_*.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for blueprint files**
+[RUNNING]● Command: bash -lc "rg --files | grep '01_Blueprint_Foundation.md'"
+[ERROR]● Command: bash -lc "rg --files | grep '01_Blueprint_Foundation.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for specific markdown file**
+[RUNNING]● Command: bash -lc "rg --files docs | grep 'Blueprint'"
+[ERROR]● Command: bash -lc "rg --files docs | grep 'Blueprint'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for Blueprint files**
+[RUNNING]● Command: bash -lc "rg --files | grep -i 'blueprint'"
+[ERROR]● Command: bash -lc "rg --files | grep -i 'blueprint'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for architecture documents**
+[RUNNING]● Command: bash -lc "find . -maxdepth 3 -type f -name '0*.md'"
+[SUCCESS]● Command: bash -lc "find . -maxdepth 3 -type f -name '0*.md'"
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Searching for plan documents**
+[RUNNING]● Command: bash -lc 'rg -n "Plan Overview"'
+[ERROR]● Command: bash -lc 'rg -n "Plan Overview"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Expanding search for blueprint files**
+[RUNNING]● Command: bash -lc "find .. -name '01_Blueprint_Foundation.md'"
+[SUCCESS]● Command: bash -lc "find .. -name '01_Blueprint_Foundation.md'"
+[SUCCESS]⎿ ../village-storefront/.codemachine/artifacts/architecture/01_Blueprint_Foundation.md
+[THINKING]● Thinking: **Planning targeted file search**
+[RUNNING]● Command: bash -lc 'rg -n "ERD" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[ERROR]● Command: bash -lc 'rg -n "ERD" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Selecting relevant document sections**
+[RUNNING]● Command: bash -lc "sed -n '43,140p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '43,140p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ <!-- anchor: section-4-blueprint -->
+[SUCCESS]⎿ ### **4.0 The "Blueprint" (Core Components & Boundaries)**
+[SUCCESS]⎿
+[SUCCESS]⎿ *  ...
+[THINKING]● Thinking: **Continuing file viewing from line 100**
+[RUNNING]● Command: bash -lc "sed -n '140,260p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '140,260p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ *   Storefront build pipeline: Tailwind configs per tenant compile during deployment using design to...
+[THINKING]● Thinking: **Extracting data model snippet**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/01_Blueprint_Foundation.md').read_text()
+start = text.index('<"'!-- anchor: section-5-contract -->'"')
+end = text.find('<"'!-- anchor: section-6-safety-net -->'"', start)
+print(text[start:end])
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/01_Blueprint_Foundation.md').read_text()
+start = text.index('<"'!-- anchor: section-5-contract -->'"')
+end = text.find('<"'!-- anchor: section-6-safety-net -->'"', start)
+print(text[start:end])
+PY"
+[SUCCESS]⎿ <!-- anchor: section-5-contract -->
+[SUCCESS]⎿ ### **5.0 The "Contract" (API & Data Definitions)**
+[SUCCESS]⎿
+[SUCCESS]⎿ *   **Prima...
+[THINKING]● Thinking: **Searching for plan manifest file**
+[RUNNING]● Command: bash -lc "find .. -name '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]● Command: bash -lc "find .. -name '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]⎿ ../.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md
+[SUCCESS]⎿ ../village-storefront/.codemachine/arti...
+[THINKING]● Thinking: **Clarifying plan file location and extracting snippet**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+path = Path('.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md')
+text = path.read_text()
+start = text.index('<"'!-- anchor: key-architectural-artifacts -->'"')
+end = text.find('<"'!-- anchor: directory-structure -->'"', start)
+print(text[start:end])
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+path = Path('.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md')
+text = path.read_text()
+start = text.index('<"'!-- anchor: key-architectural-artifacts -->'"')
+end = text.find('<"'!-- anchor: directory-structure -->'"', start)
+print(text[start:end])
+PY"
+[SUCCESS]⎿ <!-- anchor: key-architectural-artifacts -->
+[SUCCESS]⎿ ## 2.1. Key Architectural Artifacts Planned
+[SUCCESS]⎿
+[SUCCESS]⎿ *   System...
+[THINKING]● Thinking: **Planning relevant snippet extraction**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/01_Blueprint_Foundation.md').read_text()
+start = text.index('<"'!-- anchor: section-2-implementation-notes -->'"')
+end = text.find('<"'!-- anchor: section-3-enforcement-playbooks -->'"', start)
+print(text[start:end])
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+from pathlib import Path
+text = Path('.codemachine/artifacts/architecture/01_Blueprint_Foundation.md').read_text()
+start = text.index('<"'!-- anchor: section-2-implementation-notes -->'"')
+end = text.find('<"'!-- anchor: section-3-enforcement-playbooks -->'"', start)
+print(text[start:end])
+PY"
+[SUCCESS]⎿ <!-- anchor: section-2-implementation-notes -->
+[SUCCESS]⎿ #### Section 2 Implementation Notes
+[SUCCESS]⎿
+[SUCCESS]⎿ *   Modularizat...
+[THINKING]● Thinking: **Preparing data model and ERD inspection**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/diagrams/datamodel_erd.puml"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/diagrams/datamodel_erd.puml"
+[SUCCESS]⎿ @startuml datamodel_erd
+[SUCCESS]⎿ !theme plain
+[SUCCESS]⎿
+[SUCCESS]⎿ title Village Storefront - Entity Relationship Diagram (ERD)
+[SUCCESS]⎿ n...
+[THINKING]● Thinking: **Evaluating files for ERD briefing**
+[RUNNING]● Command: bash -lc 'wc -l docs/diagrams/datamodel_erd.puml'
+[SUCCESS]● Command: bash -lc 'wc -l docs/diagrams/datamodel_erd.puml'
+[SUCCESS]⎿ 579 docs/diagrams/datamodel_erd.puml
+[THINKING]● Thinking: **Continuing file reading in segments**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' docs/diagrams/datamodel_erd.puml"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' docs/diagrams/datamodel_erd.puml"
+[SUCCESS]⎿ entity "product_categories" as product_categories {
+[SUCCESS]⎿     * **tenant_id** : UUID <<PK,FK>>
+[SUCCESS]⎿     * **pro...
+[THINKING]● Thinking: **Continuing to review code lines**
+[RUNNING]● Command: bash -lc "sed -n '400,579p' docs/diagrams/datamodel_erd.puml"
+[SUCCESS]● Command: bash -lc "sed -n '400,579p' docs/diagrams/datamodel_erd.puml"
+[SUCCESS]⎿ ' =======================
+[SUCCESS]⎿ ' CONSIGNMENT MODULE
+[SUCCESS]⎿ ' =======================
+[SUCCESS]⎿ package "Consignment" {
+[SUCCESS]⎿   e...
+[THINKING]● Thinking: **Checking ADR-001-tenancy document**
+[RUNNING]● Command: bash -lc 'cat docs/adr/ADR-001-tenancy.md'
+[SUCCESS]● Command: bash -lc 'cat docs/adr/ADR-001-tenancy.md'
+[SUCCESS]⎿ # ADR-001: Multi-Tenancy & Tenant Isolation Strategy
+[SUCCESS]⎿
+[SUCCESS]⎿ **Status:** Accepted
+[SUCCESS]⎿ **Date:** 2026-01-02
+[SUCCESS]⎿ **De...
+[THINKING]● Thinking: **Gathering context and planning references**
+
+I’m organizing which files to include for the final task briefing, focusing on two main docs plus considering a third. I’m also thinking through how to precisely reference relevant line numbers in files like the datamodel ERD to provide clear, clickable citations in the summary and recommendations. This will help me build a thorough and well-cited briefing document.
+[RUNNING]● Command: bash -lc "nl -ba docs/diagrams/datamodel_erd.puml | sed -n '1,80p'"
+[SUCCESS]● Command: bash -lc "nl -ba docs/diagrams/datamodel_erd.puml | sed -n '1,80p'"
+[SUCCESS]⎿ 1	@startuml datamodel_erd
+[SUCCESS]⎿      2	!theme plain
+[SUCCESS]⎿      3	
+[SUCCESS]⎿      4	title Village Storefront - Entity Relat...
+[THINKING]● Thinking: **Preparing detailed document references**
+
+I’m organizing references to key documentation lines and snippets for a rich summary, including PlantUML ERD, ADR files, and implementation notes. I’m planning to integrate context from various architecture sections and assess which files to include fully or partially, ensuring clear recommendations and cross-references for tenant isolation and RLS policies.
+[RUNNING]● Command: bash -lc 'cat docs/quality/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'cat docs/quality/tenant_isolation.md'
+[SUCCESS]⎿ # Tenant Isolation Test Suite
+[SUCCESS]⎿
+[SUCCESS]⎿ **Status:** Active
+[SUCCESS]⎿ **Owner:** Quality Engineering
+[SUCCESS]⎿ **Last Updated:** 2...
+[THINKING]● Thinking: **Preparing final references and task data**
+
+I’m organizing details to include this file’s reference in the final output, especially noting relevance to RLS testing. Next, I plan to extract precise task information for `task_id` I1.T3 from the root tasks_I1.json file, verifying it matches earlier data, so the final instructions are accurate and complete.
+[RUNNING]● Command: bash -lc "rg -n \"\\\"task_id\\\": \\\"I1.T3\\\"\" -n tasks_I1.json"
+[ERROR]● Command: bash -lc "rg -n \"\\\"task_id\\\": \\\"I1.T3\\\"\" -n tasks_I1.json"
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for tasks_I1.json file**
+[RUNNING]● Command: bash -lc "find . -name 'tasks_I1.json'"
+[SUCCESS]● Command: bash -lc "find . -name 'tasks_I1.json'"
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I1.json
+[THINKING]● Thinking: **Preparing to parse JSON file**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+path = Path('.codemachine/artifacts/tasks/tasks_I1.json')
+data = json.loads(path.read_text())
+for obj in data:
+    if obj['task_id'] == 'I1.T3':
+        import json as js
+        print(js.dumps(obj, indent=2))
+        break
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+path = Path('.codemachine/artifacts/tasks/tasks_I1.json')
+data = json.loads(path.read_text())
+for obj in data:
+    if obj['task_id'] == 'I1.T3':
+        import json as js
+        print(js.dumps(obj, indent=2))
+        break
+PY"
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I1.T3",
+[SUCCESS]⎿   "iteration_id": "I1",
+[SUCCESS]⎿   "iteration_goal": "Stand up repository scaffolding...
+[THINKING]● Thinking: **Preparing to update context file**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Outlining task briefing content**
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T3",
+  "iteration_id": "I1",
+  "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+  "description": "Produce Mermaid ERD capturing multi-tenant schema (Tenant, StoreUser, Customer, SessionLog, FeatureFlag, Product, Variant, Inventory, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, Shipment, Return, LoyaltyLedger, GiftCard, StoreCredit, BackgroundJob, WebhookEvent, AuditEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket) with RLS annotations.",
+  "agent_type_hint": "DatabaseAgent",
+  "inputs": "Requirements data model, Section 2.1 artifacts list.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "ERD source, short narrative describing tenancy columns, indices, partition strategy.",
+  "acceptance_criteria": "Mermaid renders; each table includes tenant_id + metadata; doc explains RLS policy template, partitioned tables, archival approach; reviewed with Identity + Reporting stakeholders.",
+  "dependencies": [
+    "I1.T1"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: 5.0 The "Contract" (API & Data Definitions) (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-5-contract -->
+### **5.0 The "Contract" (API & Data Definitions)**
+
+*   **Primary API Style:** RESTful APIs defined spec-first via OpenAPI 3.0; admin SPA and storefront both consume these endpoints, and headless integrations re-use the same definitions with tenant-aware auth.
+*   **Data Model - Core Entities:**
+    *   **Tenant:** `id (UUID)`, `subdomain`, `custom_domains[]`, `plan`, `status`, `base_currency`, `branding`, `config_flags`, `created_at`, `suspended_at`.
+    *   **StoreUser:** `id`, `tenant_id`, `email`, `hashed_password`, `roles[]`, `permissions`, `status`, `last_login_at`, `mfa_secret`, `staff_profile`.
+    *   **Customer:** `id`, `tenant_id`, `email`, `password_hash`, `name`, `addresses[]`, `phone`, `loyalty_balance`, `preferences`, `created_at`.
+    *   **SessionLog:** `id`, `user_type`, `user_id`, `tenant_id`, `ip`, `user_agent`, `login_at`, `last_activity_at`, `logout_reason`, `device_fingerprint`.
+    *   **Product:** `id`, `tenant_id`, `title`, `slug`, `description`, `status`, `visibility_window`, `seo`, `category_ids[]`, `collection_ids[]`, `custom_attributes`, `created_at`, `updated_at`.
+    *   **Variant:** `id`, `product_id`, `tenant_id`, `sku`, `barcode`, `option_values`, `price`, `compare_at_price`, `inventory_policy`, `weight`, `dimensions`, `media_ids[]`.
+    *   **InventoryLocation:** `id`, `tenant_id`, `name`, `address`, `type`, `capacity`, `timezone`.
+    *   **InventoryLevel:** `id`, `variant_id`, `location_id`, `on_hand`, `reserved`, `incoming`, `safety_stock`, `low_stock_threshold`.
+    *   **Consignor:** `id`, `tenant_id`, `contact`, `tax_info`, `commission_rules`, `payout_preferences`, `portal_access_token`, `status`.
+    *   **ConsignmentItem:** `id`, `tenant_id`, `variant_id`, `consignor_id`, `cost_basis`, `received_at`, `expires_at`, `status`, `aging_days`, `payout_state`.
+    *   **Cart:** `id`, `tenant_id`, `customer_id/null`, `items[]`, `discounts[]`, `shipping_address`, `billing_address`, `currency`, `subtotal`, `tax_total`, `shipping_total`, `grand_total`, `last_activity_at`.
+    *   **Order:** `id`, `tenant_id`, `order_number`, `customer_id`, `cart_snapshot`, `status`, `payment_state`, `fulfillment_state`, `shipping_address`, `billing_address`, `totals`, `timeline[]`, `notes`, `tags`.
+    *   **PaymentIntent:** `id`, `order_id`, `tenant_id`, `provider`, `provider_reference`, `amount`, `currency`, `application_fee`, `status`, `captured_at`, `failure_reason`, `metadata`.
+    *   **Refund:** `id`, `payment_intent_id`, `amount`, `currency`, `reason`, `processed_at`, `provider_reference`, `status`.
+    *   **Shipment:** `id`, `order_id`, `tenant_id`, `carrier`, `service_level`, `tracking_number`, `labels`, `packages[]`, `status`, `shipped_at`, `delivered_at`.
+    *   **ReturnAuthorization:** `id`, `order_id`, `items[]`, `reason_codes[]`, `status`, `approved_by`, `received_at`, `restock_decision`, `refund_amount`.
+    *   **LoyaltyLedgerEntry:** `id`, `tenant_id`, `customer_id`, `points_delta`, `reason`, `order_id`, `balance_after`, `expires_at`, `source`.
+    *   **FeatureFlag:** `key`, `description`, `default_state`, `allowed_audiences`, `tenant_overrides`, `created_at`, `updated_at`.
+    *   **AuditEvent:** `id`, `tenant_id`, `actor_type`, `actor_id`, `action`, `target_type`, `target_id`, `metadata`, `impersonation_context`, `occurred_at`.
+    *   **BackgroundJob:** `id`, `queue`, `priority`, `payload`, `attempts`, `last_error`, `run_at`, `locked_by`, `locked_at`, `finished_at`.
+
+Contracts require OpenAPI schemas for each entity and versioned endpoints such as `/api/v1/tenants/{tenantId}/products` or `/api/v1/admin/consignors`. Query parameters must include pagination, filtering, and sorting conventions standardized platform-wide. Webhooks (Stripe, carriers) must map to internal events and produce idempotency keys stored alongside payloads.
+```
+
+### Context: Section 2 Implementation Notes (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-2-implementation-notes -->
+#### Section 2 Implementation Notes
+
+*   Modularization: Create Maven submodules for `core-platform`, `catalog`, `orders`, `consignment`, `loyalty`, `pos`, `media`, `admin-ui`, `storefront-ui`, and `platform-ops`. Each module enforces visibility boundaries using Java 9 module-info where feasible.
+*   Storefront build pipeline: Tailwind configs per tenant compile during deployment using design tokens stored in the database; Hot reloading exists only for development pods to avoid runtime CSS compilation in production.
+*   Admin SPA hosting: Quinoa plugin builds Vue assets, which are embedded as static resources served via Quarkus; caching headers differentiate between SPA shell (long-lived) and API responses (short-lived) to honor data freshness.
+*   PostgreSQL tenancy: All tables include `tenant_id` plus `created_by` metadata; migration scripts must include RLS policy definitions to prevent manual drift between schema and security rules.
+*   Object storage layering: Media uploads use presigned URLs generated by backend; processing jobs read from storage, write derived assets under `tenant_id/media_type/hash/size.ext`, and store metadata referencing both original and processed variants.
+*   CI/CD specifics: GitHub Actions matrix builds run JVM tests, native image builds, and frontend lint/test steps in parallel. Artifacts include OpenAPI specs, Tailwind token bundles, and Kubernetes manifests published as pipeline outputs.
+*   Infrastructure as Code: Use the Quarkus Kubernetes extension outputs as canonical manifests, but wrap them in Kustomize overlays per environment (`dev`, `staging`, `prod`). Secrets are provisioned via sealed-secrets or equivalent mechanism approved by security.
+*   Queue visibility: DelayedJob tables expose Grafana dashboards via Prometheus metrics for job latency, failure rates, and worker concurrency; architects must ensure new job types emit these metrics.
+*   Payment sandboxing: Stripe Connect onboarding flows require separate webhook endpoints for sandbox and production; the Standard Kit mandates environment variables controlling API keys with zero hardcoding.
+*   Media processing dependencies: FFmpeg binaries packaged via container multi-stage build; health checks verify binary presence and version before pods become ready.
+*   Browser compatibility: PrimeUI/PrimeVue components must follow accessibility guidelines WCAG 2.1 AA; linting includes axe-core tests in CI to maintain compliance.
+*   CDN strategy: Static assets served through Cloudflare (or equivalent) with cache-busting hashed filenames; storefront-critical HTML remains server-rendered to preserve SEO and speed.
+```
+
+### Context: 2.1. Key Architectural Artifacts Planned (from 01_Plan_Overview_and_Setup.md)
+
+```markdown
+<!-- anchor: key-architectural-artifacts -->
+## 2.1. Key Architectural Artifacts Planned
+
+*   System Context Diagram (PlantUML, docs/diagrams/system-context.puml) – Visualize actors + external dependencies (Created in `I1.T2`).
+*   Container & Component Diagrams (PlantUML, docs/diagrams/container.puml & component.puml) – Detail Quarkus modules, worker pods, queues (Created in `I1.T2`, refined in `I2.T2`).
+*   Database ERD (Mermaid, docs/diagrams/erd.mmd) – Capture multi-tenant schema with RLS expectations (Created in `I1.T3`, extended `I3.T3`).
+*   OpenAPI Specification (YAML, `api/storefront-admin-platform.yaml`) – Spec-first contracts for storefront/admin/platform/headless (Bootstrapped `I1.T4`, iteratively expanded `I2.T3`, `I3.T2`).
+*   Async Job Contract Catalogue (Markdown, `docs/async/job-catalog.md`) – Enumerate DelayedJob payloads, priorities, idempotency rules (Authored `I2.T4`).
+*   Feature Flag Governance Matrix (Markdown, `docs/governance/feature-flags.md`) – Owner/expiry/state per flag (Created `I1.T5`).
+*   Deployment & Ops Architecture Diagram (PlantUML, docs/diagrams/deployment.puml) – Show GitHub Actions → K8s + cert-manager + workers (Created `I4.T4`).
+*   Media Processing Flow Diagram (Mermaid sequence, `docs/diagrams/media-flow.mmd`) – Outline upload → processing → storefront consumption (Created `I3.T4`).
+*   POS Offline Sync Flow Diagram (Mermaid sequence, `docs/diagrams/pos-offline.mmd`) – Document offline queue/resolution handshake (Created `I4.T3`).
+*   Reporting Data Flow & Retention Doc (Markdown, `docs/data/reporting-retention.md`) – Partitioning + archival + export specs (Created `I5.T2`).
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `docs/diagrams/datamodel_erd.puml:1`
+    *   **Summary:** PlantUML ERD already enumerates the current schema, capturing Tenancy, Identity, Catalog, Orders/Payments, Consignment, Loyalty, and Cross-Cutting packages plus a note that every tenant-scoped table carries `tenant_id`, audit fields, and RLS placeholders.
+    *   **Recommendation:** Mirror this scope in the new Mermaid diagram—use it as the authoritative list of relationships and ensure any tables missing there but called out in the task (e.g., WebhookEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket) are added before export so PlantUML + Mermaid stay in sync.
+*   **File:** `docs/adr/ADR-001-tenancy.md:1`
+    *   **Summary:** ADR-001 defines the shared-database approach, host-based tenant resolution, mandatory `tenant_id` columns with indexes, and RLS policy expectations plus implementation checklist for migrations and TenantContext handling.
+    *   **Recommendation:** Reference this ADR in the ERD narrative—spell out RLS policy templates, tenant_id indexing, and partition strategies (e.g., for session/audit tables) so reviewers see how the Mermaid artifact enforces the accepted decision.
+*   **File:** `docs/quality/tenant_isolation.md:1`
+    *   **Summary:** Quality guide describes the Tenant Isolation integration suite, deterministic tenants, and how RLS policies are validated via Testcontainers, underscoring why every new table must expose tenant_id and guardrails.
+    *   **Recommendation:** When documenting the ERD, call out how new or existing tables plug into this test suite (e.g., highlight partitioned audit/session tables, tenant-aware background jobs) and ensure the narrative mentions how QA will exercise RLS.
+
+### Implementation Tips & Notes
+*   **Tip:** Place the Mermaid source beside the PlantUML asset (e.g., `docs/diagrams/datamodel_erd.mmd`) and include rendering instructions + PNG/SVG references in `docs/diagrams/README.md` while linking back to the anchors noted in the Plan (key artifact list expects this location).
+*   **Tip:** Follow the entity list from Section 5.0 plus the task description verbatim; if the PlantUML diagram lacks entities such as GiftCard, StoreCredit, WebhookEvent, DomainEvent, MediaAsset, and RateLimitBucket, introduce them in Mermaid with explicit `tenant_id`, audit metadata, and relationships to background jobs or queues so downstream iterations don’t have to reconcile gaps.
+*   **Tip:** Add an adjacent Markdown narrative (either new subsection under `docs/architecture_overview.md` or `docs/diagrams/README.md`) that summarizes tenancy columns, required indexes, RLS policies (policy name, `using` clause), and which tables should be partitioned or archived (SessionLog, AuditEvent, BackgroundJob) to satisfy the deliverable’s “short narrative” requirement.
+*   **Note:** Align naming with ADR-001 (e.g., `tenants`, `custom_domains`, `store_users`, `domain_events`) and highlight shared utilities such as `feature_flags` or `rate_limit_buckets` so Sonar/quality tooling that relies on consistent identifiers can hook into the new diagram.
+*   **Warning:** Acceptance criteria demand the Mermaid output renderable (lint-free) and reviewed with Identity and Reporting stakeholders—validate locally using `mmdc` or Mermaid CLI and include cross-links in the docs so those teams can trace session log partitions, audit policies, and reporting projections before sign-off.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T3",
+  "iteration_id": "I1",
+  "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+  "description": "Produce Mermaid ERD capturing multi-tenant schema (Tenant, StoreUser, Customer, SessionLog, FeatureFlag, Product, Variant, Inventory, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, Shipment, Return, LoyaltyLedger, GiftCard, StoreCredit, BackgroundJob, WebhookEvent, AuditEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket) with RLS annotations.",
+  "agent_type_hint": "DatabaseAgent",
+  "inputs": "Requirements data model, Section 2.1 artifacts list.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "ERD source, short narrative describing tenancy columns, indices, partition strategy.",
+  "acceptance_criteria": "Mermaid renders; each table includes tenant_id + metadata; doc explains RLS policy template, partitioned tables, archival approach; reviewed with Identity + Reporting stakeholders.",
+  "dependencies": [
+    "I1.T1"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: 5.0 The "Contract" (API & Data Definitions) (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-5-contract -->
+### **5.0 The "Contract" (API & Data Definitions)**
+
+*   **Primary API Style:** RESTful APIs defined spec-first via OpenAPI 3.0; admin SPA and storefront both consume these endpoints, and headless integrations re-use the same definitions with tenant-aware auth.
+*   **Data Model - Core Entities:**
+    *   **Tenant:** `id (UUID)`, `subdomain`, `custom_domains[]`, `plan`, `status`, `base_currency`, `branding`, `config_flags`, `created_at`, `suspended_at`.
+    *   **StoreUser:** `id`, `tenant_id`, `email`, `hashed_password`, `roles[]`, `permissions`, `status`, `last_login_at`, `mfa_secret`, `staff_profile`.
+    *   **Customer:** `id`, `tenant_id`, `email`, `password_hash`, `name`, `addresses[]`, `phone`, `loyalty_balance`, `preferences`, `created_at`.
+    *   **SessionLog:** `id`, `user_type`, `user_id`, `tenant_id`, `ip`, `user_agent`, `login_at`, `last_activity_at`, `logout_reason`, `device_fingerprint`.
+    *   **Product:** `id`, `tenant_id`, `title`, `slug`, `description`, `status`, `visibility_window`, `seo`, `category_ids[]`, `collection_ids[]`, `custom_attributes`, `created_at`, `updated_at`.
+    *   **Variant:** `id`, `product_id`, `tenant_id`, `sku`, `barcode`, `option_values`, `price`, `compare_at_price`, `inventory_policy`, `weight`, `dimensions`, `media_ids[]`.
+    *   **InventoryLocation:** `id`, `tenant_id`, `name`, `address`, `type`, `capacity`, `timezone`.
+    *   **InventoryLevel:** `id`, `variant_id`, `location_id`, `on_hand`, `reserved`, `incoming`, `safety_stock`, `low_stock_threshold`.
+    *   **Consignor:** `id`, `tenant_id`, `contact`, `tax_info`, `commission_rules`, `payout_preferences`, `portal_access_token`, `status`.
+    *   **ConsignmentItem:** `id`, `tenant_id`, `variant_id`, `consignor_id`, `cost_basis`, `received_at`, `expires_at`, `status`, `aging_days`, `payout_state`.
+    *   **Cart:** `id`, `tenant_id`, `customer_id/null`, `items[]`, `discounts[]`, `shipping_address`, `billing_address`, `currency`, `subtotal`, `tax_total`, `shipping_total`, `grand_total`, `last_activity_at`.
+    *   **Order:** `id`, `tenant_id`, `order_number`, `customer_id`, `cart_snapshot`, `status`, `payment_state`, `fulfillment_state`, `shipping_address`, `billing_address`, `totals`, `timeline[]`, `notes`, `tags`.
+    *   **PaymentIntent:** `id`, `order_id`, `tenant_id`, `provider`, `provider_reference`, `amount`, `currency`, `application_fee`, `status`, `captured_at`, `failure_reason`, `metadata`.
+    *   **Refund:** `id`, `payment_intent_id`, `amount`, `currency`, `reason`, `processed_at`, `provider_reference`, `status`.
+    *   **Shipment:** `id`, `order_id`, `tenant_id`, `carrier`, `service_level`, `tracking_number`, `labels`, `packages[]`, `status`, `shipped_at`, `delivered_at`.
+    *   **ReturnAuthorization:** `id`, `order_id`, `items[]`, `reason_codes[]`, `status`, `approved_by`, `received_at`, `restock_decision`, `refund_amount`.
+    *   **LoyaltyLedgerEntry:** `id`, `tenant_id`, `customer_id`, `points_delta`, `reason`, `order_id`, `balance_after`, `expires_at`, `source`.
+    *   **FeatureFlag:** `key`, `description`, `default_state`, `allowed_audiences`, `tenant_overrides`, `created_at`, `updated_at`.
+    *   **AuditEvent:** `id`, `tenant_id`, `actor_type`, `actor_id`, `action`, `target_type`, `target_id`, `metadata`, `impersonation_context`, `occurred_at`.
+    *   **BackgroundJob:** `id`, `queue`, `priority`, `payload`, `attempts`, `last_error`, `run_at`, `locked_by`, `locked_at`, `finished_at`.
+
+Contracts require OpenAPI schemas for each entity and versioned endpoints such as `/api/v1/tenants/{tenantId}/products` or `/api/v1/admin/consignors`. Query parameters must include pagination, filtering, and sorting conventions standardized platform-wide. Webhooks (Stripe, carriers) must map to internal events and produce idempotency keys stored alongside payloads.
+```
+
+### Context: Section 2 Implementation Notes (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-2-implementation-notes -->
+#### Section 2 Implementation Notes
+
+*   Modularization: Create Maven submodules for `core-platform`, `catalog`, `orders`, `consignment`, `loyalty`, `pos`, `media`, `admin-ui`, `storefront-ui`, and `platform-ops`. Each module enforces visibility boundaries using Java 9 module-info where feasible.
+*   Storefront build pipeline: Tailwind configs per tenant compile during deployment using design tokens stored in the database; Hot reloading exists only for development pods to avoid runtime CSS compilation in production.
+*   Admin SPA hosting: Quinoa plugin builds Vue assets, which are embedded as static resources served via Quarkus; caching headers differentiate between SPA shell (long-lived) and API responses (short-lived) to honor data freshness.
+*   PostgreSQL tenancy: All tables include `tenant_id` plus `created_by` metadata; migration scripts must include RLS policy definitions to prevent manual drift between schema and security rules.
+*   Object storage layering: Media uploads use presigned URLs generated by backend; processing jobs read from storage, write derived assets under `tenant_id/media_type/hash/size.ext`, and store metadata referencing both original and processed variants.
+*   CI/CD specifics: GitHub Actions matrix builds run JVM tests, native image builds, and frontend lint/test steps in parallel. Artifacts include OpenAPI specs, Tailwind token bundles, and Kubernetes manifests published as pipeline outputs.
+*   Infrastructure as Code: Use the Quarkus Kubernetes extension outputs as canonical manifests, but wrap them in Kustomize overlays per environment (`dev`, `staging`, `prod`). Secrets are provisioned via sealed-secrets or equivalent mechanism approved by security.
+*   Queue visibility: DelayedJob tables expose Grafana dashboards via Prometheus metrics for job latency, failure rates, and worker concurrency; architects must ensure new job types emit these metrics.
+*   Payment sandboxing: Stripe Connect onboarding flows require separate webhook endpoints for sandbox and production; the Standard Kit mandates environment variables controlling API keys with zero hardcoding.
+*   Media processing dependencies: FFmpeg binaries packaged via container multi-stage build; health checks verify binary presence and version before pods become ready.
+*   Browser compatibility: PrimeUI/PrimeVue components must follow accessibility guidelines WCAG 2.1 AA; linting includes axe-core tests in CI to maintain compliance.
+*   CDN strategy: Static assets served through Cloudflare (or equivalent) with cache-busting hashed filenames; storefront-critical HTML remains server-rendered to preserve SEO and speed.
+```
+
+### Context: 2.1. Key Architectural Artifacts Planned (from 01_Plan_Overview_and_Setup.md)
+
+```markdown
+<!-- anchor: key-architectural-artifacts -->
+## 2.1. Key Architectural Artifacts Planned
+
+*   System Context Diagram (PlantUML, docs/diagrams/system-context.puml) – Visualize actors + external dependencies (Created in `I1.T2`).
+*   Container & Component Diagrams (PlantUML, docs/diagrams/container.puml & component.puml) – Detail Quarkus modules, worker pods, queues (Created in `I1.T2`, refined in `I2.T2`).
+*   Database ERD (Mermaid, docs/diagrams/erd.mmd) – Capture multi-tenant schema with RLS expectations (Created in `I1.T3`, extended `I3.T3`).
+*   OpenAPI Specification (YAML, `api/storefront-admin-platform.yaml`) – Spec-first contracts for storefront/admin/platform/headless (Bootstrapped `I1.T4`, iteratively expanded `I2.T3`, `I3.T2`).
+*   Async Job Contract Catalogue (Markdown, `docs/async/job-catalog.md`) – Enumerate DelayedJob payloads, priorities, idempotency rules (Authored `I2.T4`).
+*   Feature Flag Governance Matrix (Markdown, `docs/governance/feature-flags.md`) – Owner/expiry/state per flag (Created `I1.T5`).
+*   Deployment & Ops Architecture Diagram (PlantUML, docs/diagrams/deployment.puml) – Show GitHub Actions → K8s + cert-manager + workers (Created `I4.T4`).
+*   Media Processing Flow Diagram (Mermaid sequence, `docs/diagrams/media-flow.mmd`) – Outline upload → processing → storefront consumption (Created `I3.T4`).
+*   POS Offline Sync Flow Diagram (Mermaid sequence, `docs/diagrams/pos-offline.mmd`) – Document offline queue/resolution handshake (Created `I4.T3`).
+*   Reporting Data Flow & Retention Doc (Markdown, `docs/data/reporting-retention.md`) – Partitioning + archival + export specs (Created `I5.T2`).
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `docs/diagrams/datamodel_erd.puml:1`
+    *   **Summary:** PlantUML ERD already enumerates the current schema, capturing Tenancy, Identity, Catalog, Orders/Payments, Consignment, Loyalty, and Cross-Cutting packages plus a note that every tenant-scoped table carries `tenant_id`, audit fields, and RLS placeholders.
+    *   **Recommendation:** Mirror this scope in the new Mermaid diagram—use it as the authoritative list of relationships and ensure any tables missing there but called out in the task (e.g., WebhookEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket) are added before export so PlantUML + Mermaid stay in sync.
+*   **File:** `docs/adr/ADR-001-tenancy.md:1`
+    *   **Summary:** ADR-001 defines the shared-database approach, host-based tenant resolution, mandatory `tenant_id` columns with indexes, and RLS policy expectations plus implementation checklist for migrations and TenantContext handling.
+    *   **Recommendation:** Reference this ADR in the ERD narrative—spell out RLS policy templates, tenant_id indexing, and partition strategies (e.g., for session/audit tables) so reviewers see how the Mermaid artifact enforces the accepted decision.
+*   **File:** `docs/quality/tenant_isolation.md:1`
+    *   **Summary:** Quality guide describes the Tenant Isolation integration suite, deterministic tenants, and how RLS policies are validated via Testcontainers, underscoring why every new table must expose tenant_id and guardrails.
+    *   **Recommendation:** When documenting the ERD, call out how new or existing tables plug into this test suite (e.g., highlight partitioned audit/session tables, tenant-aware background jobs) and ensure the narrative mentions how QA will exercise RLS.
+
+### Implementation Tips & Notes
+*   **Tip:** Place the Mermaid source beside the PlantUML asset (e.g., `docs/diagrams/datamodel_erd.mmd`) and include rendering instructions + PNG/SVG references in `docs/diagrams/README.md` while linking back to the anchors noted in the Plan (key artifact list expects this location).
+*   **Tip:** Follow the entity list from Section 5.0 plus the task description verbatim; if the PlantUML diagram lacks entities such as GiftCard, StoreCredit, WebhookEvent, DomainEvent, MediaAsset, and RateLimitBucket, introduce them in Mermaid with explicit `tenant_id`, audit metadata, and relationships to background jobs or queues so downstream iterations don’t have to reconcile gaps.
+*   **Tip:** Add an adjacent Markdown narrative (either new subsection under `docs/architecture_overview.md` or `docs/diagrams/README.md`) that summarizes tenancy columns, required indexes, RLS policies (policy name, `using` clause), and which tables should be partitioned or archived (SessionLog, AuditEvent, BackgroundJob) to satisfy the deliverable’s “short narrative” requirement.
+*   **Note:** Align naming with ADR-001 (e.g., `tenants`, `custom_domains`, `store_users`, `domain_events`) and highlight shared utilities such as `feature_flags` or `rate_limit_buckets` so Sonar/quality tooling that relies on consistent identifiers can hook into the new diagram.
+*   **Warning:** Acceptance criteria demand the Mermaid output renderable (lint-free) and reviewed with Identity and Reporting stakeholders—validate locally using `mmdc` or Mermaid CLI and include cross-links in the docs so those teams can trace session log partitions, audit policies, and reporting projections before sign-off.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Checking file content**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing final summary message**
+
+I'm putting together a clear final response that highlights the updates made to `.codemachine/prompts/context.md`, referencing specific line numbers and summarizing key changes. I'll include next-step suggestions like reviewing the new context and how the coder can proceed based on the updated documentation.
+[RUNNING]● Message: **Context Package**
+- Refreshed `.codemachine/prompts/context.md:1` with the full I1.T3 task specification, architecture/plan excerpts (Blueprint §5, Implementation Notes, Plan §2.1), and guidance derived from the PlantUML ERD, tenancy ADR, and tenant isolation quality doc so the Coder Agent has all required references.
+- Added strategic notes in `.codemachine/prompts/context.md:78` covering how to mirror the existing data model in Mermaid, cite ADR-driven RLS/partition expectations, and document the narrative/update locations for Identity & Reporting review.
+
+Next step: hand this briefing to the Coder Agent so they can implement the Mermaid ERD, documentation narrative, and validation workflow as outlined.
+⏱️  Tokens: 2305371in/14541out (996096 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

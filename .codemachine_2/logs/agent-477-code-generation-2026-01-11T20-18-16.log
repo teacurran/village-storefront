@@ -1,0 +1,139 @@
+[CYAN]===╭─ Agent 477: code-generation ───────────────────────────────────
+[CYAN]   Started: 2026-01-11 20:18:16
+[CYAN]   Prompt: **// PROTOCOL: CodeImplementer_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Claude is analyzing your request...
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Let me first read the existing related documentation to ensure consistency.
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+Now let me check if the platform_ops.md file already exists.
+[RUNNING]● Command: Bash
+[ERROR]● Command: Bash
+[ERROR]⎿ Exit code 1
+[ERROR]⎿ ls: docs/architecture/platform_ops.md: No such file or directory
+Good, now let me create the core background jobs architecture document.
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now let me create the comprehensive media pipeline Mermaid diagram.
+[SUCCESS]● Command: tool
+[SUCCESS]⎿ File created successfully at: /Users/tea/dev/VillageCompute/code/village-storefront/docs/diagrams/me...
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now let me create the platform operations document.
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now let me validate the cross-references and anchors are correct by checking the created documents.
+[RUNNING]● Command: Bash
+[RUNNING]● Command: Bash
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ 3:<!-- anchor: platform-ops-blueprint -->
+[SUCCESS]⎿ 30:<!-- anchor: overview-operational-philosophy -->
+[SUCCESS]⎿ 99:<!-...
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ - **[Operational Architecture](./04_Operational_Architecture.md)** (Section 3.6: Background Processi...
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ 3:<!-- anchor: background-jobs-blueprint -->
+[SUCCESS]⎿ 32:<!-- anchor: overview-architecture -->
+[SUCCESS]⎿ 92:<!-- ancho...
+Good! Now let me check if the Mermaid diagram has valid syntax by testing a small portion:
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ API->>+JobSvc: enqueue(MediaProcessingPayload, priority)
+[SUCCESS]⎿     Note right of JobSvc: Payload version: ...
+Excellent! The Mermaid syntax looks valid. Now let me verify that all acceptance criteria are met by checking key sections:
+[RUNNING]● Command: Bash
+[RUNNING]● Command: Bash
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ This document provides operational procedures, infrastructure configurations, and monitoring strateg...
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ %% including job enqueue, worker polling, FFmpeg isolation, retry strategies,
+[SUCCESS]⎿     participant FFmpeg...
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ ### Queue Table Schema
+[SUCCESS]⎿ ### Circuit Breaker Pattern
+[SUCCESS]⎿ // Circuit breaker configuration
+[SUCCESS]⎿ **Circuit Breake...
+Perfect! Let me now create a final verification summary and mark the task complete.
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Perfect! I've successfully completed Task I2.T6. Let me provide a summary of what was delivered.
+
+## Task I2.T6 Complete: Async Processing Blueprint
+
+I've successfully documented the comprehensive async processing architecture with three interconnected documents and a detailed Mermaid diagram. Here's what was delivered:
+
+### 1. **docs/architecture/background_jobs.md** (New)
+Comprehensive technical specification covering:
+- **Queue Schema** with complete PostgreSQL table definitions, indexes, and RLS policies
+- **Job Payload Versioning** strategy with migration examples (v1 → v2)
+- **Worker HPA Triggers** with scaling formulas and threshold configurations
+- **Circuit Breaker Strategy** for external service failures (Stripe, R2)
+- **Priority System & SLA Table** mapping priorities to latency targets
+- **Retry Policies** with exponential backoff tables
+- **Tenant Isolation** requirements for background workers (TenantContext seeding)
+- **Media Pipeline Integration** connecting to upload/processing flows
+- **Monitoring Metrics Catalog** with Prometheus metric names and alert rules
+
+### 2. **docs/diagrams/media_pipeline.mmd** (New)
+Comprehensive Mermaid sequence diagram showing:
+- **DelayedJob Lifecycle:** Enqueue → Poll → Claim → Execute → Complete/Retry/DLQ
+- **FFmpeg Container Isolation:** Resource limits, timeout enforcement, semaphore control
+- **Signed URL Flows:** Presigned upload/download with R2 integration
+- **Failure Retries:** Exponential backoff with attempt tracking
+- **Backoff Policy:** Visual representation of retry delays per priority level
+- **Circuit Breaker:** State transitions (CLOSED → OPEN → HALF_OPEN)
+- **11 Phases:** Complete workflow from client upload to signed URL delivery
+
+### 3. **docs/architecture/platform_ops.md** (New)
+Operational procedures document including:
+- **Dashboards Required:** 2 Grafana dashboards (Background Job Health, Media Pipeline) with 7+ panels each
+- **Alert Definitions:** P1/P2 alert rules with Prometheus queries and thresholds
+- **Manual Remediation Steps:** 
+  - Pausing/resuming queue processing
+  - Clearing dead letter queue
+  - Emergency kill switch activation
+  - Manual job re-enqueue procedures
+- **HPA Configuration:** Complete YAML manifests for worker autoscaling
+- **Incident Response Playbooks:** SEV-1/SEV-2 response checklists with escalation paths
+- **Queue Tuning Guide:** Capacity planning formulas and performance benchmarks
+
+### Acceptance Criteria Validation
+
+✅ **Queue table schema** - Complete schema with columns, constraints, indexes (background_jobs.md §2)  
+✅ **Job payload versioning** - Version strategy with migration examples (background_jobs.md §5)  
+✅ **Worker HPA triggers** - HPA YAML + scaling formulas (platform_ops.md §2)  
+✅ **Circuit breaker strategy** - Implementation + state diagram (background_jobs.md §6)  
+✅ **FFmpeg containers** - Resource isolation + timeout enforcement (media_pipeline.mmd Phase 5)  
+✅ **Signed URL flows** - Upload/download with R2 integration (media_pipeline.mmd Phases 1, 7)  
+✅ **Failure retries** - Retry logic with attempt tracking (media_pipeline.mmd Phase 7)  
+✅ **Backoff policy** - Exponential backoff tables (background_jobs.md §6)  
+✅ **Dashboards/alerts needed** - 2 Grafana dashboards specified (platform_ops.md §4)  
+✅ **Manual remediation steps** - 6 operational procedures documented (platform_ops.md §6)
+
+### Cross-References Validated
+
+All documents properly reference:
+- `docs/architecture/tenant_isolation.md` (TenantContext requirements)
+- `docs/operations/job_runbook.md` (existing metrics and procedures)
+- `docs/diagrams/media-flow.mmd` (consistent media workflow)
+- Architecture documents (Blueprint Foundation, Operational Architecture)
+
+The blueprint provides a complete foundation for implementing background job processing with clear operational guidance for DevOps teams.
+⏱️  Duration: 549603ms | Cost: $1.0328743 | Tokens: 849884in/28826out (838858 cached)
+Code Generation Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Code Generation Agent started to work.

@@ -1,0 +1,605 @@
+[CYAN]===╭─ Agent 572: context-manager ───────────────────────────────────
+[CYAN]   Started: 2026-01-12 14:00:08
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing root directory recursively**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Identifying next target task and gathering context**
+
+I'm zeroing in on the first incomplete task with all dependencies done, which is I4.T6, involving extending the media pipeline with FFmpeg and deployment config. Now, I’m planning to find relevant architectural and plan documents by searching manifests and matching key terms like "media pipeline" and "FFmpeg" to collect precise snippets that provide context for this task.
+[RUNNING]● Command: bash -lc "rg -n \"I4\\.T6\" 02_Iteration_I4.md"
+[ERROR]● Command: bash -lc "rg -n \"I4\\.T6\" 02_Iteration_I4.md"
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for iteration markdown file**
+[RUNNING]● Command: bash -lc 'rg --files -g "02_Iteration_I4.md"'
+[ERROR]● Command: bash -lc 'rg --files -g "02_Iteration_I4.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for iteration plan files**
+[RUNNING]● Command: bash -lc 'rg -n "iteration-4-plan" -g "*.md"'
+[ERROR]● Command: bash -lc 'rg -n "iteration-4-plan" -g "*.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for plan file**
+[RUNNING]● Command: bash -lc 'rg --files -g "01_Plan_Overview_and_Setup.md"'
+[ERROR]● Command: bash -lc 'rg --files -g "01_Plan_Overview_and_Setup.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for plan documents in root**
+[RUNNING]● Command: bash -lc "find .. -name '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]● Command: bash -lc "find .. -name '01_Plan_Overview_and_Setup.md'"
+[SUCCESS]⎿ ../.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md
+[SUCCESS]⎿ ../village-storefront/.codemachine/arti...
+[THINKING]● Thinking: **Verifying artifact paths**
+[RUNNING]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]⎿ agents
+[SUCCESS]⎿ artifacts
+[SUCCESS]⎿ file-map.txt
+[SUCCESS]⎿ inputs
+[SUCCESS]⎿ logs
+[SUCCESS]⎿ memory
+[SUCCESS]⎿ prompts
+[SUCCESS]⎿ scripts
+[SUCCESS]⎿ task_completion_reports
+[SUCCESS]⎿ template.js...
+[THINKING]● Thinking: **Checking for architecture manifests**
+[RUNNING]● Command: bash -lc 'ls .codemachine/artifacts'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/artifacts'
+[SUCCESS]⎿ architecture
+[SUCCESS]⎿ plan
+[SUCCESS]⎿ requirements
+[SUCCESS]⎿ task-i4-t4-completion-report.md
+[SUCCESS]⎿ task-i4-t5-completion-report.md
+[SUCCESS]⎿ tasks...
+[THINKING]● Thinking: **Checking architecture artifacts folder**
+[RUNNING]● Command: bash -lc 'ls .codemachine/artifacts/architecture'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/artifacts/architecture'
+[SUCCESS]⎿ 01_Blueprint_Foundation.md
+[SUCCESS]⎿ 02_System_Structure_and_Data.md
+[SUCCESS]⎿ 03_Behavior_and_Communication.md
+[SUCCESS]⎿ 04_Opera...
+[THINKING]● Thinking: **Locating relevant architecture documents**
+
+I'll focus on finding sections about the video pipeline, FFmpeg, and worker deployment by searching the architecture docs for keywords like "media" and "FFmpeg" to gather context for the plan.
+[RUNNING]● Command: bash -lc 'rg -n "FFmpeg" .codemachine/artifacts/architecture -g "*.md"'
+[SUCCESS]● Command: bash -lc 'rg -n "FFmpeg" .codemachine/artifacts/architecture -g "*.md"'
+[SUCCESS]⎿ .codemachine/artifacts/architecture/01_Blueprint_Foundation.md:46:*   **System Overview:** Village S...
+[THINKING]● Thinking: **Selecting relevant plan snippets**
+[RUNNING]● Command: bash -lc "rg -n \"I4\\.T6\" .codemachine/artifacts/plan/02_Iteration_I4.md"
+[SUCCESS]● Command: bash -lc "rg -n \"I4\\.T6\" .codemachine/artifacts/plan/02_Iteration_I4.md"
+[SUCCESS]⎿ 96:    *   **Task ID:** `I4.T6`
+[SUCCESS]⎿ 115:    *   **Inputs:** Outputs from Tasks `I3.T3`, `I3.T5`, `I4.T5`...
+[THINKING]● Thinking: **Inspecting lines 70-140**
+[RUNNING]● Command: bash -lc "sed -n '70,140p' .codemachine/artifacts/plan/02_Iteration_I4.md"
+[SUCCESS]● Command: bash -lc "sed -n '70,140p' .codemachine/artifacts/plan/02_Iteration_I4.md"
+[SUCCESS]⎿ *   **Deliverables:** Gift card/credit APIs, admin UI, checkout integration, tests verifying balance...
+[THINKING]● Thinking: **Planning snippet extraction and referencing**
+[RUNNING]● Command: bash -lc "sed -n '90,180p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]● Command: bash -lc "sed -n '90,180p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]⎿ - Implements the `PaymentProvider`, `PaymentMethodProvider`, `MarketplaceProvider`, and `WebhookHand...
+[THINKING]● Thinking: **Extracting relevant architecture snippets**
+[RUNNING]● Command: bash -lc "sed -n '280,360p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '280,360p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ LAYOUT_WITH_LEGEND()
+[SUCCESS]⎿         Person(merchant, "Merchant Admin", "Configures store and monitors KPIs....
+[THINKING]● Thinking: **Selecting relevant media worker snippet**
+[RUNNING]● Command: bash -lc "sed -n '180,230p' .codemachine/artifacts/architecture/03_Behavior_and_Communication.md"
+[SUCCESS]● Command: bash -lc "sed -n '180,230p' .codemachine/artifacts/architecture/03_Behavior_and_Communication.md"
+[SUCCESS]⎿ STRIPE --> PAY: Transfer pending, reference id
+[SUCCESS]⎿             PAY -> AUDIT: Log payout intent + provide...
+[THINKING]● Thinking: **Preparing snippet for Flow C and runbook**
+[RUNNING]● Command: bash -lc "sed -n '270,330p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]● Command: bash -lc "sed -n '270,330p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]⎿ Container(stripeApi,"Stripe APIs","Payments, Payouts")
+[SUCCESS]⎿ }
+[SUCCESS]⎿
+[SUCCESS]⎿ Rel(tenantPods,catalog,"Tenant context eve...
+[THINKING]● Thinking: **Preparing to review media module files**
+[RUNNING]● Command: bash -lc 'ls src/main/java/com/village/media'
+[ERROR]● Command: bash -lc 'ls src/main/java/com/village/media'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for media module path**
+[RUNNING]● Command: bash -lc "rg --files src -g '*media*' | head"
+[SUCCESS]● Command: bash -lc "rg --files src -g '*media*' | head"
+[SUCCESS]⎿ rg: src: IO error for operation on src: No such file or directory (os error 2)
+[THINKING]● Thinking: **Searching for com.village.media usage**
+[RUNNING]● Command: bash -lc "rg -n \"com\\.village\\.media\" -g \"*.java\""
+[ERROR]● Command: bash -lc "rg -n \"com\\.village\\.media\" -g \"*.java\""
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking modules directory contents**
+[RUNNING]● Command: bash -lc 'ls modules'
+[SUCCESS]● Command: bash -lc 'ls modules'
+[SUCCESS]⎿ core-platform
+[THINKING]● Thinking: **Inspecting core-platform module**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform'
+[SUCCESS]⎿ api
+[SUCCESS]⎿ java.io.tmpdir
+[SUCCESS]⎿ pom.xml
+[SUCCESS]⎿ src
+[SUCCESS]⎿ target
+[THINKING]● Thinking: **Adjusting file path for core platform**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/com/village/media'
+[ERROR]● Command: bash -lc 'ls modules/core-platform/src/main/java/com/village/media'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking package structure**
+[RUNNING]● Command: bash -lc 'rg --files modules/core-platform/src/main/java -g "*.java" | head'
+[SUCCESS]● Command: bash -lc 'rg --files modules/core-platform/src/main/java -g "*.java" | head'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessingException.java
+[SUCCESS]⎿ mo...
+[THINKING]● Thinking: **Analyzing key video processing files**
+[RUNNING]● Command: bash -lc "rg --files modules/core-platform/src/test/java -g '*media*'"
+[ERROR]● Command: bash -lc "rg --files modules/core-platform/src/test/java -g '*media*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for test files**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/test/java'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/test/java'
+[SUCCESS]⎿ villagecompute
+[THINKING]● Thinking: **Extending list exploration**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/test/java/villagecompute/storefront'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/test/java/villagecompute/storefront'
+[SUCCESS]⎿ StorefrontRenderingTest.java
+[SUCCESS]⎿ TenantIsolationIT.java
+[SUCCESS]⎿ api
+[SUCCESS]⎿ catalog
+[SUCCESS]⎿ compliance
+[SUCCESS]⎿ data
+[SUCCESS]⎿ giftcard
+[SUCCESS]⎿ headless
+[SUCCESS]⎿ jo...
+[THINKING]● Thinking: **Inspecting media tests**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/test/java/villagecompute/storefront/media'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/test/java/villagecompute/storefront/media'
+[SUCCESS]⎿ MediaPipelineIT.java
+[SUCCESS]⎿ MediaPipelineTest.java
+[SUCCESS]⎿ MediaQueueIntegrationTest.java
+[SUCCESS]⎿ MediaSecurityTest.java
+[SUCCESS]⎿ Vi...
+[THINKING]● Thinking: **Selecting key source files to read**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/media/VideoJobHandler.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/media/VideoJobHandler.java"
+[SUCCESS]⎿ package villagecompute.storefront.media;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.io.IOException;
+[SUCCESS]⎿ import java.io.InputStream;
+[SUCCESS]⎿ im...
+[THINKING]● Thinking: **Requesting more file content**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/media/VideoJobHandler.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/media/VideoJobHandler.java"
+[SUCCESS]⎿ throws IOException {
+[SUCCESS]⎿         long totalSize = 0;
+[SUCCESS]⎿
+[SUCCESS]⎿         // Upload master playlist when HLS is enab...
+[THINKING]● Thinking: **Reviewing MediaWorkerConfig.java**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/media/MediaWorkerConfig.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/media/MediaWorkerConfig.java"
+[SUCCESS]⎿ package villagecompute.storefront.media;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.Duration;
+[SUCCESS]⎿
+[SUCCESS]⎿ import io.smallrye.config.Conf...
+[THINKING]● Thinking: **Inspecting MediaProcessor.java**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessor.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessor.java"
+[SUCCESS]⎿ package villagecompute.storefront.media;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.nio.file.Path;
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import j...
+[THINKING]● Thinking: **Considering whether to pause**
+[RUNNING]● Command: bash -lc "sed -n '200,320p' modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessor.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,320p' modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessor.java"
+[SUCCESS]⎿ this.height = height;
+[SUCCESS]⎿             this.durationSeconds = durationSeconds;
+[SUCCESS]⎿             this.codec = c...
+[THINKING]● Thinking: **Checking MediaStorageClient usage and tests**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java"
+[SUCCESS]⎿ package villagecompute.storefront.media;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static org.junit.jupiter.api.Assertions.*;
+[SUCCESS]⎿
+[SUCCESS]⎿ import ...
+[THINKING]● Thinking: **Continuing the process**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java"
+[SUCCESS]⎿ }
+[SUCCESS]⎿     }
+[SUCCESS]⎿
+[SUCCESS]⎿     @Test
+[SUCCESS]⎿     @Transactional
+[SUCCESS]⎿     void throwsExceptionOnProcessingFailure() {
+[SUCCESS]⎿         // Arr...
+[THINKING]● Thinking: **Locating stub classes**
+[RUNNING]● Command: bash -lc "rg --files modules/core-platform/src/test/java -g '*StubMediaProcessor.java'"
+[ERROR]● Command: bash -lc "rg --files modules/core-platform/src/test/java -g '*StubMediaProcessor.java'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for StubMediaProcessor class**
+[RUNNING]● Command: bash -lc 'rg -n "StubMediaProcessor" -g "*.java" modules/core-platform/src/test/java'
+[SUCCESS]● Command: bash -lc 'rg -n "StubMediaProcessor" -g "*.java" modules/core-platform/src/test/java'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java:61:    ...
+[THINKING]● Thinking: **Investigating StubMediaProcessor definition**
+[RUNNING]● Command: bash -lc "find modules/core-platform/src/test/java -name '*Stub*'"
+[SUCCESS]● Command: bash -lc "find modules/core-platform/src/test/java -name '*Stub*'"
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Synthesizing code and doc context**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' infra/kustomize/base/media-worker-deployment.yaml"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' infra/kustomize/base/media-worker-deployment.yaml"
+[SUCCESS]⎿ ---
+[SUCCESS]⎿ apiVersion: apps/v1
+[SUCCESS]⎿ kind: Deployment
+[SUCCESS]⎿ metadata:
+[SUCCESS]⎿   name: village-storefront-media-workers
+[SUCCESS]⎿   labels...
+[THINKING]● Thinking: **Continuing to review file**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' infra/kustomize/base/media-worker-deployment.yaml"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' infra/kustomize/base/media-worker-deployment.yaml"
+[SUCCESS]⎿ name: village-storefront-r2
+[SUCCESS]⎿               key: secret-access-key
+[SUCCESS]⎿
+[SUCCESS]⎿         - name: R2_ENDPOINT
+[SUCCESS]⎿       ...
+[THINKING]● Thinking: **Deciding which files to analyze**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing updated context document**
+[RUNNING]● Command: bash -lc 'rg -n "media" docker/docker-compose.yaml'
+[ERROR]● Command: bash -lc 'rg -n "media" docker/docker-compose.yaml'
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Checking docker-compose file extension**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docker/docker-compose.yml"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docker/docker-compose.yml"
+[SUCCESS]⎿ # Village Storefront Local Development Services
+[SUCCESS]⎿ #
+[SUCCESS]⎿ # Start all services: docker compose up -d
+[SUCCESS]⎿ # Stop ...
+[THINKING]● Thinking: **Gathering media pipeline documentation snippets**
+
+I'm collecting relevant text snippets from various docs to give the coder enough context on the media pipeline, focusing on media upload flows and operational details, as well as any mentions of FFmpeg and job governance, to help clarify the environment and dependencies without including large diagrams.
+[RUNNING]● Command: bash -lc 'rg -n "FFmpeg" docs/architecture/background_jobs.md'
+[SUCCESS]● Command: bash -lc 'rg -n "FFmpeg" docs/architecture/background_jobs.md'
+[SUCCESS]⎿ 353:# FFmpeg resource isolation
+[SUCCESS]⎿ 359:### FFmpeg Worker Isolation
+[SUCCESS]⎿ 361:Video processing jobs spawn FFmp...
+[THINKING]● Thinking: **Examining snippet inclusion from manifests**
+[RUNNING]● Command: bash -lc "sed -n '318,352p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '318,352p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ System_Ext(ffmpegRuntime, "FFmpeg Runtime", "Packaged binary")
+[SUCCESS]⎿         System_Ext(monitoringStack, "...
+[THINKING]● Thinking: **Preparing container-related snippet extraction**
+[RUNNING]● Command: bash -lc "sed -n '300,332p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '300,332p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Container(delayedJobTable, "DelayedJob Queue Tables", "PostgreSQL Schema", "Priority queues (CRITICA...
+[THINKING]● Thinking: **Checking surrounding lines for context**
+[RUNNING]● Command: bash -lc "sed -n '280,310p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '280,310p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ LAYOUT_WITH_LEGEND()
+[SUCCESS]⎿         Person(merchant, "Merchant Admin", "Configures store and monitors KPIs....
+[THINKING]● Thinking: **Preparing detailed documentation snippets**
+[RUNNING]● Command: bash -lc "sed -n '100,150p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]● Command: bash -lc "sed -n '100,150p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]⎿ - POS module ships as part of the admin SPA but relies on checkout APIs for transaction persistence,...
+[THINKING]● Thinking: **Preparing to extract specific section lines**
+[RUNNING]● Command: bash -lc "rg -n \"3\\.2\\.9\" .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]● Command: bash -lc "rg -n \"3\\.2\\.9\" .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]⎿ 97:#### 3.2.9 Loyalty, POS, and Media Workloads
+[THINKING]● Thinking: **Extracting specific lines for review**
+[RUNNING]● Command: bash -lc "sed -n '92,112p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]● Command: bash -lc "sed -n '92,112p' .codemachine/artifacts/architecture/04_Operational_Architecture.md"
+[SUCCESS]⎿ - Utilizes dedicated worker queues for payout reconciliation, dispute handling, and refund processin...
+[THINKING]● Thinking: **Preparing final context document**
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I4.T6",
+  "iteration_id": "I4",
+  "iteration_goal": "Reach feature parity for consignment vendors, loyalty/rewards, POS offline workflows, and full media processing (video/FFmpeg), preparing the platform for multi-channel sales and vendor payouts.",
+  "description": "Extend media pipeline to video: integrate FFmpeg binary, define CRITICAL worker deployment, handle transcoding (MP4/HLS), poster extraction, and metadata storage with retries + metrics.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "Async blueprint, FFmpeg clarification, docker stack.",
+  "target_files": [
+    "src/main/java/com/village/media/VideoJobHandler.java",
+    "src/main/java/com/village/media/MediaWorkerConfig.java",
+    "src/test/java/com/village/media/VideoJobHandlerTest.java",
+    "infra/kustomize/base/media-worker-deployment.yaml"
+  ],
+  "input_files": [
+    "src/main/java/com/village/media",
+    "docs/diagrams/media_pipeline.mmd",
+    "docker/docker-compose.yaml"
+  ],
+  "deliverables": "Video job handler, worker deployment config, tests simulating FFmpeg CLI invocation (mocked), metrics instrumentation.",
+  "acceptance_criteria": "- Video jobs enforce timeouts, resource limits, output MP4 + optional HLS, and write poster frame.'"\\n        - Worker deployment uses separate container image with FFmpeg + queue subscription.\\n        - Tests ensure failure retries + error logging; docs describe scaling + troubleshooting.\",
+  \"dependencies\": [
+    \"I2.T7\"
+  ],
+  \"parallelizable\": true,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Task 4.6 – Media Pipeline Video Worker (from .codemachine/artifacts/plan/02_Iteration_I4.md)
+
+```markdown
+<!-- anchor: task-i4-t6 -->
+*   **Task 4.6:**
+    *   **Task ID:** `I4.T6`
+    *   **Description:** Extend media pipeline to video: integrate FFmpeg binary, define CRITICAL worker deployment, handle transcoding (MP4/HLS), poster extraction, and metadata storage with retries + metrics.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Async blueprint, FFmpeg clarification, docker stack.
+    *   **Input Files:** ["src/main/java/com/village/media", "docs/diagrams/media_pipeline.mmd", "docker/docker-compose.yaml"]
+    *   **Target Files:** ["src/main/java/com/village/media/VideoJobHandler.java", "src/main/java/com/village/media/MediaWorkerConfig.java", "src/test/java/com/village/media/VideoJobHandlerTest.java", "infra/kustomize/base/media-worker-deployment.yaml"]
+    *   **Deliverables:** Video job handler, worker deployment config, tests simulating FFmpeg CLI invocation (mocked), metrics instrumentation.
+    *   **Acceptance Criteria:**
+        - Video jobs enforce timeouts, resource limits, output MP4 + optional HLS, and write poster frame.
+        - Worker deployment uses separate container image with FFmpeg + queue subscription.
+        - Tests ensure failure retries + error logging; docs describe scaling + troubleshooting.
+    *   **Dependencies:** [`I2.T7`]
+    *   **Parallelizable:** Yes.
+```
+
+### Context: System Architecture – Media Worker & FFmpeg (from .codemachine/artifacts/architecture/02_System_Structure_and_Data.md)
+
+```markdown
+        System_Boundary(vsfContainers, "Village Storefront Platform") {
+            Container(backgroundWorker, "Background Job Worker", "Quarkus worker pod", "Executes DelayedJob payloads for emails, payouts, reports, and cleanup.")
+            Container(mediaWorker, "Media Pipeline Worker", "Quarkus + FFmpeg", "Processes images/video, generates thumbnails, manages signed URLs.")
+            Container(reportingProjection, "Reporting Projection Service", "Quarkus + Panache", "Builds aggregated tables powering dashboards and exports.")
+            Container(platformOps, "Platform Admin Backend", "Quarkus subsystem", "Provides SaaS governance APIs, impersonation, and compliance tooling.")
+            Container(posShell, "Web POS Shell", "PrimeVue + Stripe Terminal", "Delivers register UI with offline capabilities and hardware bridge.")
+            Container(featureFlagService, "Feature Toggle Service", "Caffeine + PostgreSQL", "Caches tenant overrides and enforces kill switches.")
+            ContainerDb(postgres, "PostgreSQL Cluster", "PostgreSQL 17", "Primary relational store with RLS, partitions, and migrations.")
+            Container(delayedJobTable, "DelayedJob Queue Tables", "PostgreSQL Schema", "Priority queues (CRITICAL through BULK) storing background jobs.")
+            Container(caffeineCache, "Caffeine Cache Layer", "In-pod cache", "Holds product fragments, feature flags, and rate limit counters.")
+            Container(kubernetesAdapters, "Kubernetes Adapter", "Quarkus Kubernetes Extension", "Generates manifests, ConfigMaps, Secrets, and HPAs.")
+            Container(quinoaBuilder, "Quinoa Build Orchestrator", "Quinoa Plugin", "Builds Vue SPA and injects design tokens.")
+            Container(otelAgent, "Observability Agent", "OpenTelemetry Exporter", "Emits traces and metrics to Jaeger/Prometheus.")
+            Container(securityServices, "Security & Audit Services", "Quarkus modules", "Handles JWT issuance, session logs, audit trail persistence.")
+        }
+        System_Ext(cloudflareR2, "Cloudflare R2", "Object storage")
+        System_Ext(ffmpegRuntime, "FFmpeg Runtime", "Packaged binary")
+        Rel(backgroundWorker, postgres, "Claims DelayedJob rows and writes execution results", "SQL / Advisory Locks")
+        Rel(backgroundWorker, cloudflareR2, "Uploads reports, archives, and processed media", "S3 API")
+        Rel(mediaWorker, cloudflareR2, "Reads originals, writes derivatives, and updates metadata", "S3 API")
+        Rel(mediaWorker, ffmpegRuntime, "Executes FFmpeg for transcoding and thumbnail extraction", "Process Execution")
+        Rel(quarkusCore, delayedJobTable, "Enqueues background work with priority and retry metadata", "SQL")
+        Rel(reportingProjection, postgres, "Reads domain tables and writes aggregates", "SQL")
+```
+
+### Context: Flow C – Media Upload and Variant Propagation (from .codemachine/artifacts/architecture/03_Behavior_and_Communication.md)
+
+```markdown
+* **Flow C - Media Upload and Variant Propagation:** Merchants use the Admin SPA to request presigned URLs, upload imagery or video to R2, and notify the backend upon completion; Media Pipeline Controller validates payloads, enqueues background jobs, invokes FFmpeg for heavy work, updates Catalog media references, and signals both Admin SPA and Storefront Rendering Engine so that optimized assets appear without manual refreshes.
+    - Feature toggles determine whether inline resizing or asynchronous jobs run, letting the platform stage video processing per tenant plan tier or experimentation cohort.
+    - Background jobs capture FFmpeg progress metrics, enforce timeout guardrails, and emit failure notifications when processing exceeds thresholds defined in the standards document.
+    - Storefront Rendering Engine queries media metadata through REST even though running in-process, which preserves contract-first behavior and simplifies future service extraction.
+```
+
+### Context: 3.2.9 Loyalty, POS, and Media Workloads (from .codemachine/artifacts/architecture/04_Operational_Architecture.md)
+
+```markdown
+#### 3.2.9 Loyalty, POS, and Media Workloads
+
+- Loyalty module maintains ledger entries, nightly tier recalculation jobs, and customer account APIs for viewing point balances, referencing §9 KPIs.
+- POS module ships as part of the admin SPA but relies on checkout APIs for transaction persistence, including offline batch uploads signed and encrypted per §5 Contract Patterns.
+- Media Pipeline Controller handles upload requests, variant generation, FFmpeg video transcodes, poster extraction, and metadata persistence per §3.0 Technical Architecture decisions.
+- Background Scheduler module coordinates certificate renewals, archival jobs, queue compaction, and reporting ETL, tagging each job with owning module metadata for runbook clarity.
+- Reporting Projection Service consumes domain events and builds read-optimized aggregates powering storefront snippets, admin dashboards, and platform analytics.
+```
+
+### Context: 3.10 Operational Runbooks – Media Queue Backlog (from .codemachine/artifacts/architecture/04_Operational_Architecture.md)
+
+```markdown
+### 3.10 Operational Runbooks and Incident Response
+
+- **Media Queue Backlog:** Scale worker Deployment `media-workers` by +3 replicas, verify FFmpeg readiness via `/q/health`, inspect `dead_jobs` for repeated failures, and consider temporarily disabling new uploads via feature flag if backlog exceeds SLA.
+- **Background Job Poison Pill:** If a malformed payload causes repeated worker crashes, use `paused_jobs` feature in the queue management admin screen to isolate job IDs, patch payload or code, and redeploy before resuming.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/media/VideoJobHandler.java`
+    *   **Summary:** Application-scoped job handler that injects `MediaWorkerConfig`, `MediaProcessor`, `MediaStorageClient`, and repositories to coordinate video processing. It enforces feature flag kill switches, uses a semaphore sized by `ffmpeg.maxConcurrent`, wraps work in a Micrometer `Timer`, extracts metadata via `mediaProcessor`, uploads HLS playlists/segments + MP4/poster derivatives to R2, and persists `MediaDerivative` rows with tenant context, while incrementing success/failure/timeout counters.
+    *   **Recommendation:** When extending behavior (HLS variants, retries, new metrics), reuse the existing helper methods (`processVideoInternal`, `uploadVideoDerivatives`) and keep semaphore/timeouts aligned with config. Any new derivative types must still call `MediaStoragePathBuilder` and persist via `MediaDerivativeRepository` to keep metadata + quotas accurate.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/media/MediaWorkerConfig.java`
+    *   **Summary:** SmallRye `@ConfigMapping` for the `media.processing` namespace exposing nested groups (`worker`, `ffmpeg`, `video`, `thumbnailator`, `image`). Defaults capture dispatch intervals, semaphore size, path to FFmpeg binary, timeout values, and poster/HLS toggles.
+    *   **Recommendation:** Inject this config wherever FFmpeg parameters are needed (handlers, processors, Kubernetes env) rather than hardcoding numbers. If you introduce new tuning knobs (e.g., max segment bitrate), add them here so they flow through Quarkus config, env vars, and deployment manifests consistently.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessor.java`
+    *   **Summary:** Defines the abstraction for image/video work with nested DTOs (`VideoProcessingResult`, `HLSVariant`, `VideoMetadata`, etc.) that implementations such as the FFmpeg-backed processor return. Handlers call `processVideo` to obtain playlists, segments, poster frames, and optional MP4 files, and `extractVideoMetadata` to populate the `MediaAsset` record.
+    *   **Recommendation:** Stick to this interface for all derivative needs—update implementations (e.g., FFmpeg command builder) instead of branching inside the handler. Reuse the provided metadata objects when persisting width/height/duration so downstream services remain schema-compatible.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java`
+    *   **Summary:** Quarkus test suite using stubbed media processor/storage beans and real repositories to cover the handler. Tests assert semaphore enforcement by running concurrent jobs, validate metrics counters/timers, ensure HLS playlists/segments + poster/MP4 derivatives are persisted, and verify metadata extraction + failure handling.
+    *   **Recommendation:** Use this suite as the safety net for new scenarios (timeouts, retries, kill switches). Keep helper methods (`createTestAsset*`, `createFakeVideoFile`) and tenant setup intact so additional assertions remain deterministic without relying on actual FFmpeg binaries.
+
+### Implementation Tips & Notes
+*   **Tip:** The Kubernetes deployment in `infra/kustomize/base/media-worker-deployment.yaml` already sets env vars for every `media.processing.*` property, pins high CPU/memory limits, mounts `/tmp` storage, and limits work to CRITICAL queue items—carry any new config keys through this manifest (and overlays) so operators can tune FFmpeg without redeploying code.
+*   **Tip:** Local developers rely on `docker/docker-compose.yml` (PostgreSQL + MinIO + mocks); document any additional prerequisites (FFmpeg binaries, separate worker profile) in the README section referenced by this task so the “docs describe scaling + troubleshooting” criterion is satisfied.
+*   **Tip:** Metrics emitted here (`media.video.transcode.*`) feed the operational dashboards described in §3.12, so avoid renaming them; if you add gauges (e.g., active FFmpeg processes), register them with Micrometer and expose via `/q/metrics` to match Prometheus scraping annotations already present on the worker deployment.
+*   **Tip:** Queue payloads arrive via DelayedJob with versioning—if you touch payload shapes or add job-level metadata (e.g., desired rendition set), increment or handle versions defensively to avoid tripping the “Background Job Poison Pill” runbook path.
+*   **Warning:** Tenant context is propagated through `@ActivateRequestContext` and repository lookups; never cache the injected `TenantContext` globally, and ensure any spawned threads/process callbacks clean up temporary directories plus release the semaphore even on exceptions to prevent deadlocks.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I4.T6",
+  "iteration_id": "I4",
+  "iteration_goal": "Reach feature parity for consignment vendors, loyalty/rewards, POS offline workflows, and full media processing (video/FFmpeg), preparing the platform for multi-channel sales and vendor payouts.",
+  "description": "Extend media pipeline to video: integrate FFmpeg binary, define CRITICAL worker deployment, handle transcoding (MP4/HLS), poster extraction, and metadata storage with retries + metrics.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "Async blueprint, FFmpeg clarification, docker stack.",
+  "target_files": [
+    "src/main/java/com/village/media/VideoJobHandler.java",
+    "src/main/java/com/village/media/MediaWorkerConfig.java",
+    "src/test/java/com/village/media/VideoJobHandlerTest.java",
+    "infra/kustomize/base/media-worker-deployment.yaml"
+  ],
+  "input_files": [
+    "src/main/java/com/village/media",
+    "docs/diagrams/media_pipeline.mmd",
+    "docker/docker-compose.yaml"
+  ],
+  "deliverables": "Video job handler, worker deployment config, tests simulating FFmpeg CLI invocation (mocked), metrics instrumentation.",
+  "acceptance_criteria": "- Video jobs enforce timeouts, resource limits, output MP4 + optional HLS, and write poster frame.'"\\n        - Worker deployment uses separate container image with FFmpeg + queue subscription.\\n        - Tests ensure failure retries + error logging; docs describe scaling + troubleshooting.\",
+  \"dependencies\": [
+    \"I2.T7\"
+  ],
+  \"parallelizable\": true,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Task 4.6 – Media Pipeline Video Worker (from .codemachine/artifacts/plan/02_Iteration_I4.md)
+
+```markdown
+<!-- anchor: task-i4-t6 -->
+*   **Task 4.6:**
+    *   **Task ID:** `I4.T6`
+    *   **Description:** Extend media pipeline to video: integrate FFmpeg binary, define CRITICAL worker deployment, handle transcoding (MP4/HLS), poster extraction, and metadata storage with retries + metrics.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Async blueprint, FFmpeg clarification, docker stack.
+    *   **Input Files:** ["src/main/java/com/village/media", "docs/diagrams/media_pipeline.mmd", "docker/docker-compose.yaml"]
+    *   **Target Files:** ["src/main/java/com/village/media/VideoJobHandler.java", "src/main/java/com/village/media/MediaWorkerConfig.java", "src/test/java/com/village/media/VideoJobHandlerTest.java", "infra/kustomize/base/media-worker-deployment.yaml"]
+    *   **Deliverables:** Video job handler, worker deployment config, tests simulating FFmpeg CLI invocation (mocked), metrics instrumentation.
+    *   **Acceptance Criteria:**
+        - Video jobs enforce timeouts, resource limits, output MP4 + optional HLS, and write poster frame.
+        - Worker deployment uses separate container image with FFmpeg + queue subscription.
+        - Tests ensure failure retries + error logging; docs describe scaling + troubleshooting.
+    *   **Dependencies:** [`I2.T7`]
+    *   **Parallelizable:** Yes.
+```
+
+### Context: System Architecture – Media Worker & FFmpeg (from .codemachine/artifacts/architecture/02_System_Structure_and_Data.md)
+
+```markdown
+        System_Boundary(vsfContainers, "Village Storefront Platform") {
+            Container(backgroundWorker, "Background Job Worker", "Quarkus worker pod", "Executes DelayedJob payloads for emails, payouts, reports, and cleanup.")
+            Container(mediaWorker, "Media Pipeline Worker", "Quarkus + FFmpeg", "Processes images/video, generates thumbnails, manages signed URLs.")
+            Container(reportingProjection, "Reporting Projection Service", "Quarkus + Panache", "Builds aggregated tables powering dashboards and exports.")
+            Container(platformOps, "Platform Admin Backend", "Quarkus subsystem", "Provides SaaS governance APIs, impersonation, and compliance tooling.")
+            Container(posShell, "Web POS Shell", "PrimeVue + Stripe Terminal", "Delivers register UI with offline capabilities and hardware bridge.")
+            Container(featureFlagService, "Feature Toggle Service", "Caffeine + PostgreSQL", "Caches tenant overrides and enforces kill switches.")
+            ContainerDb(postgres, "PostgreSQL Cluster", "PostgreSQL 17", "Primary relational store with RLS, partitions, and migrations.")
+            Container(delayedJobTable, "DelayedJob Queue Tables", "PostgreSQL Schema", "Priority queues (CRITICAL through BULK) storing background jobs.")
+            Container(caffeineCache, "Caffeine Cache Layer", "In-pod cache", "Holds product fragments, feature flags, and rate limit counters.")
+            Container(kubernetesAdapters, "Kubernetes Adapter", "Quarkus Kubernetes Extension", "Generates manifests, ConfigMaps, Secrets, and HPAs.")
+            Container(quinoaBuilder, "Quinoa Build Orchestrator", "Quinoa Plugin", "Builds Vue SPA and injects design tokens.")
+            Container(otelAgent, "Observability Agent", "OpenTelemetry Exporter", "Emits traces and metrics to Jaeger/Prometheus.")
+            Container(securityServices, "Security & Audit Services", "Quarkus modules", "Handles JWT issuance, session logs, audit trail persistence.")
+        }
+        System_Ext(cloudflareR2, "Cloudflare R2", "Object storage")
+        System_Ext(ffmpegRuntime, "FFmpeg Runtime", "Packaged binary")
+        Rel(backgroundWorker, postgres, "Claims DelayedJob rows and writes execution results", "SQL / Advisory Locks")
+        Rel(backgroundWorker, cloudflareR2, "Uploads reports, archives, and processed media", "S3 API")
+        Rel(mediaWorker, cloudflareR2, "Reads originals, writes derivatives, and updates metadata", "S3 API")
+        Rel(mediaWorker, ffmpegRuntime, "Executes FFmpeg for transcoding and thumbnail extraction", "Process Execution")
+        Rel(quarkusCore, delayedJobTable, "Enqueues background work with priority and retry metadata", "SQL")
+        Rel(reportingProjection, postgres, "Reads domain tables and writes aggregates", "SQL")
+```
+
+### Context: Flow C – Media Upload and Variant Propagation (from .codemachine/artifacts/architecture/03_Behavior_and_Communication.md)
+
+```markdown
+* **Flow C - Media Upload and Variant Propagation:** Merchants use the Admin SPA to request presigned URLs, upload imagery or video to R2, and notify the backend upon completion; Media Pipeline Controller validates payloads, enqueues background jobs, invokes FFmpeg for heavy work, updates Catalog media references, and signals both Admin SPA and Storefront Rendering Engine so that optimized assets appear without manual refreshes.
+    - Feature toggles determine whether inline resizing or asynchronous jobs run, letting the platform stage video processing per tenant plan tier or experimentation cohort.
+    - Background jobs capture FFmpeg progress metrics, enforce timeout guardrails, and emit failure notifications when processing exceeds thresholds defined in the standards document.
+    - Storefront Rendering Engine queries media metadata through REST even though running in-process, which preserves contract-first behavior and simplifies future service extraction.
+```
+
+### Context: 3.2.9 Loyalty, POS, and Media Workloads (from .codemachine/artifacts/architecture/04_Operational_Architecture.md)
+
+```markdown
+#### 3.2.9 Loyalty, POS, and Media Workloads
+
+- Loyalty module maintains ledger entries, nightly tier recalculation jobs, and customer account APIs for viewing point balances, referencing §9 KPIs.
+- POS module ships as part of the admin SPA but relies on checkout APIs for transaction persistence, including offline batch uploads signed and encrypted per §5 Contract Patterns.
+- Media Pipeline Controller handles upload requests, variant generation, FFmpeg video transcodes, poster extraction, and metadata persistence per §3.0 Technical Architecture decisions.
+- Background Scheduler module coordinates certificate renewals, archival jobs, queue compaction, and reporting ETL, tagging each job with owning module metadata for runbook clarity.
+- Reporting Projection Service consumes domain events and builds read-optimized aggregates powering storefront snippets, admin dashboards, and platform analytics.
+```
+
+### Context: 3.10 Operational Runbooks – Media Queue Backlog (from .codemachine/artifacts/architecture/04_Operational_Architecture.md)
+
+```markdown
+### 3.10 Operational Runbooks and Incident Response
+
+- **Media Queue Backlog:** Scale worker Deployment `media-workers` by +3 replicas, verify FFmpeg readiness via `/q/health`, inspect `dead_jobs` for repeated failures, and consider temporarily disabling new uploads via feature flag if backlog exceeds SLA.
+- **Background Job Poison Pill:** If a malformed payload causes repeated worker crashes, use `paused_jobs` feature in the queue management admin screen to isolate job IDs, patch payload or code, and redeploy before resuming.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/media/VideoJobHandler.java`
+    *   **Summary:** Application-scoped job handler that injects `MediaWorkerConfig`, `MediaProcessor`, `MediaStorageClient`, and repositories to coordinate video processing. It enforces feature flag kill switches, uses a semaphore sized by `ffmpeg.maxConcurrent`, wraps work in a Micrometer `Timer`, extracts metadata via `mediaProcessor`, uploads HLS playlists/segments + MP4/poster derivatives to R2, and persists `MediaDerivative` rows with tenant context, while incrementing success/failure/timeout counters.
+    *   **Recommendation:** When extending behavior (HLS variants, retries, new metrics), reuse the existing helper methods (`processVideoInternal`, `uploadVideoDerivatives`) and keep semaphore/timeouts aligned with config. Any new derivative types must still call `MediaStoragePathBuilder` and persist via `MediaDerivativeRepository` to keep metadata + quotas accurate.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/media/MediaWorkerConfig.java`
+    *   **Summary:** SmallRye `@ConfigMapping` for the `media.processing` namespace exposing nested groups (`worker`, `ffmpeg`, `video`, `thumbnailator`, `image`). Defaults capture dispatch intervals, semaphore size, path to FFmpeg binary, timeout values, and poster/HLS toggles.
+    *   **Recommendation:** Inject this config wherever FFmpeg parameters are needed (handlers, processors, Kubernetes env) rather than hardcoding numbers. If you introduce new tuning knobs (e.g., max segment bitrate), add them here so they flow through Quarkus config, env vars, and deployment manifests consistently.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/media/MediaProcessor.java`
+    *   **Summary:** Defines the abstraction for image/video work with nested DTOs (`VideoProcessingResult`, `HLSVariant`, `VideoMetadata`, etc.) that implementations such as the FFmpeg-backed processor return. Handlers call `processVideo` to obtain playlists, segments, poster frames, and optional MP4 files, and `extractVideoMetadata` to populate the `MediaAsset` record.
+    *   **Recommendation:** Stick to this interface for all derivative needs—update implementations (e.g., FFmpeg command builder) instead of branching inside the handler. Reuse the provided metadata objects when persisting width/height/duration so downstream services remain schema-compatible.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/media/VideoJobHandlerTest.java`
+    *   **Summary:** Quarkus test suite using stubbed media processor/storage beans and real repositories to cover the handler. Tests assert semaphore enforcement by running concurrent jobs, validate metrics counters/timers, ensure HLS playlists/segments + poster/MP4 derivatives are persisted, and verify metadata extraction + failure handling.
+    *   **Recommendation:** Use this suite as the safety net for new scenarios (timeouts, retries, kill switches). Keep helper methods (`createTestAsset*`, `createFakeVideoFile`) and tenant setup intact so additional assertions remain deterministic without relying on actual FFmpeg binaries.
+
+### Implementation Tips & Notes
+*   **Tip:** The Kubernetes deployment in `infra/kustomize/base/media-worker-deployment.yaml` already sets env vars for every `media.processing.*` property, pins high CPU/memory limits, mounts `/tmp` storage, and limits work to CRITICAL queue items—carry any new config keys through this manifest (and overlays) so operators can tune FFmpeg without redeploying code.
+*   **Tip:** Local developers rely on `docker/docker-compose.yml` (PostgreSQL + MinIO + mocks); document any additional prerequisites (FFmpeg binaries, separate worker profile) in the README section referenced by this task so the “docs describe scaling + troubleshooting” criterion is satisfied.
+*   **Tip:** Metrics emitted here (`media.video.transcode.*`) feed the operational dashboards described in §3.12, so avoid renaming them; if you add gauges (e.g., active FFmpeg processes), register them with Micrometer and expose via `/q/metrics` to match Prometheus scraping annotations already present on the worker deployment.
+*   **Tip:** Queue payloads arrive via DelayedJob with versioning—if you touch payload shapes or add job-level metadata (e.g., desired rendition set), increment or handle versions defensively to avoid tripping the “Background Job Poison Pill” runbook path.
+*   **Warning:** Tenant context is propagated through `@ActivateRequestContext` and repository lookups; never cache the injected `TenantContext` globally, and ensure any spawned threads/process callbacks clean up temporary directories plus release the semaphore even on exceptions to prevent deadlocks.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Preparing final summary message**
+[RUNNING]● Message: Updated the Task Briefing Package for I4.T6 with fresh architectural snippets (plan + sections from 02/03/04 docs) and current code analysis covering `VideoJobHandler`, `MediaWorkerConfig`, `MediaProcessor`, and its tests. Guidance now also highlights Kubernetes env mappings and local tooling expectations to support FFmpeg workers. See `.codemachine/prompts/context.md` for the full package.
+⏱️  Tokens: 5130609in/15330out (2211072 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

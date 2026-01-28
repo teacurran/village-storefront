@@ -1,0 +1,521 @@
+[CYAN]===╭─ Agent 409: context-manager ───────────────────────────────────
+[CYAN]   Started: 2026-01-11 10:38:01
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing files recursively**
+[RUNNING]● Command: /bin/zsh -lc 'ls -R'
+[THINKING]● Thinking: **Determining next incomplete task and gathering documentation context**
+
+I'm identifying the first incomplete task with all dependencies done, which turns out to be I1.T2 focused on Tenant Access Gateway and RLS enforcement. Next, I'll extract key search terms from that task’s description and inputs to locate relevant sections in architecture and plan manifests, aiming to find and read precise documentation snippets like 01_Blueprint_Foundation.md to inform the task.
+[RUNNING]● Command: /bin/zsh -lc "rg --files -g '01_Blueprint_Foundation.md'"
+[ERROR]● Command: /bin/zsh -lc "rg --files -g '01_Blueprint_Foundation.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for blueprint foundation anchor**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "anchor: blueprint-foundation" -g"*.md"'
+[SUCCESS]● Command: /bin/zsh -lc 'rg -n "anchor: blueprint-foundation" -g"*.md"'
+[SUCCESS]⎿ docs/architecture_overview.md:3:<!-- anchor: blueprint-foundation -->
+[THINKING]● Thinking: **Identifying relevant documentation sections**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "anchor: project-plan-header" -g"*.md"'
+[ERROR]● Command: /bin/zsh -lc 'rg -n "anchor: project-plan-header" -g"*.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching alternative directories**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "project-plan" -g"*.md"'
+[ERROR]● Command: /bin/zsh -lc 'rg -n "project-plan" -g"*.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for plan files**
+[RUNNING]● Command: /bin/zsh -lc "rg --files | grep '01_Plan_Overview_and_Setup.md'"
+[ERROR]● Command: /bin/zsh -lc "rg --files | grep '01_Plan_Overview_and_Setup.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for manifest presence**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "Plan Overview" -g"*.md"'
+[ERROR]● Command: /bin/zsh -lc 'rg -n "Plan Overview" -g"*.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for plan documents**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "iteration-plan" -g"*.md"'
+[ERROR]● Command: /bin/zsh -lc 'rg -n "iteration-plan" -g"*.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Verifying manifest references in docs**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "I1.T1" -g"*.md"'
+[SUCCESS]● Command: /bin/zsh -lc 'rg -n "I1.T1" -g"*.md"'
+[SUCCESS]⎿ docs/adr/ADR-README.md:92:**Implementation Status:** Fully implemented in I1.T1, enhanced in I6.T1 w...
+[THINKING]● Thinking: **Checking for plan manifest files**
+[RUNNING]● Command: /bin/zsh -lc "rg --files | rg '01_'"
+[ERROR]● Command: /bin/zsh -lc "rg --files | rg '01_'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching documentation for architecture details**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "Tenant Access Gateway" docs/architecture_overview.md'
+[ERROR]● Command: /bin/zsh -lc 'rg -n "Tenant Access Gateway" docs/architecture_overview.md'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for "Tenant" in repo**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "Tenant" docs/architecture_overview.md'
+[SUCCESS]● Command: /bin/zsh -lc 'rg -n "Tenant" docs/architecture_overview.md'
+[SUCCESS]⎿ 35:1. **True Multi-Tenant SaaS Architecture:** Unlike Shopify (merchant-per-instance) or Squarespace...
+[THINKING]● Thinking: **Extracting section around tenant isolation**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '200,260p' docs/architecture_overview.md"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '200,260p' docs/architecture_overview.md"
+[SUCCESS]⎿ **Dependency Rule:** Inner modules (Tenancy, Identity) have no dependencies on outer modules (Orders...
+[THINKING]● Thinking: **Continuing to Section 6**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '260,340p' docs/architecture_overview.md"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '260,340p' docs/architecture_overview.md"
+[SUCCESS]⎿ info:
+[SUCCESS]⎿   title: Village Storefront API
+[SUCCESS]⎿   version: 1.0.0
+[SUCCESS]⎿ paths:
+[SUCCESS]⎿   /health:
+[SUCCESS]⎿     get:
+[SUCCESS]⎿       operationId:...
+[THINKING]● Thinking: **Searching for tenant isolation docs**
+[RUNNING]● Command: /bin/zsh -lc 'rg -n "tenant isolation" -g"*.md" docs'
+[SUCCESS]● Command: /bin/zsh -lc 'rg -n "tenant isolation" -g"*.md" docs'
+[SUCCESS]⎿ docs/consignment/domain.md:25:- `tenant_id` (UUID): Foreign key to tenant for multi-tenant isolation...
+[THINKING]● Thinking: **Collecting relevant documentation and source files**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' docs/architecture/tenant_isolation.md"
+[ERROR]● Command: /bin/zsh -lc "sed -n '1,200p' docs/architecture/tenant_isolation.md"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for tenant_isolation occurrences**
+[RUNNING]● Command: /bin/zsh -lc "rg --files | rg 'tenant_isolation'"
+[SUCCESS]● Command: /bin/zsh -lc "rg --files | rg 'tenant_isolation'"
+[SUCCESS]⎿ docs/quality/tenant_isolation.md
+[THINKING]● Thinking: **Evaluating missing documentation file**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' src/main/java/com/village/tenant/TenantContext.java"
+[ERROR]● Command: /bin/zsh -lc "sed -n '1,200p' src/main/java/com/village/tenant/TenantContext.java"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for TenantContext.java file**
+[RUNNING]● Command: /bin/zsh -lc "rg --files | rg 'TenantContext\\.java'"
+[SUCCESS]● Command: /bin/zsh -lc "rg --files | rg 'TenantContext\\.java'"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java
+[THINKING]● Thinking: **Reading file due to path difference**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.Objects;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ import ...
+[THINKING]● Thinking: **Checking referenced classes and files**
+[RUNNING]● Command: /bin/zsh -lc "rg --files | rg 'Tenant.*Filter\\.java'"
+[SUCCESS]● Command: /bin/zsh -lc "rg --files | rg 'Tenant.*Filter\\.java'"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java
+[SUCCESS]⎿ mod...
+[THINKING]● Thinking: **Reading TenantResolutionFilter**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.io.IOException;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import...
+[THINKING]● Thinking: **Identifying relevant files and docs**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' docs/rls-setup.md"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '1,200p' docs/rls-setup.md"
+[SUCCESS]⎿ # Row Level Security (RLS) Setup Guide
+[SUCCESS]⎿
+[SUCCESS]⎿ ## Overview
+[SUCCESS]⎿
+[SUCCESS]⎿ Village Storefront implements PostgreSQL Row Le...
+[THINKING]● Thinking: **Locating tenant isolation docs**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,160p' docs/quality/tenant_isolation.md"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '1,160p' docs/quality/tenant_isolation.md"
+[SUCCESS]⎿ # Tenant Isolation Test Suite
+[SUCCESS]⎿
+[SUCCESS]⎿ **Status:** Active
+[SUCCESS]⎿ **Owner:** Quality Engineering
+[SUCCESS]⎿ **Last Updated:** 2...
+[THINKING]● Thinking: **Evaluating architecture and plan references**
+[RUNNING]● Command: /bin/zsh -lc "rg --files | rg 'System_Structure_and_Data'"
+[ERROR]● Command: /bin/zsh -lc "rg --files | rg 'System_Structure_and_Data'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Deciding relevant documentation sections**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContextClearFilter.java"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContextClearFilter.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.io.IOException;
+[SUCCESS]⎿ import java.util.logging.Leve...
+[THINKING]● Thinking: **Checking TenantInfo.java file**
+[RUNNING]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantInfo.java"
+[SUCCESS]● Command: /bin/zsh -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantInfo.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ /**
+[SUCCESS]⎿  * Immutable tenant informati...
+[THINKING]● Thinking: **Organizing documentation snippets for context.md**
+[RUNNING]● Command: /bin/zsh -lc 'if [ -f .codemachine/prompts/context.md ]; then cat .codemachine/prompts/context.md; fi'
+[SUCCESS]● Command: /bin/zsh -lc 'if [ -f .codemachine/prompts/context.md ]; then cat .codemachine/prompts/context.md; fi'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing comprehensive documentation update**
+[THINKING]● Thinking: **Considering full file replacement**
+[RUNNING]● Command: /bin/zsh -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T2",
+  "iteration_id": "I1",
+  "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+  "description": "Document Tenant Access Gateway + RLS enforcement plan detailing subdomain/custom-domain resolution, TenantContext lifecycle, Panache filters, and PostgreSQL policy templates with rollback guidance.",
+  "agent_type_hint": "DocumentationAgent",
+  "inputs": "Section 2 Core Architecture, Section 6 Safety Net, Clarification 1 + 6.",
+  "target_files": [
+    "docs/architecture/tenant_isolation.md",
+    "src/main/java/com/village/tenant/TenantContext.java",
+    "src/main/java/com/village/tenant/TenantFilter.java"
+  ],
+  "input_files": [
+    "docs/java-project-standards.adoc",
+    ".codemachine/inputs/competitor-research.md"
+  ],
+  "deliverables": "Markdown blueprint, scaffolded TenantContext bean + JAX-RS filter skeleton with TODOs referencing spec, sample RLS SQL snippet.",
+  "acceptance_criteria": "- Markdown covers subdomain + custom domain resolution, RLS policy template, test hooks.'"\\n        - TenantContext + TenantFilter compile and include logging + TODOs for later services.\\n        - Document cross-links to ERD + component diagram placeholders.\",
+  \"dependencies\": [
+    \"I1.T1\"
+  ],
+  \"parallelizable\": true,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Section 4 Multi-Tenancy & Data Isolation (from docs/architecture_overview.md)
+
+```markdown
+## 4. Multi-Tenancy & Data Isolation
+
+**See ADR-001 for detailed tenancy design decisions.**
+
+### Tenancy Model: Shared Database, Tenant-Scoped Queries
+
+Every table includes a `tenant_id UUID` foreign key to the `tenants` table. All queries automatically filter by `TenantContext.getCurrentTenantId()` via:
+
+1. **Request-level tenant resolution:** Custom filter extracts subdomain/domain from HTTP `Host` header → resolves Tenant → sets `TenantContext` (ThreadLocal)
+2. **Repository-level enforcement:** All Panache queries use `find("tenant.id = ?1 AND ...", TenantContext.getCurrentTenantId())`
+3. **Entity-level constraints:** JPA `@PrePersist` hooks inject `tenant_id` before insert
+
+### Tenant Resolution Flow
+
+```
+HTTP Request (Host: storename.villagecompute.com)
+    ↓
+TenantResolutionFilter
+    ↓ (extract subdomain "storename")
+CustomDomainRepository.findByDomain() OR TenantRepository.findBySubdomain()
+    ↓ (if found)
+TenantContext.setCurrentTenant(tenant)
+    ↓
+Request proceeds to resource/service/repository
+    ↓ (all queries auto-filtered by tenant_id)
+Response
+```
+
+### Data Isolation Guarantees
+
+- **Database-level:** Row-level security policies (PostgreSQL RLS) planned for defense-in-depth (ADR-001)
+- **Application-level:** All queries explicitly filter by `tenant_id`
+- **Cache-level:** Cache keys include `tenant_id` prefix (e.g., `tenant:123:product:456`)
+- **Audit trail:** All tenant context switches logged (admin impersonation, API key usage)
+
+### Scalability Considerations
+
+- **Tenant sharding (future):** `tenant_id` supports hash-based sharding if single-DB becomes bottleneck (Q4 2026+)
+- **Read replicas:** Tenant-scoped queries can route to read replicas via Quarkus datasource configuration
+- **Cache warming:** Caffeine cache pre-loads tenant metadata on startup for top 100 tenants
+```
+
+### Context: Section 6 Safety Net – Risk Register (from docs/architecture_overview.md)
+
+```markdown
+## 6. Safety Net: Risks, Decisions, & Governance
+
+### Risk Register
+
+| Risk ID | Description | Likelihood | Impact | Mitigation Strategy | Owner | Status |
+|---------|-------------|------------|--------|---------------------|-------|--------|
+| RISK-001 | Tenant data leakage due to missing tenant_id filter | Medium | Critical | Automated test suite verifying all queries include tenant filter; code review checklist | Dev Lead | Open |
+| RISK-002 | Missing upstream plan alignment (no `01_Plan_Overview_and_Setup.md`) | High | Medium | Document assumptions from standards doc + competitor research; revisit when plan doc created | Architect | Open |
+| RISK-003 | Native compilation compatibility issues with Stripe SDK | Low | Medium | Regular native build tests in CI; fallback to JVM mode if GraalVM reflection config fails | DevOps | Open |
+| RISK-004 | PostgreSQL single point of failure | Medium | High | Multi-AZ PostgreSQL (RDS/CloudSQL), automated backups, read replicas for scaling | DevOps | Planned Q2 2026 |
+| RISK-005 | Insufficient test coverage for payment flows | Medium | High | Dedicated Stripe test mode webhooks, 80% JaCoCo threshold enforced, manual QA for checkout flows | QA Lead | Open |
+| RISK-006 | OpenAPI spec drift from implementation | Medium | Medium | CI job validates OpenAPI spec against runtime endpoints (Quarkus OpenAPI extension) | Dev Lead | Planned Q1 2026 |
+```
+
+### Context: Row Level Security Setup Guide (from docs/rls-setup.md)
+
+```markdown
+# Row Level Security (RLS) Setup Guide
+
+Village Storefront implements PostgreSQL Row Level Security (RLS) policies to enforce tenant isolation at the database layer. This ensures that tenant data is protected even if application code fails to filter queries correctly.
+
+## Architecture
+
+- **Migration**: `V20260113__enable_rls_policies.sql`
+- **Helper Functions**:
+  - `set_current_tenant_id(UUID)`: Sets the tenant ID for the current session
+  - `get_current_tenant_id()`: Retrieves the current tenant ID from session variable
+- **Session Variable**: `app.tenant_id` - stores the current tenant UUID
+
+## How It Works
+
+1. **Request Filter**: `TenantResolutionFilter` resolves the tenant from the Host header
+2. **Context Population**: Sets `TenantContext.setCurrentTenant(tenantInfo)`
+3. **Database Session**: When `tenant.rls.enabled=true` (default), `TenantResolutionFilter` automatically runs `SELECT set_current_tenant_id(:tenantId)` so PostgreSQL RLS policies can evaluate `current_setting('"'app.tenant_id')"'`.
+4. **RLS Enforcement**: PostgreSQL automatically filters all queries to the current tenant'"'s data
+
+## Testing RLS
+
+"'`TenantFilterTest` now uses Quarkus Dev Services to automatically start PostgreSQL 17 via Testcontainers during the test phase. Run focused tests with:
+
+```
+./mvnw test -Dtest=TenantFilterTest
+```
+```
+
+### Context: Tenant Isolation Test Suite Overview (from docs/quality/tenant_isolation.md)
+
+```markdown
+The tenant isolation test suite (`TenantIsolationIT.java`) provides comprehensive validation that multi-tenant data boundaries are enforced at three critical layers:
+
+1. **Repository Layer:** Panache filters ensure all database queries are scoped by `tenant_id`
+2. **Service Layer:** Business logic validates tenant ownership before mutating operations
+3. **HTTP Layer:** Request routing respects subdomain-based tenant resolution
+
+This suite is **mandatory** in the CI pipeline and must pass before any PR can merge. Tests are designed to fail explicitly when tenant isolation mechanisms are disabled or bypassed. A dedicated Quarkus test resource (`PostgresTenantTestResource`) provisions PostgreSQL through Testcontainers so real row-level policies can be toggled during the run.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java:1`
+    *   **Summary:** Thread-local holder that stores `TenantInfo` plus a placeholder `FeatureFlagSnapshot`, exposes helpers for background jobs to seed context by `tenantId`, and enforces guard rails by throwing when no context exists.
+    *   **Recommendation:** When updating scaffolding, preserve the existing guard clauses and document how TODOs will integrate with future feature flag hydration; any new behavior (logging, TODO markers) should align with ADR-001 references already present in the JavaDoc.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java:1`
+    *   **Summary:** High-priority JAX-RS request filter responsible for extracting host headers, resolving tenants via custom domains or subdomains, seeding `TenantContext`, toggling PostgreSQL session variables when `tenant.rls.enabled=true`, and firing CDI events for downstream consumers.
+    *   **Recommendation:** The documentation you produce must stay consistent with this implementation: describe the hostname parsing workflow, cache behavior, CDI events (`TenantResolved`, `TenantMissing`), and the `tenant.cache.enabled` / `tenant.rls.enabled` config toggles so future changes remain synchronized.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContextClearFilter.java:1`
+    *   **Summary:** Response filter that clears thread-local context and resets the `app.tenant_id` session variable after every request to avoid memory leaks or RLS bleed-over between requests.
+    *   **Recommendation:** Highlight in the blueprint that cleanup is mandatory (mention this filter or an equivalent finally-block strategy) and ensure any new TODOs in code reinforce calling `TenantContext.clear()` even during exceptional flows.
+*   **File:** `docs/rls-setup.md:1`
+    *   **Summary:** Existing procedural guide that already defines helper SQL functions, migrations, and manual verification steps for RLS enablement and rollback.
+    *   **Recommendation:** Rather than duplicating content, cross-link from the new `docs/architecture/tenant_isolation.md` to this guide where you describe policy templates and rollback guidance; reuse the helper function names verbatim.
+
+### Implementation Tips & Notes
+*   **Tip:** `docs/architecture/tenant_isolation.md` does not exist yet—create it under `docs/architecture/` and structure it to mirror the manifest anchors (overview, resolution flow, RLS, testing hooks) so future agents can locate content deterministically.
+*   **Tip:** Include ASCII sequence diagrams or bullet lists referencing `TenantResolutionFilter`'"'s host parsing and CDI events so developers understand where to plug future services (feature flags, auditing) without re-reading the Java implementation.
+*   **Note:** Tenant filtering code already lives under "'`modules/core-platform/.../tenant`; if you introduce new scaffolding classes (e.g., sample `TenantResolverService`) remember to wire them within this module instead of creating duplicate packages under `src/main/java/com/village/tenant` as listed in the older task spec.
+*   **Warning:** The acceptance criteria require sample PostgreSQL policy SQL—leverage the RLS helper/rollback text from `docs/rls-setup.md` and make sure the SQL references the `app.tenant_id` session variable so it stays compatible with the filters resetting that state.
+*   **Warning:** Document how Tenant Isolation tests tie into this plan; mention `TenantIsolationIT` and `TenantFilterTest` so future failures immediately point back to the blueprint rather than being treated as isolated QA artifacts.
+EOF'
+[SUCCESS]● Command: /bin/zsh -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T2",
+  "iteration_id": "I1",
+  "iteration_goal": "Establish multi-tenant Quarkus skeleton, env tooling, and authoritative architecture artifacts (component diagram, ERD, tenant isolation blueprint, test strategy) so downstream teams can safely parallelize feature work.",
+  "description": "Document Tenant Access Gateway + RLS enforcement plan detailing subdomain/custom-domain resolution, TenantContext lifecycle, Panache filters, and PostgreSQL policy templates with rollback guidance.",
+  "agent_type_hint": "DocumentationAgent",
+  "inputs": "Section 2 Core Architecture, Section 6 Safety Net, Clarification 1 + 6.",
+  "target_files": [
+    "docs/architecture/tenant_isolation.md",
+    "src/main/java/com/village/tenant/TenantContext.java",
+    "src/main/java/com/village/tenant/TenantFilter.java"
+  ],
+  "input_files": [
+    "docs/java-project-standards.adoc",
+    ".codemachine/inputs/competitor-research.md"
+  ],
+  "deliverables": "Markdown blueprint, scaffolded TenantContext bean + JAX-RS filter skeleton with TODOs referencing spec, sample RLS SQL snippet.",
+  "acceptance_criteria": "- Markdown covers subdomain + custom domain resolution, RLS policy template, test hooks.'"\\n        - TenantContext + TenantFilter compile and include logging + TODOs for later services.\\n        - Document cross-links to ERD + component diagram placeholders.\",
+  \"dependencies\": [
+    \"I1.T1\"
+  ],
+  \"parallelizable\": true,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Section 4 Multi-Tenancy & Data Isolation (from docs/architecture_overview.md)
+
+```markdown
+## 4. Multi-Tenancy & Data Isolation
+
+**See ADR-001 for detailed tenancy design decisions.**
+
+### Tenancy Model: Shared Database, Tenant-Scoped Queries
+
+Every table includes a `tenant_id UUID` foreign key to the `tenants` table. All queries automatically filter by `TenantContext.getCurrentTenantId()` via:
+
+1. **Request-level tenant resolution:** Custom filter extracts subdomain/domain from HTTP `Host` header → resolves Tenant → sets `TenantContext` (ThreadLocal)
+2. **Repository-level enforcement:** All Panache queries use `find("tenant.id = ?1 AND ...", TenantContext.getCurrentTenantId())`
+3. **Entity-level constraints:** JPA `@PrePersist` hooks inject `tenant_id` before insert
+
+### Tenant Resolution Flow
+
+```
+HTTP Request (Host: storename.villagecompute.com)
+    ↓
+TenantResolutionFilter
+    ↓ (extract subdomain "storename")
+CustomDomainRepository.findByDomain() OR TenantRepository.findBySubdomain()
+    ↓ (if found)
+TenantContext.setCurrentTenant(tenant)
+    ↓
+Request proceeds to resource/service/repository
+    ↓ (all queries auto-filtered by tenant_id)
+Response
+```
+
+### Data Isolation Guarantees
+
+- **Database-level:** Row-level security policies (PostgreSQL RLS) planned for defense-in-depth (ADR-001)
+- **Application-level:** All queries explicitly filter by `tenant_id`
+- **Cache-level:** Cache keys include `tenant_id` prefix (e.g., `tenant:123:product:456`)
+- **Audit trail:** All tenant context switches logged (admin impersonation, API key usage)
+
+### Scalability Considerations
+
+- **Tenant sharding (future):** `tenant_id` supports hash-based sharding if single-DB becomes bottleneck (Q4 2026+)
+- **Read replicas:** Tenant-scoped queries can route to read replicas via Quarkus datasource configuration
+- **Cache warming:** Caffeine cache pre-loads tenant metadata on startup for top 100 tenants
+```
+
+### Context: Section 6 Safety Net – Risk Register (from docs/architecture_overview.md)
+
+```markdown
+## 6. Safety Net: Risks, Decisions, & Governance
+
+### Risk Register
+
+| Risk ID | Description | Likelihood | Impact | Mitigation Strategy | Owner | Status |
+|---------|-------------|------------|--------|---------------------|-------|--------|
+| RISK-001 | Tenant data leakage due to missing tenant_id filter | Medium | Critical | Automated test suite verifying all queries include tenant filter; code review checklist | Dev Lead | Open |
+| RISK-002 | Missing upstream plan alignment (no `01_Plan_Overview_and_Setup.md`) | High | Medium | Document assumptions from standards doc + competitor research; revisit when plan doc created | Architect | Open |
+| RISK-003 | Native compilation compatibility issues with Stripe SDK | Low | Medium | Regular native build tests in CI; fallback to JVM mode if GraalVM reflection config fails | DevOps | Open |
+| RISK-004 | PostgreSQL single point of failure | Medium | High | Multi-AZ PostgreSQL (RDS/CloudSQL), automated backups, read replicas for scaling | DevOps | Planned Q2 2026 |
+| RISK-005 | Insufficient test coverage for payment flows | Medium | High | Dedicated Stripe test mode webhooks, 80% JaCoCo threshold enforced, manual QA for checkout flows | QA Lead | Open |
+| RISK-006 | OpenAPI spec drift from implementation | Medium | Medium | CI job validates OpenAPI spec against runtime endpoints (Quarkus OpenAPI extension) | Dev Lead | Planned Q1 2026 |
+```
+
+### Context: Row Level Security Setup Guide (from docs/rls-setup.md)
+
+```markdown
+# Row Level Security (RLS) Setup Guide
+
+Village Storefront implements PostgreSQL Row Level Security (RLS) policies to enforce tenant isolation at the database layer. This ensures that tenant data is protected even if application code fails to filter queries correctly.
+
+## Architecture
+
+- **Migration**: `V20260113__enable_rls_policies.sql`
+- **Helper Functions**:
+  - `set_current_tenant_id(UUID)`: Sets the tenant ID for the current session
+  - `get_current_tenant_id()`: Retrieves the current tenant ID from session variable
+- **Session Variable**: `app.tenant_id` - stores the current tenant UUID
+
+## How It Works
+
+1. **Request Filter**: `TenantResolutionFilter` resolves the tenant from the Host header
+2. **Context Population**: Sets `TenantContext.setCurrentTenant(tenantInfo)`
+3. **Database Session**: When `tenant.rls.enabled=true` (default), `TenantResolutionFilter` automatically runs `SELECT set_current_tenant_id(:tenantId)` so PostgreSQL RLS policies can evaluate `current_setting('"'app.tenant_id')"'`.
+4. **RLS Enforcement**: PostgreSQL automatically filters all queries to the current tenant'"'s data
+
+## Testing RLS
+
+"'`TenantFilterTest` now uses Quarkus Dev Services to automatically start PostgreSQL 17 via Testcontainers during the test phase. Run focused tests with:
+
+```
+./mvnw test -Dtest=TenantFilterTest
+```
+```
+
+### Context: Tenant Isolation Test Suite Overview (from docs/quality/tenant_isolation.md)
+
+```markdown
+The tenant isolation test suite (`TenantIsolationIT.java`) provides comprehensive validation that multi-tenant data boundaries are enforced at three critical layers:
+
+1. **Repository Layer:** Panache filters ensure all database queries are scoped by `tenant_id`
+2. **Service Layer:** Business logic validates tenant ownership before mutating operations
+3. **HTTP Layer:** Request routing respects subdomain-based tenant resolution
+
+This suite is **mandatory** in the CI pipeline and must pass before any PR can merge. Tests are designed to fail explicitly when tenant isolation mechanisms are disabled or bypassed. A dedicated Quarkus test resource (`PostgresTenantTestResource`) provisions PostgreSQL through Testcontainers so real row-level policies can be toggled during the run.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java:1`
+    *   **Summary:** Thread-local holder that stores `TenantInfo` plus a placeholder `FeatureFlagSnapshot`, exposes helpers for background jobs to seed context by `tenantId`, and enforces guard rails by throwing when no context exists.
+    *   **Recommendation:** When updating scaffolding, preserve the existing guard clauses and document how TODOs will integrate with future feature flag hydration; any new behavior (logging, TODO markers) should align with ADR-001 references already present in the JavaDoc.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java:1`
+    *   **Summary:** High-priority JAX-RS request filter responsible for extracting host headers, resolving tenants via custom domains or subdomains, seeding `TenantContext`, toggling PostgreSQL session variables when `tenant.rls.enabled=true`, and firing CDI events for downstream consumers.
+    *   **Recommendation:** The documentation you produce must stay consistent with this implementation: describe the hostname parsing workflow, cache behavior, CDI events (`TenantResolved`, `TenantMissing`), and the `tenant.cache.enabled` / `tenant.rls.enabled` config toggles so future changes remain synchronized.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContextClearFilter.java:1`
+    *   **Summary:** Response filter that clears thread-local context and resets the `app.tenant_id` session variable after every request to avoid memory leaks or RLS bleed-over between requests.
+    *   **Recommendation:** Highlight in the blueprint that cleanup is mandatory (mention this filter or an equivalent finally-block strategy) and ensure any new TODOs in code reinforce calling `TenantContext.clear()` even during exceptional flows.
+*   **File:** `docs/rls-setup.md:1`
+    *   **Summary:** Existing procedural guide that already defines helper SQL functions, migrations, and manual verification steps for RLS enablement and rollback.
+    *   **Recommendation:** Rather than duplicating content, cross-link from the new `docs/architecture/tenant_isolation.md` to this guide where you describe policy templates and rollback guidance; reuse the helper function names verbatim.
+
+### Implementation Tips & Notes
+*   **Tip:** `docs/architecture/tenant_isolation.md` does not exist yet—create it under `docs/architecture/` and structure it to mirror the manifest anchors (overview, resolution flow, RLS, testing hooks) so future agents can locate content deterministically.
+*   **Tip:** Include ASCII sequence diagrams or bullet lists referencing `TenantResolutionFilter`'"'s host parsing and CDI events so developers understand where to plug future services (feature flags, auditing) without re-reading the Java implementation.
+*   **Note:** Tenant filtering code already lives under "'`modules/core-platform/.../tenant`; if you introduce new scaffolding classes (e.g., sample `TenantResolverService`) remember to wire them within this module instead of creating duplicate packages under `src/main/java/com/village/tenant` as listed in the older task spec.
+*   **Warning:** The acceptance criteria require sample PostgreSQL policy SQL—leverage the RLS helper/rollback text from `docs/rls-setup.md` and make sure the SQL references the `app.tenant_id` session variable so it stays compatible with the filters resetting that state.
+*   **Warning:** Document how Tenant Isolation tests tie into this plan; mention `TenantIsolationIT` and `TenantFilterTest` so future failures immediately point back to the blueprint rather than being treated as isolated QA artifacts.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Preparing final update summary**
+
+I'll confirm the context assembled by referencing the `.codemachine/prompts/context.md` update related to Task I1.T2, summarize the change briefly in bullet form, and suggest next steps for the coder to proceed, without needing verification or tests.
+[RUNNING]● Message: - Updated `.codemachine/prompts/context.md:1` with a fresh briefing for Task I1.T2, including the full task JSON, multi-tenancy/RLS context excerpts, and detailed guidance referencing the existing tenant filters and RLS guide so the next agent can align code and docs.
+- Captured relevant sections from `docs/architecture_overview.md`, `docs/rls-setup.md`, and `docs/quality/tenant_isolation.md`, plus analysis of the current tenant-related Java filters, to give the coder actionable pointers on documentation structure, SQL snippets, and guard rails.
+
+Next step: Pick up Task I1.T2 using the new briefing as your source of truth for implementing the tenant isolation blueprint and aligned scaffolding.
+⏱️  Tokens: 2622524in/14909out (1147008 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

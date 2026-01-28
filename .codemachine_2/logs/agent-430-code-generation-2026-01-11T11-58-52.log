@@ -1,0 +1,176 @@
+[CYAN]===╭─ Agent 430: code-generation ───────────────────────────────────
+[CYAN]   Started: 2026-01-11 11:58:52
+[CYAN]   Prompt: **// PROTOCOL: CodeImplementer_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Claude is analyzing your request...
+I'll complete both phases of this code generation workflow.
+
+## PHASE 1: STRATEGIC PLANNING
+
+Let me think through the optimal approach for drafting a comprehensive test strategy:
+
+**Problem Understanding:**
+- Task requires updating `docs/quality/test_strategy.md` to map unit/integration/e2e expectations per module
+- Need to create `scripts/qa/run_e2e.sh` stub script
+- Must align with JaCoCo 80% coverage + mutation testing stretch goals
+- Strategy should reference existing architecture, verification plan, and project standards
+- Need clear data seeding, CI gating, and reporting pipeline descriptions
+
+**Approach Selection:**
+- Document structure: Organize by testing level (unit/integration/e2e/performance) with per-module breakdowns
+- Cross-reference existing artifacts (Section 6 verification strategy, java-project-standards.adoc, existing Playwright setup)
+- Create living document with forward references to iteration tasks that will satisfy coverage
+- Script should be minimal but production-ready (error handling, environment variables, clear TODOs)
+
+**Data Structure:**
+- Test strategy document organized hierarchically: Overview → Per-Module Expectations → Data Management → CI/CD Pipeline → Coverage & Reporting → Future Work
+- Tables mapping modules to test requirements, coverage targets, and responsible iterations
+- Script with clear sections: prerequisites check, environment setup, execution, artifact collection
+
+**Implementation Plan:**
+1. Read existing test_strategy.md to understand current state
+2. Read java-project-standards.adoc for mandatory requirements
+3. Read playwright config and package.json for e2e context
+4. Restructure test_strategy.md with comprehensive sections
+5. Create scripts/qa/run_e2e.sh with proper bash practices
+6. Ensure cross-references to architecture docs and downstream tasks
+
+**Key Considerations:**
+- Maintain alignment with 80% JaCoCo threshold from standards
+- Reference existing Playwright setup rather than reinventing
+- Clear distinction between current state and future iterations
+- Script must fail fast on missing dependencies
+- Document data seeding workflows explicitly
+
+## PHASE 2: IMPLEMENTATION
+
+Let me implement the comprehensive test strategy and e2e runner script.
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[RUNNING]● Command: Read
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→{
+[SUCCESS]⎿      2→  "name": "village-storefront-playwright-tests",
+[SUCCESS]⎿      3→  "version": "1.0.0",
+[SUCCESS]⎿      4→  "d...
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→import { defineConfig, devices } from '@playwright/test';
+[SUCCESS]⎿      2→
+[SUCCESS]⎿      3→/**
+[SUCCESS]⎿      4→ * Playwright ...
+[SUCCESS]● Command: Read
+[SUCCESS]⎿ 1→= VillageCompute Java Project Standards
+[SUCCESS]⎿      2→:toc: left
+[SUCCESS]⎿      3→:toclevels: 3
+[SUCCESS]⎿      4→:sectnums:
+[SUCCESS]⎿  ...
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now I'll update the test strategy document with comprehensive module-by-module expectations, data management workflows, CI gating, and coverage reporting.
+[RUNNING]● Command: Edit
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Now I'll create the E2E runner script with proper bash practices, environment variable support, and clear TODOs for future work.
+[RUNNING]● Command: Write
+[SUCCESS]● Command: Write
+[SUCCESS]⎿ File created successfully at: /Users/tea/dev/VillageCompute/code/village-storefront/scripts/qa/run_e...
+Now I need to make the script executable.
+[RUNNING]● Command: Bash
+[SUCCESS]● Command: Bash
+[SUCCESS]⎿ empty
+[RUNNING]● Command: TodoWrite
+[SUCCESS]● Command: TodoWrite
+[SUCCESS]⎿ Todos have been modified successfully. Ensure that you continue to use the todo list to track your p...
+Perfect! I've successfully completed Task I1.T6. Let me verify the deliverables match the acceptance criteria:
+
+## Task Completion Summary
+
+I've successfully drafted the comprehensive test strategy and created the E2E runner script for Task I1.T6. Here's what was delivered:
+
+### 1. Updated Test Strategy Document (`docs/quality/test_strategy.md`)
+
+The document now includes:
+
+**Per-Module Test Expectations:**
+- Comprehensive table mapping all 12 modules (Tenant Gateway, Identity & Auth, Catalog, Inventory, Checkout, Payments, Consignment, Media, Loyalty, POS, Headless CMS, Platform Admin) to their unit/integration/e2e test requirements
+- Coverage targets (≥85% per module) and responsible iterations clearly specified
+
+**Testing Levels and Scope:**
+- **Unit Tests:** JUnit 5, Mockito, H2 in-memory, ≥85% coverage, <5 min execution
+- **Integration Tests:** Testcontainers PostgreSQL 17, REST Assured, RLS verification, <10 min execution
+- **E2E Tests:** Playwright with TypeScript, cross-browser (Chromium/Firefox/WebKit/Mobile), <20 min execution
+- **Performance Tests:** Gatling/Locust planned for I3.T8
+- **Chaos Testing:** Kubernetes pod disruption, failover scenarios
+
+**Data Management:**
+- Development environment seeding via `scripts/dev/bootstrap.sh` (linked to I2.T7)
+- Unit test fixtures using `@Transactional` rollback
+- Integration test Testcontainers with SQL seed scripts
+- E2E deterministic seeding via `tests/fixtures/seed-e2e-data.js`
+- Clear data isolation strategy (tenant IDs, reserved subdomains)
+
+**Coverage Criteria and Reporting:**
+- JaCoCo 80% minimum (project standard) + 85% stretch goal per module
+- SonarCloud quality gate enforcement
+- Mutation testing stretch goals (PIT for Java, StrykerJS for TypeScript)
+- Coverage reporting pipeline: local → CI → SonarCloud → artifacts
+
+**CI/CD Gating:**
+- 4-stage pipeline: Validation → Test → Quality Gate → Deploy
+- Parallel test execution (JVM unit/integration + Playwright E2E + Native)
+- Quality gate blocks merge on: coverage <80%, bugs >0, vulnerabilities >0
+- Artifact collection: HTML reports, JSON results, JUnit XML
+
+**Links to Iteration Tasks:**
+- I2.T8: Expand integration test suite
+- I3.T8: Implement performance/chaos testing
+- I4.T8: Expand E2E suite for POS/loyalty/headless
+- I5.T7: Release readiness report with final metrics
+
+### 2. Created E2E Runner Script (`scripts/qa/run_e2e.sh`)
+
+The script includes:
+
+**Production-Ready Features:**
+- Bash best practices: `set -euo pipefail`, proper error handling
+- Environment variable support: `BASE_URL`, `HEADLESS` (with defaults)
+- Prerequisite checks: Node.js version, required commands, directory existence
+- Smart dependency installation: `npm ci` in CI, `npm install` locally
+- Playwright browser installation with `--with-deps`
+- Artifact collection reporting (HTML, JSON, JUnit XML, traces)
+- Color-coded logging (info/warn/error)
+- Exit codes for CI integration
+
+**TODO Comments for Future Work:**
+- `TODO(I2.T8)`: Add REST-assured API smoke tests (health checks, OpenAPI validation)
+- `TODO(I3.T8)`: Integrate Gatling/Locust performance tests with budget enforcement
+- `TODO(I4.T8)`: Add chaos testing (failover, outage simulation)
+- `TODO(I5.T7)`: Generate release readiness report with aggregated metrics
+
+**Script is executable** (chmod +x applied) and ready for CI integration.
+
+### Acceptance Criteria Met ✅
+
+- ✅ **Document outlines per-module suites:** Module-by-Module Test Obligations table with 12 modules mapped to unit/integration/e2e requirements
+- ✅ **Data seeding:** Comprehensive Data Management section with dev/unit/integration/e2e strategies, seed script references
+- ✅ **Coverage criteria:** JaCoCo 80% minimum + 85% stretch goal, SonarCloud enforcement, mutation testing stretch goals
+- ✅ **Reporting pipeline:** Coverage Reporting Pipeline section with 4-step flow (local → CI → SonarCloud → artifacts)
+- ✅ **Script stub runs placeholder command:** Script executes `npm run test` via Playwright config with proper environment setup
+- ✅ **Includes TODO for actual tests:** 4 TODO comments linked to I2.T8, I3.T8, I4.T8, I5.T7 for REST-assured, performance, chaos, and reporting integration
+- ✅ **Links to iteration tasks:** Future Enhancements section cross-references I2.T8, I3.T8, I4.T8, I5.T7 with specific deliverables
+
+The test strategy is now a living document ready to guide downstream teams as they implement feature work across iterations I2-I5.
+⏱️  Duration: 220883ms | Cost: $0.5532493 | Tokens: 459114in/10002out (457682 cached)
+Code Generation Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Code Generation Agent started to work.

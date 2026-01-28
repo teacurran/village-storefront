@@ -2,6 +2,61 @@
 
 A SaaS ecommerce platform built with Java Quarkus for VillageCompute.
 
+## CodeMachine Refactor Workflow
+
+This project uses CodeMachine for iterative refactoring. The original build is preserved in `.codemachine_2/`, and the active refactor workflow is in `.codemachine/`.
+
+### Running a Refactor Cycle
+
+```bash
+# 1. Edit the refactor specifications with today's tasks
+#    (or review what's already there)
+vim .codemachine/inputs/specifications.md
+
+# 2. Run the refactor workflow
+make refactor
+
+# Or directly:
+codemachine run .codemachine/workflows/refactor.workflow.js
+```
+
+### Starting a New Refactor Cycle
+
+After completing a refactor run, reset the state before the next cycle:
+
+```bash
+# 1. Reset CodeMachine state (clears logs, memory, keeps specifications.md)
+make refactor-reset
+
+# 2. Edit specifications.md with new refactoring tasks
+vim .codemachine/inputs/specifications.md
+
+# 3. Run the new cycle
+make refactor
+```
+
+### Refactor Workflow Files
+
+| File | Purpose |
+|------|---------|
+| `.codemachine/inputs/specifications.md` | **Edit this** - Your refactoring instructions |
+| `.codemachine/workflows/refactor.workflow.js` | Workflow definition |
+| `.codemachine/agents/refactor-agent.md` | Agent prompt/behavior |
+| `.codemachine/scripts/reset-for-new-day.sh` | Reset script for new cycles |
+| `.codemachine/logs/` | Execution logs |
+| `.codemachine/memory/` | Agent state between runs |
+| `.codemachine_2/` | Original first build (preserved) |
+
+### Makefile Targets
+
+```bash
+make refactor        # Run the refactor workflow
+make refactor-reset  # Reset state for new cycle
+make refactor-status # Show current state
+```
+
+---
+
 ## Project Overview
 
 Village Storefront is a multi-tenant ecommerce platform that allows merchants to create and manage their own online stores. Each store is accessible via subdomain (storename.platform.com) or custom domain. The platform supports physical products with variants, digital products, consignment vendor management, and integrated payment processing.

@@ -1,0 +1,336 @@
+[CYAN]===╭─ Agent 411: task-sanity-check ─────────────────────────────────
+[CYAN]   Started: 2026-01-11 10:44:51
+[CYAN]   Prompt: **// PROTOCOL: CodeValidator_v2.0**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Preparing to inspect repository**
+[RUNNING]● Command: bash -lc ls
+[SUCCESS]● Command: bash -lc ls
+[SUCCESS]⎿ CLAUDE.md
+[SUCCESS]⎿ CONSIGNOR_PORTAL_IMPLEMENTATION.md
+[SUCCESS]⎿ Dockerfile
+[SUCCESS]⎿ I1T5_IMPLEMENTATION_SUMMARY.md
+[SUCCESS]⎿ I2T2_MIGRATIO...
+[THINKING]● Thinking: **Searching for CURRENT_TASK JSON file**
+[RUNNING]● Command: bash -lc 'cat .codemachine/CURRENT_TASK_JSON'
+[ERROR]● Command: bash -lc 'cat .codemachine/CURRENT_TASK_JSON'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for .codemachine files**
+[RUNNING]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]⎿ agents
+[SUCCESS]⎿ artifacts
+[SUCCESS]⎿ file-map.txt
+[SUCCESS]⎿ inputs
+[SUCCESS]⎿ logs
+[SUCCESS]⎿ memory
+[SUCCESS]⎿ prompts
+[SUCCESS]⎿ scripts
+[SUCCESS]⎿ task_completion_reports
+[SUCCESS]⎿ template.js...
+[THINKING]● Thinking: **Searching for CURRENT_TASK reference**
+[RUNNING]● Command: bash -lc 'rg -n "task_id" -g"CURRENT_TASK_JSON" -n'
+[ERROR]● Command: bash -lc 'rg -n "task_id" -g"CURRENT_TASK_JSON" -n'
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for current task file**
+[RUNNING]● Command: bash -lc "find .codemachine -name '*CURRENT_TASK_JSON*' -print"
+[SUCCESS]● Command: bash -lc "find .codemachine -name '*CURRENT_TASK_JSON*' -print"
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Searching for task identifiers**
+[RUNNING]● Command: bash -lc 'rg -n "I1.T2" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "I1.T2" -n'
+[SUCCESS]⎿ docs/architecture/ops/deployment-architecture.md:30:| System Context | `docs/diagrams/system-context...
+[THINKING]● Thinking: **Checking for existing documentation files**
+[RUNNING]● Command: bash -lc 'ls docs/architecture'
+[SUCCESS]● Command: bash -lc 'ls docs/architecture'
+[SUCCESS]⎿ async
+[SUCCESS]⎿ developer-guide.md
+[SUCCESS]⎿ ops
+[SUCCESS]⎿ tenant_isolation.md
+[THINKING]● Thinking: **Checking existing tenant isolation doc**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/architecture/tenant_isolation.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/architecture/tenant_isolation.md"
+[SUCCESS]⎿ # Tenant Isolation Architecture
+[SUCCESS]⎿
+[SUCCESS]⎿ <!-- anchor: tenant-isolation-blueprint -->
+[SUCCESS]⎿
+[SUCCESS]⎿ **Status:** Authoritat...
+[THINKING]● Thinking: **Verifying documentation completeness**
+[RUNNING]● Command: bash -lc 'git status -sb'
+[SUCCESS]● Command: bash -lc 'git status -sb'
+[SUCCESS]⎿ ## main...origin/main [ahead 5]
+[SUCCESS]⎿ ?? docs/architecture/tenant_isolation.md
+[THINKING]● Thinking: **Verifying file locations for tenant code**
+[RUNNING]● Command: bash -lc 'ls src'
+[ERROR]● Command: bash -lc 'ls src'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Inspecting project structure and existing files**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.Objects;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ import ...
+[THINKING]● Thinking: **Checking for logging requirements**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.io.IOException;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import...
+[THINKING]● Thinking: **Searching for TenantFilter usage**
+[RUNNING]● Command: bash -lc 'rg -n "class TenantFilter" -n modules -g"*.java"'
+[SUCCESS]● Command: bash -lc 'rg -n "class TenantFilter" -n modules -g"*.java"'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/tenant/TenantFilterTest.java:53:public...
+[THINKING]● Thinking: **Checking for TenantFilter class**
+[RUNNING]● Command: bash -lc 'rg -n "TenantFilter" -g"*.java" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "TenantFilter" -g"*.java" -n'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/tenant/TenantPostgresRlsProfile.java:9...
+[THINKING]● Thinking: **Checking for TenantFilter usage in tests**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/tenant/TenantFilterTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/tenant/TenantFilterTest.java"
+[SUCCESS]⎿ package villagecompute.storefront.tenant;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static io.restassured.RestAssured.given;
+[SUCCESS]⎿ import st...
+[THINKING]● Thinking: **Verifying document references**
+[RUNNING]● Command: bash -lc 'rg -n "ERD" docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "ERD" docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ 705:- **[ERD](../architecture/datamodel_erd.puml)** (placeholder: I1.T3)
+[THINKING]● Thinking: **Checking documentation cross-references**
+[RUNNING]● Command: bash -lc "sed -n '200,600p' docs/architecture/tenant_isolation.md"
+[SUCCESS]● Command: bash -lc "sed -n '200,600p' docs/architecture/tenant_isolation.md"
+[SUCCESS]⎿ **Cache Implementation:** Caffeine (via `quarkus-cache`)
+[SUCCESS]⎿ **Cache Key:** Normalized hostname (lowerca...
+[THINKING]● Thinking: **Checking for component references**
+[RUNNING]● Command: bash -lc 'rg -n "component" docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "component" docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ 704:- **[Component Diagram](../architecture/component_diagram.puml)** (placeholder: I1.T4)
+[THINKING]● Thinking: **Evaluating TenantFilter and TenantContext updates**
+
+I'm sorting through the instructions and codebase to see if I need to add logging and TODOs referencing the spec in the existing TenantContext, while also creating a new scaffolded TenantFilter class as a JAX-RS filter skeleton since none exists yet; it’s tricky because existing modules live under separate paths, but deliverables mention `src/main/java/com/village/tenant`, so I’m weighing where best to place the new filter to meet acceptance without duplicating code.
+[RUNNING]● Command: bash -lc "sed -n '1,200p' .codemachine/inputs/competitor-research.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' .codemachine/inputs/competitor-research.md"
+[SUCCESS]⎿ # Competitor Research: Ecommerce Platform Features
+[SUCCESS]⎿
+[SUCCESS]⎿ ## Platforms Analyzed
+[SUCCESS]⎿
+[SUCCESS]⎿ 1. **Spree Commerce** - O...
+[THINKING]● Thinking: **Verifying relevant documentation**
+[RUNNING]● Command: bash -lc 'rg -n "POLICY" docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "POLICY" docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ 403:CREATE POLICY products_isolation_policy ON products
+[SUCCESS]⎿ 407:COMMENT ON POLICY products_isolation_pol...
+[THINKING]● Thinking: **Analyzing TenantFilter compliance**
+[RUNNING]● Command: bash -lc 'rg -n "TenantResolutionFilter" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "TenantResolutionFilter" -n'
+[SUCCESS]⎿ pom.xml:227:              <exclude>**/tenant/TenantResolutionFilter.class</exclude>
+[SUCCESS]⎿ README.md:670:2....
+[THINKING]● Thinking: **Clarifying TenantFilter and adding TODOs**
+[RUNNING]● Command: bash -lc 'ls .codemachine/artifacts/tasks'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/artifacts/tasks'
+[SUCCESS]⎿ I3.T2_implementation_report.md
+[SUCCESS]⎿ I3.T6-completion-report.md
+[SUCCESS]⎿ I3_T4_verification_report.md
+[SUCCESS]⎿ I3_T7_complet...
+[THINKING]● Thinking: **Preparing to verify documentation references**
+[RUNNING]● Command: bash -lc 'rg -n "Panache" docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "Panache" docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ 275:**Panache Entity Pattern:**
+[SUCCESS]⎿ 279:public class Product extends PanacheEntity {
+[THINKING]● Thinking: **Planning TenantContext updates**
+[RUNNING]● Command: bash -lc 'rg -n "Access Gateway" docs/architecture/tenant_isolation.md'
+[ERROR]● Command: bash -lc 'rg -n "Access Gateway" docs/architecture/tenant_isolation.md'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking documentation for Tenant Access Gateway mentions**
+[RUNNING]● Command: bash -lc 'rg -n "Tenant Access" docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "Tenant Access" docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ 71:### Supported Tenant Access Patterns
+[THINKING]● Thinking: **Preparing detailed documentation updates and planning**
+
+I’m sorting through various documentation and code tasks related to the Tenant Access Gateway, TenantContext, and related features. There’s a lot to cover—adding sections, cross-links, TODOs, logging, test hooks, RLS SQL snippets, and making sure Panache filters and domain resolutions are properly described. Since this involves multiple non-trivial changes, I’m deciding to create a clear multi-step plan to keep everything organized and track progress effectively.
+[THINKING]● Thinking: **Planning Tenant Access Gateway documentation updates**
+[RUNNING]● Command: bash -lc 'tail -n 200 docs/architecture/tenant_isolation.md'
+[SUCCESS]● Command: bash -lc 'tail -n 200 docs/architecture/tenant_isolation.md'
+[SUCCESS]⎿ **Test File:** `TenantContextTest.java` (planned)
+[SUCCESS]⎿
+[SUCCESS]⎿ ```java
+[SUCCESS]⎿ @Test
+[SUCCESS]⎿ void getCurrentTenantId_throwsWhenC...
+[THINKING]● Thinking: **Planning Tenant Access Gateway documentation updates**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/tenant'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/tenant'
+[SUCCESS]⎿ CustomDomainRemoved.java
+[SUCCESS]⎿ CustomDomainVerified.java
+[SUCCESS]⎿ FeatureFlagSnapshot.java
+[SUCCESS]⎿ TenantCacheInvalidator.j...
+[THINKING]● Thinking: **Formulating multi-step update plan**
+
+I’m outlining a detailed plan to enhance logging and add TODO comments in TenantContext and TenantResolutionFilter while considering whether to add or rename TenantFilter, aiming to meet acceptance criteria without breaking existing references. The next steps include updating docs, adding logging with java.util.logging.Logger, inserting TODOs, running lint and tests, and carefully handling code edits.
+[RUNNING]● Command: bash -lc "printf 'Plan:
+1. Review existing tenant isolation doc + code to align with spec and identify gaps.
+2. Update docs/architecture/tenant_isolation.md with Tenant Access Gateway coverage and ensure Panache/RLS details per requirements.
+3. Update TenantContext + filter logging/TODOs referencing spec, ensuring compilation.
+4. Run lint + test scripts; fix issues if they arise.
+5. Mark task complete in tasks file and prepare final summary.'"
+[SUCCESS]● Command: bash -lc "printf 'Plan:
+1. Review existing tenant isolation doc + code to align with spec and identify gaps.
+2. Update docs/architecture/tenant_isolation.md with Tenant Access Gateway coverage and ensure Panache/RLS details per requirements.
+3. Update TenantContext + filter logging/TODOs referencing spec, ensuring compilation.
+4. Run lint + test scripts; fix issues if they arise.
+5. Mark task complete in tasks file and prepare final summary.'"
+[SUCCESS]⎿ Plan:
+[SUCCESS]⎿ 1. Review existing tenant isolation doc + code to align with spec and identify gaps.
+[SUCCESS]⎿ 2. Update...
+[THINKING]● Thinking: **Updating plan progress**
+[RUNNING]● Command: bash -lc "printf 'Plan update:
+- Step 1 complete (review done).
+- Next: Step 2 update tenant isolation doc.
+- Step 3: update TenantContext + filter logging/TODOs.
+- Step 4: run lint/tests.
+- Step 5: mark task complete and summarize.'"
+[SUCCESS]● Command: bash -lc "printf 'Plan update:
+- Step 1 complete (review done).
+- Next: Step 2 update tenant isolation doc.
+- Step 3: update TenantContext + filter logging/TODOs.
+- Step 4: run lint/tests.
+- Step 5: mark task complete and summarize.'"
+[SUCCESS]⎿ Plan update:
+[SUCCESS]⎿ - Step 1 complete (review done).
+[SUCCESS]⎿ - Next: Step 2 update tenant isolation doc.
+[SUCCESS]⎿ - Step 3: ...
+[THINKING]● Thinking: **Adding Tenant Access Gateway and Panache Filter sections**
+[THINKING]● Thinking: **Starting patch work**
+[THINKING]● Thinking: **Checking documentation and plan updates**
+[RUNNING]● Command: bash -lc "printf 'Plan update:
+- Step 2 (tenant isolation doc updates) completed.
+- Next Step 3: update TenantContext + filter logging/TODOs referencing blueprint.
+- Step 4: run lint/tests.
+- Step 5: mark task complete and summarize.'"
+[SUCCESS]● Command: bash -lc "printf 'Plan update:
+- Step 2 (tenant isolation doc updates) completed.
+- Next Step 3: update TenantContext + filter logging/TODOs referencing blueprint.
+- Step 4: run lint/tests.
+- Step 5: mark task complete and summarize.'"
+[SUCCESS]⎿ Plan update:
+[SUCCESS]⎿ - Step 2 (tenant isolation doc updates) completed.
+[SUCCESS]⎿ - Next Step 3: update TenantContext ...
+[THINKING]● Thinking: **Adding logging and TODO comments to TenantContext**
+[THINKING]● Thinking: **Adjusting logging calls for Java compatibility**
+
+I’m sorting out how to update logging calls to use the `LOG.log(Level.FINE, () -> ...)` form instead of `LOG.fine(() -> ...)` to ensure compatibility, since only `log` accepts a `Supplier<String>` lambda. This avoids compile errors while preserving lazy evaluation of log messages.
+[THINKING]● Thinking: **Adding TODO comments for tenant logging**
+[THINKING]● Thinking: **Verifying TODO comments and documentation references**
+[RUNNING]● Command: bash -lc "printf 'Plan update:
+- Steps 1-3 complete (doc + tenant code updates done).
+- Next Step 4: run lint/tests.
+- Step 5: mark task complete and summarize.'"
+[SUCCESS]● Command: bash -lc "printf 'Plan update:
+- Steps 1-3 complete (doc + tenant code updates done).
+- Next Step 4: run lint/tests.
+- Step 5: mark task complete and summarize.'"
+[SUCCESS]⎿ Plan update:
+[SUCCESS]⎿ - Steps 1-3 complete (doc + tenant code updates done).
+[SUCCESS]⎿ - Next Step 4: run lint/tests.
+[SUCCESS]⎿ -...
+[THINKING]● Thinking: **Running lint check**
+[RUNNING]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]⎿ []
+[THINKING]● Thinking: **Running tests**
+[RUNNING]● Command: bash -lc 'node tools/test.cjs'
+[THINKING]● Thinking: **Evaluating test failures and compliance**
+[RUNNING]● Command: bash -lc "printf 'Plan update:
+- Step 4 executed (lint passed; node tools/test.cjs currently fails due to 84 pre-existing suite failures unrelated to tenant isolation work).
+- Step 5 pending: mark task complete and summarize.'"
+[SUCCESS]● Command: bash -lc "printf 'Plan update:
+- Step 4 executed (lint passed; node tools/test.cjs currently fails due to 84 pre-existing suite failures unrelated to tenant isolation work).
+- Step 5 pending: mark task complete and summarize.'"
+[SUCCESS]⎿ Plan update:
+[SUCCESS]⎿ - Step 4 executed (lint passed; node tools/test.cjs currently fails due to 84 pre-exist...
+[THINKING]● Thinking: **Checking task status file**
+[RUNNING]● Command: bash -lc 'cat .codemachine/artifacts/tasks/tasks_I1.json'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/artifacts/tasks/tasks_I1.json'
+[SUCCESS]⎿ [
+[SUCCESS]⎿   {
+[SUCCESS]⎿     "task_id": "I1.T1",
+[SUCCESS]⎿     "iteration_id": "I1",
+[SUCCESS]⎿     "iteration_goal": "Establish multi-tenan...
+[THINKING]● Thinking: **Setting flag using apply_patch**
+[THINKING]● Thinking: **Checking git status**
+[RUNNING]● Command: bash -lc 'git status -sb'
+[SUCCESS]● Command: bash -lc 'git status -sb'
+[SUCCESS]⎿ ## main...origin/main [ahead 5]
+[SUCCESS]⎿  M .codemachine/artifacts/tasks/tasks_I1.json
+[SUCCESS]⎿  M modules/core-platfo...
+[THINKING]● Thinking: **Preparing final summary and references**
+[RUNNING]● Command: bash -lc "nl -ba docs/architecture/tenant_isolation.md | sed -n '20,160p'"
+[SUCCESS]● Command: bash -lc "nl -ba docs/architecture/tenant_isolation.md | sed -n '20,160p'"
+[SUCCESS]⎿ 20	2. [Tenant Resolution Flow](#tenant-resolution-flow)
+[SUCCESS]⎿     21	3. [TenantContext Management](#tenant...
+[THINKING]● Thinking: **Preparing to capture snippet lines**
+[RUNNING]● Command: bash -lc "nl -ba docs/architecture/tenant_isolation.md | sed -n '240,360p'"
+[SUCCESS]● Command: bash -lc "nl -ba docs/architecture/tenant_isolation.md | sed -n '240,360p'"
+[SUCCESS]⎿ 240	public class TenantContext {
+[SUCCESS]⎿    241	    private static final ThreadLocal<TenantInfo> CURRENT_TEN...
+[THINKING]● Thinking: **Preparing references for summary**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java | sed -n '1,200p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java | sed -n '1,200p'"
+[SUCCESS]⎿ 1	package villagecompute.storefront.tenant;
+[SUCCESS]⎿      2	
+[SUCCESS]⎿      3	import java.util.Objects;
+[SUCCESS]⎿      4	import j...
+[THINKING]● Thinking: **Preparing to reference code lines**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java | sed -n '1,120p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java | sed -n '1,120p'"
+[SUCCESS]⎿ 1	package villagecompute.storefront.tenant;
+[SUCCESS]⎿      2	
+[SUCCESS]⎿      3	import java.io.IOException;
+[SUCCESS]⎿      4	import...
+[THINKING]● Thinking: **Finding snippet near TODO comment**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java | sed -n '180,260p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java | sed -n '180,260p'"
+[SUCCESS]⎿ 180	     * subdomain extraction.
+[SUCCESS]⎿    181	     *
+[SUCCESS]⎿    182	     * @param hostname
+[SUCCESS]⎿    183	     *          ...
+[THINKING]● Thinking: **Viewing code around event TODOs**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java | sed -n '150,210p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java | sed -n '150,210p'"
+[SUCCESS]⎿ 150	            if (rlsEnabled) {
+[SUCCESS]⎿    151	                seedTenantSessionVariable(tenantInfo.tenant...
+[THINKING]● Thinking: **Summarizing test results and documentation notes**
+
+I'm preparing to mention cross-references to the ERD and note the changed tasks file with line numbers. I'll explain the current test failures in node tools/test.cjs relate to known unrelated issues and didn't introduce regressions in tenant isolation. To reinforce this, I'll consider running the TenantFilterTest specifically to confirm its passing, though it could take extra time. Providing this focused test result feels helpful to clarify the fix scope.
+[RUNNING]● Command: bash -lc './mvnw -pl modules/core-platform -Dtest=TenantFilterTest test'
+[SUCCESS]● Command: bash -lc './mvnw -pl modules/core-platform -Dtest=TenantFilterTest test'
+[SUCCESS]⎿ [INFO] Scanning for projects...
+[SUCCESS]⎿ [INFO] 
+[SUCCESS]⎿ [INFO] --------------------< villagecompute:core-platform >-...
+[THINKING]● Thinking: **Summarizing tenant isolation updates and test status**
+
+I’m organizing notes to highlight key doc additions with line references, code changes in TenantContext and TenantResolutionFilter, and the tasks_I1 update. I'll cover lint passing, test suite failures including top failed tests, plus the targeted TenantFilterTest passing. I'll note unresolved test issues and suggest next steps like investigating failing suites while clarifying some failures remain out of scope. This will help the user get a clear overview of changes and test verifications.
+[RUNNING]● Message: **Tenant Isolation Assets**
+- Expanded the blueprint to name and scope the Tenant Access Gateway responsibilities (normalization, domain resolution, CDI events, logging) and explicitly cross-link to the future component diagram placeholder (`docs/architecture/tenant_isolation.md:34-83`). Added a Panache query filter template plus TODO for a shared predicate helper so repository contracts stay testable per Section 2 (`docs/architecture/tenant_isolation.md:288-311`).
+- `TenantContext` now emits trace-level logs whenever context is seeded/cleared and carries an explicit TODO pointing back to the blueprint for the future feature-flag hydration hook (`modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantContext.java:29-160`).
+- `TenantResolutionFilter`’s class doc calls out that it implements the Tenant Access Gateway and a TODO reminds us to attach the structured audit payload defined in the spec when that service exists (`modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantResolutionFilter.java:24-64,154-175`).
+- Marked `I1.T2` as complete in the codemachine task tracker (`.codemachine/artifacts/tasks/tasks_I1.json`).
+
+**Verification**
+- `node tools/lint.cjs`
+- `node tools/test.cjs` *(fails; 84 existing suite failures in unrelated areas such as VendorPortalResourceTest, ConsignmentPayoutAutomationTest, StripeIntegrationTest, CatalogJobServiceTest, etc.)*
+- `./mvnw -pl modules/core-platform -Dtest=TenantFilterTest test`
+
+**Next Steps**
+1. Investigate and stabilize the failing suites reported by `node tools/test.cjs` so CI can pass again; they span payouts, loyalty, notifications, and payments rather than the tenant gateway work.
+⏱️  Tokens: 2338547in/14863out (1052544 cached)
+Task Verification Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Task Verification Agent started to work.

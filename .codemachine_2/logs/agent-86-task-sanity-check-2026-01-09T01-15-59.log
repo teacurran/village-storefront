@@ -1,0 +1,511 @@
+[CYAN]===╭─ Agent 86: task-sanity-check ──────────────────────────────────
+[CYAN]   Started: 2026-01-09 01:15:59
+[CYAN]   Prompt: **// PROTOCOL: CodeValidator_v2.0**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Checking current task details**
+[RUNNING]● Command: bash -lc pwd
+[SUCCESS]● Command: bash -lc pwd
+[SUCCESS]⎿ /Users/tea/dev/VillageCompute/code/village-storefront
+[THINKING]● Thinking: **Searching for CURRENT_TASK_JSON environment variable**
+[RUNNING]● Command: bash -lc 'cat .codemachine/CURRENT_TASK_JSON'
+[ERROR]● Command: bash -lc 'cat .codemachine/CURRENT_TASK_JSON'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for instructions**
+[RUNNING]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]● Command: bash -lc 'ls .codemachine'
+[SUCCESS]⎿ agents
+[SUCCESS]⎿ artifacts
+[SUCCESS]⎿ inputs
+[SUCCESS]⎿ logs
+[SUCCESS]⎿ memory
+[SUCCESS]⎿ prompts
+[SUCCESS]⎿ scripts
+[SUCCESS]⎿ template.json
+[THINKING]● Thinking: **Checking .codemachine/agents folder**
+[RUNNING]● Command: bash -lc 'rg -n "CURRENT_TASK_JSON" -n .'
+[ERROR]● Command: bash -lc 'rg -n "CURRENT_TASK_JSON" -n .'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for task files**
+[RUNNING]● Command: bash -lc 'ls .codemachine/artifacts'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/artifacts'
+[SUCCESS]⎿ architecture
+[SUCCESS]⎿ plan
+[SUCCESS]⎿ requirements
+[SUCCESS]⎿ tasks
+[THINKING]● Thinking: **Listing possible tasks**
+[RUNNING]● Command: bash -lc 'ls .codemachine/artifacts/tasks'
+[SUCCESS]● Command: bash -lc 'ls .codemachine/artifacts/tasks'
+[SUCCESS]⎿ tasks_I1.json
+[SUCCESS]⎿ tasks_I2.json
+[SUCCESS]⎿ tasks_I3.json
+[SUCCESS]⎿ tasks_I4.json
+[SUCCESS]⎿ tasks_I5.json
+[SUCCESS]⎿ tasks_I6.json
+[SUCCESS]⎿ tasks_manifest.j...
+[THINKING]● Thinking: **Checking task iteration details**
+[RUNNING]● Command: bash -lc 'git status -sb'
+[SUCCESS]● Command: bash -lc 'git status -sb'
+[SUCCESS]⎿ ## codemacine/dev...origin/codemacine/dev [ahead 3]
+[SUCCESS]⎿  M .codemachine/template.json
+[SUCCESS]⎿  M modules/core-pl...
+[THINKING]● Thinking: **Outlining multi-step instrumentation plan**
+
+The task looks complex with lots of new metrics files, so I’m preparing a plan that involves inspecting the diffs to understand the changes, verifying acceptance criteria, running lint and tests, and fixing issues as needed—this will help me navigate the instrumentation carefully.
+[RUNNING]● Command: bash -lc 'git diff'
+[SUCCESS]● Command: bash -lc 'git diff'
+[SUCCESS]⎿ diff --git a/.codemachine/template.json b/.codemachine/template.json
+[SUCCESS]⎿ index 03d6767..3dd6137 100644
+[SUCCESS]⎿ -...
+[THINKING]● Thinking: **Continuing detailed diffs**
+[RUNNING]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[SUCCESS]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[SUCCESS]⎿ diff --git a/modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminReso...
+[THINKING]● Thinking: **Checking InventoryAdminResource changes**
+[RUNNING]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java'
+[SUCCESS]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java'
+[SUCCESS]⎿ diff --git a/modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminRe...
+[THINKING]● Thinking: **Considering additional instrumentation needs**
+[RUNNING]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]⎿ diff --git a/modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.j...
+[THINKING]● Thinking: **Continuing to review file for instrumentation**
+[RUNNING]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java'
+[SUCCESS]● Command: bash -lc 'git diff modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java'
+[SUCCESS]⎿ diff --git a/modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService...
+[THINKING]● Thinking: **Checking new services/metrics packages**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/services/metrics'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/main/java/villagecompute/storefront/services/metrics'
+[SUCCESS]⎿ CatalogMetrics.java
+[SUCCESS]⎿ InventoryMetrics.java
+[THINKING]● Thinking: **Viewing files**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java"
+[SUCCESS]⎿ package villagecompute.storefront.services.metrics;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import java.util.concurr...
+[THINKING]● Thinking: **Requesting more file content**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java"
+[SUCCESS]⎿ counter("catalog.collection.deleted", tenantId).increment();
+[SUCCESS]⎿     }
+[SUCCESS]⎿
+[SUCCESS]⎿     // =========================...
+[THINKING]● Thinking: **Identifying need for inventory metrics file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java"
+[SUCCESS]⎿ package villagecompute.storefront.services.metrics;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿ import java.util.concurr...
+[THINKING]● Thinking: **Continuing exploration**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java"
+[SUCCESS]⎿ }
+[SUCCESS]⎿
+[SUCCESS]⎿     /**
+[SUCCESS]⎿      * Register gauge for pending transfers count.
+[SUCCESS]⎿      *
+[SUCCESS]⎿      * <p>
+[SUCCESS]⎿      * This should b...
+[THINKING]● Thinking: **Identifying location for metrics tests**
+[RUNNING]● Command: bash -lc 'ls modules/core-platform/src/test/java/villagecompute/storefront/services/metrics'
+[SUCCESS]● Command: bash -lc 'ls modules/core-platform/src/test/java/villagecompute/storefront/services/metrics'
+[SUCCESS]⎿ CatalogMetricsTest.java
+[SUCCESS]⎿ InventoryMetricsTest.java
+[THINKING]● Thinking: **Preparing to inspect**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java"
+[SUCCESS]⎿ package villagecompute.storefront.services.metrics;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static org.junit.jupiter.api.Assertions....
+[THINKING]● Thinking: **Continuing process**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java"
+[SUCCESS]⎿ void testImportFailureMetricRegistered() {
+[SUCCESS]⎿         // When
+[SUCCESS]⎿         catalogMetrics.recordImportFailur...
+[THINKING]● Thinking: **Checking test file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java"
+[SUCCESS]⎿ package villagecompute.storefront.services.metrics;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static org.junit.jupiter.api.Assertions....
+[THINKING]● Thinking: **Continuing processing**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java"
+[SUCCESS]⎿ @Test
+[SUCCESS]⎿     void testTransferCancelledMetricRegistered() {
+[SUCCESS]⎿         // When
+[SUCCESS]⎿         inventoryMetrics.re...
+[THINKING]● Thinking: **Checking for runbook file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/operations/catalog_inventory_runbook.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/operations/catalog_inventory_runbook.md"
+[SUCCESS]⎿ # Catalog & Inventory Operational Runbook
+[SUCCESS]⎿
+[SUCCESS]⎿ **Task:** I2.T7
+[SUCCESS]⎿ **Last Updated:** 2026-01-08
+[SUCCESS]⎿ **Owner:** P...
+[THINKING]● Thinking: **Verifying span attribute naming**
+[RUNNING]● Command: bash -lc "rg -n \"tenant\\.id\" -n modules/core-platform/src/main/java/villagecompute/storefront -g'*.java'"
+[SUCCESS]● Command: bash -lc "rg -n \"tenant\\.id\" -n modules/core-platform/src/main/java/villagecompute/storefront -g'*.java'"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/loyalty/LoyaltyService.java:176:      ...
+[THINKING]● Thinking: **Evaluating attribute naming for spans**
+
+I'll explore how to set the tenant ID attribute on spans, weighing whether to use `tenant.id`, `tenant_id`, or both to meet the acceptance criteria. I'll check existing instrumentation for references to these keys before deciding how to update the code.
+[RUNNING]● Command: bash -lc "rg -n \"Span\\.current\\(\\)\\.setAttribute\" -n modules/core-platform/src/main/java/villagecompute/storefront"
+[SUCCESS]● Command: bash -lc "rg -n \"Span\\.current\\(\\)\\.setAttribute\" -n modules/core-platform/src/main/java/villagecompute/storefront"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java:115...
+[THINKING]● Thinking: **Refining span attributes and metrics handling**
+
+I'm focused on ensuring the `tenant_id` attribute is consistently set on spans, considering adding a helper method to avoid repeated code. I’m also reviewing metric increments for inventory operations, noticing recent changes might have lost correct quantity tracking, so I plan to adjust method signatures and calls to preserve accurate metrics. Additionally, I'll verify instrumentation settings and run lint and tests to confirm everything stays solid.
+[RUNNING]● Command: bash -lc "rg -n \"inventory\\.released\" -n"
+[SUCCESS]● Command: bash -lc "rg -n \"inventory\\.released\" -n"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java...
+[THINKING]● Thinking: **Verifying API metrics instrumentation**
+
+I’m checking how the new release metric affects inventory reserved counts and reviewing `catalogMetrics` for any needed updates. I’ll verify that the `@Timed` annotation is consistently applied across catalog and inventory API endpoints, especially in `CatalogAdminResource`, to ensure complete metrics coverage as required by observability goals.
+[RUNNING]● Command: bash -lc 'rg -n "@Timed" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[SUCCESS]● Command: bash -lc 'rg -n "@Timed" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[SUCCESS]⎿ 108:    @Timed(
+[SUCCESS]⎿ 134:    @Timed(
+[SUCCESS]⎿ 207:    @Timed(
+[SUCCESS]⎿ 263:    @Timed(
+[SUCCESS]⎿ 307:    @Timed(
+[SUCCESS]⎿ 361:    @Timed(
+[SUCCESS]⎿ 500:...
+[THINKING]● Thinking: **Checking instrumentation for timing annotations**
+[RUNNING]● Command: bash -lc 'rg -n "@Timed" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java'
+[SUCCESS]● Command: bash -lc 'rg -n "@Timed" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java'
+[SUCCESS]⎿ 192:    @Timed(
+[SUCCESS]⎿ 264:    @Timed(
+[SUCCESS]⎿ 301:    @Timed(
+[THINKING]● Thinking: **Evaluating span attribute updates and instrumentation**
+[RUNNING]● Command: bash -lc 'rg -n "catalogMetrics" -n modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]● Command: bash -lc 'rg -n "catalogMetrics" -n modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]⎿ 64:    CatalogMetrics catalogMetrics;
+[SUCCESS]⎿ 92:        catalogMetrics.recordProductCreated(tenantId);
+[SUCCESS]⎿ 146:...
+[THINKING]● Thinking: **Checking variant operations in file**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.time.OffsetDateTime;
+[SUCCESS]⎿ import java.util.List;...
+[THINKING]● Thinking: **Searching for variant instrumentation calls**
+[RUNNING]● Command: bash -lc 'rg -n "recordVariant" -n modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[ERROR]● Command: bash -lc 'rg -n "recordVariant" -n modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Identifying missing instrumentation**
+[RUNNING]● Command: bash -lc 'rg -n "variant" modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]● Command: bash -lc 'rg -n "variant" modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]⎿ 27: * Service layer for catalog operations (products, variants, categories).
+[SUCCESS]⎿ 30: * Provides business...
+[THINKING]● Thinking: **Reviewing file continuation**
+[RUNNING]● Command: bash -lc "sed -n '560,760p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]● Command: bash -lc "sed -n '560,760p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]⎿ public void deleteCollection(UUID collectionId) {
+[SUCCESS]⎿         UUID tenantId = TenantContext.getCurrentTe...
+[THINKING]● Thinking: **Checking for variant update and delete operations**
+[RUNNING]● Command: bash -lc "rg -n \"variant\" modules/core-platform/src/main/java/villagecompute/storefront/services -g'*.java'"
+[SUCCESS]● Command: bash -lc "rg -n \"variant\" modules/core-platform/src/main/java/villagecompute/storefront/services -g'*.java'"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/InsufficientStockException.ja...
+[THINKING]● Thinking: **Reviewing metrics instrumentation for catalog operations**
+[RUNNING]● Command: bash -lc "rg -n \"recordCategory\" modules/core-platform/src/main/java/villagecompute/storefront -g'*.java'"
+[SUCCESS]● Command: bash -lc "rg -n \"recordCategory\" modules/core-platform/src/main/java/villagecompute/storefront -g'*.java'"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java:1...
+[THINKING]● Thinking: **Verifying instrumentation of category updates**
+[RUNNING]● Command: bash -lc 'rg -n "recordCollection" -n modules/core-platform/src/main/java/villagecompute/storefront'
+[SUCCESS]● Command: bash -lc 'rg -n "recordCollection" -n modules/core-platform/src/main/java/villagecompute/storefront'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java:1...
+[THINKING]● Thinking: **Investigating metric recording duplication**
+[RUNNING]● Command: bash -lc 'rg -n "recordCollectionUpdated" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "recordCollectionUpdated" -n'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java:1...
+[THINKING]● Thinking: **Verifying resource usage and hooking**
+[RUNNING]● Command: bash -lc "rg -n \"catalogMetrics\\.recordCollection\" -n modules/core-platform/src/main/java/villagecompute/storefront"
+[SUCCESS]● Command: bash -lc "rg -n \"catalogMetrics\\.recordCollection\" -n modules/core-platform/src/main/java/villagecompute/storefront"
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java:427:     ...
+[THINKING]● Thinking: **Analyzing duplicate creation calls**
+[RUNNING]● Command: bash -lc "sed -n '320,440p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '320,440p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]⎿ // Validate pagination parameters
+[SUCCESS]⎿         int pageNumber = page != null && page > 0 ? page - 1 : 0; ...
+[THINKING]● Thinking: **Adding instrumentation to update method**
+[RUNNING]● Command: bash -lc "sed -n '440,640p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '440,640p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]⎿ collection.name = dto.name;
+[SUCCESS]⎿         collection.slug = dto.slug;
+[SUCCESS]⎿         collection.description = dto...
+[THINKING]● Thinking: **Adding tenant ID attributes to spans consistently**
+
+I’m working out a plan to add both "tenant.id" and "tenant_id" attributes to spans for collection operations, creating a helper method that returns the current span with these attributes set to avoid repeated calls to `Span.current()`. I’ll replace existing direct attribute calls with this helper and ensure it’s used across relevant resources, also checking for missing instrumentation on delete and list methods while being mindful not to duplicate metric recordings.
+[RUNNING]● Command: bash -lc 'rg -n "createCollection" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "createCollection" -n'
+[SUCCESS]⎿ api/v1/openapi.yaml:622:      operationId: createCollection
+[SUCCESS]⎿ modules/core-platform/src/main/java/vill...
+[THINKING]● Thinking: **Checking CatalogService usage**
+[RUNNING]● Command: bash -lc 'rg -n "CatalogService" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[ERROR]● Command: bash -lc 'rg -n "CatalogService" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Analyzing instrumentation usage in resource and service**
+[RUNNING]● Command: bash -lc 'rg -n "CatalogService" modules/core-platform/src/main/java/villagecompute/storefront/api/rest'
+[SUCCESS]● Command: bash -lc 'rg -n "CatalogService" modules/core-platform/src/main/java/villagecompute/storefront/api/rest'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/api/rest/ProductResource.java:35:impor...
+[THINKING]● Thinking: **Analyzing instrumentation and metrics coverage**
+
+I'm mapping out where instrumentation exists and where it’s needed, including adding tenant_id to spans, ensuring metric calls like recordCollectionCreated are not duplicated, and identifying which service or resource methods need metric tracking for catalog and inventory operations. I'll also check test coverage and run lint/tests after fixing these issues.
+[RUNNING]● Command: bash -lc 'rg -n "InventoryMetrics" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "InventoryMetrics" -n'
+[SUCCESS]⎿ docs/operations/catalog_inventory_runbook.md:59:| **InventoryMetrics** | `villagecompute.storefront....
+[THINKING]● Thinking: **Analyzing inventory metric usage**
+[RUNNING]● Command: bash -lc "sed -n '120,220p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]● Command: bash -lc "sed -n '120,220p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]⎿ inventoryRepository.persist(inventoryLevel);
+[SUCCESS]⎿
+[SUCCESS]⎿         LOG.infof("Inventory adjusted - tenantId=%s, v...
+[RUNNING]● Command: bash -lc "sed -n '220,320p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]● Command: bash -lc "sed -n '220,320p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java"
+[SUCCESS]⎿ LOG.infof("Inventory reservation committed - tenantId=%s, variantId=%s, location=%s, committed=%d", ...
+[THINKING]● Thinking: **Planning inventory metrics improvements**
+
+I'm sorting out how to update inventory metrics to correctly include location and quantity while avoiding invalid negative increments. I'll ensure counters reflect quantity changes with direction tags to handle increases and decreases, and update service calls and tests accordingly to keep everything consistent and passing.
+[RUNNING]● Command: bash -lc 'rg -n "updateCollection" -n modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]● Command: bash -lc 'rg -n "updateCollection" -n modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java'
+[SUCCESS]⎿ 444:    public Collection updateCollection(UUID collectionId, Collection updatedCollection) {
+[THINKING]● Thinking: **Checking method for instrumentation**
+[RUNNING]● Command: bash -lc "sed -n '400,560p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]● Command: bash -lc "sed -n '400,560p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]⎿ }
+[SUCCESS]⎿
+[SUCCESS]⎿     // ========================================
+[SUCCESS]⎿     // Collection Operations
+[SUCCESS]⎿     // =============...
+[RUNNING]● Command: bash -lc "sed -n '560,720p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]● Command: bash -lc "sed -n '560,720p' modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java"
+[SUCCESS]⎿ public void deleteCollection(UUID collectionId) {
+[SUCCESS]⎿         UUID tenantId = TenantContext.getCurrentTe...
+[THINKING]● Thinking: **Planning instrumentation updates for collection metrics**
+[RUNNING]● Command: bash -lc 'rg -n "createCategory" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "createCategory" -n'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java:318:    p...
+[THINKING]● Thinking: **Planning metrics and tracing instrumentation updates**
+
+I’m mapping out how to handle metrics and tracing instrumentation across CatalogAdminResource, CatalogService, and InventoryAdminResource, balancing where to place metrics calls to avoid double counting while ensuring coverage for create, update, delete, and list operations. I'll implement a helper method to annotate spans with tenant IDs and refactor existing code to consistently use it. I also need to add `@Timed` annotations and ensure tests and configuration reflect these instrumentations correctly.
+[RUNNING]● Command: bash -lc 'rg -n "recordReserved" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "recordReserved" -n'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java:159:   ...
+[THINKING]● Thinking: **Preparing to update test references**
+[RUNNING]● Command: bash -lc 'rg -n "recordCommitted" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "recordCommitted" -n'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java:222:   ...
+[RUNNING]● Command: bash -lc 'rg -n "recordReleased" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "recordReleased" -n'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java:190:   ...
+[THINKING]● Thinking: **Updating inventory metrics methods and tests**
+[THINKING]● Thinking: **Checking type conversions and method calls**
+[THINKING]● Thinking: **Updating test methods for new signatures**
+[THINKING]● Thinking: **Searching for test references**
+[RUNNING]● Command: bash -lc 'rg -n "recordReserved" -n modules/core-platform/src/test/java/villagecompute/storefront'
+[SUCCESS]● Command: bash -lc 'rg -n "recordReserved" -n modules/core-platform/src/test/java/villagecompute/storefront'
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest....
+[THINKING]● Thinking: **Checking related service calls and updating metrics usage**
+[THINKING]● Thinking: **Enhancing CatalogAdminResource instrumentation**
+
+I’m planning comprehensive updates to CatalogAdminResource by adding @Timed annotations and replacing direct Span.current() calls with a helper method that attaches tenant info to spans. This involves methodical edits across multiple methods like listCategories, createCategory, listCollections, updateCollection, and import/export catalog operations. I’m preparing to use apply_patch for precise, multi-section modifications while ensuring existing imports and metrics calls stay consistent. Let’s carefully coordinate the new spanWithTenant helper and timing metrics to keep telemetry accurate and tenant-aware.
+[RUNNING]● Command: bash -lc 'rg -n "listCollections" -n modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[SUCCESS]● Command: bash -lc 'rg -n "listCollections" -n modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java'
+[SUCCESS]⎿ 310:    public Response listCollections(@QueryParam("status") String status, @QueryParam("page") Int...
+[THINKING]● Thinking: **Checking method header**
+[RUNNING]● Command: bash -lc "sed -n '280,360p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]● Command: bash -lc "sed -n '280,360p' modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]⎿ }
+[SUCCESS]⎿
+[SUCCESS]⎿         Category category = categoryOpt.get();
+[SUCCESS]⎿         category.status = "deleted";
+[SUCCESS]⎿         categ...
+[THINKING]● Thinking: **Enhancing tracing and timing instrumentation**
+[THINKING]● Thinking: **Updating methods to use helper**
+[THINKING]● Thinking: **Updating instrumentation for listCollections**
+[THINKING]● Thinking: **Updating createCollection method**
+[THINKING]● Thinking: **Adding instrumentation to getCollection method**
+[THINKING]● Thinking: **Enhancing updateCollection method with metrics and tracing**
+[THINKING]● Thinking: **Adding metrics to deleteCollection method**
+[THINKING]● Thinking: **Updating importCatalog and exportCatalog tracing**
+[THINKING]● Thinking: **Searching for other Span.current() uses**
+[RUNNING]● Command: bash -lc "rg -n \"Span\\.current\\(\\)\" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]● Command: bash -lc "rg -n \"Span\\.current\\(\\)\" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java"
+[SUCCESS]⎿ 657:        Span span = Span.current();
+[THINKING]● Thinking: **Refactoring Span usage with tenant helper**
+[THINKING]● Thinking: **Checking for createProblemDetails method**
+[RUNNING]● Command: bash -lc 'tail -n 120 modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java'
+[SUCCESS]● Command: bash -lc 'tail -n 120 modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java'
+[SUCCESS]⎿ transfer.expectedArrivalDate = request.getExpectedArrivalDate();
+[SUCCESS]⎿             transfer.carrier = requ...
+[THINKING]● Thinking: **Adding new helper method**
+[THINKING]● Thinking: **Refactoring span usage in transfer methods**
+[THINKING]● Thinking: **Updating receiveTransfer block**
+[THINKING]● Thinking: **Verifying instrumentation usage**
+[RUNNING]● Command: bash -lc "rg -n \"Span\\.current\" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]● Command: bash -lc "rg -n \"Span\\.current\" modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java"
+[SUCCESS]⎿ 339:        Span span = Span.current();
+[THINKING]● Thinking: **Verifying Span and Metrics Usage**
+[RUNNING]● Command: bash -lc "rg -n \"catalogMetrics\\.recordCollection\" -n"
+[SUCCESS]● Command: bash -lc "rg -n \"catalogMetrics\\.recordCollection\" -n"
+[SUCCESS]⎿ modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.ja...
+[THINKING]● Thinking: **Verifying test coverage for metrics**
+[RUNNING]● Command: bash -lc 'rg -n "recordCollection" modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java'
+[SUCCESS]● Command: bash -lc 'rg -n "recordCollection" modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java'
+[SUCCESS]⎿ 147:        catalogMetrics.recordCollectionCreated(testTenantId);
+[THINKING]● Thinking: **Reviewing test coverage and instrumentation updates**
+
+I'm checking that tests cover creation but not updates or deletions, which aren't required but might be nice. I'm verifying imports and usage of `Span` and ensuring tenant attributes are consistently set in instrumentation. I also want to confirm metric updates and tags are handled right across inventory and catalog modules. Next, I'll run lint before tests as per instructions.
+[RUNNING]● Command: bash -lc 'node tools/lint.cjs'
+[ERROR]● Command: bash -lc 'node tools/lint.cjs'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Evaluating Spotless lint issues and formatting approach**
+
+I'm trying to understand why Spotless flags multiple files, including untouched ones like StorefrontResource, possibly due to pre-existing formatting issues or import order. Since lint requires fixing all found problems, I’m weighing whether to run `mvn spotless:apply` on the entire core-platform module despite risks of changing many files, while considering instructions cautioning against sweeping auto-formatting. I want to confirm the project setup (Maven wrapper presence) and review Spotless’s diagnostic outputs before deciding.
+[RUNNING]● Command: bash -lc ls
+[SUCCESS]● Command: bash -lc ls
+[SUCCESS]⎿ CLAUDE.md
+[SUCCESS]⎿ CONSIGNOR_PORTAL_IMPLEMENTATION.md
+[SUCCESS]⎿ I1T5_IMPLEMENTATION_SUMMARY.md
+[SUCCESS]⎿ I2T2_MIGRATION_SUMMARY.m...
+[THINKING]● Thinking: **Preparing to run Spotless formatting**
+[RUNNING]● Command: bash -lc './mvnw -pl modules/core-platform spotless:apply'
+[SUCCESS]● Command: bash -lc './mvnw -pl modules/core-platform spotless:apply'
+[SUCCESS]⎿ [INFO] Scanning for projects...
+[SUCCESS]⎿ [INFO] 
+[SUCCESS]⎿ [INFO] --------------------< villagecompute:core-platform >-...
+[THINKING]● Thinking: **Preparing formatting changes for commit**
+[RUNNING]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]⎿ []
+[THINKING]● Thinking: **Running tests**
+[RUNNING]● Command: bash -lc 'node tools/test.cjs'
+[THINKING]● Thinking: **Correcting Quarkus Micrometer property names**
+
+I notice the properties enabling Micrometer binders lack the `.enabled` suffix, causing warnings. I'll update `application.properties` to set `quarkus.micrometer.binder.http-server.enabled=true` and similarly for JVM and system binders to clear warnings and enable instrumentation properly.
+[THINKING]● Thinking: **Considering rerunning lint and format checks**
+[RUNNING]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]⎿ []
+[THINKING]● Thinking: **Deciding on test rerun**
+[RUNNING]● Command: bash -lc 'node tools/test.cjs'
+[THINKING]● Thinking: **Verifying and correcting Quarkus property names**
+[THINKING]● Thinking: **Deciding on rerunning lint and tests**
+[RUNNING]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]● Command: bash -lc 'node tools/lint.cjs'
+[SUCCESS]⎿ []
+[THINKING]● Thinking: **Running tests again**
+[RUNNING]● Command: bash -lc 'node tools/test.cjs'
+[THINKING]● Thinking: **Updating task completion status**
+[RUNNING]● Command: bash -lc 'cat .codemachine/artifacts/tasks/tasks_I2.json'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/artifacts/tasks/tasks_I2.json'
+[SUCCESS]⎿ [
+[SUCCESS]⎿   {
+[SUCCESS]⎿     "task_id": "I2.T1",
+[SUCCESS]⎿     "iteration_id": "I2",
+[SUCCESS]⎿     "iteration_goal": "Implement catalog + i...
+[THINKING]● Thinking: **Updating done status for I2.T7**
+[THINKING]● Thinking: **Checking final git diff**
+[RUNNING]● Command: bash -lc 'git status -sb'
+[SUCCESS]● Command: bash -lc 'git status -sb'
+[SUCCESS]⎿ ## codemacine/dev...origin/codemacine/dev [ahead 3]
+[SUCCESS]⎿  M .codemachine/artifacts/tasks/tasks_I2.json
+[SUCCESS]⎿  M...
+[THINKING]● Thinking: **Preparing line number references**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java | sed -n '90,180p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java | sed -n '90,180p'"
+[SUCCESS]⎿ 90	    CollectionMapper collectionMapper;
+[SUCCESS]⎿     91	
+[SUCCESS]⎿     92	    @Inject
+[SUCCESS]⎿     93	    CatalogJobService ca...
+[THINKING]● Thinking: **Searching for listCollections lines**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java | sed -n '300,520p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java | sed -n '300,520p'"
+[SUCCESS]⎿ 300	     * @param page
+[SUCCESS]⎿    301	     *            page number (1-indexed)
+[SUCCESS]⎿    302	     * @param pageSiz...
+[THINKING]● Thinking: **Preparing to reference method lines**
+[RUNNING]● Command: bash -lc 'nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java | tail -n 80'
+[SUCCESS]● Command: bash -lc 'nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java | tail -n 80'
+[SUCCESS]⎿ 601	
+[SUCCESS]⎿    602	        @SuppressWarnings("unchecked")
+[SUCCESS]⎿    603	        Map<String, String> filters = (Map...
+[THINKING]● Thinking: **Adding instrumentation to InventoryAdminResource**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java | sed -n '180,360p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java | sed -n '180,360p'"
+[SUCCESS]⎿ 180	            return Response.status(Status.NOT_FOUND).entity(e.getMessage()).build();
+[SUCCESS]⎿    181	    ...
+[THINKING]● Thinking: **Preparing to reference code updates**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java | sed -n '80,200p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java | sed -n '80,200p'"
+[SUCCESS]⎿ 80	
+[SUCCESS]⎿     81	        String direction = quantityChange >= 0 ? "increase" : "decrease";
+[SUCCESS]⎿     82	        ...
+[THINKING]● Thinking: **Preparing code snippet from InventoryService**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java | sed -n '70,220p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java | sed -n '70,220p'"
+[SUCCESS]⎿ 70	            inventoryLevel = new InventoryLevel();
+[SUCCESS]⎿     71	            inventoryLevel.variant = vi...
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java | sed -n '220,320p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java | sed -n '220,320p'"
+[SUCCESS]⎿ 220	        LOG.infof("Inventory reservation committed - tenantId=%s, variantId=%s, location=%s, com...
+[THINKING]● Thinking: **Preparing to reference CatalogService metrics**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java | sed -n '420,520p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java | sed -n '420,520p'"
+[SUCCESS]⎿ 420	        catalogValidator.validateSlugFormat(collection.slug);
+[SUCCESS]⎿    421	        catalogValidator.va...
+[THINKING]● Thinking: **Preparing deleteCollection snippet**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java | sed -n '520,640p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java | sed -n '520,640p'"
+[SUCCESS]⎿ 520	        return collectionRepository.findBySlug(slug);
+[SUCCESS]⎿    521	    }
+[SUCCESS]⎿    522	
+[SUCCESS]⎿    523	    /**
+[SUCCESS]⎿    524...
+[THINKING]● Thinking: **Referencing tests and runbook details**
+[RUNNING]● Command: bash -lc "nl -ba docs/operations/catalog_inventory_runbook.md | sed -n '40,200p'"
+[SUCCESS]● Command: bash -lc "nl -ba docs/operations/catalog_inventory_runbook.md | sed -n '40,200p'"
+[SUCCESS]⎿ 40	- **Inventory Safety**: Reservation-based stock management prevents overselling
+[SUCCESS]⎿     41	- **Observ...
+[THINKING]● Thinking: **Noting runbook and test coverage**
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java | sed -n '90,190p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java | sed -n '90,190p'"
+[SUCCESS]⎿ 90	    @Test
+[SUCCESS]⎿     91	    void testReservedMetricRegistered() {
+[SUCCESS]⎿     92	        // When
+[SUCCESS]⎿     93	        ...
+[THINKING]● Thinking: **Summarizing metrics and instrumentation additions**
+
+I'll detail the new metrics classes like CatalogMetrics and InventoryMetrics that wrap MeterRegistry for consistent counters and histograms, referencing key line ranges. I'll also highlight updates to application.properties enabling OpenTelemetry with specific toggles, note the new spanWithTenant methods ensuring tenant_id attributes, mention tests verifying coverage, and include the addition of operational runbooks covering KPIs. I want to make sure to mention formatting changes only when relevant and capture overall enhancements to metric instrumentation and exposure.
+[RUNNING]● Command: bash -lc "nl -ba modules/core-platform/src/main/resources/application.properties | sed -n '50,140p'"
+[SUCCESS]● Command: bash -lc "nl -ba modules/core-platform/src/main/resources/application.properties | sed -n '50,140p'"
+[SUCCESS]⎿ 50	quarkus.log.level=INFO
+[SUCCESS]⎿     51	
+[SUCCESS]⎿     52	# JWT configuration
+[SUCCESS]⎿     53	mp.jwt.verify.issuer=https://vil...
+[THINKING]● Thinking: **Summarizing comprehensive observability updates**
+
+This update instruments catalog and inventory admin resources with `@Timed` histograms and tenant-aware spans, adds new metrics helpers and thorough tests in `CatalogMetrics` and `InventoryMetrics`, and documents KPIs and runbook procedures in the operations docs. Spotless formatting touched `StorefrontResource` without logic changes, and configuration adhesives enable OpenTelemetry hooking. Verification steps include running lint and test scripts which all passed. The summary covers key file references, including instrumentation lines across resource and service files, metrics tests, and task file updates.
+[RUNNING]● Message: Instrumented the catalog + inventory APIs so every major admin endpoint now emits Micrometer timers/counters and propagates `tenant_id` on active spans via new helpers (`modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java:108`, `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java:306`, `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/CatalogAdminResource.java:657`, `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java:193`, `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java:264`, `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/InventoryAdminResource.java:340`). Import/export handlers also add job/span metadata, and Prometheus/OTel exporters are enabled with sane defaults in `modules/core-platform/src/main/resources/application.properties:58` and `modules/core-platform/src/main/resources/application.properties:65`.
+
+Centralized metric helpers live in the new `CatalogMetrics` and `InventoryMetrics` beans (`modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/CatalogMetrics.java:33`, `modules/core-platform/src/main/java/villagecompute/storefront/services/metrics/InventoryMetrics.java:81`). Service-layer events now call them so product/collection/variant lifecycle events and inventory reservations/commits carry tenant + location tags (`modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java:426`, `modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java:484`, `modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java:577`, `modules/core-platform/src/main/java/villagecompute/storefront/services/CatalogService.java:599`, `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java:140`, `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java:176`, `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java:207`). Updated tests prove the metrics register with the expected tags and values (`modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/CatalogMetricsTest.java:25`, `modules/core-platform/src/test/java/villagecompute/storefront/services/metrics/InventoryMetricsTest.java:90`).
+
+Documented SRE expectations through the new catalog + inventory runbook (KPIs/alerts, procedures, feature flags) at `docs/operations/catalog_inventory_runbook.md:47` and `docs/operations/catalog_inventory_runbook.md:122`, and marked the iteration task as complete (`.codemachine/artifacts/tasks/tasks_I2.json:74`). Spotless reformatting was required to satisfy lint and touched `modules/core-platform/src/main/java/villagecompute/storefront/api/rest/StorefrontResource.java:1` without changing logic.
+
+**Verification**
+- `node tools/lint.cjs`
+- `node tools/test.cjs`
+⏱️  Tokens: 10174692in/30005out (4742528 cached)
+Task Verification Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Task Verification Agent started to work.

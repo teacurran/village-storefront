@@ -1,0 +1,597 @@
+[CYAN]===╭─ Agent 68: context-manager ────────────────────────────────────
+[CYAN]   Started: 2026-01-08 17:33:30
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing files recursively from root**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Selecting next task and planning document retrieval**
+
+I’m identifying the first incomplete task with all dependencies done, which is I2.T4, then preparing to gather relevant documentation by extracting key search terms from the task description. I plan to locate and read targeted sections from the architecture and plan manifests, focusing on files like `01_Blueprint_Foundation.md` and `02_Iteration_I2.md`, using precise line extraction to get relevant snippets about the inventory service and its domain.
+[RUNNING]● Command: bash -lc 'rg -n "Inventory" 01_Blueprint_Foundation.md'
+[ERROR]● Command: bash -lc 'rg -n "Inventory" 01_Blueprint_Foundation.md'
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for Blueprint-related files**
+[RUNNING]● Command: bash -lc 'rg --files | rg Blueprint'
+[ERROR]● Command: bash -lc 'rg --files | rg Blueprint'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for blueprint files**
+[RUNNING]● Command: bash -lc 'rg --files | rg -i "blueprint"'
+[ERROR]● Command: bash -lc 'rg --files | rg -i "blueprint"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for files with '01_' pattern**
+[RUNNING]● Command: bash -lc 'rg --files | rg "01_"'
+[ERROR]● Command: bash -lc 'rg --files | rg "01_"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for plan files with find**
+[RUNNING]● Command: bash -lc "find . -maxdepth 1 -type f \\( -name '01_*' -o -name '02_*' -o -name '03_*' -o -name '04_*' -o -name '05_*' -o -name '06_*' \\)"
+[SUCCESS]● Command: bash -lc "find . -maxdepth 1 -type f \\( -name '01_*' -o -name '02_*' -o -name '03_*' -o -name '04_*' -o -name '05_*' -o -name '06_*' \\)"
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Searching entire repository for files**
+[RUNNING]● Command: bash -lc "find . -name '01_Blueprint_Foundation.md'"
+[SUCCESS]● Command: bash -lc "find . -name '01_Blueprint_Foundation.md'"
+[SUCCESS]⎿ ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md
+[THINKING]● Thinking: **Searching for Inventory references**
+[RUNNING]● Command: bash -lc 'rg -n "Inventory" ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "Inventory" ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]⎿ 53:    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, ...
+[THINKING]● Thinking: **Preparing multi-location snippet extraction**
+[RUNNING]● Command: bash -lc "find . -name '02_Iteration_I2.md'"
+[SUCCESS]● Command: bash -lc "find . -name '02_Iteration_I2.md'"
+[SUCCESS]⎿ ./.codemachine/artifacts/plan/02_Iteration_I2.md
+[THINKING]● Thinking: **Searching for snippet using rg**
+[RUNNING]● Command: bash -lc "rg -n \"I2\\.T4\" -n ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "rg -n \"I2\\.T4\" -n ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ 50:    *   **Task ID:** `I2.T4`
+[SUCCESS]⎿ 97:    *   **Dependencies:** `I2.T1`-`I2.T4`.
+[THINKING]● Thinking: **Extracting specific lines with sed**
+[RUNNING]● Command: bash -lc "sed -n '34,120p' ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "sed -n '34,120p' ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ <!-- anchor: task-i2-t3 -->
+[SUCCESS]⎿ *   **Task 2.3:**
+[SUCCESS]⎿     *   **Task ID:** `I2.T3`
+[SUCCESS]⎿     *   **Description:** ...
+[THINKING]● Thinking: **Extracting architecture blueprint snippet**
+[RUNNING]● Command: bash -lc "sed -n '43,95p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '43,95p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ <!-- anchor: section-4-blueprint -->
+[SUCCESS]⎿ ### **4.0 The "Blueprint" (Core Components & Boundaries)**
+[SUCCESS]⎿
+[SUCCESS]⎿ *  ...
+[THINKING]● Thinking: **Extracting domain events snippet**
+[RUNNING]● Command: bash -lc "sed -n '160,210p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '160,210p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ *   Release guardrails: Any migration introducing new constraints must include feature-flagged code ...
+[THINKING]● Thinking: **Searching architecture docs for inventory**
+[RUNNING]● Command: bash -lc 'rg -n "Inventory" ./.codemachine/artifacts/architecture/02_System_Structure_and_Data.md | head'
+[SUCCESS]● Command: bash -lc 'rg -n "Inventory" ./.codemachine/artifacts/architecture/02_System_Structure_and_Data.md | head'
+[SUCCESS]⎿ 376:    *   **Description:** Focuses on the Quarkus API container, highlighting components mandated ...
+[THINKING]● Thinking: **Examining data section snippet**
+[RUNNING]● Command: bash -lc "sed -n '420,460p' ./.codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '420,460p' ./.codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ Rel(backgroundScheduler, platformAdminBackend, "Runs suspension audits and plan compliance checks", ...
+[THINKING]● Thinking: **Preparing to gather code context snippets**
+[RUNNING]● Command: bash -lc 'rg --files modules | rg "Inventory"'
+[SUCCESS]● Command: bash -lc 'rg --files modules | rg "Inventory"'
+[SUCCESS]⎿ modules/core-platform/src/main/webui/src/modules/inventory/views/InventoryDashboard.vue
+[SUCCESS]⎿ modules/core...
+[THINKING]● Thinking: **Reviewing core platform inventory files**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java'
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.Optional;
+[SUCCESS]⎿ impor...
+[THINKING]● Thinking: **Reviewing InventoryTransferService**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java'
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ import j...
+[THINKING]● Thinking: **Considering additional repository files**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/data/repositories/InventoryLevelRepository.java'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/data/repositories/InventoryLevelRepository.java'
+[SUCCESS]⎿ package villagecompute.storefront.data.repositories;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.Option...
+[THINKING]● Thinking: **Considering critical test files**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryServiceTest.java'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryServiceTest.java'
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static org.junit.jupiter.api.Assertions.assertEq...
+[THINKING]● Thinking: **Preparing to extract task data**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj = json.loads(Path('tasks_I2.json').read_text())
+target = [t for t in obj if t['task_id']=='I2.T4'][0]
+import json as js
+print(js.dumps(target, indent=2))
+PY"
+[ERROR]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj = json.loads(Path('tasks_I2.json').read_text())
+target = [t for t in obj if t['task_id']=='I2.T4'][0]
+import json as js
+print(js.dumps(target, indent=2))
+PY"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for tasks_I2.json file**
+[RUNNING]● Command: bash -lc "find . -name 'tasks_I2.json'"
+[SUCCESS]● Command: bash -lc "find . -name 'tasks_I2.json'"
+[SUCCESS]⎿ ./.codemachine/artifacts/tasks/tasks_I2.json
+[THINKING]● Thinking: **Preparing to run Python script**
+[RUNNING]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj = json.loads(Path('.codemachine/artifacts/tasks/tasks_I2.json').read_text())
+target = [t for t in obj if t['task_id']=='I2.T4'][0]
+import json as js
+print(js.dumps(target, indent=2))
+PY"
+[SUCCESS]● Command: bash -lc "python - <<'PY'
+import json
+from pathlib import Path
+obj = json.loads(Path('.codemachine/artifacts/tasks/tasks_I2.json').read_text())
+target = [t for t in obj if t['task_id']=='I2.T4'][0]
+import json as js
+print(js.dumps(target, indent=2))
+PY"
+[SUCCESS]⎿ {
+[SUCCESS]⎿   "task_id": "I2.T4",
+[SUCCESS]⎿   "iteration_id": "I2",
+[SUCCESS]⎿   "iteration_goal": "Implement catalog + inventory d...
+[THINKING]● Thinking: **Gathering documentation snippets**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Compiling comprehensive context file content**
+
+I'm gathering all relevant snippets and summaries—plan, blueprint, interaction notes, data model, and code analysis—to assemble a detailed context file for the new task. I'll ensure to include exact text blocks for key sections, concise summaries for main code files with notes on domain events, and organize everything carefully for clarity.
+[RUNNING]● Command: bash -lc 'rg -n "domain" modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java'
+[ERROR]● Command: bash -lc 'rg -n "domain" modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Noticing absence of domain events**
+[RUNNING]● Command: bash -lc "sed -n '1,160p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]● Command: bash -lc "sed -n '1,160p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.util.List;
+[SUCCESS]⎿ import java.util.UUID;
+[SUCCESS]⎿
+[SUCCESS]⎿ import j...
+[THINKING]● Thinking: **Retrieving remaining file lines**
+[RUNNING]● Command: bash -lc "sed -n '160,320p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]● Command: bash -lc "sed -n '160,320p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]⎿ source.code, "destination_location", destination.code).increment();
+[SUCCESS]⎿
+[SUCCESS]⎿         // Enqueue barcode labe...
+[THINKING]● Thinking: **Continuing to review code lines**
+[RUNNING]● Command: bash -lc "sed -n '320,420p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]● Command: bash -lc "sed -n '320,420p' modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java"
+[SUCCESS]⎿ */
+[SUCCESS]⎿     public InventoryTransfer getTransfer(UUID transferId) {
+[SUCCESS]⎿         UUID tenantId = TenantContext...
+[THINKING]● Thinking: **Preparing implementation context details**
+[RUNNING]● Command: bash -lc 'rg -n "domain_events" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "domain_events" -n'
+[SUCCESS]⎿ docs/diagrams/datamodel_erd.mmd:504:    domain_events {
+[SUCCESS]⎿ docs/diagrams/datamodel_erd.mmd:604:    tena...
+[THINKING]● Thinking: **Searching for domain event repository code**
+[RUNNING]● Command: bash -lc 'rg -n "DomainEvent" -n modules/core-platform/src/main/java'
+[ERROR]● Command: bash -lc 'rg -n "DomainEvent" -n modules/core-platform/src/main/java'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for event class patterns**
+[RUNNING]● Command: bash -lc 'rg -n "domain event" -n -i'
+[SUCCESS]● Command: bash -lc 'rg -n "domain event" -n -i'
+[SUCCESS]⎿ docs/diagrams/c4-architecture-diagrams.md:267:- **How do modules interact?** (CDI interfaces, domain...
+[THINKING]● Thinking: **Searching for domain event persistence**
+[RUNNING]● Command: bash -lc 'rg --files | rg "DomainEvent"'
+[ERROR]● Command: bash -lc 'rg --files | rg "DomainEvent"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for domain event terminology**
+[RUNNING]● Command: bash -lc 'rg -n "domain event" -i modules/core-platform'
+[SUCCESS]● Command: bash -lc 'rg -n "domain event" -i modules/core-platform'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/tenant/TenantCacheInvalidator.java:70:...
+[THINKING]● Thinking: **Inspecting domain event handling**
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/services/ReportingProjectionService.java'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/main/java/villagecompute/storefront/services/ReportingProjectionService.java'
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import java.math.BigDecimal;
+[SUCCESS]⎿ import java.time.LocalDate...
+[THINKING]● Thinking: **Preparing detailed documentation content**
+
+I'm organizing key context snippets and code summaries about inventory and domain events across several files, planning to compile relevant excerpts from blueprints, system data, and task plans. I’ll also draft implementation tips focusing on missing domain event handling and concurrency considerations based on the current service and test coverage.
+[RUNNING]● Command: bash -lc 'rg --files modules/core-platform/src/main/java | rg "Domain" | head'
+[SUCCESS]● Command: bash -lc 'rg --files modules/core-platform/src/main/java | rg "Domain" | head'
+[SUCCESS]⎿ modules/core-platform/src/main/java/villagecompute/storefront/tenant/CustomDomainVerified.java
+[SUCCESS]⎿ modul...
+[THINKING]● Thinking: **Searching for DomainEvent definition**
+[RUNNING]● Command: bash -lc 'rg -n "DomainEvent" -R'
+[ERROR]● Command: bash -lc 'rg -n "DomainEvent" -R'
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Running ripgrep for DomainEvent**
+[RUNNING]● Command: bash -lc 'rg -n "DomainEvent"'
+[SUCCESS]● Command: bash -lc 'rg -n "DomainEvent"'
+[SUCCESS]⎿ docs/diagrams/README.md:142:13. **Infrastructure Primitives**: JobScheduler, CacheManager, DomainEve...
+[THINKING]● Thinking: **Checking domain event implementation status**
+[RUNNING]● Command: bash -lc 'rg -n "domain_events" -g "*.sql"'
+[ERROR]● Command: bash -lc 'rg -n "domain_events" -g "*.sql"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for database migrations**
+[RUNNING]● Command: bash -lc 'rg -n "domain_events" -g "*.xml" modules'
+[ERROR]● Command: bash -lc 'rg -n "domain_events" -g "*.xml" modules'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Exploring migration files without ls**
+[RUNNING]● Command: bash -lc 'rg --files modules/core-platform/src/main/resources | head'
+[SUCCESS]● Command: bash -lc 'rg --files modules/core-platform/src/main/resources | head'
+[SUCCESS]⎿ modules/core-platform/src/main/resources/application.properties
+[SUCCESS]⎿ modules/core-platform/src/main/resou...
+[THINKING]● Thinking: **Searching for migration files**
+[RUNNING]● Command: bash -lc 'rg --files modules/core-platform/src/main/resources/db | rg domain'
+[ERROR]● Command: bash -lc 'rg --files modules/core-platform/src/main/resources/db | rg domain'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for migration files**
+[RUNNING]● Command: bash -lc "find modules -path '*migration*' -type f | head"
+[SUCCESS]● Command: bash -lc "find modules -path '*migration*' -type f | head"
+[SUCCESS]⎿ modules/core-platform/target/classes/db/migrations/V20260102__baseline_schema.sql
+[SUCCESS]⎿ modules/core-platf...
+[THINKING]● Thinking: **Locating migration source files**
+[RUNNING]● Command: bash -lc "find modules/core-platform/src/main/resources -path '*migrations*' -type f"
+[SUCCESS]● Command: bash -lc "find modules/core-platform/src/main/resources -path '*migrations*' -type f"
+[SUCCESS]⎿ modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql
+[SUCCESS]⎿ modules/core-p...
+[THINKING]● Thinking: **Searching for domain events in baseline**
+[RUNNING]● Command: bash -lc 'rg -n "domain_events" modules/core-platform/src/main/resources/db/migrations -n'
+[ERROR]● Command: bash -lc 'rg -n "domain_events" modules/core-platform/src/main/resources/db/migrations -n'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for domain events table**
+[RUNNING]● Command: bash -lc 'rg -n "domain" modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql | head'
+[SUCCESS]● Command: bash -lc 'rg -n "domain" modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql | head'
+[SUCCESS]⎿ 50:    subdomain VARCHAR(63) UNIQUE NOT NULL,  -- RFC 1035 label max length
+[SUCCESS]⎿ 57:    CONSTRAINT chk_te...
+[THINKING]● Thinking: **Searching for domain events in SQL files**
+[RUNNING]● Command: bash -lc 'rg -n "domain" -i modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql | head -n 20'
+[SUCCESS]● Command: bash -lc 'rg -n "domain" -i modules/core-platform/src/main/resources/db/migrations/V20260102__baseline_schema.sql | head -n 20'
+[SUCCESS]⎿ 50:    subdomain VARCHAR(63) UNIQUE NOT NULL,  -- RFC 1035 label max length
+[SUCCESS]⎿ 57:    CONSTRAINT chk_te...
+[THINKING]● Thinking: **Investigating missing domain_events table**
+[RUNNING]● Command: bash -lc 'rg -n "domain_events" -g "*"'
+[SUCCESS]● Command: bash -lc 'rg -n "domain_events" -g "*"'
+[SUCCESS]⎿ docs/diagrams/datamodel_erd.mmd:504:    domain_events {
+[SUCCESS]⎿ docs/diagrams/datamodel_erd.mmd:604:    tena...
+[THINKING]● Thinking: **Preparing implementation guidance package**
+
+I’m organizing a detailed guidance package covering task details, relevant context snippets, codebase analysis, and strategic implementation tips. I’m making sure to highlight missing domain events infrastructure, concurrency considerations, relevant services and tests like `InventoryTransferIT.java`, and essential concepts like `TenantContext` and `MeterRegistry`. I’ll review the test file to provide accurate recommendations on coverage and verification.
+[RUNNING]● Command: bash -lc 'cat modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryTransferIT.java'
+[SUCCESS]● Command: bash -lc 'cat modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryTransferIT.java'
+[SUCCESS]⎿ package villagecompute.storefront.services;
+[SUCCESS]⎿
+[SUCCESS]⎿ import static org.junit.jupiter.api.Assertions.assertEq...
+[THINKING]● Thinking: **Summarizing implementation guidance and context preparation**
+
+I'm putting together detailed implementation tips referencing tenant context enforcement, domain events setup, logging, and metrics integration. I'll include curated snippets from blueprints, interaction notes, data models, and the plan to build a comprehensive context file for the inventory service task, ensuring all key modules, tests, and best practices are well documented before updating the context file.
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T4",
+  "iteration_id": "I2",
+  "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
+  "description": "Implement Inventory service (multi-location levels, adjustments, transfers) with Panache repositories, domain services enforcing reason codes, integration events for reporting.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "Requirements (inventory), migrations.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Services supporting create/update/transfer/adjust operations, domain events (InventoryAdjusted, TransferInitiated) persisted to `domain_events`, tests verifying concurrency + RLS.",
+  "acceptance_criteria": "Transfers handle validations (matching tenant, quantities, statuses); events recorded with JSON payload; tests run against dev Postgres; API docs updated referencing adjustments.",
+  "dependencies": [
+    "I2.T2"
+  ],
+  "parallelizable": false,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Section 4 – Core Components & Boundaries (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-4-blueprint -->
+### **4.0 The "Blueprint" (Core Components & Boundaries)**
+
+*   **System Overview:** Village Storefront is a layered modular monolith where Quarkus hosts tenant-aware REST APIs, storefront Qute templates, admin Vue SPA assets, and background job executors; PostgreSQL anchors multi-tenant data with RLS, while object storage, Stripe, carrier APIs, and FFmpeg-driven media processors run as integration edges controlled via explicit adapters.
+*   **Core Architectural Principle:** Separation of Concerns is enforced through CDI interfaces, Panache repositories per domain, and DTO mappers isolating API schemas from persistence; modules communicate via domain events recorded in the database so that replacing Stripe, adding loyalty engines, or extracting POS services later does not ripple through storefront rendering or checkout orchestration.
+*   **Key Components/Services:**
+    *   **Tenant Access Gateway:** Handles subdomain/custom-domain resolution, populates TenantContext, enforces CORS, and rejects unknown tenants before routing deeper into the stack.
+    *   **Identity & Session Service:** Issues JWT/refresh tokens, maintains session/activity logs, and exposes impersonation workflows with audit logging.
+    *   **Storefront Rendering Engine:** Delivers Qute-templated storefront pages, injects branding/theme tokens, and coordinates PrimeUI interactions plus Tailwind builds.
+    *   **Admin SPA Delivery Service:** Serves Vue 3 assets under `/admin/*`, provides bootstrapped config (tenant, feature flags, RBAC scopes), and proxies API calls through authenticated endpoints.
+    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, multi-location inventory, adjustments, transfers, and reporting projections.
+    *   **Consignment Domain Module:** Manages consignor profiles, commission schedules, intake batches, payouts, vendor portals, and related notifications.
+    *   **Checkout & Order Orchestrator:** Coordinates cart persistence, address validation, shipping rate fetch, Stripe intents, order lifecycle transitions, refunds, and returns.
+    *   **Payment Integration Layer:** Implements PaymentProvider interfaces (Stripe first) plus generic payment, refund, dispute, and ledger models; handles Stripe Connect onboarding and payouts.
+    *   **Loyalty & Rewards Module:** Tracks points balances, tier upgrades, expirations, and redemption hooks invoked during checkout and customer account flows.
+    *   **POS & Offline Processor:** Provides browser-based POS UI assets, hardware integrations (Stripe Terminal, printers), offline queueing, and reconciliation jobs syncing queued sales.
+    *   **Media Pipeline Controller:** Accepts uploads, enforces limits, queues FFmpeg jobs, generates thumbnails/WebP variants, and persists metadata plus signed URLs in object storage.
+    *   **Background Job Scheduler & Worker:** Implements DelayedJob semantics, executes email dispatch, media processing, payouts, report generation, and certificate renewals via Quarkus `@Scheduled` triggers.
+    *   **Reporting & Analytics Projection Service:** Builds read-optimized aggregates for sales, inventory, consignment, loyalty, and platform metrics; powers admin dashboard widgets and platform-level reports.
+    *   **Platform Admin Console Backend:** Provides SaaS-level store management APIs, impersonation controls, plan/billing observability, and health monitoring endpoints for operations.
+    *   **Integration Adapter Layer:** Abstracts external services (Stripe, USPS/UPS/FedEx APIs, address validation, SMTP, Cloudflare R2) behind versioned interfaces with retry/fallback policies.
+
+Component boundaries must remain thin yet explicit: each module exposes interfaces plus OpenAPI-documented endpoints; no module may reach around another via shared tables without going through defined repositories or service contracts. Shared utilities live in a `platform-kit` module (validation, money, feature flags) to avoid duplication while preserving clarity.
+```
+
+### Context: Section 4 Component Interaction Notes (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-4-interaction-notes -->
+#### Section 4 Component Interaction Notes
+
+*   Tenant Access Gateway publishes CDI events when tenants resolved or missing; downstream modules subscribe to enrich context (theme tokens, feature flags) without re-parsing host headers.
+*   Identity Service exposes OAuth clients for headless integrations and uses Panache repositories dedicated to authentication tables; no other module touches these tables directly.
+*   Storefront Rendering Engine consumes Catalog APIs via internal service calls even though running in same process, reinforcing contract-first development and enabling future service extraction.
+*   Admin SPA operations route through `/api/v1/admin/*` endpoints that enforce role scopes; Platform Admin Console extends same API namespace with `platform` scope requiring super-user tokens.
+*   Catalog module emits domain events (`ProductPublished`, `InventoryAdjusted`, `ConsignmentExpired`) persisted to `domain_events` table; Reporting Projection Service consumes these events via polling worker to build aggregates.
+*   Consignment module coordinates with Inventory module by referencing variant IDs only; it cannot mutate inventory tables directly but instead calls Inventory service methods that enforce transactional integrity.
+*   Checkout orchestrator sequences address validation, shipping rates, gift card redemption, loyalty points, and Stripe payments via asynchronous saga steps; failure handling relies on compensating actions recorded in audit logs.
+*   Payment Integration Layer isolates provider-specific payloads; new providers implement `PaymentProvider`, `PaymentMethodProvider`, `WebhookHandler`, and optional `MarketplaceProvider` interfaces to guarantee parity.
+*   POS module synchronizes carts and payments through the same Checkout APIs; offline transactions stored locally reuse Cart and Order schemas when replayed to avoid duplication.
+*   Media Pipeline registers job types (`IMAGE_VARIANT`, `VIDEO_TRANSCODE`, `POSTER_FRAME`); each job yields metadata entries consumed by Storefront and Admin UI to display processing status.
+*   Background Scheduler coordinates certificate renewal for custom domains, Stripe payout auditing, and archival tasks; each scheduled job identifies owning module for accountability.
+*   Platform Admin Backend aggregates cross-tenant metrics by querying read models rather than live tables to avoid heavy scans on production workloads.
+*   Integration Adapter Layer enforces timeout/retry policies in one place; modules declare adapters via dependency injection, never instantiating HTTP clients manually.
+*   Shared utilities (money, measurement units, address normalization) live in `platform-kit`; consumption is read-only to avoid hidden coupling.
+```
+
+### Context: 3.6 Data Model Overview & ERD (from 02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.6. Data Model Overview & ERD:**
+    *   **Description:** Captures the multi-tenant data entities defined in Foundation Section 5.0, covering tenancy, users, customers, sessions, catalog, inventory, consignment, carts, orders, payments, shipments, returns, loyalty, feature flags, audit events, and background jobs. Every tenant-scoped table contains tenant_id and adheres to RLS policies.
+    *   **Key Entities:**
+        - `Tenant` governs store metadata, plan, status, branding, and configuration flags.
+        - `StoreUser` stores merchant/staff accounts with hashed passwords, roles, and status.
+        - `Customer` holds shopper identities, authentication, loyalty balances, and preferences.
+        - `Product` and `Variant` capture catalog hierarchy, SKUs, pricing, inventory policy, and media references.
+        - `InventoryLocation` and `InventoryLevel` define stock tracking across warehouses, stores, and suppliers.
+        - `Consignor` and `ConsignmentItem` store vendor agreements, commission rules, item aging, and payout state.
+        - `Cart`, `CartItem`, and `Order` maintain purchase journeys including discounts, shipping, taxes, and timeline events.
+        - `PaymentIntent` and `Refund` represent provider-agnostic payment operations with provider references and statuses.
+        - `Shipment` and `ReturnAuthorization` capture fulfillment and reverse logistics data.
+        - `LoyaltyLedgerEntry` tracks points accrual, redemption, tier progression, and expirations.
+        - `FeatureFlag`, `AuditEvent`, and `BackgroundJob` provide platform governance, observability, and async orchestration data.
+    *   **Diagram (PlantUML - ERD):** emphasises tenant_id columns plus inventory-centric tables that downstream events must reference when emitting adjustments/transfers.
+```
+
+### Context: Task 2.4 – Inventory Service Implementation (from 02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t4 -->
+*   **Task 2.4:**
+    *   **Task ID:** `I2.T4`
+    *   **Description:** Implement Inventory service (multi-location levels, adjustments, transfers) with Panache repositories, domain services enforcing reason codes, integration events for reporting.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Requirements (inventory), migrations.
+    *   **Input Files:** [`modules/catalog/src/main/java/.../Inventory*`, `docs/diagrams/erd.mmd`]
+    *   **Target Files:** [`modules/catalog/src/main/java/.../InventoryLocationEntity.java`, `InventoryLevelEntity.java`, `InventoryAdjustmentService.java`, `InventoryTransferService.java`, `modules/catalog/src/test/java/...`]
+    *   **Deliverables:** Services supporting create/update/transfer/adjust operations, domain events (InventoryAdjusted, TransferInitiated) persisted to `domain_events`, tests verifying concurrency + RLS.
+    *   **Acceptance Criteria:** Transfers handle validations (matching tenant, quantities, statuses); events recorded with JSON payload; tests run against dev Postgres; API docs updated referencing adjustments.
+    *   **Dependencies:** `I2.T2`.
+    *   **Parallelizable:** No.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java`
+    *   **Summary:** Provides tenant-scoped CRUD and reservation semantics for `InventoryLevel` records, emitting Micrometer counters for level updates, reservations, and commits while routing all persistence through `InventoryLevelRepository`.
+    *   **Recommendation:** Reuse these entry points when transfers or adjustments need to mutate on-hand/reserved quantities so that logging, validation, and metrics remain centralized instead of duplicating raw repository writes.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java`
+    *   **Summary:** Handles validation and lifecycle of transfers, including tenant-safe location lookups, `TransferStatus` updates, reservation/commit flows between locations, adjustment recording, and barcode-job enqueueing, but currently lacks any domain-event publishing.
+    *   **Recommendation:** Extend this service (rather than building a parallel implementation) to emit `InventoryAdjusted` and `TransferInitiated` payloads after create/receive/adjust paths, ensuring payloads capture tenant/location/variant quantities that reporting consumers expect.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/repositories/InventoryLevelRepository.java`
+    *   **Summary:** Panache repository enforcing `TenantContext` filters for queries such as `findByVariantAndLocation`, `findByLocation`, and aggregate availability calculations.
+    *   **Recommendation:** Keep all reads/writes for inventory levels flowing through this repository (and its tenant-aware queries) so RLS assumptions hold; if you need new lookup patterns, add repository helpers that still scope by current tenant.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryServiceTest.java`
+    *   **Summary:** Quarkus integration tests covering set/update, adjustments, reservation commits, and aggregate queries with explicit tenant seeding, ensuring behavior is deterministic under RLS.
+    *   **Recommendation:** Mirror this testing style—and the cleanup/TenantContext setup it demonstrates—when adding new tests for transfers, adjustments, or domain-event persistence so future regressions are caught under real Postgres dev services.
+
+### Implementation Tips & Notes
+*   **Tip:** `InventoryTransferService` already wires `InventoryService`, multiple repositories, `MeterRegistry`, and a `BarcodeLabelJobQueue`; emit domain events from this layer so you can enrich payloads with both source/destination context immediately after persistence.
+*   **Tip:** There is not yet a concrete `DomainEvent` entity/repository in `modules/core-platform`; plan to introduce one aligned with the ERD (`domain_events` table with tenant_id, aggregate_type, event_type, payload JSON, metadata) so reporting/observability services can poll it later.
+*   **Tip:** Tenant isolation is enforced via `TenantContext` plus repository filters as shown in the integration tests—always set the context in tests (see `InventoryServiceTest` and `InventoryTransferIT`) and avoid bypassing repositories with `EntityManager` queries that would skip tenant guards.
+*   **Tip:** Keep observability consistent: reuse the existing Micrometer naming conventions (`inventory.transfer.started`, `inventory.adjustment.count`, etc.) and extend them for new adjustment/transfer event stages so SLO dashboards gain coverage automatically.
+*   **Tip:** Whenever you add transfer or adjustment APIs, remember that the Admin SPA already expects DTOs under `modules/core-platform/src/main/java/villagecompute/storefront/api/types/Inventory*`; keep signatures compatible and document any new behaviors in the OpenAPI slice referenced by Task I2.T3.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T4",
+  "iteration_id": "I2",
+  "iteration_goal": "Implement catalog + inventory domain models, repositories, migrations, and API slices so downstream checkout/consignment flows interact with tenant-safe data services.",
+  "description": "Implement Inventory service (multi-location levels, adjustments, transfers) with Panache repositories, domain services enforcing reason codes, integration events for reporting.",
+  "agent_type_hint": "BackendAgent",
+  "inputs": "Requirements (inventory), migrations.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Services supporting create/update/transfer/adjust operations, domain events (InventoryAdjusted, TransferInitiated) persisted to `domain_events`, tests verifying concurrency + RLS.",
+  "acceptance_criteria": "Transfers handle validations (matching tenant, quantities, statuses); events recorded with JSON payload; tests run against dev Postgres; API docs updated referencing adjustments.",
+  "dependencies": [
+    "I2.T2"
+  ],
+  "parallelizable": false,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Section 4 – Core Components & Boundaries (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-4-blueprint -->
+### **4.0 The "Blueprint" (Core Components & Boundaries)**
+
+*   **System Overview:** Village Storefront is a layered modular monolith where Quarkus hosts tenant-aware REST APIs, storefront Qute templates, admin Vue SPA assets, and background job executors; PostgreSQL anchors multi-tenant data with RLS, while object storage, Stripe, carrier APIs, and FFmpeg-driven media processors run as integration edges controlled via explicit adapters.
+*   **Core Architectural Principle:** Separation of Concerns is enforced through CDI interfaces, Panache repositories per domain, and DTO mappers isolating API schemas from persistence; modules communicate via domain events recorded in the database so that replacing Stripe, adding loyalty engines, or extracting POS services later does not ripple through storefront rendering or checkout orchestration.
+*   **Key Components/Services:**
+    *   **Tenant Access Gateway:** Handles subdomain/custom-domain resolution, populates TenantContext, enforces CORS, and rejects unknown tenants before routing deeper into the stack.
+    *   **Identity & Session Service:** Issues JWT/refresh tokens, maintains session/activity logs, and exposes impersonation workflows with audit logging.
+    *   **Storefront Rendering Engine:** Delivers Qute-templated storefront pages, injects branding/theme tokens, and coordinates PrimeUI interactions plus Tailwind builds.
+    *   **Admin SPA Delivery Service:** Serves Vue 3 assets under `/admin/*`, provides bootstrapped config (tenant, feature flags, RBAC scopes), and proxies API calls through authenticated endpoints.
+    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, multi-location inventory, adjustments, transfers, and reporting projections.
+    *   **Consignment Domain Module:** Manages consignor profiles, commission schedules, intake batches, payouts, vendor portals, and related notifications.
+    *   **Checkout & Order Orchestrator:** Coordinates cart persistence, address validation, shipping rate fetch, Stripe intents, order lifecycle transitions, refunds, and returns.
+    *   **Payment Integration Layer:** Implements PaymentProvider interfaces (Stripe first) plus generic payment, refund, dispute, and ledger models; handles Stripe Connect onboarding and payouts.
+    *   **Loyalty & Rewards Module:** Tracks points balances, tier upgrades, expirations, and redemption hooks invoked during checkout and customer account flows.
+    *   **POS & Offline Processor:** Provides browser-based POS UI assets, hardware integrations (Stripe Terminal, printers), offline queueing, and reconciliation jobs syncing queued sales.
+    *   **Media Pipeline Controller:** Accepts uploads, enforces limits, queues FFmpeg jobs, generates thumbnails/WebP variants, and persists metadata plus signed URLs in object storage.
+    *   **Background Job Scheduler & Worker:** Implements DelayedJob semantics, executes email dispatch, media processing, payouts, report generation, and certificate renewals via Quarkus `@Scheduled` triggers.
+    *   **Reporting & Analytics Projection Service:** Builds read-optimized aggregates for sales, inventory, consignment, loyalty, and platform metrics; powers admin dashboard widgets and platform-level reports.
+    *   **Platform Admin Console Backend:** Provides SaaS-level store management APIs, impersonation controls, plan/billing observability, and health monitoring endpoints for operations.
+    *   **Integration Adapter Layer:** Abstracts external services (Stripe, USPS/UPS/FedEx APIs, address validation, SMTP, Cloudflare R2) behind versioned interfaces with retry/fallback policies.
+
+Component boundaries must remain thin yet explicit: each module exposes interfaces plus OpenAPI-documented endpoints; no module may reach around another via shared tables without going through defined repositories or service contracts. Shared utilities live in a `platform-kit` module (validation, money, feature flags) to avoid duplication while preserving clarity.
+```
+
+### Context: Section 4 Component Interaction Notes (from 01_Blueprint_Foundation.md)
+
+```markdown
+<!-- anchor: section-4-interaction-notes -->
+#### Section 4 Component Interaction Notes
+
+*   Tenant Access Gateway publishes CDI events when tenants resolved or missing; downstream modules subscribe to enrich context (theme tokens, feature flags) without re-parsing host headers.
+*   Identity Service exposes OAuth clients for headless integrations and uses Panache repositories dedicated to authentication tables; no other module touches these tables directly.
+*   Storefront Rendering Engine consumes Catalog APIs via internal service calls even though running in same process, reinforcing contract-first development and enabling future service extraction.
+*   Admin SPA operations route through `/api/v1/admin/*` endpoints that enforce role scopes; Platform Admin Console extends same API namespace with `platform` scope requiring super-user tokens.
+*   Catalog module emits domain events (`ProductPublished`, `InventoryAdjusted`, `ConsignmentExpired`) persisted to `domain_events` table; Reporting Projection Service consumes these events via polling worker to build aggregates.
+*   Consignment module coordinates with Inventory module by referencing variant IDs only; it cannot mutate inventory tables directly but instead calls Inventory service methods that enforce transactional integrity.
+*   Checkout orchestrator sequences address validation, shipping rates, gift card redemption, loyalty points, and Stripe payments via asynchronous saga steps; failure handling relies on compensating actions recorded in audit logs.
+*   Payment Integration Layer isolates provider-specific payloads; new providers implement `PaymentProvider`, `PaymentMethodProvider`, `WebhookHandler`, and optional `MarketplaceProvider` interfaces to guarantee parity.
+*   POS module synchronizes carts and payments through the same Checkout APIs; offline transactions stored locally reuse Cart and Order schemas when replayed to avoid duplication.
+*   Media Pipeline registers job types (`IMAGE_VARIANT`, `VIDEO_TRANSCODE`, `POSTER_FRAME`); each job yields metadata entries consumed by Storefront and Admin UI to display processing status.
+*   Background Scheduler coordinates certificate renewal for custom domains, Stripe payout auditing, and archival tasks; each scheduled job identifies owning module for accountability.
+*   Platform Admin Backend aggregates cross-tenant metrics by querying read models rather than live tables to avoid heavy scans on production workloads.
+*   Integration Adapter Layer enforces timeout/retry policies in one place; modules declare adapters via dependency injection, never instantiating HTTP clients manually.
+*   Shared utilities (money, measurement units, address normalization) live in `platform-kit`; consumption is read-only to avoid hidden coupling.
+```
+
+### Context: 3.6 Data Model Overview & ERD (from 02_System_Structure_and_Data.md)
+
+```markdown
+*   **3.6. Data Model Overview & ERD:**
+    *   **Description:** Captures the multi-tenant data entities defined in Foundation Section 5.0, covering tenancy, users, customers, sessions, catalog, inventory, consignment, carts, orders, payments, shipments, returns, loyalty, feature flags, audit events, and background jobs. Every tenant-scoped table contains tenant_id and adheres to RLS policies.
+    *   **Key Entities:**
+        - `Tenant` governs store metadata, plan, status, branding, and configuration flags.
+        - `StoreUser` stores merchant/staff accounts with hashed passwords, roles, and status.
+        - `Customer` holds shopper identities, authentication, loyalty balances, and preferences.
+        - `Product` and `Variant` capture catalog hierarchy, SKUs, pricing, inventory policy, and media references.
+        - `InventoryLocation` and `InventoryLevel` define stock tracking across warehouses, stores, and suppliers.
+        - `Consignor` and `ConsignmentItem` store vendor agreements, commission rules, item aging, and payout state.
+        - `Cart`, `CartItem`, and `Order` maintain purchase journeys including discounts, shipping, taxes, and timeline events.
+        - `PaymentIntent` and `Refund` represent provider-agnostic payment operations with provider references and statuses.
+        - `Shipment` and `ReturnAuthorization` capture fulfillment and reverse logistics data.
+        - `LoyaltyLedgerEntry` tracks points accrual, redemption, tier progression, and expirations.
+        - `FeatureFlag`, `AuditEvent`, and `BackgroundJob` provide platform governance, observability, and async orchestration data.
+    *   **Diagram (PlantUML - ERD):** emphasises tenant_id columns plus inventory-centric tables that downstream events must reference when emitting adjustments/transfers.
+```
+
+### Context: Task 2.4 – Inventory Service Implementation (from 02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t4 -->
+*   **Task 2.4:**
+    *   **Task ID:** `I2.T4`
+    *   **Description:** Implement Inventory service (multi-location levels, adjustments, transfers) with Panache repositories, domain services enforcing reason codes, integration events for reporting.
+    *   **Agent Type Hint:** `BackendAgent`
+    *   **Inputs:** Requirements (inventory), migrations.
+    *   **Input Files:** [`modules/catalog/src/main/java/.../Inventory*`, `docs/diagrams/erd.mmd`]
+    *   **Target Files:** [`modules/catalog/src/main/java/.../InventoryLocationEntity.java`, `InventoryLevelEntity.java`, `InventoryAdjustmentService.java`, `InventoryTransferService.java`, `modules/catalog/src/test/java/...`]
+    *   **Deliverables:** Services supporting create/update/transfer/adjust operations, domain events (InventoryAdjusted, TransferInitiated) persisted to `domain_events`, tests verifying concurrency + RLS.
+    *   **Acceptance Criteria:** Transfers handle validations (matching tenant, quantities, statuses); events recorded with JSON payload; tests run against dev Postgres; API docs updated referencing adjustments.
+    *   **Dependencies:** `I2.T2`.
+    *   **Parallelizable:** No.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryService.java`
+    *   **Summary:** Provides tenant-scoped CRUD and reservation semantics for `InventoryLevel` records, emitting Micrometer counters for level updates, reservations, and commits while routing all persistence through `InventoryLevelRepository`.
+    *   **Recommendation:** Reuse these entry points when transfers or adjustments need to mutate on-hand/reserved quantities so that logging, validation, and metrics remain centralized instead of duplicating raw repository writes.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/services/InventoryTransferService.java`
+    *   **Summary:** Handles validation and lifecycle of transfers, including tenant-safe location lookups, `TransferStatus` updates, reservation/commit flows between locations, adjustment recording, and barcode-job enqueueing, but currently lacks any domain-event publishing.
+    *   **Recommendation:** Extend this service (rather than building a parallel implementation) to emit `InventoryAdjusted` and `TransferInitiated` payloads after create/receive/adjust paths, ensuring payloads capture tenant/location/variant quantities that reporting consumers expect.
+*   **File:** `modules/core-platform/src/main/java/villagecompute/storefront/data/repositories/InventoryLevelRepository.java`
+    *   **Summary:** Panache repository enforcing `TenantContext` filters for queries such as `findByVariantAndLocation`, `findByLocation`, and aggregate availability calculations.
+    *   **Recommendation:** Keep all reads/writes for inventory levels flowing through this repository (and its tenant-aware queries) so RLS assumptions hold; if you need new lookup patterns, add repository helpers that still scope by current tenant.
+*   **File:** `modules/core-platform/src/test/java/villagecompute/storefront/services/InventoryServiceTest.java`
+    *   **Summary:** Quarkus integration tests covering set/update, adjustments, reservation commits, and aggregate queries with explicit tenant seeding, ensuring behavior is deterministic under RLS.
+    *   **Recommendation:** Mirror this testing style—and the cleanup/TenantContext setup it demonstrates—when adding new tests for transfers, adjustments, or domain-event persistence so future regressions are caught under real Postgres dev services.
+
+### Implementation Tips & Notes
+*   **Tip:** `InventoryTransferService` already wires `InventoryService`, multiple repositories, `MeterRegistry`, and a `BarcodeLabelJobQueue`; emit domain events from this layer so you can enrich payloads with both source/destination context immediately after persistence.
+*   **Tip:** There is not yet a concrete `DomainEvent` entity/repository in `modules/core-platform`; plan to introduce one aligned with the ERD (`domain_events` table with tenant_id, aggregate_type, event_type, payload JSON, metadata) so reporting/observability services can poll it later.
+*   **Tip:** Tenant isolation is enforced via `TenantContext` plus repository filters as shown in the integration tests—always set the context in tests (see `InventoryServiceTest` and `InventoryTransferIT`) and avoid bypassing repositories with `EntityManager` queries that would skip tenant guards.
+*   **Tip:** Keep observability consistent: reuse the existing Micrometer naming conventions (`inventory.transfer.started`, `inventory.adjustment.count`, etc.) and extend them for new adjustment/transfer event stages so SLO dashboards gain coverage automatically.
+*   **Tip:** Whenever you add transfer or adjustment APIs, remember that the Admin SPA already expects DTOs under `modules/core-platform/src/main/java/villagecompute/storefront/api/types/Inventory*`; keep signatures compatible and document any new behaviors in the OpenAPI slice referenced by Task I2.T3.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Summarizing final task briefing update**
+
+I’m wrapping up with a clear summary that highlights updating the `.codemachine/prompts/context.md` file at line 1 to include the new Task Briefing for I2.T4. I’ll note that no tests were run and suggest that the coder agent can now use this updated context for next steps. This keeps the final message concise and aligned with the instructions.
+[RUNNING]● Message: - Updated `.codemachine/prompts/context.md:1` with a fresh Task Briefing for I2.T4, including the task JSON, the relevant blueprint/plan/data-model excerpts, and targeted guidance covering `InventoryService`, `InventoryTransferService`, repository usage, and testing patterns the coder must follow.
+- No tests were run; the change is documentation-only.
+⏱️  Tokens: 4679491in/13403out (2078592 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+

@@ -1,0 +1,660 @@
+[CYAN]===╭─ Agent 466: context-manager ───────────────────────────────────
+[CYAN]   Started: 2026-01-11 19:16:15
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Listing files recursively**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Identifying next actionable task and gathering document context**
+
+I'm confirming the first incomplete task with all dependencies done, which is I2.T4. Now, I’m preparing to collect relevant document sections from manifests and markdown files that reference contract patterns and the OpenAPI spec, focusing on architectural and plan files like `01_Blueprint_Foundation.md` and `02_Iteration_I2.md`. I'll use search tools and manifests to pinpoint exact lines to extract useful context for this task.
+[RUNNING]● Command: bash -lc "rg --files -g '02_Iteration_I2.md'"
+[ERROR]● Command: bash -lc "rg --files -g '02_Iteration_I2.md'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for Iteration_I2 files**
+[RUNNING]● Command: bash -lc "rg --files -g '*Iteration_I2*'"
+[ERROR]● Command: bash -lc "rg --files -g '*Iteration_I2*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Verifying plan file naming**
+[RUNNING]● Command: bash -lc "rg --files -g '01_Plan*'"
+[ERROR]● Command: bash -lc "rg --files -g '01_Plan*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching documentation for Iteration_I2**
+[RUNNING]● Command: bash -lc 'rg -n "Iteration I2" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "Iteration I2" -n'
+[SUCCESS]⎿ docs/architecture_overview.md:411:### Iteration I2+ Dependencies
+[SUCCESS]⎿ docs/storefront-theming.md:428:**La...
+[THINKING]● Thinking: **Searching for Iteration_I1 in docs**
+[RUNNING]● Command: bash -lc 'rg -n "Iteration I1" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "Iteration I1" -n'
+[SUCCESS]⎿ docs/architecture_overview.md:403:### Immediate Tasks (Iteration I1)
+[THINKING]● Thinking: **Searching for blueprint files**
+[RUNNING]● Command: bash -lc "rg --files -g '*Blueprint*'"
+[ERROR]● Command: bash -lc "rg --files -g '*Blueprint*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for manifest documentation**
+[RUNNING]● Command: bash -lc 'rg -n "blueprint-foundation"'
+[SUCCESS]● Command: bash -lc 'rg -n "blueprint-foundation"'
+[SUCCESS]⎿ docs/architecture_overview.md:3:<!-- anchor: blueprint-foundation -->
+[THINKING]● Thinking: **Determining relevant documentation files**
+[RUNNING]● Command: bash -lc 'rg -n "iteration-plan-overview" -n'
+[ERROR]● Command: bash -lc 'rg -n "iteration-plan-overview" -n'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for project plan anchor**
+[RUNNING]● Command: bash -lc 'rg -n "project-plan-header" -g "*.md"'
+[ERROR]● Command: bash -lc 'rg -n "project-plan-header" -g "*.md"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for plan files**
+[RUNNING]● Command: bash -lc "find . -name '01_*'"
+[SUCCESS]● Command: bash -lc "find . -name '01_*'"
+[SUCCESS]⎿ ./.codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md
+[SUCCESS]⎿ ./.codemachine/artifacts/architecture/01...
+[THINKING]● Thinking: **Examining artifact files for context**
+[RUNNING]● Command: bash -lc "find . -name '02_*'"
+[SUCCESS]● Command: bash -lc "find . -name '02_*'"
+[SUCCESS]⎿ ./.codemachine/artifacts/plan/02_Iteration_I4.md
+[SUCCESS]⎿ ./.codemachine/artifacts/plan/02_Iteration_I1.md
+[SUCCESS]⎿ ./...
+[THINKING]● Thinking: **Identifying key documentation sections**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ <!-- anchor: iteration-2-plan -->
+[SUCCESS]⎿ ### Iteration 2: Catalog, Storefront Shell, and Spec-First APIs
+[SUCCESS]⎿
+[SUCCESS]⎿ *...
+[THINKING]● Thinking: **Searching for Task 2.4 snippet**
+[RUNNING]● Command: bash -lc "rg -n \"Task 2\\.4\" -n ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "rg -n \"Task 2\\.4\" -n ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ 63:*   **Task 2.4:**
+[THINKING]● Thinking: **Extracting specific lines with sed**
+[RUNNING]● Command: bash -lc "sed -n '60,120p' ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]● Command: bash -lc "sed -n '60,120p' ./.codemachine/artifacts/plan/02_Iteration_I2.md"
+[SUCCESS]⎿ *   **Parallelizable:** Yes.
+[SUCCESS]⎿
+[SUCCESS]⎿ <!-- anchor: task-i2-t4 -->
+[SUCCESS]⎿ *   **Task 2.4:**
+[SUCCESS]⎿     *   **Task ID:** `I2...
+[THINKING]● Thinking: **Preparing to extract contract section**
+[RUNNING]● Command: bash -lc 'rg -n "section-5-contract" ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "section-5-contract" ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]⎿ 67:<!-- anchor: section-5-contract -->
+[SUCCESS]⎿ 184:<!-- anchor: section-5-contract-patterns -->
+[THINKING]● Thinking: **Preparing snippet extraction command**
+[RUNNING]● Command: bash -lc "sed -n '67,110p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '67,110p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ <!-- anchor: section-5-contract -->
+[SUCCESS]⎿ ### **5.0 The "Contract" (API & Data Definitions)**
+[SUCCESS]⎿
+[SUCCESS]⎿ *   **Prima...
+[THINKING]● Thinking: **Extracting code snippet with sed**
+[RUNNING]● Command: bash -lc "sed -n '184,240p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '184,240p' ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ <!-- anchor: section-5-contract-patterns -->
+[SUCCESS]⎿ #### Section 5 Contract Patterns
+[SUCCESS]⎿
+[SUCCESS]⎿ *   OpenAPI governanc...
+[THINKING]● Thinking: **Searching for OpenAPI references in architecture docs**
+[RUNNING]● Command: bash -lc 'rg -n "OpenAPI" ./.codemachine/artifacts/architecture -n'
+[SUCCESS]● Command: bash -lc 'rg -n "OpenAPI" ./.codemachine/artifacts/architecture -n'
+[SUCCESS]⎿ ./.codemachine/artifacts/architecture/01_Blueprint_Foundation.md:65:Component boundaries must remain...
+[THINKING]● Thinking: **Extracting relevant snippet from architecture file**
+[RUNNING]● Command: bash -lc "sed -n '1,120p' ./.codemachine/artifacts/architecture/03_Behavior_and_Communication.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,120p' ./.codemachine/artifacts/architecture/03_Behavior_and_Communication.md"
+[SUCCESS]⎿ <!-- anchor: 3-0-proposed-architecture -->
+[SUCCESS]⎿ ## 3. Proposed Architecture (Behavioral View)
+[SUCCESS]⎿
+[SUCCESS]⎿ * **3.7. A...
+[THINKING]● Thinking: **Searching for feature flag references**
+[RUNNING]● Command: bash -lc "rg -n \"x-feature-flags\" -n ./.codemachine/artifacts/architecture -g '*.md'"
+[SUCCESS]● Command: bash -lc "rg -n \"x-feature-flags\" -n ./.codemachine/artifacts/architecture -g '*.md'"
+[SUCCESS]⎿ ./.codemachine/artifacts/architecture/03_Behavior_and_Communication.md:22:        - Feature flag gov...
+[THINKING]● Thinking: **Searching for Spectral references**
+[RUNNING]● Command: bash -lc 'rg -n "Spectral" -n'
+[SUCCESS]● Command: bash -lc 'rg -n "Spectral" -n'
+[SUCCESS]⎿ api/README.md:36:The spec is validated using [Spectral](https://stoplight.io/open-source/spectral) w...
+[THINKING]● Thinking: **Planning document snippet extraction**
+[RUNNING]● Command: bash -lc 'rg -n "OpenAPI" ./.codemachine/artifacts/plan/03_Verification_and_Glossary.md'
+[SUCCESS]● Command: bash -lc 'rg -n "OpenAPI" ./.codemachine/artifacts/plan/03_Verification_and_Glossary.md'
+[SUCCESS]⎿ 6:    - **Integration:** Quarkus integration tests run against PostgreSQL + MinIO containers verifyi...
+[THINKING]● Thinking: **Preparing initial snippet extraction**
+[RUNNING]● Command: bash -lc "sed -n '1,60p' ./.codemachine/artifacts/plan/03_Verification_and_Glossary.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,60p' ./.codemachine/artifacts/plan/03_Verification_and_Glossary.md"
+[SUCCESS]⎿ <!-- anchor: verification-and-integration-strategy -->
+[SUCCESS]⎿ ## 6. Verification and Integration Strategy
+[SUCCESS]⎿
+[SUCCESS]⎿ ...
+[THINKING]● Thinking: **Assessing necessary files for context**
+[RUNNING]● Command: bash -lc 'wc -l api/openapi.yaml'
+[ERROR]● Command: bash -lc 'wc -l api/openapi.yaml'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking alternate openapi.yaml location**
+[RUNNING]● Command: bash -lc 'wc -l api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'wc -l api/v1/openapi.yaml'
+[SUCCESS]⎿ 6508 api/v1/openapi.yaml
+[THINKING]● Thinking: **Evaluating strategy for large file review**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' api/v1/openapi.yaml"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' api/v1/openapi.yaml"
+[SUCCESS]⎿ # Village Storefront API - OpenAPI 3.0.3 Specification
+[SUCCESS]⎿ #
+[SUCCESS]⎿ # Lint command: npx @stoplight/spectral-cli...
+[THINKING]● Thinking: **Investigating spec completeness and feature flags**
+[RUNNING]● Command: bash -lc 'rg -n "x-feature-flags" api/v1/openapi.yaml | head'
+[SUCCESS]● Command: bash -lc 'rg -n "x-feature-flags" api/v1/openapi.yaml | head'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Searching README for OpenAPI references**
+[RUNNING]● Command: bash -lc 'rg -n "OpenAPI" README.md'
+[SUCCESS]● Command: bash -lc 'rg -n "OpenAPI" README.md'
+[SUCCESS]⎿ 31:- **🔌 Headless APIs:** OpenAPI spec-first REST APIs, OAuth 2.0 scopes, rate limiting, signed med...
+[THINKING]● Thinking: **Extracting README snippet for workflow**
+[RUNNING]● Command: bash -lc "sed -n '964,1045p' README.md"
+[SUCCESS]● Command: bash -lc "sed -n '964,1045p' README.md"
+[SUCCESS]⎿ The REST API follows an **OpenAPI spec-first** approach:
+[SUCCESS]⎿
+[SUCCESS]⎿ - **Specification:** `api/v1/openapi.yaml`...
+[THINKING]● Thinking: **Searching for SDK generation instructions**
+[RUNNING]● Command: bash -lc 'rg -n "SDK" README.md'
+[SUCCESS]● Command: bash -lc 'rg -n "SDK" README.md'
+[SUCCESS]⎿ 110:1. First run: Downloads all Maven dependencies + GraalVM SDK (~5-10 min overhead)
+[SUCCESS]⎿ 246:> Module a...
+[THINKING]● Thinking: **Identifying key documentation for OpenAPI spec**
+[RUNNING]● Command: bash -lc 'cat api/README.md'
+[SUCCESS]● Command: bash -lc 'cat api/README.md'
+[SUCCESS]⎿ # Village Storefront API Specifications
+[SUCCESS]⎿
+[SUCCESS]⎿ This directory contains the authoritative OpenAPI specifica...
+[THINKING]● Thinking: **Investigating API spec for catalog details**
+[RUNNING]● Command: bash -lc "rg -n \"\\/products\" api/v1/openapi.yaml | head"
+[SUCCESS]● Command: bash -lc "rg -n \"\\/products\" api/v1/openapi.yaml | head"
+[SUCCESS]⎿ 321:  /catalog/products:
+[SUCCESS]⎿ 414:  /catalog/products/{productId}:
+[SUCCESS]⎿ 818:  /catalog/products/{productId}/va...
+[THINKING]● Thinking: **Inspecting path definitions**
+[RUNNING]● Command: bash -lc "sed -n '300,520p' api/v1/openapi.yaml"
+[SUCCESS]● Command: bash -lc "sed -n '300,520p' api/v1/openapi.yaml"
+[SUCCESS]⎿ **No authentication required** - tenant resolution happens before authentication.
+[SUCCESS]⎿       tags: [Platf...
+[THINKING]● Thinking: **Searching for securitySchemes**
+[RUNNING]● Command: bash -lc 'rg -n "securitySchemes" -n api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'rg -n "securitySchemes" -n api/v1/openapi.yaml'
+[SUCCESS]⎿ 3733:  securitySchemes:
+[THINKING]● Thinking: **Locating code snippet near line 3733**
+[RUNNING]● Command: bash -lc "sed -n '3720,3840p' api/v1/openapi.yaml"
+[SUCCESS]● Command: bash -lc "sed -n '3720,3840p' api/v1/openapi.yaml"
+[SUCCESS]⎿ application/json:
+[SUCCESS]⎿               schema:
+[SUCCESS]⎿                 $ref: '#/components/schemas/ProblemDetails'
+[SUCCESS]⎿ ...
+[THINKING]● Thinking: **Summarizing spec and README insights**
+
+I'm gathering key details about the spec located in `api/v1/openapi.yaml`, which differs from the expected path `api/openapi.yaml`. I notice the spec lacks certain extensions like `x-feature-flags` and usage of macros for security schemes, though it includes tags and some rate limiting info. The README outlines the spec workflow and suggests linting with `npx @stoplight/spectral-cli`. I’m consolidating these observations to prepare clear guidance on spec maintenance, file location, and missing features.
+[RUNNING]● Command: bash -lc 'rg -n "theme" api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'rg -n "theme" api/v1/openapi.yaml'
+[SUCCESS]⎿ 298:        Useful for headless clients to verify tenant context and retrieve theme settings.
+[SUCCESS]⎿ 4102: ...
+[THINKING]● Thinking: **Planning context gathering and verification steps**
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing to update task briefing**
+[RUNNING]● Command: bash -lc 'rg -n "Theme" api/v1/openapi.yaml'
+[ERROR]● Command: bash -lc 'rg -n "Theme" api/v1/openapi.yaml'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for theme endpoints**
+[RUNNING]● Command: bash -lc 'rg -n "inventory" api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'rg -n "inventory" api/v1/openapi.yaml'
+[SUCCESS]⎿ 139:      Multi-location inventory management including locations, transfers, adjustments,
+[SUCCESS]⎿ 419:     ...
+[THINKING]● Thinking: **Reviewing OpenAPI spec details and tooling**
+[RUNNING]● Command: bash -lc 'rg -n "tenants" api/v1/openapi.yaml'
+[SUCCESS]● Command: bash -lc 'rg -n "tenants" api/v1/openapi.yaml'
+[SUCCESS]⎿ 292:  /tenants/resolve:
+[SUCCESS]⎿ 2663:  /platform/tenants:
+[SUCCESS]⎿ 2666:      summary: List all tenants (platform adm...
+[THINKING]● Thinking: **Summarizing API specification and documentation gaps**
+
+I'm gathering key points about the API spec and documentation, including missing theme endpoints, the spec structure for components like `Product`, RESTful elements, and gaps in `openapi.yaml` such as security schemes and feature flags. I'll also capture recommendations for improving README instructions and integration workflow to keep everything aligned and actionable.
+[RUNNING]● Command: bash -lc 'rg -n "openapi:" README.md'
+[SUCCESS]● Command: bash -lc 'rg -n "openapi:" README.md'
+[SUCCESS]⎿ 1020:The CI pipeline enforces that `npm run lint:openapi` passes before merging PRs and runs a compa...
+[THINKING]● Thinking: **Summarizing SDK and spec update requirements**
+
+I'm gathering all instructions needed to update the README with spec change workflows, SDK generation commands, and contract test guidance. I want to ensure the final context document covers spec details, behavior and verification snippets, and specific file summaries—highlighting missing features like `x-feature-flags` and the actual spec path in `api/v1`. I'll also verify package scripts to mention SDK stub generation properly.
+[RUNNING]● Command: bash -lc 'rg -n "openapi" package.json'
+[SUCCESS]● Command: bash -lc 'rg -n "openapi" package.json'
+[SUCCESS]⎿ 27:    "openapi:lint": "npx @stoplight/spectral-cli lint api/v1/openapi.yaml",
+[SUCCESS]⎿ 28:    "lint:openapi"...
+[THINKING]● Thinking: **Checking README for generation instructions**
+[RUNNING]● Command: bash -lc "sed -n '1045,1125p' README.md"
+[SUCCESS]● Command: bash -lc "sed -n '1045,1125p' README.md"
+[SUCCESS]⎿ **Access the spec:**
+[SUCCESS]⎿ - JSON format: `http://localhost:8080/openapi`
+[SUCCESS]⎿ - Swagger UI: `http://localhost:...
+[THINKING]● Thinking: **Summarizing spec and README alignment**
+
+I'm identifying gaps between the README and the spec, especially around custom extensions like `x-feature-flags` and SDK generation instructions. I'll plan clear implementation tips referencing these extensions, authentication scopes, theming endpoints, and the use of scripts like `openapi-diff` and possibly contract tests to guide developers in keeping the spec and docs in sync.
+[RUNNING]● Command: bash -lc 'rg -n "contract" README.md'
+[SUCCESS]● Command: bash -lc 'rg -n "contract" README.md'
+[SUCCESS]⎿ 970:All API types are generated from the OpenAPI spec to ensure contract-first development.
+[SUCCESS]⎿ 974:The ...
+[THINKING]● Thinking: **Preparing detailed task briefing content**
+
+I’m organizing a thorough context file for the task, including JSON task details, multiple document context snippets, and a code analysis with focused summaries and implementation tips. I’ll ensure the content covers the OpenAPI spec location issues, custom extension needs, and README updates to keep everything aligned for contract tests and SDK generation. Now I’m ready to carefully draft the Markdown content before writing it to `.codemachine/prompts/context.md`.
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T4",
+  "iteration_id": "I2",
+  "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+  "description": "Create OpenAPI v3 skeleton covering catalog, inventory, theme, tenant, and auth endpoints with reusable components, security schemes (JWT + OAuth client credentials), feature-flag metadata, and error schema templates.",
+  "agent_type_hint": "DocumentationAgent",
+  "inputs": "Section 2 contract style, Task outputs `I2.T1`–`I2.T3`, `I1.T6` test strategy.",
+  "target_files": [
+    "api/openapi.yaml",
+    "README.md"
+  ],
+  "input_files": [
+    "api/openapi.yaml",
+    "README.md"
+  ],
+  "deliverables": "Spec file with tags, schemas, error objects, `x-feature-flags` fields, README instructions for generating SDK stubs + contract tests.",
+  "acceptance_criteria": "- Spec validates via `spectral lint` and includes schema references for all implemented endpoints.'"\\n        - SecuritySchemes define bearer + client creds with scopes; operations cite required scopes + rate limit hints.\\n        - README updated with spec change workflow + instructions to regenerate TypeScript/Java clients.\",
+  \"dependencies\": [
+    \"I2.T1\",
+    \"I2.T2\"
+  ],
+  \"parallelizable\": true,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Iteration 2 – Catalog, Storefront Shell, and Spec-First APIs (from .codemachine/artifacts/plan/02_Iteration_I2.md)
+
+```markdown
+### Iteration 2: Catalog, Storefront Shell, and Spec-First APIs
+
+*   **Iteration ID:** `I2`
+*   **Goal:** Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.
+*   **Prerequisites:** `I1`
+*   **Iteration KPIs:** Catalog APIs ≤200 ms p95 in dev, storefront home renders under 1.5 s server-side, OpenAPI lint passes with zero warnings, and Playwright smoke retains 100% pass rate.
+*   **Iteration Risks & Mitigations:**
+    - Variant explosion could degrade performance → enforce pagination defaults, add covering indexes from ERD, and monitor via integration tests.
+    - Theme token drift between Qute + Vue layers → add automated snapshot tests referencing shared token endpoint and document sync script.
+    - Async queue misconfiguration could block media ingestion → finalize blueprint + dev HPA plan before enabling endpoints.
+*   **Tasks:**
+```
+
+### Context: Task 2.4 – OpenAPI Skeleton (from .codemachine/artifacts/plan/02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t4 -->
+*   **Task 2.4:**
+    *   **Task ID:** `I2.T4`
+    *   **Description:** Create OpenAPI v3 skeleton covering catalog, inventory, theme, tenant, and auth endpoints with reusable components, security schemes (JWT + OAuth client credentials), feature-flag metadata, and error schema templates.
+    *   **Agent Type Hint:** `DocumentationAgent`
+    *   **Inputs:** Section 2 contract style, Task outputs `I2.T1`–`I2.T3`, `I1.T6` test strategy.
+    *   **Input Files:** ["api/openapi.yaml", "README.md"]
+    *   **Target Files:** ["api/openapi.yaml", "README.md"]
+    *   **Deliverables:** Spec file with tags, schemas, error objects, `x-feature-flags` fields, README instructions for generating SDK stubs + contract tests.
+    *   **Acceptance Criteria:**
+        - Spec validates via `spectral lint` and includes schema references for all implemented endpoints.
+        - SecuritySchemes define bearer + client creds with scopes; operations cite required scopes + rate limit hints.
+        - README updated with spec change workflow + instructions to regenerate TypeScript/Java clients.
+    *   **Dependencies:** [`I2.T1`, `I2.T2`]
+    *   **Parallelizable:** Yes.
+```
+
+### Context: 5.0 The "Contract" (API & Data Definitions) (from .codemachine/artifacts/architecture/01_Blueprint_Foundation.md)
+
+```markdown
+### **5.0 The "Contract" (API & Data Definitions)**
+
+*   **Primary API Style:** RESTful APIs defined spec-first via OpenAPI 3.0; admin SPA and storefront both consume these endpoints, and headless integrations re-use the same definitions with tenant-aware auth.
+*   **Data Model - Core Entities:**
+    *   **Tenant:** `id (UUID)`, `subdomain`, `custom_domains[]`, `plan`, `status`, `base_currency`, `branding`, `config_flags`, `created_at`, `suspended_at`.
+    *   **StoreUser:** `id`, `tenant_id`, `email`, `hashed_password`, `roles[]`, `permissions`, `status`, `last_login_at`, `mfa_secret`, `staff_profile`.
+    *   **Customer:** `id`, `tenant_id`, `email`, `password_hash`, `name`, `addresses[]`, `phone`, `loyalty_balance`, `preferences`, `created_at`.
+    *   **SessionLog:** `id`, `user_type`, `user_id`, `tenant_id`, `ip`, `user_agent`, `login_at`, `last_activity_at`, `logout_reason`, `device_fingerprint`.
+    *   **Product:** `id`, `tenant_id`, `title`, `slug`, `description`, `status`, `visibility_window`, `seo`, `category_ids[]`, `collection_ids[]`, `custom_attributes`, `created_at`, `updated_at`.
+    *   **Variant:** `id`, `product_id`, `tenant_id`, `sku`, `barcode`, `option_values`, `price`, `compare_at_price`, `inventory_policy`, `weight`, `dimensions`, `media_ids[]`.
+    *   **InventoryLocation:** `id`, `tenant_id`, `name`, `address`, `type`, `capacity`, `timezone`.
+    *   **InventoryLevel:** `id`, `variant_id`, `location_id`, `on_hand`, `reserved`, `incoming`, `safety_stock`, `low_stock_threshold`.
+    *   **Consignor:** `id`, `tenant_id`, `contact`, `tax_info`, `commission_rules`, `payout_preferences`, `portal_access_token`, `status`.
+    *   **ConsignmentItem:** `id`, `tenant_id`, `variant_id`, `consignor_id`, `cost_basis`, `received_at`, `expires_at`, `status`, `aging_days`, `payout_state`.
+    *   **Cart:** `id`, `tenant_id`, `customer_id/null`, `items[]`, `discounts[]`, `shipping_address`, `billing_address`, `currency`, `subtotal`, `tax_total`, `shipping_total`, `grand_total`, `last_activity_at`.
+    *   **Order:** `id`, `tenant_id`, `order_number`, `customer_id`, `cart_snapshot`, `status`, `payment_state`, `fulfillment_state`, `shipping_address`, `billing_address`, `totals`, `timeline[]`, `notes`, `tags`.
+    *   **PaymentIntent:** `id`, `order_id`, `tenant_id`, `provider`, `provider_reference`, `amount`, `currency`, `application_fee`, `status`, `captured_at`, `failure_reason`, `metadata`.
+    *   **Refund:** `id`, `payment_intent_id`, `amount`, `currency`, `reason`, `processed_at`, `provider_reference`, `status`.
+    *   **Shipment:** `id`, `order_id`, `tenant_id`, `carrier`, `service_level`, `tracking_number`, `labels`, `packages[]`, `status`, `shipped_at`, `delivered_at`.
+    *   **ReturnAuthorization:** `id`, `order_id`, `items[]`, `reason_codes[]`, `status`, `approved_by`, `received_at`, `restock_decision`, `refund_amount`.
+    *   **LoyaltyLedgerEntry:** `id`, `tenant_id`, `customer_id`, `points_delta`, `reason`, `order_id`, `balance_after`, `expires_at`, `source`.
+    *   **FeatureFlag:** `key`, `description`, `default_state`, `allowed_audiences`, `tenant_overrides`, `created_at`, `updated_at`.
+    *   **AuditEvent:** `id`, `tenant_id`, `actor_type`, `actor_id`, `action`, `target_type`, `target_id`, `metadata`, `impersonation_context`, `occurred_at`.
+    *   **BackgroundJob:** `id`, `queue`, `priority`, `payload`, `attempts`, `last_error`, `run_at`, `locked_by`, `locked_at`, `finished_at`.
+
+Contracts require OpenAPI schemas for each entity and versioned endpoints such as `/api/v1/tenants/{tenantId}/products` or `/api/v1/admin/consignors`. Query parameters must include pagination, filtering, and sorting conventions standardized platform-wide. Webhooks (Stripe, carriers) must map to internal events and produce idempotency keys stored alongside payloads.
+```
+
+### Context: Section 5 Contract Patterns (from .codemachine/artifacts/architecture/01_Blueprint_Foundation.md)
+
+```markdown
+#### Section 5 Contract Patterns
+
+*   OpenAPI governance requires each endpoint to declare tenant scoping, authentication scheme, rate limits, and feature flag dependencies inside the spec description; linting fails PRs missing this metadata.
+*   DTO layering: Define separate request/response DTOs, domain models, and persistence entities; mapping happens via MapStruct or manually curated assemblers to guard against exposing internal columns (e.g., commission cost basis).
+*   Pagination contract: All list endpoints require `page`, `page_size`, `sort`, and `filter` parameters with documented defaults and maximums; response envelopes include `total_count`, `page_count`, and `links` for HATEOAS compatibility.
+*   Webhook contracts: Incoming webhooks validated via HMAC signature; the handler writes payload + signature to `webhook_events` table before processing to allow replay. Outgoing webhooks (if introduced later) must follow the same guarantee.
+*   Error handling: APIs return RFC 7807 Problem Details JSON with `traceId`, `tenantId`, and user-friendly `message`. Client libraries rely on these structures, so architects must not return ad-hoc payloads.
+*   Data versioning: Entities with frequent schema evolution (Product, Order, PaymentIntent) include `version` numbers incremented per update; concurrency control ensures conflicting writes produce 409 responses.
+*   Headless endpoints: Provide read-only scopes for catalog/cart, and write scopes for orders/cart modifications; tokens embed tenant_id, and rate limits apply per tenant per scope.
+*   File upload contracts: Media uploads negotiated via `POST /media/upload-request` returning presigned URL, size/type limits, checksum; clients confirm completion via `POST /media/uploads/{id}/complete` enabling background processing.
+*   Background job payload schema: Use JSON structures referencing job type, version, and associated entity IDs; workers must validate schema version before processing to prevent drift.
+*   Reporting exports: `POST /reports/{reportType}` enqueues job returning job_id; `GET /reports/jobs/{id}` exposes status, download link, and expiration. Architects must reuse this template for all long-running report workflows.
+*   POS offline queue API: `/pos/offline/batches` accepts encrypted bundle with transaction metadata; backend validates signature, stores payload, and triggers reconciliation jobs.
+```
+
+### Context: 3.7 API Design & Communication (from .codemachine/artifacts/architecture/03_Behavior_and_Communication.md)
+
+```markdown
+* **3.7. API Design & Communication:**
+    * **API Style:**
+        - The platform adheres to the OpenAPI 3.0 spec-first RESTful paradigm mandated in the foundation, ensuring every endpoint across storefront, admin, headless, and platform scopes is versioned under `/api/v1/...` with explicit tenant-aware segments or hostnames so contracts remain stable as modules evolve.
+        - REST-backed DTOs map closely to data entities such as Product, Variant, Order, PaymentIntent, Consignor, SessionLog, LoyaltyLedgerEntry, and FeatureFlag; persistence models stay encapsulated inside Panache repositories while MapStruct assemblers enforce separation between transport schemas and database columns like commission cost basis or encrypted tax identifiers.
+        - HTTP verbs represent intent consistently: `GET` for catalog queries and reporting lookups, `POST` for command-style operations (checkout orchestration, consignment intake, payout initiation, media upload completion), `PUT` for idempotent replacements (inventory location definition), `PATCH` for partial updates (order editing, staff role changes), and `DELETE` for soft-deletion toggles that trigger archival policies.
+        - JWT bearer tokens issued by the Identity & Session Service supply tenant, user, and scope claims; headless integrations additionally rely on OAuth client credentials that return the same JWT structure so REST controllers can uniformly enforce permissions via annotations referencing RBAC scopes.
+        - Pagination and filtering employ shared query parameters (`page`, `page_size`, `sort`, `filter`) and responses wrap resource arrays within envelopes containing `items`, `total_count`, `page_count`, `links`, and `data_freshness_timestamp`, giving storefront templates and Admin SPA consistent mechanics for infinite scroll or table pagination.
+        - Error handling follows RFC 7807 Problem Details with extended fields for `tenantId`, `traceId`, `impersonationId`, and `remediation`; RESTEasy reactive filters automatically populate correlation IDs from OpenTelemetry spans so debugging across pods stays deterministic.
+        - Rate limiting is enforced at API gateway level per tenant and per scope, with response headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) propagated through REST middleware; clients such as PrimeUI toasts interpret HTTP 429 payloads to show friendly throttling messages.
+        - Every mutating endpoint that can execute twice (checkout, refund, payout, upload completion) accepts `Idempotency-Key` headers stored inside PostgreSQL tables to guarantee safe retries from browsers or POS devices when networks flap or offline queues replay transactions.
+        - Hypermedia-style affordances appear via HATEOAS `links` arrays and `actions` metadata so Storefront Rendering Engine and Admin SPA can inspect allowed transitions (e.g., `canRefund`, `canSplitShipment`) without bundling business logic into JavaScript bundles.
+        - Multi-tenant enforcement occurs through REST filters that inspect Host headers, confirm TenantContext, and inject row-level security hints; endpoints explicitly include `/tenants/{tenantId}` segments to make cross-tenant access impossible even if Host header spoofed.
+        - CORS policies differentiate storefront, admin, headless, and platform origins; configuration stored in Tenant entity drives Quarkus HTTP filters so REST endpoints only accept fetches from registered subdomains or custom domains, fulfilling SaaS safety mandates.
+        - Webhook ingress endpoints (Stripe, carrier callbacks, FFmpeg notifications) speak REST as well; they first persist raw JSON payloads plus signature headers into `webhook_events` tables before invoking module-specific handlers, enabling replay during incident response and satisfying audit requirements.
+        - SSE (Server-Sent Events) endpoints for Admin SPA notifications reuse REST security and stream JSON lines within the same OpenAPI contract, ensuring Quarkus filters and TenantContext apply identically to traditional HTTP responses while enabling low-latency UI refreshes.
+        - REST controllers expose `HEAD` and `OPTIONS` for caching and preflight support; CDN caches rely on ETag headers derived from resource version numbers maintained in Product, Order, or Media entities, while `Cache-Control` durations respect tenant-configured TTLs that differ between storefront and headless clients.
+        - Media uploads follow REST handshake sequences: clients request presigned URLs via `POST /media/upload-request`, upload directly to R2/S3, then confirm completion via REST callbacks that kick off background jobs, allowing the backend to validate checksums before exposing URLs.
+        - Reporting exports operate as REST job submission endpoints returning job IDs; clients poll `GET /reports/jobs/{id}` which surfaces status transitions and signed download URLs, aligning synchronous REST invocation with asynchronous execution through Background Job Scheduler.
+        - Feature flag governance integrates with REST by requiring every endpoint description inside the OpenAPI document to declare dependent flags using `x-feature-flags`, making it explicit when responses change due to toggled capabilities or phased rollouts.
+```
+
+### Context: Verification and Integration Strategy (from .codemachine/artifacts/plan/03_Verification_and_Glossary.md)
+
+```markdown
+## 6. Verification and Integration Strategy
+
+*   **Testing Levels:**
+    - **Unit:** Each domain/service (tenant, catalog, checkout, payment, consignment, loyalty, POS, media) must keep ≥85% coverage, include negative cases (tenant mismatch, validation errors), and run via `mvn test` + Jest/Vitest for Vue stores. Feature toggles require dedicated unit tests verifying enable/disable behavior.
+    - **Integration:** Quarkus integration tests run against PostgreSQL + MinIO containers verifying RLS policies, Stripe webhook flows (mocked), shipping adapters, media uploads; REST-assured contract tests automatically validate OpenAPI schemas per iteration deliverables.
+    - **End-to-End:** Playwright suites cover storefront browsing/checkout, admin catalog/order workflows, POS offline transactions, platform impersonation; nightly + release candidate runs capture screenshots, tracing metadata, and Lighthouse metrics for storefront/admin.
+    - **Performance & Chaos:** Gatling/Locust load tests simulate peak checkout/cart traffic, POS offline bursts, and consignment payout spikes; chaos scripts trigger DB failover, worker restarts, and Stripe/carrier outages verifying kill-switch + fallback behavior documented in runbook.
+*   **CI/CD Flow:** GitHub Actions pipeline runs Spotless, unit/integration tests, Playwright API smoke, OpenAPI lint, coverage upload (JaCoCo ≥80%), Quinoa build, GraalVM native compile, docker image publish, and deploy workflow (blue/green with smoke tests + manual approval). Feature branch gating enforces spec alignment and prevents merges with unchecked tasks.
+*   **Quality Gates:**
+    - Test coverage: backend modules ≥80% (JaCoCo), frontend stores/components ≥80% (Vitest), e2e suites must pass each run.
+    - Lint/style: Spotless, ESLint, Stylelint, Spectral (OpenAPI) zero errors.
+    - Security: Dependency scanning (OWASP/Trivy) integrated into CI; secrets scanning ensures no credentials in repo; Stripe keys only referenced via GitHub secrets.
+    - Performance budgets: Checkout API <300 ms p95, storefront LCP <2 s, admin initial JS bundle <2 MB gz; budgets enforced by integration tests + Lighthouse CI.
+    - Observability checks: `/q/health` endpoints validated in pipeline; metrics/tracing exporters verified via unit tests.
+*   **Integration Strategy:**
+    - Feature flags gate incremental rollout; iteration deliverables specify required toggles/clamps for new modules (catalog, checkout, consignment, POS, headless, domain management).
+    - OpenAPI spec-first approach ensures backend/frontend/headless clients stay in sync; spec merged before code, and generated SDKs updated automatically.
+    - Background job payload schemas versioned; new job handlers introduced with compatibility tests + migration notes in runbook.
+    - Infrastructure integration uses Kustomize overlays; dev/staging/prod parity maintained with sealed secrets + environment variable matrices documented in runbook.
+*   **Artifact Validation:** PlantUML/Mermaid diagrams validated via CI (PlantUML CLI, `mmdc`), OpenAPI via Spectral, Markdown docs linted (markdownlint). Media worker container includes health check to ensure FFmpeg version pinned; Kubernetes manifests tested via `kubeconform`.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `api/v1/openapi.yaml`
+    *   **Summary:** Authoritative 6.5k-line OpenAPI 3.0.3 spec defining system, auth, catalog, admin, headless, inventory, and platform endpoints with shared schemas (`ProductSummary`, `ProblemDetails`, `PaginationMetadata`) plus security schemes for bearer JWTs, API keys, and OAuth client credentials.
+    *   **Recommendation:** Continue editing this canonical spec even though the plan mentions `api/openapi.yaml`; keep the file under `api/v1/` and, if required, create/refresh a thin wrapper at `api/openapi.yaml` that references or includes the v1 spec. When adding catalog/inventory/theme/tenant/auth coverage, prefer `$ref` to the existing schema definitions, add explicit `security` requirements per operation (bearer/apiKey/oauth scopes as applicable), and insert the mandated custom metadata (`x-tenant-scope`, `x-feature-flags`, `x-rate-limit`) because they are currently absent in the file.
+*   **File:** `api/README.md`
+    *   **Summary:** Documents the API directory layout, Spectral lint command, sync process for copying the spec into Quarkus resources, and the expected tags/authentication schemes for the spec-first workflow.
+    *   **Recommendation:** Align any new spec capabilities with this README—if you introduce new artifacts (e.g., SDK generation scripts or contract test hooks), document the commands here alongside the lint instructions so contributors know how to validate and sync the spec.
+*   **File:** `README.md`
+    *   **Summary:** Project-wide guide covering the OpenAPI workflow, linting (`npm run lint:openapi`, `npm run openapi:diff`), expected custom extensions (`x-tenant-scope`, `x-feature-flags`, `x-rate-limit`), Spectral enforcement, and Quarkus integration settings for serving the spec.
+    *   **Recommendation:** Update this section with the spec-change workflow required by the task—include concise instructions for regenerating TypeScript/Java SDKs (even if that’s a placeholder script) and for triggering contract tests tied to the spec so downstream teams know how to verify changes. Also reference any new commands/scripts you add.
+
+### Implementation Tips & Notes
+*   **Tip:** Treat `api/v1/openapi.yaml` as the source of truth. If the tooling still expects `api/openapi.yaml`, create a lightweight stub (e.g., include or symlink) so both paths stay in sync after your update instead of splitting the spec into multiple divergent files.
+*   **Tip:** Architecture guidance requires declaring `x-feature-flags`, `x-tenant-scope`, and rate-limit metadata per operation. Search shows no `x-feature-flags` entries today, so budget time to add those custom extensions while updating/adding endpoints (catalog, inventory, theme tokens, tenant resolution, auth) to satisfy the acceptance criteria.
+*   **Tip:** Reuse existing schemas like `ProductSummary`, `InventoryLocation`, `TenantMetadata`, `Money`, and `ProblemDetails` so the skeleton stays coherent. Define new schemas only when necessary (e.g., theme token payloads) and keep payloads aligned with the entity definitions listed in the blueprint.
+*   **Tip:** After editing the spec, run `npm run lint:openapi` (Spectral) and `npm run openapi:diff` to confirm compatibility. Capture those commands plus any SDK generation/contract test workflow you add in the README so other contributors can reproduce the checks locally.
+*   **Note:** README already documents the spec-first process but lacks concrete steps for generating SDKs or running contract tests; ensure your README update links to actual scripts (or placeholders with TODOs) so the acceptance criteria about regeneration guidance is met without leaving contributors guessing.
+EOF'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I2.T4",
+  "iteration_id": "I2",
+  "iteration_goal": "Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.",
+  "description": "Create OpenAPI v3 skeleton covering catalog, inventory, theme, tenant, and auth endpoints with reusable components, security schemes (JWT + OAuth client credentials), feature-flag metadata, and error schema templates.",
+  "agent_type_hint": "DocumentationAgent",
+  "inputs": "Section 2 contract style, Task outputs `I2.T1`–`I2.T3`, `I1.T6` test strategy.",
+  "target_files": [
+    "api/openapi.yaml",
+    "README.md"
+  ],
+  "input_files": [
+    "api/openapi.yaml",
+    "README.md"
+  ],
+  "deliverables": "Spec file with tags, schemas, error objects, `x-feature-flags` fields, README instructions for generating SDK stubs + contract tests.",
+  "acceptance_criteria": "- Spec validates via `spectral lint` and includes schema references for all implemented endpoints.'"\\n        - SecuritySchemes define bearer + client creds with scopes; operations cite required scopes + rate limit hints.\\n        - README updated with spec change workflow + instructions to regenerate TypeScript/Java clients.\",
+  \"dependencies\": [
+    \"I2.T1\",
+    \"I2.T2\"
+  ],
+  \"parallelizable\": true,
+  \"done\": false
+}
+"'```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: Iteration 2 – Catalog, Storefront Shell, and Spec-First APIs (from .codemachine/artifacts/plan/02_Iteration_I2.md)
+
+```markdown
+### Iteration 2: Catalog, Storefront Shell, and Spec-First APIs
+
+*   **Iteration ID:** `I2`
+*   **Goal:** Deliver tenant-aware catalog + inventory services, publish OpenAPI skeleton, bootstrap Qute storefront and Vue admin shells, and document async/media job behaviors to unblock checkout and advanced modules.
+*   **Prerequisites:** `I1`
+*   **Iteration KPIs:** Catalog APIs ≤200 ms p95 in dev, storefront home renders under 1.5 s server-side, OpenAPI lint passes with zero warnings, and Playwright smoke retains 100% pass rate.
+*   **Iteration Risks & Mitigations:**
+    - Variant explosion could degrade performance → enforce pagination defaults, add covering indexes from ERD, and monitor via integration tests.
+    - Theme token drift between Qute + Vue layers → add automated snapshot tests referencing shared token endpoint and document sync script.
+    - Async queue misconfiguration could block media ingestion → finalize blueprint + dev HPA plan before enabling endpoints.
+*   **Tasks:**
+```
+
+### Context: Task 2.4 – OpenAPI Skeleton (from .codemachine/artifacts/plan/02_Iteration_I2.md)
+
+```markdown
+<!-- anchor: task-i2-t4 -->
+*   **Task 2.4:**
+    *   **Task ID:** `I2.T4`
+    *   **Description:** Create OpenAPI v3 skeleton covering catalog, inventory, theme, tenant, and auth endpoints with reusable components, security schemes (JWT + OAuth client credentials), feature-flag metadata, and error schema templates.
+    *   **Agent Type Hint:** `DocumentationAgent`
+    *   **Inputs:** Section 2 contract style, Task outputs `I2.T1`–`I2.T3`, `I1.T6` test strategy.
+    *   **Input Files:** ["api/openapi.yaml", "README.md"]
+    *   **Target Files:** ["api/openapi.yaml", "README.md"]
+    *   **Deliverables:** Spec file with tags, schemas, error objects, `x-feature-flags` fields, README instructions for generating SDK stubs + contract tests.
+    *   **Acceptance Criteria:**
+        - Spec validates via `spectral lint` and includes schema references for all implemented endpoints.
+        - SecuritySchemes define bearer + client creds with scopes; operations cite required scopes + rate limit hints.
+        - README updated with spec change workflow + instructions to regenerate TypeScript/Java clients.
+    *   **Dependencies:** [`I2.T1`, `I2.T2`]
+    *   **Parallelizable:** Yes.
+```
+
+### Context: 5.0 The "Contract" (API & Data Definitions) (from .codemachine/artifacts/architecture/01_Blueprint_Foundation.md)
+
+```markdown
+### **5.0 The "Contract" (API & Data Definitions)**
+
+*   **Primary API Style:** RESTful APIs defined spec-first via OpenAPI 3.0; admin SPA and storefront both consume these endpoints, and headless integrations re-use the same definitions with tenant-aware auth.
+*   **Data Model - Core Entities:**
+    *   **Tenant:** `id (UUID)`, `subdomain`, `custom_domains[]`, `plan`, `status`, `base_currency`, `branding`, `config_flags`, `created_at`, `suspended_at`.
+    *   **StoreUser:** `id`, `tenant_id`, `email`, `hashed_password`, `roles[]`, `permissions`, `status`, `last_login_at`, `mfa_secret`, `staff_profile`.
+    *   **Customer:** `id`, `tenant_id`, `email`, `password_hash`, `name`, `addresses[]`, `phone`, `loyalty_balance`, `preferences`, `created_at`.
+    *   **SessionLog:** `id`, `user_type`, `user_id`, `tenant_id`, `ip`, `user_agent`, `login_at`, `last_activity_at`, `logout_reason`, `device_fingerprint`.
+    *   **Product:** `id`, `tenant_id`, `title`, `slug`, `description`, `status`, `visibility_window`, `seo`, `category_ids[]`, `collection_ids[]`, `custom_attributes`, `created_at`, `updated_at`.
+    *   **Variant:** `id`, `product_id`, `tenant_id`, `sku`, `barcode`, `option_values`, `price`, `compare_at_price`, `inventory_policy`, `weight`, `dimensions`, `media_ids[]`.
+    *   **InventoryLocation:** `id`, `tenant_id`, `name`, `address`, `type`, `capacity`, `timezone`.
+    *   **InventoryLevel:** `id`, `variant_id`, `location_id`, `on_hand`, `reserved`, `incoming`, `safety_stock`, `low_stock_threshold`.
+    *   **Consignor:** `id`, `tenant_id`, `contact`, `tax_info`, `commission_rules`, `payout_preferences`, `portal_access_token`, `status`.
+    *   **ConsignmentItem:** `id`, `tenant_id`, `variant_id`, `consignor_id`, `cost_basis`, `received_at`, `expires_at`, `status`, `aging_days`, `payout_state`.
+    *   **Cart:** `id`, `tenant_id`, `customer_id/null`, `items[]`, `discounts[]`, `shipping_address`, `billing_address`, `currency`, `subtotal`, `tax_total`, `shipping_total`, `grand_total`, `last_activity_at`.
+    *   **Order:** `id`, `tenant_id`, `order_number`, `customer_id`, `cart_snapshot`, `status`, `payment_state`, `fulfillment_state`, `shipping_address`, `billing_address`, `totals`, `timeline[]`, `notes`, `tags`.
+    *   **PaymentIntent:** `id`, `order_id`, `tenant_id`, `provider`, `provider_reference`, `amount`, `currency`, `application_fee`, `status`, `captured_at`, `failure_reason`, `metadata`.
+    *   **Refund:** `id`, `payment_intent_id`, `amount`, `currency`, `reason`, `processed_at`, `provider_reference`, `status`.
+    *   **Shipment:** `id`, `order_id`, `tenant_id`, `carrier`, `service_level`, `tracking_number`, `labels`, `packages[]`, `status`, `shipped_at`, `delivered_at`.
+    *   **ReturnAuthorization:** `id`, `order_id`, `items[]`, `reason_codes[]`, `status`, `approved_by`, `received_at`, `restock_decision`, `refund_amount`.
+    *   **LoyaltyLedgerEntry:** `id`, `tenant_id`, `customer_id`, `points_delta`, `reason`, `order_id`, `balance_after`, `expires_at`, `source`.
+    *   **FeatureFlag:** `key`, `description`, `default_state`, `allowed_audiences`, `tenant_overrides`, `created_at`, `updated_at`.
+    *   **AuditEvent:** `id`, `tenant_id`, `actor_type`, `actor_id`, `action`, `target_type`, `target_id`, `metadata`, `impersonation_context`, `occurred_at`.
+    *   **BackgroundJob:** `id`, `queue`, `priority`, `payload`, `attempts`, `last_error`, `run_at`, `locked_by`, `locked_at`, `finished_at`.
+
+Contracts require OpenAPI schemas for each entity and versioned endpoints such as `/api/v1/tenants/{tenantId}/products` or `/api/v1/admin/consignors`. Query parameters must include pagination, filtering, and sorting conventions standardized platform-wide. Webhooks (Stripe, carriers) must map to internal events and produce idempotency keys stored alongside payloads.
+```
+
+### Context: Section 5 Contract Patterns (from .codemachine/artifacts/architecture/01_Blueprint_Foundation.md)
+
+```markdown
+#### Section 5 Contract Patterns
+
+*   OpenAPI governance requires each endpoint to declare tenant scoping, authentication scheme, rate limits, and feature flag dependencies inside the spec description; linting fails PRs missing this metadata.
+*   DTO layering: Define separate request/response DTOs, domain models, and persistence entities; mapping happens via MapStruct or manually curated assemblers to guard against exposing internal columns (e.g., commission cost basis).
+*   Pagination contract: All list endpoints require `page`, `page_size`, `sort`, and `filter` parameters with documented defaults and maximums; response envelopes include `total_count`, `page_count`, and `links` for HATEOAS compatibility.
+*   Webhook contracts: Incoming webhooks validated via HMAC signature; the handler writes payload + signature to `webhook_events` table before processing to allow replay. Outgoing webhooks (if introduced later) must follow the same guarantee.
+*   Error handling: APIs return RFC 7807 Problem Details JSON with `traceId`, `tenantId`, and user-friendly `message`. Client libraries rely on these structures, so architects must not return ad-hoc payloads.
+*   Data versioning: Entities with frequent schema evolution (Product, Order, PaymentIntent) include `version` numbers incremented per update; concurrency control ensures conflicting writes produce 409 responses.
+*   Headless endpoints: Provide read-only scopes for catalog/cart, and write scopes for orders/cart modifications; tokens embed tenant_id, and rate limits apply per tenant per scope.
+*   File upload contracts: Media uploads negotiated via `POST /media/upload-request` returning presigned URL, size/type limits, checksum; clients confirm completion via `POST /media/uploads/{id}/complete` enabling background processing.
+*   Background job payload schema: Use JSON structures referencing job type, version, and associated entity IDs; workers must validate schema version before processing to prevent drift.
+*   Reporting exports: `POST /reports/{reportType}` enqueues job returning job_id; `GET /reports/jobs/{id}` exposes status, download link, and expiration. Architects must reuse this template for all long-running report workflows.
+*   POS offline queue API: `/pos/offline/batches` accepts encrypted bundle with transaction metadata; backend validates signature, stores payload, and triggers reconciliation jobs.
+```
+
+### Context: 3.7 API Design & Communication (from .codemachine/artifacts/architecture/03_Behavior_and_Communication.md)
+
+```markdown
+* **3.7. API Design & Communication:**
+    * **API Style:**
+        - The platform adheres to the OpenAPI 3.0 spec-first RESTful paradigm mandated in the foundation, ensuring every endpoint across storefront, admin, headless, and platform scopes is versioned under `/api/v1/...` with explicit tenant-aware segments or hostnames so contracts remain stable as modules evolve.
+        - REST-backed DTOs map closely to data entities such as Product, Variant, Order, PaymentIntent, Consignor, SessionLog, LoyaltyLedgerEntry, and FeatureFlag; persistence models stay encapsulated inside Panache repositories while MapStruct assemblers enforce separation between transport schemas and database columns like commission cost basis or encrypted tax identifiers.
+        - HTTP verbs represent intent consistently: `GET` for catalog queries and reporting lookups, `POST` for command-style operations (checkout orchestration, consignment intake, payout initiation, media upload completion), `PUT` for idempotent replacements (inventory location definition), `PATCH` for partial updates (order editing, staff role changes), and `DELETE` for soft-deletion toggles that trigger archival policies.
+        - JWT bearer tokens issued by the Identity & Session Service supply tenant, user, and scope claims; headless integrations additionally rely on OAuth client credentials that return the same JWT structure so REST controllers can uniformly enforce permissions via annotations referencing RBAC scopes.
+        - Pagination and filtering employ shared query parameters (`page`, `page_size`, `sort`, `filter`) and responses wrap resource arrays within envelopes containing `items`, `total_count`, `page_count`, `links`, and `data_freshness_timestamp`, giving storefront templates and Admin SPA consistent mechanics for infinite scroll or table pagination.
+        - Error handling follows RFC 7807 Problem Details with extended fields for `tenantId`, `traceId`, `impersonationId`, and `remediation`; RESTEasy reactive filters automatically populate correlation IDs from OpenTelemetry spans so debugging across pods stays deterministic.
+        - Rate limiting is enforced at API gateway level per tenant and per scope, with response headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) propagated through REST middleware; clients such as PrimeUI toasts interpret HTTP 429 payloads to show friendly throttling messages.
+        - Every mutating endpoint that can execute twice (checkout, refund, payout, upload completion) accepts `Idempotency-Key` headers stored inside PostgreSQL tables to guarantee safe retries from browsers or POS devices when networks flap or offline queues replay transactions.
+        - Hypermedia-style affordances appear via HATEOAS `links` arrays and `actions` metadata so Storefront Rendering Engine and Admin SPA can inspect allowed transitions (e.g., `canRefund`, `canSplitShipment`) without bundling business logic into JavaScript bundles.
+        - Multi-tenant enforcement occurs through REST filters that inspect Host headers, confirm TenantContext, and inject row-level security hints; endpoints explicitly include `/tenants/{tenantId}` segments to make cross-tenant access impossible even if Host header spoofed.
+        - CORS policies differentiate storefront, admin, headless, and platform origins; configuration stored in Tenant entity drives Quarkus HTTP filters so REST endpoints only accept fetches from registered subdomains or custom domains, fulfilling SaaS safety mandates.
+        - Webhook ingress endpoints (Stripe, carrier callbacks, FFmpeg notifications) speak REST as well; they first persist raw JSON payloads plus signature headers into `webhook_events` tables before invoking module-specific handlers, enabling replay during incident response and satisfying audit requirements.
+        - SSE (Server-Sent Events) endpoints for Admin SPA notifications reuse REST security and stream JSON lines within the same OpenAPI contract, ensuring Quarkus filters and TenantContext apply identically to traditional HTTP responses while enabling low-latency UI refreshes.
+        - REST controllers expose `HEAD` and `OPTIONS` for caching and preflight support; CDN caches rely on ETag headers derived from resource version numbers maintained in Product, Order, or Media entities, while `Cache-Control` durations respect tenant-configured TTLs that differ between storefront and headless clients.
+        - Media uploads follow REST handshake sequences: clients request presigned URLs via `POST /media/upload-request`, upload directly to R2/S3, then confirm completion via REST callbacks that kick off background jobs, allowing the backend to validate checksums before exposing URLs.
+        - Reporting exports operate as REST job submission endpoints returning job IDs; clients poll `GET /reports/jobs/{id}` which surfaces status transitions and signed download URLs, aligning synchronous REST invocation with asynchronous execution through Background Job Scheduler.
+        - Feature flag governance integrates with REST by requiring every endpoint description inside the OpenAPI document to declare dependent flags using `x-feature-flags`, making it explicit when responses change due to toggled capabilities or phased rollouts.
+```
+
+### Context: Verification and Integration Strategy (from .codemachine/artifacts/plan/03_Verification_and_Glossary.md)
+
+```markdown
+## 6. Verification and Integration Strategy
+
+*   **Testing Levels:**
+    - **Unit:** Each domain/service (tenant, catalog, checkout, payment, consignment, loyalty, POS, media) must keep ≥85% coverage, include negative cases (tenant mismatch, validation errors), and run via `mvn test` + Jest/Vitest for Vue stores. Feature toggles require dedicated unit tests verifying enable/disable behavior.
+    - **Integration:** Quarkus integration tests run against PostgreSQL + MinIO containers verifying RLS policies, Stripe webhook flows (mocked), shipping adapters, media uploads; REST-assured contract tests automatically validate OpenAPI schemas per iteration deliverables.
+    - **End-to-End:** Playwright suites cover storefront browsing/checkout, admin catalog/order workflows, POS offline transactions, platform impersonation; nightly + release candidate runs capture screenshots, tracing metadata, and Lighthouse metrics for storefront/admin.
+    - **Performance & Chaos:** Gatling/Locust load tests simulate peak checkout/cart traffic, POS offline bursts, and consignment payout spikes; chaos scripts trigger DB failover, worker restarts, and Stripe/carrier outages verifying kill-switch + fallback behavior documented in runbook.
+*   **CI/CD Flow:** GitHub Actions pipeline runs Spotless, unit/integration tests, Playwright API smoke, OpenAPI lint, coverage upload (JaCoCo ≥80%), Quinoa build, GraalVM native compile, docker image publish, and deploy workflow (blue/green with smoke tests + manual approval). Feature branch gating enforces spec alignment and prevents merges with unchecked tasks.
+*   **Quality Gates:**
+    - Test coverage: backend modules ≥80% (JaCoCo), frontend stores/components ≥80% (Vitest), e2e suites must pass each run.
+    - Lint/style: Spotless, ESLint, Stylelint, Spectral (OpenAPI) zero errors.
+    - Security: Dependency scanning (OWASP/Trivy) integrated into CI; secrets scanning ensures no credentials in repo; Stripe keys only referenced via GitHub secrets.
+    - Performance budgets: Checkout API <300 ms p95, storefront LCP <2 s, admin initial JS bundle <2 MB gz; budgets enforced by integration tests + Lighthouse CI.
+    - Observability checks: `/q/health` endpoints validated in pipeline; metrics/tracing exporters verified via unit tests.
+*   **Integration Strategy:**
+    - Feature flags gate incremental rollout; iteration deliverables specify required toggles/clamps for new modules (catalog, checkout, consignment, POS, headless, domain management).
+    - OpenAPI spec-first approach ensures backend/frontend/headless clients stay in sync; spec merged before code, and generated SDKs updated automatically.
+    - Background job payload schemas versioned; new job handlers introduced with compatibility tests + migration notes in runbook.
+    - Infrastructure integration uses Kustomize overlays; dev/staging/prod parity maintained with sealed secrets + environment variable matrices documented in runbook.
+*   **Artifact Validation:** PlantUML/Mermaid diagrams validated via CI (PlantUML CLI, `mmdc`), OpenAPI via Spectral, Markdown docs linted (markdownlint). Media worker container includes health check to ensure FFmpeg version pinned; Kubernetes manifests tested via `kubeconform`.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `api/v1/openapi.yaml`
+    *   **Summary:** Authoritative 6.5k-line OpenAPI 3.0.3 spec defining system, auth, catalog, admin, headless, inventory, and platform endpoints with shared schemas (`ProductSummary`, `ProblemDetails`, `PaginationMetadata`) plus security schemes for bearer JWTs, API keys, and OAuth client credentials.
+    *   **Recommendation:** Continue editing this canonical spec even though the plan mentions `api/openapi.yaml`; keep the file under `api/v1/` and, if required, create/refresh a thin wrapper at `api/openapi.yaml` that references or includes the v1 spec. When adding catalog/inventory/theme/tenant/auth coverage, prefer `$ref` to the existing schema definitions, add explicit `security` requirements per operation (bearer/apiKey/oauth scopes as applicable), and insert the mandated custom metadata (`x-tenant-scope`, `x-feature-flags`, `x-rate-limit`) because they are currently absent in the file.
+*   **File:** `api/README.md`
+    *   **Summary:** Documents the API directory layout, Spectral lint command, sync process for copying the spec into Quarkus resources, and the expected tags/authentication schemes for the spec-first workflow.
+    *   **Recommendation:** Align any new spec capabilities with this README—if you introduce new artifacts (e.g., SDK generation scripts or contract test hooks), document the commands here alongside the lint instructions so contributors know how to validate and sync the spec.
+*   **File:** `README.md`
+    *   **Summary:** Project-wide guide covering the OpenAPI workflow, linting (`npm run lint:openapi`, `npm run openapi:diff`), expected custom extensions (`x-tenant-scope`, `x-feature-flags`, `x-rate-limit`), Spectral enforcement, and Quarkus integration settings for serving the spec.
+    *   **Recommendation:** Update this section with the spec-change workflow required by the task—include concise instructions for regenerating TypeScript/Java SDKs (even if that’s a placeholder script) and for triggering contract tests tied to the spec so downstream teams know how to verify changes. Also reference any new commands/scripts you add.
+
+### Implementation Tips & Notes
+*   **Tip:** Treat `api/v1/openapi.yaml` as the source of truth. If the tooling still expects `api/openapi.yaml`, create a lightweight stub (e.g., include or symlink) so both paths stay in sync after your update instead of splitting the spec into multiple divergent files.
+*   **Tip:** Architecture guidance requires declaring `x-feature-flags`, `x-tenant-scope`, and rate-limit metadata per operation. Search shows no `x-feature-flags` entries today, so budget time to add those custom extensions while updating/adding endpoints (catalog, inventory, theme tokens, tenant resolution, auth) to satisfy the acceptance criteria.
+*   **Tip:** Reuse existing schemas like `ProductSummary`, `InventoryLocation`, `TenantMetadata`, `Money`, and `ProblemDetails` so the skeleton stays coherent. Define new schemas only when necessary (e.g., theme token payloads) and keep payloads aligned with the entity definitions listed in the blueprint.
+*   **Tip:** After editing the spec, run `npm run lint:openapi` (Spectral) and `npm run openapi:diff` to confirm compatibility. Capture those commands plus any SDK generation/contract test workflow you add in the README so other contributors can reproduce the checks locally.
+*   **Note:** README already documents the spec-first process but lacks concrete steps for generating SDKs or running contract tests; ensure your README update links to actual scripts (or placeholders with TODOs) so the acceptance criteria about regeneration guidance is met without leaving contributors guessing.
+EOF'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Preparing final summary message**
+
+I'll wrap up by highlighting the update to `.codemachine/prompts/context.md`, summarizing the prepared context, and suggesting the next step of handing off the information since no further tasks remain.
+[RUNNING]● Message: Updated `.codemachine/prompts/context.md` with a full Task Briefing for `I2.T4`, including the task JSON, all relevant planning/architecture excerpts, and guidance drawn from `api/v1/openapi.yaml`, `api/README.md`, and the OpenAPI workflow section of `README.md`. Ready for the coder agent to pick up.
+⏱️  Tokens: 4660350in/15951out (2127872 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.

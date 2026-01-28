@@ -1,0 +1,488 @@
+[CYAN]===╭─ Agent 13: context-manager ────────────────────────────────────
+[CYAN]   Started: 2026-01-08 13:27:02
+[CYAN]   Prompt: **// PROTOCOL: ContextAssembler_v1.1**
+[CYAN]╰───────────────────────────────────────────────────────────────
+
+[CYAN]● Codex is analyzing your request...
+[THINKING]● Thinking: **Starting with recursive directory listing**
+[RUNNING]● Command: bash -lc 'ls -R'
+[THINKING]● Thinking: **Determining next task and gathering context**
+[RUNNING]● Command: bash -lc 'rg -n "Core Architecture" 01_Plan_Overview_and_Setup.md'
+[ERROR]● Command: bash -lc 'rg -n "Core Architecture" 01_Plan_Overview_and_Setup.md'
+[ERROR]⎿ Exit code 2
+[THINKING]● Thinking: **Searching for plan files with ripgrep**
+[RUNNING]● Command: bash -lc 'rg --files | rg "01_Plan"'
+[ERROR]● Command: bash -lc 'rg --files | rg "01_Plan"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Considering alternative plan file locations**
+[RUNNING]● Command: bash -lc "rg --files -g '01_*'"
+[ERROR]● Command: bash -lc "rg --files -g '01_*'"
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Searching for blueprint documentation**
+[RUNNING]● Command: bash -lc 'rg -n "Blueprint" -g "*.md"'
+[SUCCESS]● Command: bash -lc 'rg -n "Blueprint" -g "*.md"'
+[SUCCESS]⎿ docs/loyalty/program.md:9:- Blueprint Section 4.0: Core Components & Boundaries
+[SUCCESS]⎿ docs/feature_flags/g...
+[THINKING]● Thinking: **Searching for architecture blueprint files**
+[RUNNING]● Command: bash -lc 'rg --files | rg "01_Blueprint"'
+[ERROR]● Command: bash -lc 'rg --files | rg "01_Blueprint"'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for architecture artifacts**
+[RUNNING]● Command: bash -lc "rg --files . | rg \"\\.codemachine\""
+[ERROR]● Command: bash -lc "rg --files . | rg \"\\.codemachine\""
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Adjusting search for hidden directories**
+[RUNNING]● Command: bash -lc "rg --files --hidden | rg \"\\.codemachine\""
+[SUCCESS]● Command: bash -lc "rg --files --hidden | rg \"\\.codemachine\""
+[SUCCESS]⎿ .codemachine/inputs/java-project-standards.md
+[SUCCESS]⎿ .codemachine/inputs/specifications.md
+[SUCCESS]⎿ .codemachine/inp...
+[THINKING]● Thinking: **Extracting architecture and plan document snippets**
+
+I'm focusing on gathering key sections from the architecture and plan manifests inside the `.codemachine` folder. I'll target Section 2 of the plan file for the core architecture description, along with relevant parts of the blueprint document—like Section 4—to capture system context and components. I plan to read these documents carefully, likely grabbing the first 200 lines or so, to find the best snippets referencing modules, actors, and architecture details for the final context.
+[RUNNING]● Command: bash -lc "sed -n '1,200p' .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md"
+[SUCCESS]⎿ <!-- anchor: project-plan-root -->
+[SUCCESS]⎿ # Project Plan: Village Storefront
+[SUCCESS]⎿
+[SUCCESS]⎿ **Version:** 1.0
+[SUCCESS]⎿ **Date:** 20...
+[THINKING]● Thinking: **Searching specification for relevant snippets**
+[RUNNING]● Command: bash -lc 'rg -n "actors" .codemachine/artifacts/requirements/00_Specification_Review.md'
+[ERROR]● Command: bash -lc 'rg -n "actors" .codemachine/artifacts/requirements/00_Specification_Review.md'
+[ERROR]⎿ Exit code 1
+[THINKING]● Thinking: **Checking for spec file content**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' .codemachine/artifacts/requirements/00_Specification_Review.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' .codemachine/artifacts/requirements/00_Specification_Review.md"
+[SUCCESS]⎿ # Specification Review & Recommendations: Village Storefront SaaS Platform
+[SUCCESS]⎿
+[SUCCESS]⎿ **Date:** 2026-01-08
+[SUCCESS]⎿ **S...
+[THINKING]● Thinking: **Searching for architecture snippets**
+[RUNNING]● Command: bash -lc 'rg -n "4.0" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "4.0" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]⎿ 44:### **4.0 The "Blueprint" (Core Components & Boundaries)**
+[THINKING]● Thinking: **Extracting specific code snippet**
+[RUNNING]● Command: bash -lc "sed -n '44,160p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]● Command: bash -lc "sed -n '44,160p' .codemachine/artifacts/architecture/01_Blueprint_Foundation.md"
+[SUCCESS]⎿ ### **4.0 The "Blueprint" (Core Components & Boundaries)**
+[SUCCESS]⎿
+[SUCCESS]⎿ *   **System Overview:** Village Storefr...
+[THINKING]● Thinking: **Searching for actor definitions**
+[RUNNING]● Command: bash -lc 'rg -n "actor" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]● Command: bash -lc 'rg -n "actor" .codemachine/artifacts/architecture/01_Blueprint_Foundation.md'
+[SUCCESS]⎿ 35:*   **Security:** JWT auth with refresh tokens is canonical; TenantFilter + RLS enforce data isol...
+[THINKING]● Thinking: **Gathering documentation snippets for architecture context**
+[RUNNING]● Command: bash -lc "sed -n '1,160p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,160p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ <!-- anchor: system-architecture-blueprint -->
+[SUCCESS]⎿ # System Architecture Blueprint: Village Storefront
+[SUCCESS]⎿
+[SUCCESS]⎿ ...
+[THINKING]● Thinking: **Identifying relevant architecture snippets**
+[RUNNING]● Command: bash -lc 'rg -n "3. Proposed Architecture" -n .codemachine/artifacts/architecture/02_System_Structure_and_Data.md'
+[SUCCESS]● Command: bash -lc 'rg -n "3. Proposed Architecture" -n .codemachine/artifacts/architecture/02_System_Structure_and_Data.md'
+[SUCCESS]⎿ 57:## 3. Proposed Architecture (Structural View)
+[THINKING]● Thinking: **Extracting container description snippet**
+[RUNNING]● Command: bash -lc "sed -n '56,220p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]● Command: bash -lc "sed -n '56,220p' .codemachine/artifacts/architecture/02_System_Structure_and_Data.md"
+[SUCCESS]⎿ <!-- anchor: 3-proposed-architecture -->
+[SUCCESS]⎿ ## 3. Proposed Architecture (Structural View)
+[SUCCESS]⎿
+[SUCCESS]⎿ *   **3.1. A...
+[THINKING]● Thinking: **Identifying key documentation and diagrams**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/diagrams/component_overview.puml"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/diagrams/component_overview.puml"
+[SUCCESS]⎿ @startuml component_overview
+[SUCCESS]⎿ !theme plain
+[SUCCESS]⎿ skinparam componentStyle rectangle
+[SUCCESS]⎿ scale max 1920 width
+[SUCCESS]⎿
+[SUCCESS]⎿ '...
+[THINKING]● Thinking: **Evaluating component overview files**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' docs/diagrams/component_overview.puml"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' docs/diagrams/component_overview.puml"
+[SUCCESS]⎿ QuteStorefront --> TenantFilter : HTTP Request
+[SUCCESS]⎿ AdminSPA --> TenantFilter : HTTP Request
+[SUCCESS]⎿ RestAPI --> ...
+[THINKING]● Thinking: **Checking additional documentation**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/diagrams/README.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/diagrams/README.md"
+[SUCCESS]⎿ # Component Diagrams
+[SUCCESS]⎿
+[SUCCESS]⎿ ## component_overview.puml
+[SUCCESS]⎿
+[SUCCESS]⎿ The main architectural component diagram showing t...
+[THINKING]● Thinking: **Evaluating candidate files to read**
+[RUNNING]● Command: bash -lc "sed -n '1,200p' docs/architecture_overview.md"
+[SUCCESS]● Command: bash -lc "sed -n '1,200p' docs/architecture_overview.md"
+[SUCCESS]⎿ # Village Storefront Architecture Overview
+[SUCCESS]⎿
+[SUCCESS]⎿ <!-- anchor: blueprint-foundation -->
+[SUCCESS]⎿
+[SUCCESS]⎿ ## Document Purpo...
+[THINKING]● Thinking: **Continuing to read full file**
+[RUNNING]● Command: bash -lc "sed -n '200,400p' docs/architecture_overview.md"
+[SUCCESS]● Command: bash -lc "sed -n '200,400p' docs/architecture_overview.md"
+[SUCCESS]⎿ **Dependency Rule:** Inner modules (Tenancy, Identity) have no dependencies on outer modules (Orders...
+[THINKING]● Thinking: **Checking for additional lines**
+[RUNNING]● Command: bash -lc "sed -n '400,800p' docs/architecture_overview.md"
+[SUCCESS]● Command: bash -lc "sed -n '400,800p' docs/architecture_overview.md"
+[SUCCESS]⎿ ## 7. Next Steps & Roadmap Alignment
+[SUCCESS]⎿
+[SUCCESS]⎿ ### Immediate Tasks (Iteration I1)
+[SUCCESS]⎿
+[SUCCESS]⎿ - ✅ Architecture overview ...
+[THINKING]● Thinking: **Planning context extraction and summaries**
+
+I’m organizing which document sections to include as manageable, relevant snippets for core architecture, blueprint components, and structural views. I’ll also summarize key code-related docs with recommendations, noting formats like PlantUML and tooling hints. Next, I plan to check the `.codemachine/prompts/context.md` file for guidance before producing the final context file.
+[RUNNING]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]● Command: bash -lc 'cat .codemachine/prompts/context.md'
+[SUCCESS]⎿ # Task Briefing Package
+[SUCCESS]⎿
+[SUCCESS]⎿ This package contains all necessary information and strategic guidance for ...
+[THINKING]● Thinking: **Preparing detailed context content and JSON payload**
+[RUNNING]● Command: bash -lc "sed -n '30,140p' .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md"
+[SUCCESS]● Command: bash -lc "sed -n '30,140p' .codemachine/artifacts/plan/01_Plan_Overview_and_Setup.md"
+[SUCCESS]⎿ *   **Architectural Style:** Layered modular monolith on Quarkus (Java 21) with bounded-context modu...
+[THINKING]● Thinking: **Compiling architecture documentation and implementation notes**
+
+I’m gathering and organizing core architecture snippets and related docs to create a consolidated briefing package. This includes capturing key sections on architecture, blueprints, system structure, and project vision with proper formatting, plus detailed recommendations for updating diagrams, README, and architecture overview files with implementation tips on maintaining style consistency and referencing anchors. I’ll assemble all content carefully using heredocs to generate the final composite file.
+[RUNNING]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T2",
+  "iteration_id": "I1",
+  "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+  "description": "Author PlantUML System Context + Container + Component diagrams describing actors, Quarkus modules, worker pods, and adapters; document diagram intent.",
+  "agent_type_hint": "DiagrammingAgent",
+  "inputs": "Requirements brief, Section 2 Core Architecture.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Three diagrams plus Markdown commentary linking modules to deployment/integration concerns.",
+  "acceptance_criteria": "PlantUML renders without errors; diagrams include all actors (merchants, staff, consignors, platform admins, headless partners) and integrations (Stripe, R2, carriers, DNS, FFmpeg); Markdown summarises responsibilities + links to diagram anchors.",
+  "dependencies": [
+    "I1.T1"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: 2. Core Architecture (from 01_Plan_Overview_and_Setup.md)
+
+```markdown
+<!-- anchor: core-architecture -->
+## 2. Core Architecture
+
+*   **Architectural Style:** Layered modular monolith on Quarkus (Java 21) with bounded-context modules linked via CDI interfaces, Panache repositories, and persisted domain events for future service extraction.
+*   **Technology Stack:**
+    *   Frontend: Qute templates + Tailwind CSS + PrimeUI widgets (storefront); Vue 3 + Vite + TypeScript + Pinia + PrimeVue + Tailwind via Quinoa (admin, POS, platform console).
+    *   Backend: Quarkus (RESTEasy Reactive, Qute, Panache, Scheduler, Kubernetes, Mailer, AWS S3 client) on Java 21 with GraalVM native builds; Spotless + JaCoCo enforced by Maven.
+    *   Database: PostgreSQL 17 shared schema with tenant_id discriminator, RLS policies, MyBatis migrations, partitioned session/audit tables, pgcrypto for sensitive data.
+    *   Messaging/Queues: Database-backed DelayedJob tables with CRITICAL/HIGH/DEFAULT/LOW/BULK priorities plus Quarkus schedulers; CDI events for in-process signals.
+    *   Deployment: GitHub Actions → GraalVM native containers → Kubernetes (k3s) with Quarkus-generated manifests, Kustomize overlays, cert-manager for ACME certificates, Cloudflare R2 for object storage.
+    *   Other Key Libraries/Tools: Stripe SDK/Stripe Connect, Quarkus Mailer, Thumbnailator, FFmpeg, Caffeine cache, OpenTelemetry, Prometheus, PrimeVue/PrimeUI, Tailwind, ESLint/Vitest/Playwright, Feature flag governance service, GitHub Actions, Spotless, JaCoCo, MyBatis, MapStruct.
+*   **Key Components/Services:** (Component Diagram planned in I1.T2)
+    - Tenant Access Gateway (Host header parsing, TenantContext, CORS, feature flag hydration).
+    - Identity & Session Service (JWT/refresh, OAuth clients, session logs, impersonation controls).
+    - Catalog & Inventory domain (products, variants, categories, collections, multi-location stock, adjustments, search events).
+    - Consignment domain (vendor onboarding, commissions, payouts, portal APIs, notifications).
+    - Checkout & Order Orchestrator (cart persistence, address validation, shipping, payments, loyalty, returns, refunds).
+    - Payment Integration Layer (Stripe Connect, PaymentProvider abstraction, webhooks, ledger, payouts).
+    - Storefront Rendering Engine (Qute/Tailwind, theme tokens, PrimeUI hydration, headless API bridge).
+    - Admin SPA delivery & POS shell (Vue 3, Quinoa bundler, Pinia stores, hardware integration, offline queue).
+    - Media Pipeline Controller (upload handshake, R2 keys, Thumbnailator, FFmpeg worker coordination).
+    - Reporting & Analytics Projections (domain events ingestion, aggregates, exports, platform dashboards).
+    - Platform Admin Console backend (store lifecycle, impersonation governance, system health, rate limiting, feature flags).
+    - Integration Adapter Layer (Stripe, USPS/UPS/FedEx, address validation, tax, email, certificate automation).
+*   **Data Model Overview:**
+    - Shared schema anchored by Tenant, StoreUser, Customer, SessionLog, FeatureFlag, Product, Variant, InventoryLocation/Level, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, Refund, Shipment, ReturnAuthorization, LoyaltyLedgerEntry, GiftCard, StoreCredit, BackgroundJob, WebhookEvent, AuditEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket. (Comprehensive ERD in Mermaid planned I1.T3.)
+    - All tenant tables include RLS policies and metadata columns (created_by, updated_by) to align with audit requirements; domain events capture version for concurrency.
+*   **API Contract Style:** RESTful OpenAPI 3.0 spec-first for storefront, admin, headless, and platform APIs; Problem Details error responses; DTO layering via MapStruct; per-endpoint metadata for tenant scope, feature flags, rate limits; OAuth scopes for partner integrations. (Initial OpenAPI skeleton in I1.T4, extended each iteration.)
+*   **Communication Patterns:**
+    - TenantContext filter populates per-request context before REST/GraphQL (future) controllers execute; CDI events broadcast resolution results to caches.
+    - Modules interact synchronously via CDI/service interfaces but publish domain events to `domain_events` table for asynchronous reporting, media, and integration pipelines.
+    - Background workloads operate via DelayedJob queue with prioritized worker deployments; job payloads versioned for safe retries.
+    - External integrations (Stripe, carriers, address validation, cert-manager, Cloudflare R2) encapsulated inside adapter layer with retry/fallback policies and OpenTelemetry spans.
+    - Feature flags combined with Caffeine caches and PostgreSQL overrides provide runtime control for phased rollouts; SSE/WebSocket updates keep admin UX aware of toggles.
+```
+
+### Context: 4.0 The "Blueprint" (from 01_Blueprint_Foundation.md)
+
+```markdown
+### **4.0 The "Blueprint" (Core Components & Boundaries)**
+
+*   **System Overview:** Village Storefront is a layered modular monolith where Quarkus hosts tenant-aware REST APIs, storefront Qute templates, admin Vue SPA assets, and background job executors; PostgreSQL anchors multi-tenant data with RLS, while object storage, Stripe, carrier APIs, and FFmpeg-driven media processors run as integration edges controlled via explicit adapters.
+*   **Core Architectural Principle:** Separation of Concerns is enforced through CDI interfaces, Panache repositories per domain, and DTO mappers isolating API schemas from persistence; modules communicate via domain events recorded in the database so that replacing Stripe, adding loyalty engines, or extracting POS services later does not ripple through storefront rendering or checkout orchestration.
+*   **Key Components/Services:**
+    *   **Tenant Access Gateway:** Handles subdomain/custom-domain resolution, populates TenantContext, enforces CORS, and rejects unknown tenants before routing deeper into the stack.
+    *   **Identity & Session Service:** Issues JWT/refresh tokens, maintains session/activity logs, and exposes impersonation workflows with audit logging.
+    *   **Storefront Rendering Engine:** Delivers Qute-templated storefront pages, injects branding/theme tokens, and coordinates PrimeUI interactions plus Tailwind builds.
+    *   **Admin SPA Delivery Service:** Serves Vue 3 assets under `/admin/*`, provides bootstrapped config (tenant, feature flags, RBAC scopes), and proxies API calls through authenticated endpoints.
+    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, multi-location inventory, adjustments, transfers, and reporting projections.
+    *   **Consignment Domain Module:** Manages consignor profiles, commission schedules, intake batches, payouts, vendor portals, and related notifications.
+    *   **Checkout & Order Orchestrator:** Coordinates cart persistence, address validation, shipping rate fetch, Stripe intents, order lifecycle transitions, refunds, and returns.
+    *   **Payment Integration Layer:** Implements PaymentProvider interfaces (Stripe first) plus generic payment, refund, dispute, and ledger models; handles Stripe Connect onboarding and payouts.
+    *   **Loyalty & Rewards Module:** Tracks points balances, tier upgrades, expirations, and redemption hooks invoked during checkout and customer account flows.
+    *   **POS & Offline Processor:** Provides browser-based POS UI assets, hardware integrations (Stripe Terminal, printers), offline queueing, and reconciliation jobs syncing queued sales.
+    *   **Media Pipeline Controller:** Accepts uploads, enforces limits, queues FFmpeg jobs, generates thumbnails/WebP variants, and persists metadata plus signed URLs in object storage.
+    *   **Background Job Scheduler & Worker:** Implements DelayedJob semantics, executes email dispatch, media processing, payouts, report generation, and certificate renewals via Quarkus `@Scheduled` triggers.
+    *   **Reporting & Analytics Projection Service:** Builds read-optimized aggregates for sales, inventory, consignment, loyalty, and platform metrics; powers admin dashboard widgets and platform-level reports.
+    *   **Platform Admin Console Backend:** Provides SaaS-level store management APIs, impersonation controls, plan/billing observability, and health monitoring endpoints for operations.
+    *   **Integration Adapter Layer:** Abstracts external services (Stripe, USPS/UPS/FedEx APIs, address validation, SMTP, Cloudflare R2) behind versioned interfaces with retry/fallback policies.
+
+Component boundaries must remain thin yet explicit: each module exposes interfaces plus OpenAPI-documented endpoints; no module may reach around another via shared tables without going through defined repositories or service contracts. Shared utilities live in a `platform-kit` module (validation, money, feature flags) to avoid duplication while preserving clarity.
+```
+
+### Context: 3. Proposed Architecture (from 02_System_Structure_and_Data.md)
+
+```markdown
+<!-- anchor: 3-proposed-architecture -->
+## 3. Proposed Architecture (Structural View)
+
+*   **3.1. Architectural Style:** Layered modular monolith per Foundation Section 2.0, with bounded-context modules (catalog, orders, consignment, loyalty, POS, media, platform-ops) exposing CDI interfaces and domain events so subsystems can later be extracted without schema rewrites. Layers include presentation (Qute/Vue), application services orchestrating workflows, domain modules encapsulating business logic, and infrastructure/adapters abstracting integrations.
+*   **3.2. Technology Stack Summary:**
+| Layer | Technology | Notes |
+| --- | --- | --- |
+| Runtime & Framework | Java 21 + Quarkus (RESTEasy Reactive, Qute, Panache, Scheduler) | GraalVM native builds for cold-start <100ms, CDI wiring for modular boundaries. |
+| Storefront UI | Qute templates + Tailwind CSS + PrimeUI | All customer routes except /admin rendered server-side with tenant design tokens. |
+| Admin UI | Vue 3 + Vite + TypeScript + PrimeVue | Served under /admin via Quinoa plugin, consumes OpenAPI-generated clients. |
+| Database | PostgreSQL 17 + MyBatis Migrations | Shared schema with tenant_id columns, RLS policies, partitioned session/audit tables. |
+| Caching | Caffeine (in-memory per pod) | Caches product fragments, rate-limit counters, feature flags without external cache dependency. |
+| Object Storage | Cloudflare R2 via AWS S3 SDK | Stores originals and processed media variants with tenant-prefixed keys. |
+| Payments | Stripe + Stripe Connect | Implements PaymentProvider + MarketplaceProvider interfaces with webhook handlers. |
+| Async Processing | Database-backed DelayedJob tables + Quarkus Scheduler | Handles emails, payouts, media work, reporting, and cleanup. |
+| Observability | OpenTelemetry, Prometheus, Structured JSON logging | Tenant-aware tracing, metrics scraping, and liveness/readiness probes. |
+| CI/CD & Deployment | Maven + Spotless + JaCoCo + GitHub Actions + Quarkus Kubernetes Extension | Produces native container images, validates coverage, and emits manifests for k3s. |
+*   **3.3. System Context Diagram (C4 Level 1):**
+    *   **Description:** Shows how Village Storefront (Quarkus modular monolith) interacts with personas (merchants, staff, customers, consignors, platform admins, headless partners, auditors) and critical external services such as Stripe Connect, carrier APIs, Cloudflare R2, DNS/SSL automation, OAuth providers, tax calculators, analytics destinations, and transactional mail relays.
+    *   **Diagram (PlantUML):** `@startuml` block leverages `C4_Context.puml` with actors, `System_Ext` definitions for Stripe, carriers, Cloudflare R2, mail, address validation, analytics, tax engines, OAuth, FFmpeg runtime, and DNS automation, plus bidirectional `Rel` definitions describing how each persona uses storefront, admin, POS, or headless APIs and what telemetry/notifications they receive back.
+```
+
+### Context: 2.0 Synthesized Project Vision (from 00_Specification_Review.md)
+
+```markdown
+### **2.0 Synthesized Project Vision**
+
+*Based on the provided data, the core project objective is to engineer a system that:*
+
+Delivers a multi-tenant SaaS ecommerce platform enabling merchants to operate independent online stores with consignment inventory management, integrated payment processing via Stripe Connect, and a dual-frontend architecture (Qute-rendered storefront + Vue.js admin dashboard) built on Java 21 + Quarkus with PostgreSQL persistence and native compilation for Kubernetes deployment.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `docs/diagrams/component_overview.puml`
+    *   **Summary:** Existing PlantUML component diagram already models the layered modular monolith with presentation interfaces, tenant gateway, bounded-context packages, infrastructure primitives, external systems, and annotated customer/admin flows.
+    *   **Recommendation:** Reuse its conventions (legend, package grouping, arrow semantics, anchors to other docs) when introducing new System Context, Container, and Component diagrams so visual language stays consistent and downstream PDFs/images can be generated uniformly.
+*   **File:** `docs/diagrams/README.md`
+    *   **Summary:** Documents how to render PlantUML sources (Docker + local commands), the current `component_overview.puml` output, and the architectural anchors each diagram references.
+    *   **Recommendation:** Extend this README with sections for the new context/container/component diagrams, including render commands and summary bullets, so contributors know how to regenerate artifacts and which documentation anchors they support.
+*   **File:** `docs/architecture_overview.md`
+    *   **Summary:** Narrative architecture blueprint outlining vision, technology standards, module boundaries, tenancy guarantees, and roadmap expectations; multiple sections reference diagram anchors slated for I1.T2.
+    *   **Recommendation:** Align diagram content and terminology (module names, integration edges, personas) with this source and add Markdown commentary/anchors back into this document—or a sibling architecture doc—so reviewers can trace each new diagram to the textual justification promised in Section 2.1.
+
+### Implementation Tips & Notes
+*   **Tip:** Place new PlantUML files under `docs/diagrams/` (e.g., `system-context.puml`, `container.puml`, `component.puml`) and mirror the `@startuml` headers, `!theme`, and legend style used in `component_overview.puml`; this keeps CI image generation simple and visually consistent.
+*   **Tip:** Reference the C4-PlantUML templates (as shown in the System Structure doc) for the System Context and Container diagrams so personas (merchants, staff, consignors, platform admins, headless partners, auditors, POS clerks) and external services (Stripe, carriers, Cloudflare R2, DNS/SSL, FFmpeg, tax/tax, email) appear exactly as mandated by the acceptance criteria.
+*   **Tip:** After authoring the diagrams, update `docs/diagrams/README.md` (and/or `docs/architecture_overview.md`) with Markdown commentary describing diagram intent, module responsibilities, and deep links to anchors like `#section-3-layered-modular-monolith` to satisfy the “document diagram intent” deliverable.
+*   **Warning:** `component_overview.puml` already declares flow notes and cross-references; ensure the new component diagram either extends or supersedes that file without regressing existing flows, and keep rendering instructions accurate so future agents can regenerate `.png` artifacts without guessing.
+EOF
+'
+[SUCCESS]● Command: bash -lc "cat <<'EOF' > .codemachine/prompts/context.md
+# Task Briefing Package
+
+This package contains all necessary information and strategic guidance for the Coder Agent.
+
+---
+
+## 1. Current Task Details
+
+This is the full specification of the task you must complete.
+
+"'```json
+{
+  "task_id": "I1.T2",
+  "iteration_id": "I1",
+  "iteration_goal": "Stand up repository scaffolding, tenancy enforcement, base migrations, and initial architectural artifacts/specifications so downstream teams can implement business features safely.",
+  "description": "Author PlantUML System Context + Container + Component diagrams describing actors, Quarkus modules, worker pods, and adapters; document diagram intent.",
+  "agent_type_hint": "DiagrammingAgent",
+  "inputs": "Requirements brief, Section 2 Core Architecture.",
+  "target_files": [],
+  "input_files": [],
+  "deliverables": "Three diagrams plus Markdown commentary linking modules to deployment/integration concerns.",
+  "acceptance_criteria": "PlantUML renders without errors; diagrams include all actors (merchants, staff, consignors, platform admins, headless partners) and integrations (Stripe, R2, carriers, DNS, FFmpeg); Markdown summarises responsibilities + links to diagram anchors.",
+  "dependencies": [
+    "I1.T1"
+  ],
+  "parallelizable": true,
+  "done": false
+}
+```
+
+---
+
+## 2. Architectural & Planning Context
+
+The following are the relevant sections from the architecture and plan documents, which I found by analyzing the task description.
+
+### Context: 2. Core Architecture (from 01_Plan_Overview_and_Setup.md)
+
+```markdown
+<!-- anchor: core-architecture -->
+## 2. Core Architecture
+
+*   **Architectural Style:** Layered modular monolith on Quarkus (Java 21) with bounded-context modules linked via CDI interfaces, Panache repositories, and persisted domain events for future service extraction.
+*   **Technology Stack:**
+    *   Frontend: Qute templates + Tailwind CSS + PrimeUI widgets (storefront); Vue 3 + Vite + TypeScript + Pinia + PrimeVue + Tailwind via Quinoa (admin, POS, platform console).
+    *   Backend: Quarkus (RESTEasy Reactive, Qute, Panache, Scheduler, Kubernetes, Mailer, AWS S3 client) on Java 21 with GraalVM native builds; Spotless + JaCoCo enforced by Maven.
+    *   Database: PostgreSQL 17 shared schema with tenant_id discriminator, RLS policies, MyBatis migrations, partitioned session/audit tables, pgcrypto for sensitive data.
+    *   Messaging/Queues: Database-backed DelayedJob tables with CRITICAL/HIGH/DEFAULT/LOW/BULK priorities plus Quarkus schedulers; CDI events for in-process signals.
+    *   Deployment: GitHub Actions → GraalVM native containers → Kubernetes (k3s) with Quarkus-generated manifests, Kustomize overlays, cert-manager for ACME certificates, Cloudflare R2 for object storage.
+    *   Other Key Libraries/Tools: Stripe SDK/Stripe Connect, Quarkus Mailer, Thumbnailator, FFmpeg, Caffeine cache, OpenTelemetry, Prometheus, PrimeVue/PrimeUI, Tailwind, ESLint/Vitest/Playwright, Feature flag governance service, GitHub Actions, Spotless, JaCoCo, MyBatis, MapStruct.
+*   **Key Components/Services:** (Component Diagram planned in I1.T2)
+    - Tenant Access Gateway (Host header parsing, TenantContext, CORS, feature flag hydration).
+    - Identity & Session Service (JWT/refresh, OAuth clients, session logs, impersonation controls).
+    - Catalog & Inventory domain (products, variants, categories, collections, multi-location stock, adjustments, search events).
+    - Consignment domain (vendor onboarding, commissions, payouts, portal APIs, notifications).
+    - Checkout & Order Orchestrator (cart persistence, address validation, shipping, payments, loyalty, returns, refunds).
+    - Payment Integration Layer (Stripe Connect, PaymentProvider abstraction, webhooks, ledger, payouts).
+    - Storefront Rendering Engine (Qute/Tailwind, theme tokens, PrimeUI hydration, headless API bridge).
+    - Admin SPA delivery & POS shell (Vue 3, Quinoa bundler, Pinia stores, hardware integration, offline queue).
+    - Media Pipeline Controller (upload handshake, R2 keys, Thumbnailator, FFmpeg worker coordination).
+    - Reporting & Analytics Projections (domain events ingestion, aggregates, exports, platform dashboards).
+    - Platform Admin Console backend (store lifecycle, impersonation governance, system health, rate limiting, feature flags).
+    - Integration Adapter Layer (Stripe, USPS/UPS/FedEx, address validation, tax, email, certificate automation).
+*   **Data Model Overview:**
+    - Shared schema anchored by Tenant, StoreUser, Customer, SessionLog, FeatureFlag, Product, Variant, InventoryLocation/Level, Consignor, ConsignmentItem, Cart, Order, PaymentIntent, Refund, Shipment, ReturnAuthorization, LoyaltyLedgerEntry, GiftCard, StoreCredit, BackgroundJob, WebhookEvent, AuditEvent, DomainEvent, PlatformCommand, MediaAsset, RateLimitBucket. (Comprehensive ERD in Mermaid planned I1.T3.)
+    - All tenant tables include RLS policies and metadata columns (created_by, updated_by) to align with audit requirements; domain events capture version for concurrency.
+*   **API Contract Style:** RESTful OpenAPI 3.0 spec-first for storefront, admin, headless, and platform APIs; Problem Details error responses; DTO layering via MapStruct; per-endpoint metadata for tenant scope, feature flags, rate limits; OAuth scopes for partner integrations. (Initial OpenAPI skeleton in I1.T4, extended each iteration.)
+*   **Communication Patterns:**
+    - TenantContext filter populates per-request context before REST/GraphQL (future) controllers execute; CDI events broadcast resolution results to caches.
+    - Modules interact synchronously via CDI/service interfaces but publish domain events to `domain_events` table for asynchronous reporting, media, and integration pipelines.
+    - Background workloads operate via DelayedJob queue with prioritized worker deployments; job payloads versioned for safe retries.
+    - External integrations (Stripe, carriers, address validation, cert-manager, Cloudflare R2) encapsulated inside adapter layer with retry/fallback policies and OpenTelemetry spans.
+    - Feature flags combined with Caffeine caches and PostgreSQL overrides provide runtime control for phased rollouts; SSE/WebSocket updates keep admin UX aware of toggles.
+```
+
+### Context: 4.0 The "Blueprint" (from 01_Blueprint_Foundation.md)
+
+```markdown
+### **4.0 The "Blueprint" (Core Components & Boundaries)**
+
+*   **System Overview:** Village Storefront is a layered modular monolith where Quarkus hosts tenant-aware REST APIs, storefront Qute templates, admin Vue SPA assets, and background job executors; PostgreSQL anchors multi-tenant data with RLS, while object storage, Stripe, carrier APIs, and FFmpeg-driven media processors run as integration edges controlled via explicit adapters.
+*   **Core Architectural Principle:** Separation of Concerns is enforced through CDI interfaces, Panache repositories per domain, and DTO mappers isolating API schemas from persistence; modules communicate via domain events recorded in the database so that replacing Stripe, adding loyalty engines, or extracting POS services later does not ripple through storefront rendering or checkout orchestration.
+*   **Key Components/Services:**
+    *   **Tenant Access Gateway:** Handles subdomain/custom-domain resolution, populates TenantContext, enforces CORS, and rejects unknown tenants before routing deeper into the stack.
+    *   **Identity & Session Service:** Issues JWT/refresh tokens, maintains session/activity logs, and exposes impersonation workflows with audit logging.
+    *   **Storefront Rendering Engine:** Delivers Qute-templated storefront pages, injects branding/theme tokens, and coordinates PrimeUI interactions plus Tailwind builds.
+    *   **Admin SPA Delivery Service:** Serves Vue 3 assets under `/admin/*`, provides bootstrapped config (tenant, feature flags, RBAC scopes), and proxies API calls through authenticated endpoints.
+    *   **Catalog & Inventory Domain Module:** Owns products, variants, categories, collections, multi-location inventory, adjustments, transfers, and reporting projections.
+    *   **Consignment Domain Module:** Manages consignor profiles, commission schedules, intake batches, payouts, vendor portals, and related notifications.
+    *   **Checkout & Order Orchestrator:** Coordinates cart persistence, address validation, shipping rate fetch, Stripe intents, order lifecycle transitions, refunds, and returns.
+    *   **Payment Integration Layer:** Implements PaymentProvider interfaces (Stripe first) plus generic payment, refund, dispute, and ledger models; handles Stripe Connect onboarding and payouts.
+    *   **Loyalty & Rewards Module:** Tracks points balances, tier upgrades, expirations, and redemption hooks invoked during checkout and customer account flows.
+    *   **POS & Offline Processor:** Provides browser-based POS UI assets, hardware integrations (Stripe Terminal, printers), offline queueing, and reconciliation jobs syncing queued sales.
+    *   **Media Pipeline Controller:** Accepts uploads, enforces limits, queues FFmpeg jobs, generates thumbnails/WebP variants, and persists metadata plus signed URLs in object storage.
+    *   **Background Job Scheduler & Worker:** Implements DelayedJob semantics, executes email dispatch, media processing, payouts, report generation, and certificate renewals via Quarkus `@Scheduled` triggers.
+    *   **Reporting & Analytics Projection Service:** Builds read-optimized aggregates for sales, inventory, consignment, loyalty, and platform metrics; powers admin dashboard widgets and platform-level reports.
+    *   **Platform Admin Console Backend:** Provides SaaS-level store management APIs, impersonation controls, plan/billing observability, and health monitoring endpoints for operations.
+    *   **Integration Adapter Layer:** Abstracts external services (Stripe, USPS/UPS/FedEx APIs, address validation, SMTP, Cloudflare R2) behind versioned interfaces with retry/fallback policies.
+
+Component boundaries must remain thin yet explicit: each module exposes interfaces plus OpenAPI-documented endpoints; no module may reach around another via shared tables without going through defined repositories or service contracts. Shared utilities live in a `platform-kit` module (validation, money, feature flags) to avoid duplication while preserving clarity.
+```
+
+### Context: 3. Proposed Architecture (from 02_System_Structure_and_Data.md)
+
+```markdown
+<!-- anchor: 3-proposed-architecture -->
+## 3. Proposed Architecture (Structural View)
+
+*   **3.1. Architectural Style:** Layered modular monolith per Foundation Section 2.0, with bounded-context modules (catalog, orders, consignment, loyalty, POS, media, platform-ops) exposing CDI interfaces and domain events so subsystems can later be extracted without schema rewrites. Layers include presentation (Qute/Vue), application services orchestrating workflows, domain modules encapsulating business logic, and infrastructure/adapters abstracting integrations.
+*   **3.2. Technology Stack Summary:**
+| Layer | Technology | Notes |
+| --- | --- | --- |
+| Runtime & Framework | Java 21 + Quarkus (RESTEasy Reactive, Qute, Panache, Scheduler) | GraalVM native builds for cold-start <100ms, CDI wiring for modular boundaries. |
+| Storefront UI | Qute templates + Tailwind CSS + PrimeUI | All customer routes except /admin rendered server-side with tenant design tokens. |
+| Admin UI | Vue 3 + Vite + TypeScript + PrimeVue | Served under /admin via Quinoa plugin, consumes OpenAPI-generated clients. |
+| Database | PostgreSQL 17 + MyBatis Migrations | Shared schema with tenant_id columns, RLS policies, partitioned session/audit tables. |
+| Caching | Caffeine (in-memory per pod) | Caches product fragments, rate-limit counters, feature flags without external cache dependency. |
+| Object Storage | Cloudflare R2 via AWS S3 SDK | Stores originals and processed media variants with tenant-prefixed keys. |
+| Payments | Stripe + Stripe Connect | Implements PaymentProvider + MarketplaceProvider interfaces with webhook handlers. |
+| Async Processing | Database-backed DelayedJob tables + Quarkus Scheduler | Handles emails, payouts, media work, reporting, and cleanup. |
+| Observability | OpenTelemetry, Prometheus, Structured JSON logging | Tenant-aware tracing, metrics scraping, and liveness/readiness probes. |
+| CI/CD & Deployment | Maven + Spotless + JaCoCo + GitHub Actions + Quarkus Kubernetes Extension | Produces native container images, validates coverage, and emits manifests for k3s. |
+*   **3.3. System Context Diagram (C4 Level 1):**
+    *   **Description:** Shows how Village Storefront (Quarkus modular monolith) interacts with personas (merchants, staff, customers, consignors, platform admins, headless partners, auditors) and critical external services such as Stripe Connect, carrier APIs, Cloudflare R2, DNS/SSL automation, OAuth providers, tax calculators, analytics destinations, and transactional mail relays.
+    *   **Diagram (PlantUML):** `@startuml` block leverages `C4_Context.puml` with actors, `System_Ext` definitions for Stripe, carriers, Cloudflare R2, mail, address validation, analytics, tax engines, OAuth, FFmpeg runtime, and DNS automation, plus bidirectional `Rel` definitions describing how each persona uses storefront, admin, POS, or headless APIs and what telemetry/notifications they receive back.
+```
+
+### Context: 2.0 Synthesized Project Vision (from 00_Specification_Review.md)
+
+```markdown
+### **2.0 Synthesized Project Vision**
+
+*Based on the provided data, the core project objective is to engineer a system that:*
+
+Delivers a multi-tenant SaaS ecommerce platform enabling merchants to operate independent online stores with consignment inventory management, integrated payment processing via Stripe Connect, and a dual-frontend architecture (Qute-rendered storefront + Vue.js admin dashboard) built on Java 21 + Quarkus with PostgreSQL persistence and native compilation for Kubernetes deployment.
+```
+
+---
+
+## 3. Codebase Analysis & Strategic Guidance
+
+The following analysis is based on my direct review of the current codebase. Use these notes and tips to guide your implementation.
+
+### Relevant Existing Code
+*   **File:** `docs/diagrams/component_overview.puml`
+    *   **Summary:** Existing PlantUML component diagram already models the layered modular monolith with presentation interfaces, tenant gateway, bounded-context packages, infrastructure primitives, external systems, and annotated customer/admin flows.
+    *   **Recommendation:** Reuse its conventions (legend, package grouping, arrow semantics, anchors to other docs) when introducing new System Context, Container, and Component diagrams so visual language stays consistent and downstream PDFs/images can be generated uniformly.
+*   **File:** `docs/diagrams/README.md`
+    *   **Summary:** Documents how to render PlantUML sources (Docker + local commands), the current `component_overview.puml` output, and the architectural anchors each diagram references.
+    *   **Recommendation:** Extend this README with sections for the new context/container/component diagrams, including render commands and summary bullets, so contributors know how to regenerate artifacts and which documentation anchors they support.
+*   **File:** `docs/architecture_overview.md`
+    *   **Summary:** Narrative architecture blueprint outlining vision, technology standards, module boundaries, tenancy guarantees, and roadmap expectations; multiple sections reference diagram anchors slated for I1.T2.
+    *   **Recommendation:** Align diagram content and terminology (module names, integration edges, personas) with this source and add Markdown commentary/anchors back into this document—or a sibling architecture doc—so reviewers can trace each new diagram to the textual justification promised in Section 2.1.
+
+### Implementation Tips & Notes
+*   **Tip:** Place new PlantUML files under `docs/diagrams/` (e.g., `system-context.puml`, `container.puml`, `component.puml`) and mirror the `@startuml` headers, `!theme`, and legend style used in `component_overview.puml`; this keeps CI image generation simple and visually consistent.
+*   **Tip:** Reference the C4-PlantUML templates (as shown in the System Structure doc) for the System Context and Container diagrams so personas (merchants, staff, consignors, platform admins, headless partners, auditors, POS clerks) and external services (Stripe, carriers, Cloudflare R2, DNS/SSL, FFmpeg, tax/tax, email) appear exactly as mandated by the acceptance criteria.
+*   **Tip:** After authoring the diagrams, update `docs/diagrams/README.md` (and/or `docs/architecture_overview.md`) with Markdown commentary describing diagram intent, module responsibilities, and deep links to anchors like `#section-3-layered-modular-monolith` to satisfy the “document diagram intent” deliverable.
+*   **Warning:** `component_overview.puml` already declares flow notes and cross-references; ensure the new component diagram either extends or supersedes that file without regressing existing flows, and keep rendering instructions accurate so future agents can regenerate `.png` artifacts without guessing.
+EOF
+'
+[SUCCESS]⎿ empty
+[THINKING]● Thinking: **Summarizing final response plan**
+
+I’m preparing a concise final message explaining that I updated `.codemachine/prompts/context.md` to focus on the new target task I1.T2, describing related doc contexts and code insights. I’ll include next steps for the coder to start building diagrams per the context file and follow the recommended format with a brief bullet summary.
+[RUNNING]● Message: Updated `.codemachine/prompts/context.md:1` with a fresh Task Briefing Package for I1.T2, including the new task JSON, excerpts from the core architecture, blueprint, structural view, and specification docs, plus guidance on leveraging `docs/diagrams/component_overview.puml`, `docs/diagrams/README.md`, and `docs/architecture_overview.md` when producing the required PlantUML diagrams.
+
+Next: generate the System Context, Container, and Component diagrams under `docs/diagrams/`, update the README commentary, and ensure each rendering follows the conventions captured in the new briefing.
+⏱️  Tokens: 2102161in/14641out (895488 cached)
+Context Manager Agent has completed their work.
+
+════════════════════════════════════════════════════════════════════════════════
+
+════════════════════════════════════════════════════════════════════════════════
+Context Manager Agent started to work.
